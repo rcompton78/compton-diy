@@ -9,13 +9,13 @@ This repo uses [Nx](https://nx.dev) to manage multiple projects in a single work
 ## Getting Started
 
 ```bash
-npm install
+pnpm install
 ```
 
 Run a specific project:
 
 ```bash
-npx nx run <project>:<target>
+pnpm nx run <project>:<target>
 ```
 
 ## Projects
