@@ -1,0 +1,19 @@
+
+.nx/installation
+.nx/cache
+.nx/workspace-data
+.nx/self-healing
+.nx/polygraph
+.claude/
+
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+.pio/
+
+# Environment
+.env
+.env.*

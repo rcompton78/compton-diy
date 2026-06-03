@@ -1,0 +1,16 @@
+{
+  "name": "compton-diy",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "build": "nx run-many -t build",
+    "test": "nx run-many -t test",
+    "lint": "nx run-many -t lint"
+  },
+  "devDependencies": {
+    "nx": "22.7.5"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["nx"]
+  }
+}
