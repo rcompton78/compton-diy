@@ -8,7 +8,7 @@ NX monorepo for DIY ESP32 and Arduino firmware projects. Projects live under `ap
 
 ## Package Manager
 
-Always use `pnpm` and `pnpx` / `pnpm dlx`. Never use `npm` or `npx`.
+Always use `pnpm` (for install/run) and `pnpm dlx` (the npx equivalent, for one-off remote packages). Never use `npm` or `npx`.
 
 ## Common Commands
 
