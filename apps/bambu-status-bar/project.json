@@ -6,63 +6,63 @@
     "build": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "pio run",
+        "command": "python3 -m platformio run",
         "cwd": "apps/bambu-status-bar"
       }
     },
     "build-s3": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "pio run -e s3",
+        "command": "python3 -m platformio run -e s3",
         "cwd": "apps/bambu-status-bar"
       }
     },
     "build-c3": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "pio run -e c3",
+        "command": "python3 -m platformio run -e c3",
         "cwd": "apps/bambu-status-bar"
       }
     },
     "build-pico32": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "pio run -e pico32",
+        "command": "python3 -m platformio run -e pico32",
         "cwd": "apps/bambu-status-bar"
       }
     },
     "flash": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "pio run -t upload",
+        "command": "python3 -m platformio run -t upload",
         "cwd": "apps/bambu-status-bar"
       }
     },
     "flash-s3": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "pio run -e s3 -t upload",
+        "command": "python3 -m platformio run -e s3 -t upload",
         "cwd": "apps/bambu-status-bar"
       }
     },
     "flash-c3": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "pio run -e c3 -t upload",
+        "command": "python3 -m platformio run -e c3 -t upload",
         "cwd": "apps/bambu-status-bar"
       }
     },
     "monitor": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "pio device monitor",
+        "command": "python3 -m platformio device monitor",
         "cwd": "apps/bambu-status-bar"
       }
     },
     "build-fs": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "pio run -t buildfs",
+        "command": "python3 -m platformio run -t buildfs",
         "cwd": "apps/bambu-status-bar"
       }
     }
