@@ -1,0 +1,70 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install Node dependencies
+        run: pnpm install
+
+      - name: Build all firmware
+        run: pnpm nx run-many -t build,build-fs --all
+
+      - name: Generate releases
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: pnpm nx run-many -t release --all -- --version="$RELEASE_VERSION"
+
+      - name: Generate flasher index
+        env:
+          RELEASE_VERSION: ${{ github.ref_name }}
+        run: python3 tools/esp-flasher/generate_index.py --version="$RELEASE_VERSION"
+
+      - name: Upload release binaries
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**/*.bin
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/
+
+  deploy-pages:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
