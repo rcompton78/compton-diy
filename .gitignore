@@ -4,7 +4,8 @@
 .nx/workspace-data
 .nx/self-healing
 .nx/polygraph
-.claude/
+.claude/workflow.local.md
+.claude/settings.local.json
 
 # Dependencies
 node_modules/
