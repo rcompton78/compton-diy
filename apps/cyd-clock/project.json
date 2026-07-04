@@ -1,0 +1,53 @@
+{
+  "name": "cyd-clock",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "tags": ["platform:esp32", "type:firmware"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "python3 -m platformio run -e cyd",
+        "cwd": "apps/cyd-clock"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**",
+        "{projectRoot}/include/**",
+        "{projectRoot}/platformio.ini"
+      ],
+      "outputs": ["{projectRoot}/.pio/build/cyd"]
+    },
+    "flash": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "python3 -m platformio run -e cyd -t upload",
+        "cwd": "apps/cyd-clock"
+      }
+    },
+    "build-fs": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "python3 -m platformio run -e cyd -t buildfs",
+        "cwd": "apps/cyd-clock"
+      },
+      "cache": true,
+      "inputs": ["{projectRoot}/data/**"],
+      "outputs": ["{projectRoot}/.pio/build/cyd/littlefs.bin"]
+    },
+    "flash-fs": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "python3 -m platformio run -e cyd -t uploadfs",
+        "cwd": "apps/cyd-clock"
+      }
+    },
+    "monitor": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "python3 -m platformio device monitor",
+        "cwd": "apps/cyd-clock"
+      }
+    }
+  }
+}
