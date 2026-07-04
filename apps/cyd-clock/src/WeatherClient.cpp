@@ -20,7 +20,7 @@ bool WeatherClient::fetch(float latitude, float longitude) {
     if (deserializeJson(doc, http.getStream())) { http.end(); return false; }
     http.end();
 
-    auto cw = doc["current_weather"];
+    JsonObject cw = doc["current_weather"];
     _data.tempC        = cw["temperature"];
     _data.weatherCode  = cw["weathercode"];
     _data.windspeedKmh = cw["windspeed"];
