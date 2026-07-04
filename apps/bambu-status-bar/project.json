@@ -66,6 +66,12 @@
         "cwd": "apps/bambu-status-bar"
       }
     },
+    "version": {
+      "executor": "@compton/nx-version:npm-version",
+      "options": {
+        "buildTargetName": "build"
+      }
+    },
     "release": {
       "executor": "nx:run-commands",
       "options": {

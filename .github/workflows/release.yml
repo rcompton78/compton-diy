@@ -1,9 +1,8 @@
-name: Release
+name: CI
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [master]
 
 permissions:
   contents: write
@@ -15,6 +14,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions/setup-python@v5
         with:
@@ -34,29 +36,46 @@ jobs:
 
       - name: Install Node dependencies
         run: pnpm install
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Build all firmware
-        run: pnpm nx run-many -t build && pnpm nx run-many -t build-fs
+      - name: Get last version tag
+        id: last_tag
+        run: |
+          git fetch --all --tags
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          LAST_TAG_SHA=$(git show-ref --hash "$LAST_TAG" 2>/dev/null | head -n 1 || echo "$LAST_TAG")
+          echo "sha=$LAST_TAG_SHA" >> "$GITHUB_OUTPUT"
+          echo "Last tag: $LAST_TAG ($LAST_TAG_SHA)"
+
+      - name: Build affected firmware
+        run: |
+          pnpm nx affected --base ${{ steps.last_tag.outputs.sha }} -t build
+          pnpm nx affected --base ${{ steps.last_tag.outputs.sha }} -t build-fs
 
       - name: Generate releases
+        run: pnpm nx affected --base ${{ steps.last_tag.outputs.sha }} -t release
         env:
-          RELEASE_VERSION: ${{ github.ref_name }}
-        run: pnpm nx run-many -t release
+          RELEASE_VERSION: latest
 
       - name: Generate flasher index
-        env:
-          RELEASE_VERSION: ${{ github.ref_name }}
-        run: python3 tools/esp-flasher/generate_index.py --version="$RELEASE_VERSION"
-
-      - name: Upload release binaries
-        uses: softprops/action-gh-release@v2
-        with:
-          files: dist/**/*.bin
+        run: python3 tools/esp-flasher/generate_index.py --version=latest
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist/
+
+      - name: Version affected projects
+        run: pnpm nx affected --base ${{ steps.last_tag.outputs.sha }} -t version --parallel 1
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Push version tags
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git push origin master --follow-tags
 
   deploy-pages:
     needs: build-and-release
