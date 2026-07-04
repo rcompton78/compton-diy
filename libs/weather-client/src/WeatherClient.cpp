@@ -1,7 +1,8 @@
 #include "WeatherClient.h"
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
-#include "../include/Config.h"
+
+#define WEATHER_API_HOST "api.open-meteo.com"
 
 bool WeatherClient::fetch(float latitude, float longitude) {
     HTTPClient http;

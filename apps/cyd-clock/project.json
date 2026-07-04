@@ -3,6 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
   "tags": ["platform:esp32", "type:firmware"],
+  "implicitDependencies": ["weather-client"],
   "targets": {
     "build": {
       "executor": "nx:run-commands",
@@ -14,7 +15,8 @@
       "inputs": [
         "{projectRoot}/src/**",
         "{projectRoot}/include/**",
-        "{projectRoot}/platformio.ini"
+        "{projectRoot}/platformio.ini",
+        "{workspaceRoot}/libs/weather-client/src/**"
       ],
       "outputs": ["{projectRoot}/.pio/build/cyd"]
     },
