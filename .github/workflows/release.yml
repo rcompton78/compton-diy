@@ -36,12 +36,12 @@ jobs:
         run: pnpm install
 
       - name: Build all firmware
-        run: pnpm nx run-many -t build,build-fs --all
+        run: pnpm nx run-many -t build && pnpm nx run-many -t build-fs
 
       - name: Generate releases
         env:
           RELEASE_VERSION: ${{ github.ref_name }}
-        run: pnpm nx run-many -t release --all -- --version="$RELEASE_VERSION"
+        run: pnpm nx run-many -t release
 
       - name: Generate flasher index
         env:

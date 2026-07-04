@@ -54,7 +54,7 @@
     "release": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "python3 tools/esp-flasher/generate_release.py --project-dir apps/cyd-clock --env cyd --chip ESP32 --name \"CYD Clock\" --version {args.version}",
+        "command": "python3 tools/esp-flasher/generate_release.py --project-dir apps/cyd-clock --env cyd --chip ESP32 --name \"CYD Clock\" --version ${RELEASE_VERSION:-dev}",
         "cwd": "."
       },
       "dependsOn": ["build", "build-fs"]
