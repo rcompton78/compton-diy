@@ -427,6 +427,110 @@ static void updateCatAnim() {
     if (changed) dirty.animal = true;
 }
 
+// ── Config web page ───────────────────────────────────────────────────────────
+
+static const char CONFIG_HTML[] PROGMEM = R"html(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CYD Clock · Config</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px;background:#111;color:#ddd}
+h2{margin-top:0}
+label{display:block;font-size:.82rem;color:#888;margin-bottom:2px}
+input{display:block;width:100%;padding:8px;margin-bottom:14px;background:#1e1e1e;color:#ddd;border:1px solid #333;border-radius:5px}
+.row{display:flex;gap:8px}
+.row input{flex:1;margin-bottom:0}
+button{padding:9px 16px;background:#0070f3;color:#fff;border:none;border-radius:5px;cursor:pointer}
+button:hover{background:#005ec4}
+#res{margin:8px 0 14px;border:1px solid #333;border-radius:5px;max-height:200px;overflow-y:auto;display:none}
+.city{padding:10px 12px;cursor:pointer;border-bottom:1px solid #222}
+.city:hover,.city:focus{background:#1e1e1e;outline:none}
+.city small{color:#666}
+.banner{padding:10px;border-radius:5px;margin-bottom:14px}
+.ok{background:#063}
+.err{background:#600}
+</style>
+</head><body>
+<h2>Configuration</h2>
+%%MSG%%
+<form method="POST" action="/save-config">
+<label>City search — fills location + timezone automatically</label>
+<div class="row">
+<input id="cs" placeholder="e.g. London, Edmonton…" oninput="deb(this.value)">
+<button type="button" onclick="go()">Search</button>
+</div>
+<div id="res"></div>
+<label>Latitude</label>
+<input name="lat" id="lat" value="%%LAT%%">
+<label>Longitude</label>
+<input name="lon" id="lon" value="%%LON%%">
+<label>UTC Offset (seconds) — auto-filled by city search, accounts for DST</label>
+<input name="utc" id="utc" type="number" value="%%UTC%%">
+<button type="submit" style="width:100%;margin-top:4px">Save</button>
+</form>
+<script>
+let t;
+function deb(v){clearTimeout(t);if(v.length>1)t=setTimeout(go,500)}
+async function go(){
+  const q=document.getElementById('cs').value.trim();
+  if(!q)return;
+  const el=document.getElementById('res');
+  el.style.display='block';el.innerHTML='<div class="city">Searching…</div>';
+  try{
+    const r=await fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(q)+'&count=8&language=en&format=json');
+    const d=await r.json();
+    if(!d.results||!d.results.length){el.innerHTML='<div class="city">No results found</div>';return;}
+    el.innerHTML=d.results.map(c=>`<div class="city" tabindex="0"
+      onclick="pick(${c.latitude},${c.longitude},'${c.timezone||''}')"
+      onkeydown="if(event.key==='Enter')pick(${c.latitude},${c.longitude},'${c.timezone||''}')">
+      <strong>${c.name}</strong>${c.admin1?', '+c.admin1:''} <small>${c.country}</small>
+    </div>`).join('');
+  }catch(e){el.innerHTML='<div class="city">Network error — check connection</div>';}
+}
+function pick(lat,lon,tz){
+  document.getElementById('lat').value=lat;
+  document.getElementById('lon').value=lon;
+  document.getElementById('res').style.display='none';
+  document.getElementById('cs').value='';
+  if(tz){
+    try{
+      const p=new Intl.DateTimeFormat('en',{timeZone:tz,timeZoneName:'longOffset'}).formatToParts(new Date());
+      const s=p.find(x=>x.type==='timeZoneName').value; // e.g. GMT-07:00
+      const m=s.match(/GMT([+-]?)(\d{2}):(\d{2})/);
+      if(m)document.getElementById('utc').value=(m[1]==='-'?-1:1)*(+m[2]*3600+ +m[3]*60);
+    }catch(e){}
+  }
+}
+</script>
+</body></html>
+)html";
+
+static void handleConfigGet() {
+    String page = String(FPSTR(CONFIG_HTML));
+    page.replace("%%LAT%%", String(configMgr.config().latitude,  4));
+    page.replace("%%LON%%", String(configMgr.config().longitude, 4));
+    page.replace("%%UTC%%", String(configMgr.config().utcOffsetSeconds));
+    String msg = "";
+    if (wm.server->hasArg("saved"))
+        msg = "<div class='banner ok'>Settings saved.</div>";
+    page.replace("%%MSG%%", msg);
+    wm.server->send(200, "text/html", page);
+}
+
+static void handleConfigPost() {
+    if (wm.server->hasArg("lat")) configMgr.config().latitude         = wm.server->arg("lat").toFloat();
+    if (wm.server->hasArg("lon")) configMgr.config().longitude        = wm.server->arg("lon").toFloat();
+    if (wm.server->hasArg("utc")) configMgr.config().utcOffsetSeconds = wm.server->arg("utc").toInt();
+    configMgr.save();
+    ntpClient.setTimeOffset(configMgr.config().utcOffsetSeconds);
+    lastWeatherFetch = 0;  // force immediate weather refresh on next loop
+    dirty.header = true;
+    wm.server->sendHeader("Location", "/config?saved=1");
+    wm.server->send(302, "text/plain", "");
+}
+
 // ── WiFiManager ───────────────────────────────────────────────────────────────
 static void runWiFiManager(ConfigManager& cfg) {
     char latBuf[12], lonBuf[12], utcBuf[8];
@@ -447,8 +551,11 @@ static void runWiFiManager(ConfigManager& cfg) {
         cfg.config().utcOffsetSeconds = atoi(paramUtc.getValue());
         cfg.save();
     });
+    wm.setCustomMenuHTML("<a href='/config' class='W l btn'>Configuration</a>");
     wm.autoConnect("CYD-Clock");
     wm.startWebPortal();
+    wm.server->on("/config",      HTTP_GET,  handleConfigGet);
+    wm.server->on("/save-config", HTTP_POST, handleConfigPost);
 }
 
 // ── Arduino ───────────────────────────────────────────────────────────────────
