@@ -34,11 +34,9 @@ import json
 import os
 import subprocess
 import sys
-import urllib.request
 
 SCRIPT_DIR       = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT        = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
-ESP_WEB_TOOLS_URL = "https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"
 
 
 # ── esptool helpers ──────────────────────────────────────────────────────────
@@ -155,13 +153,6 @@ def generate_manifest(app_name, version, builds, output_path):
         json.dump(manifest, f, indent=2)
 
 
-def download_esp_web_tools(dist_dir):
-    dest = os.path.join(dist_dir, "esp-web-tools.js")
-    if os.path.exists(dest):
-        return
-    print("==> Downloading esp-web-tools bundle")
-    urllib.request.urlretrieve(ESP_WEB_TOOLS_URL, dest)
-
 
 def copy_flasher_html(app_name, app_slug, version, output_path):
     template = os.path.join(SCRIPT_DIR, "flasher-template.html")
@@ -215,9 +206,6 @@ def main():
     print("==> Generating manifest")
     generate_manifest(args.name, args.version, builds_for_manifest,
                       os.path.join(dist_dir, "manifest.json"))
-
-    print("==> Downloading esp-web-tools")
-    download_esp_web_tools(dist_dir)
 
     print("==> Copying flasher HTML")
     copy_flasher_html(args.name, app_slug, args.version,
