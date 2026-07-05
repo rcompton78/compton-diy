@@ -19,30 +19,38 @@
 - **Key flags:** `ST7789_DRIVER=1`, `TFT_INVERSION_ON=1`, `CGRAM_OFFSET=1`
 - Note: other CYD boards in this set have ILI9341 — keep separate platformio configs if flashing both
 
-## Planned Redesign (Next Session)
+## Layout (Implemented)
 
-New layout — portrait 240×320:
+Portrait 240×320, USB at bottom:
 
 ```
-┌─────────────────────┐
-│  12:34  ☁ 18°C      │  ← ~40px header (clock + weather, always visible)
-├─────────────────────┤
+┌─────────────────────┐  y=0
+│  12:34  ²³  18C Clear│  ← 40px header (clock + weather, always on)
+├─────────────────────┤  y=40
 │                     │
-│    🐱 (animated)    │  ← ~180px main area (animated animal for Chloe)
+│    pixel cat        │  ← 175px animal zone (touch to feed)
+│   (animated)        │
 │                     │
-├─────────────────────┤
-│  [1m] [5m] [10] [30]│  ← ~50px quick-pick timer buttons
-│   ⏱ 05:00  ■  ↺    │  ← ~50px timer display + stop/reset
-└─────────────────────┘
+│   tap to feed       │
+├─────────────────────┤  y=215
+│  [1m] [5m][10m][30m]│  ← 50px quick-pick buttons
+├─────────────────────┤  y=265
+│  05:00      [||] [X]│  ← 55px timer row (font 6 digits)
+└─────────────────────┘  y=320
         [USB]
 ```
 
-Features to build:
-- Clock + weather always-on header bar
-- Animated pixel animal (Chloe can "feed" it)
-- Quick-pick timer buttons: 1, 5, 10, 30 min
-- Timer: start, pause/resume, stop, reset
-- Animal reacts when timer finishes (celebration animation)
+### Features
+- **Header**: HH:MM + seconds + weather temp/description, redraws every second
+- **Pixel cat**: white cat with ears, eyes (blink every 4s), whiskers, nose, paws, tail
+  - Idle: neutral expression, slow blink
+  - Happy (3s): big W-smile + sparkles — triggered by tapping the animal zone
+  - Celebrating (6s): bounce + sparkles — triggered automatically when timer finishes
+- **Quick-pick buttons**: [1m] [5m] [10m] [30m] — tap to start that timer, active button highlighted
+- **Timer row**: MM:SS in font 6 (green=running, yellow=paused, red=finished)
+  - [||/▶] button: pause / resume
+  - [X] button: reset timer and clear active pick
+- Dirty-flag rendering — only redraws zones that changed, no flicker
 
 ## Known Issues
 
