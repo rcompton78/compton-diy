@@ -39,9 +39,10 @@ void TimerWidget::resume() {
 }
 
 void TimerWidget::reset() {
-    _running   = false;
-    _finished  = false;
-    _elapsedMs = 0;
+    _running    = false;
+    _finished   = false;
+    _durationMs = 0;
+    _elapsedMs  = 0;
 }
 
 void TimerWidget::tick() {
