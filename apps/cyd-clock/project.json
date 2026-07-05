@@ -53,9 +53,7 @@
     },
     "version": {
       "executor": "@compton/nx-version:npm-version",
-      "options": {
-        "buildTargetName": "build"
-      }
+      "options": {}
     },
     "release": {
       "executor": "nx:run-commands",
