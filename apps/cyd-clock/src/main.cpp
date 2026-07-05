@@ -182,32 +182,37 @@ static void drawHeader() {
     tft.fillRect(0, HEADER_Y, 240, HEADER_H - 1, TFT_BLACK);
     tft.drawFastHLine(0, HEADER_Y + HEADER_H - 1, 240, C_SEP);
 
-    // Time HH:MM — font 4, left side
+    // 12-hour time: "H:MM" in font 4, then ":SS am/pm" in font 2 next to it
+    int h12 = t->tm_hour % 12;
+    if (h12 == 0) h12 = 12;
+    const char* ampm = (t->tm_hour < 12) ? "am" : "pm";
+
     char hmBuf[6];
-    snprintf(hmBuf, sizeof(hmBuf), "%02d:%02d", t->tm_hour, t->tm_min);
+    snprintf(hmBuf, sizeof(hmBuf), "%d:%02d", h12, t->tm_min);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.drawString(hmBuf, 6, HEADER_Y + 7, 4);
 
-    // Seconds — font 2, next to time
-    char sBuf[3];
-    snprintf(sBuf, sizeof(sBuf), "%02d", t->tm_sec);
+    char ssBuf[8];
+    snprintf(ssBuf, sizeof(ssBuf), ":%02d %s", t->tm_sec, ampm);
+    int hmWidth = tft.textWidth(hmBuf, 4);
     tft.setTextColor(C_DIM, TFT_BLACK);
-    tft.drawString(sBuf, 88, HEADER_Y + 13, 2);
+    tft.drawString(ssBuf, 6 + hmWidth + 2, HEADER_Y + 14, 2);
 
-    // Weather — font 2, right side
-    tft.fillRect(112, HEADER_Y, 128, HEADER_H - 1, TFT_BLACK);
+    // Weather — font 2, right-aligned
+    int timeEnd = 6 + hmWidth + 2 + tft.textWidth(ssBuf, 2) + 4;
+    tft.fillRect(timeEnd, HEADER_Y, 240 - timeEnd, HEADER_H - 1, TFT_BLACK);
     if (weather.data().valid) {
         char wBuf[20];
-        // degree symbol is char 0xB0 in ISO-8859-1 but TFT_eSPI font 2 uses ASCII
-        snprintf(wBuf, sizeof(wBuf), "%.0fC  %s",
+        snprintf(wBuf, sizeof(wBuf), "%.0fC %s",
                  weather.data().tempC,
                  WeatherClient::descriptionForCode(weather.data().weatherCode));
         tft.setTextColor(TFT_CYAN, TFT_BLACK);
         int tw = tft.textWidth(wBuf, 2);
-        tft.drawString(wBuf, max(112, 234 - tw), HEADER_Y + 13, 2);
+        int wx = max(timeEnd, 234 - tw);
+        tft.drawString(wBuf, wx, HEADER_Y + 14, 2);
     } else {
         tft.setTextColor(C_DIM, TFT_BLACK);
-        tft.drawString("no weather", 138, HEADER_Y + 13, 1);
+        tft.drawString("no wx", 200, HEADER_Y + 14, 1);
     }
 }
 
