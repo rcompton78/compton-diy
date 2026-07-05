@@ -47,10 +47,14 @@ jobs:
         id: last_tag
         run: |
           git fetch --all --tags
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)
-          LAST_TAG_SHA=$(git show-ref --hash "$LAST_TAG" 2>/dev/null | head -n 1 || echo "$LAST_TAG")
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            LAST_TAG_SHA=$(git rev-list -n 1 "$LAST_TAG")
+          else
+            LAST_TAG_SHA=$(git rev-list --max-parents=0 HEAD)
+          fi
           echo "sha=$LAST_TAG_SHA" >> "$GITHUB_OUTPUT"
-          echo "Last tag: $LAST_TAG ($LAST_TAG_SHA)"
+          echo "Last tag: ${LAST_TAG:-<none>} ($LAST_TAG_SHA)"
 
       - name: Build affected firmware
         env:
