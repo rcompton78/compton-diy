@@ -9,7 +9,6 @@
     "lint": "nx run-many -t lint"
   },
   "devDependencies": {
-    "@compton/nx-version": "^0.9.1",
     "nx": "22.7.5"
   },
   "pnpm": {
