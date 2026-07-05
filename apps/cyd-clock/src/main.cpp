@@ -217,13 +217,12 @@ static void drawHeader() {
 }
 
 static void drawAnimal() {
+    tft.fillRect(0, ANIMAL_Y, 240, ANIMAL_H, TFT_BLACK);
     int dy = (cat.mood == CatMood::Celebrate) ? ((cat.frame % 2 == 0) ? -3 : 3) : 0;
     drawCat(CAT_CX, CAT_CY + dy, cat.mood, cat.eyeOpen);
 
     if (cat.mood == CatMood::Happy || cat.mood == CatMood::Celebrate) {
         drawSparkles(CAT_CX, CAT_CY, cat.frame);
-    } else {
-        clearSparkles(CAT_CX, CAT_CY);
     }
 
     // Feed hint at bottom of animal zone
