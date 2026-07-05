@@ -438,69 +438,85 @@ static const char CONFIG_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 *{box-sizing:border-box}
 body{font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px;background:#111;color:#ddd}
 h2{margin-top:0}
+h3{margin:20px 0 10px;font-size:1rem;color:#aaa;border-bottom:1px solid #333;padding-bottom:6px}
 label{display:block;font-size:.82rem;color:#888;margin-bottom:2px}
 input{display:block;width:100%;padding:8px;margin-bottom:14px;background:#1e1e1e;color:#ddd;border:1px solid #333;border-radius:5px}
 .row{display:flex;gap:8px}
 .row input{flex:1;margin-bottom:0}
 button{padding:9px 16px;background:#0070f3;color:#fff;border:none;border-radius:5px;cursor:pointer}
 button:hover{background:#005ec4}
-#res{margin:8px 0 14px;border:1px solid #333;border-radius:5px;max-height:200px;overflow-y:auto;display:none}
+.drop{margin:8px 0 14px;border:1px solid #333;border-radius:5px;max-height:200px;overflow-y:auto;display:none}
 .city{padding:10px 12px;cursor:pointer;border-bottom:1px solid #222}
 .city:hover,.city:focus{background:#1e1e1e;outline:none}
 .city small{color:#666}
 .banner{padding:10px;border-radius:5px;margin-bottom:14px}
 .ok{background:#063}
-.err{background:#600}
 </style>
 </head><body>
 <h2>Configuration</h2>
 %%MSG%%
 <form method="POST" action="/save-config">
-<label>City search — fills location + timezone automatically</label>
+
+<h3>Weather location</h3>
+<label>City search</label>
 <div class="row">
-<input id="cs" placeholder="e.g. London, Edmonton…" oninput="deb(this.value)">
-<button type="button" onclick="go()">Search</button>
+<input id="wcs" placeholder="e.g. Paris, Toronto…" oninput="deb('w',this.value)">
+<button type="button" onclick="search('w')">Search</button>
 </div>
-<div id="res"></div>
+<div id="wres" class="drop"></div>
 <label>Latitude</label>
 <input name="lat" id="lat" value="%%LAT%%">
 <label>Longitude</label>
 <input name="lon" id="lon" value="%%LON%%">
-<label>UTC Offset (seconds) — auto-filled by city search, accounts for DST</label>
+
+<h3>Timezone (for clock)</h3>
+<label>City search</label>
+<div class="row">
+<input id="tcs" placeholder="e.g. London, New York…" oninput="deb('t',this.value)">
+<button type="button" onclick="search('t')">Search</button>
+</div>
+<div id="tres" class="drop"></div>
+<label>UTC Offset (seconds)</label>
 <input name="utc" id="utc" type="number" value="%%UTC%%">
-<button type="submit" style="width:100%;margin-top:4px">Save</button>
+
+<button type="submit" style="width:100%;margin-top:8px">Save</button>
 </form>
 <script>
-let t;
-function deb(v){clearTimeout(t);if(v.length>1)t=setTimeout(go,500)}
-async function go(){
-  const q=document.getElementById('cs').value.trim();
+const tm={};
+function deb(k,v){clearTimeout(tm[k]);if(v.length>1)tm[k]=setTimeout(()=>search(k),500)}
+async function search(k){
+  const q=document.getElementById(k+'cs').value.trim();
   if(!q)return;
-  const el=document.getElementById('res');
+  const el=document.getElementById(k+'res');
   el.style.display='block';el.innerHTML='<div class="city">Searching…</div>';
   try{
     const r=await fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(q)+'&count=8&language=en&format=json');
     const d=await r.json();
-    if(!d.results||!d.results.length){el.innerHTML='<div class="city">No results found</div>';return;}
+    if(!d.results||!d.results.length){el.innerHTML='<div class="city">No results</div>';return;}
     el.innerHTML=d.results.map(c=>`<div class="city" tabindex="0"
-      onclick="pick(${c.latitude},${c.longitude},'${c.timezone||''}')"
-      onkeydown="if(event.key==='Enter')pick(${c.latitude},${c.longitude},'${c.timezone||''}')">
+      onclick="pick('${k}',${c.latitude},${c.longitude},'${c.timezone||''}')"
+      onkeydown="if(event.key==='Enter')pick('${k}',${c.latitude},${c.longitude},'${c.timezone||''}')">
       <strong>${c.name}</strong>${c.admin1?', '+c.admin1:''} <small>${c.country}</small>
     </div>`).join('');
-  }catch(e){el.innerHTML='<div class="city">Network error — check connection</div>';}
+  }catch(e){el.innerHTML='<div class="city">Network error</div>';}
 }
-function pick(lat,lon,tz){
-  document.getElementById('lat').value=lat;
-  document.getElementById('lon').value=lon;
-  document.getElementById('res').style.display='none';
-  document.getElementById('cs').value='';
-  if(tz){
-    try{
-      const p=new Intl.DateTimeFormat('en',{timeZone:tz,timeZoneName:'longOffset'}).formatToParts(new Date());
-      const s=p.find(x=>x.type==='timeZoneName').value; // e.g. GMT-07:00
-      const m=s.match(/GMT([+-]?)(\d{2}):(\d{2})/);
-      if(m)document.getElementById('utc').value=(m[1]==='-'?-1:1)*(+m[2]*3600+ +m[3]*60);
-    }catch(e){}
+function utcFromTz(tz){
+  try{
+    const p=new Intl.DateTimeFormat('en',{timeZone:tz,timeZoneName:'longOffset'}).formatToParts(new Date());
+    const s=p.find(x=>x.type==='timeZoneName').value;
+    const m=s.match(/GMT([+-]?)(\d{2}):(\d{2})/);
+    return m?(m[1]==='-'?-1:1)*(+m[2]*3600+ +m[3]*60):null;
+  }catch(e){return null;}
+}
+function pick(k,lat,lon,tz){
+  document.getElementById(k+'res').style.display='none';
+  document.getElementById(k+'cs').value='';
+  if(k==='w'){
+    document.getElementById('lat').value=lat;
+    document.getElementById('lon').value=lon;
+  } else {
+    const off=utcFromTz(tz);
+    if(off!==null)document.getElementById('utc').value=off;
   }
 }
 </script>
