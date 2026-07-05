@@ -24,7 +24,9 @@ jobs:
           python-version: '3.12'
 
       - name: Install PlatformIO
-        run: pip install platformio
+        run: |
+          pip install platformio
+          python3 -m platformio system info
 
       - uses: pnpm/action-setup@v4
         with:
