@@ -51,12 +51,6 @@
         "cwd": "apps/cyd-clock"
       }
     },
-    "version": {
-      "executor": "@compton/nx-version:npm-version",
-      "options": {
-        "buildTargetName": "build"
-      }
-    },
     "release": {
       "executor": "nx:run-commands",
       "options": {
