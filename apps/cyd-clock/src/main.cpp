@@ -3,6 +3,7 @@
 #include <TFT_eSPI.h>
 #include <XPT2046_Touchscreen.h>
 #include <WiFiManager.h>
+#include <WiFi.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 
@@ -65,9 +66,10 @@ struct {
 } cat;
 
 // ── App state ─────────────────────────────────────────────────────────────────
-bool timerDonePrev     = false;
+bool timerDonePrev          = false;
 unsigned long lastWeatherFetch = 0;
 unsigned long lastTouchMs      = 0;
+unsigned long showIpUntilMs    = 0;
 
 struct { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick; } dirty = {true, true, true, true, false, false, false};
 
@@ -216,10 +218,15 @@ static void drawHeader() {
     tft.setTextColor(C_DIM, TFT_BLACK);
     tft.drawString(ssBuf, 6 + hmWidth + 2, HEADER_Y + 14, 2);
 
-    // Weather — font 2, right-aligned
+    // Weather / IP — font 2, right-aligned
     int timeEnd = 6 + hmWidth + 2 + tft.textWidth(ssBuf, 2) + 4;
     tft.fillRect(timeEnd, HEADER_Y, 240 - timeEnd, HEADER_H - 1, TFT_BLACK);
-    if (weather.data().valid) {
+    if (showIpUntilMs > millis()) {
+        String ip = WiFi.localIP().toString();
+        tft.setTextColor(TFT_GREEN, TFT_BLACK);
+        int tw = tft.textWidth(ip.c_str(), 1);
+        tft.drawString(ip.c_str(), max(timeEnd, 238 - tw), HEADER_Y + 15, 1);
+    } else if (weather.data().valid) {
         char wBuf[20];
         snprintf(wBuf, sizeof(wBuf), "%.0fC %s",
                  weather.data().tempC,
@@ -340,7 +347,10 @@ static void handleTouch() {
 
     Serial.printf("Touch x=%d y=%d\n", p.x, p.y);
 
-    if (p.y >= TIMER_Y) {
+    if (p.y < HEADER_Y + HEADER_H && p.x < 120) {
+        showIpUntilMs = now + 7000;
+        dirty.header  = true;
+    } else if (p.y >= TIMER_Y) {
         if (timerWidget.isRunning()) {
             if (p.x >= 196) {
                 timerWidget.reset();
@@ -462,6 +472,12 @@ void loop() {
     handleTouch();
 
     unsigned long now = millis();
+
+    // IP display expiry
+    if (showIpUntilMs > 0 && now >= showIpUntilMs) {
+        showIpUntilMs = 0;
+        dirty.header  = true;
+    }
 
     // Weather refresh
     if (now - lastWeatherFetch > WEATHER_UPDATE_INTERVAL_MS) {
