@@ -65,6 +65,20 @@
         "command": "python3 -m platformio run -t buildfs",
         "cwd": "apps/bambu-status-bar"
       }
+    },
+    "version": {
+      "executor": "@compton/nx-version:npm-version",
+      "options": {
+        "buildTargetName": "build"
+      }
+    },
+    "release": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "python3 tools/esp-flasher/generate_release.py --project-dir apps/bambu-status-bar --name \"Bambu Status Bar\" --build c3:ESP32-C3 --build s3:ESP32-S3 --build pico32:ESP32 --version ${RELEASE_VERSION:-dev}",
+        "cwd": "."
+      },
+      "dependsOn": ["build", "build-fs"]
     }
   }
 }

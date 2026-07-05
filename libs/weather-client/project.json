@@ -1,0 +1,7 @@
+{
+  "name": "weather-client",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "tags": ["platform:esp32", "type:firmware-lib"],
+  "targets": {}
+}

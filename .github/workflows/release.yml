@@ -1,0 +1,100 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install Node dependencies
+        run: pnpm install
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Get last version tag
+        id: last_tag
+        run: |
+          git fetch --all --tags
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || git rev-list --max-parents=0 HEAD)
+          LAST_TAG_SHA=$(git show-ref --hash "$LAST_TAG" 2>/dev/null | head -n 1 || echo "$LAST_TAG")
+          echo "sha=$LAST_TAG_SHA" >> "$GITHUB_OUTPUT"
+          echo "Last tag: $LAST_TAG ($LAST_TAG_SHA)"
+
+      - name: Build affected firmware
+        env:
+          BASE_SHA: ${{ steps.last_tag.outputs.sha }}
+        run: |
+          pnpm nx affected --base "$BASE_SHA" -t build
+          pnpm nx affected --base "$BASE_SHA" -t build-fs
+
+      - name: Generate releases
+        env:
+          BASE_SHA: ${{ steps.last_tag.outputs.sha }}
+          RELEASE_VERSION: latest
+        run: pnpm nx affected --base "$BASE_SHA" -t release
+
+      - name: Generate flasher index
+        run: python3 tools/esp-flasher/generate_index.py --version=latest
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/
+
+      - name: Version affected projects
+        env:
+          BASE_SHA: ${{ steps.last_tag.outputs.sha }}
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: pnpm nx affected --base "$BASE_SHA" -t version --parallel 1
+
+      - name: Push version tags
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GITHUB_TOKEN}@github.com/${{ github.repository }}"
+          git push origin master --follow-tags
+
+  deploy-pages:
+    needs: build-and-release
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

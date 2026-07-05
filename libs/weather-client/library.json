@@ -1,0 +1,11 @@
+{
+  "name": "weather-client",
+  "version": "1.0.0",
+  "description": "Open-Meteo weather client for ESP32 Arduino projects",
+  "keywords": ["weather", "esp32", "open-meteo"],
+  "frameworks": ["arduino"],
+  "platforms": ["espressif32"],
+  "dependencies": {
+    "bblanchon/ArduinoJson": "^7.0.3"
+  }
+}

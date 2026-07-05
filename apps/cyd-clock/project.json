@@ -1,0 +1,69 @@
+{
+  "name": "cyd-clock",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "tags": ["platform:esp32", "type:firmware"],
+  "implicitDependencies": ["weather-client"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "../../.venv/bin/python -m platformio run -e cyd",
+        "cwd": "apps/cyd-clock"
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**",
+        "{projectRoot}/include/**",
+        "{projectRoot}/platformio.ini",
+        "{workspaceRoot}/libs/weather-client/src/**"
+      ],
+      "outputs": ["{projectRoot}/.pio/build/cyd"]
+    },
+    "flash": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "../../.venv/bin/python -m platformio run -e cyd -t upload",
+        "cwd": "apps/cyd-clock"
+      }
+    },
+    "build-fs": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "../../.venv/bin/python -m platformio run -e cyd -t buildfs",
+        "cwd": "apps/cyd-clock"
+      },
+      "cache": true,
+      "inputs": ["{projectRoot}/data/**"],
+      "outputs": ["{projectRoot}/.pio/build/cyd/littlefs.bin"]
+    },
+    "flash-fs": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "../../.venv/bin/python -m platformio run -e cyd -t uploadfs",
+        "cwd": "apps/cyd-clock"
+      }
+    },
+    "monitor": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "../../.venv/bin/python -m platformio device monitor",
+        "cwd": "apps/cyd-clock"
+      }
+    },
+    "version": {
+      "executor": "@compton/nx-version:npm-version",
+      "options": {
+        "buildTargetName": "build"
+      }
+    },
+    "release": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "python3 tools/esp-flasher/generate_release.py --project-dir apps/cyd-clock --name \"CYD Clock\" --build cyd:ESP32 --version ${RELEASE_VERSION:-dev}",
+        "cwd": "."
+      },
+      "dependsOn": ["build", "build-fs"]
+    }
+  }
+}
