@@ -37,7 +37,7 @@ static constexpr uint16_t C_DIM  = 0x7BEF;  // dim text
 
 // Quick-pick durations
 static constexpr uint32_t    PICK_SEC[] = {60, 300, 600, 1800};
-static constexpr const char* PICK_LBL[] = {"1m", "5m", "10m", "30m"};
+static constexpr const char* PICK_LBL[] = {"+1", "+5", "+10", "+30"};
 static constexpr int PICK_N = 4;
 
 // ── Hardware ──────────────────────────────────────────────────────────────────
@@ -65,7 +65,6 @@ struct {
 } cat;
 
 // ── App state ─────────────────────────────────────────────────────────────────
-int  activePick        = -1;
 bool timerDonePrev     = false;
 unsigned long lastWeatherFetch = 0;
 unsigned long lastTouchMs      = 0;
@@ -258,13 +257,10 @@ static void drawPicker() {
 
     constexpr int btnW = 60;
     for (int i = 0; i < PICK_N; i++) {
-        int bx    = i * btnW;
-        bool on   = (i == activePick);
-        uint16_t bg = on ? C_BACT : C_BTN;
-        uint16_t fg = on ? TFT_WHITE : C_DIM;
-        tft.fillRoundRect(bx + 3, PICKER_Y + 7, btnW - 6, PICKER_H - 14, 6, bg);
+        int bx = i * btnW;
+        tft.fillRoundRect(bx + 3, PICKER_Y + 7, btnW - 6, PICKER_H - 14, 6, C_BTN);
         int tw = tft.textWidth(PICK_LBL[i], 2);
-        tft.setTextColor(fg, bg);
+        tft.setTextColor(TFT_WHITE, C_BTN);
         tft.drawString(PICK_LBL[i], bx + (btnW - tw) / 2, PICKER_Y + 17, 2);
     }
 }
@@ -341,9 +337,7 @@ static void handleTouch() {
     if (p.y >= TIMER_Y) {
         if (p.x >= 196 && (timerWidget.remaining() > 0 || timerWidget.isFinished())) {
             timerWidget.reset();
-            activePick = -1;
             if (cat.mood == CatMood::Celebrate) { cat.mood = CatMood::Idle; dirty.animal = true; }
-            dirty.picker   = true;
             dirty.timerRow = true;
         } else if (timerWidget.remaining() > 0 || timerWidget.isRunning()) {
             if (timerWidget.isRunning()) timerWidget.pause();
@@ -352,9 +346,7 @@ static void handleTouch() {
         }
     } else if (p.y >= PICKER_Y) {
         int idx = constrain(p.x / (240 / PICK_N), 0, PICK_N - 1);
-        activePick = idx;
-        timerWidget.start(PICK_SEC[idx]);
-        dirty.picker   = true;
+        timerWidget.addTime(PICK_SEC[idx]);
         dirty.timerRow = true;
     } else if (p.y >= ANIMAL_Y) {
         cat.mood  = CatMood::Happy;

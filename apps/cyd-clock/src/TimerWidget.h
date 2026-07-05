@@ -4,6 +4,7 @@
 class TimerWidget {
 public:
     void start(uint32_t durationSeconds);
+    void addTime(uint32_t seconds);
     void pause();
     void resume();
     void reset();
