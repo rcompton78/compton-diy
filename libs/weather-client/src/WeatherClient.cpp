@@ -14,12 +14,15 @@ bool WeatherClient::fetch(float latitude, float longitude) {
         latitude, longitude);
 
     http.begin(url);
+    http.setTimeout(10000);
     int code = http.GET();
     if (code != 200) { http.end(); return false; }
 
-    JsonDocument doc;
-    if (deserializeJson(doc, http.getStream())) { http.end(); return false; }
+    String body = http.getString();
     http.end();
+
+    JsonDocument doc;
+    if (deserializeJson(doc, body)) return false;
 
     JsonObject cw = doc["current_weather"];
     _data.tempC        = cw["temperature"];

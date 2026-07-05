@@ -70,31 +70,35 @@ bool timerDonePrev     = false;
 unsigned long lastWeatherFetch = 0;
 unsigned long lastTouchMs      = 0;
 
-struct { bool header, animal, picker, timerRow; } dirty = {true, true, true, true};
+struct { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick; } dirty = {true, true, true, true, false, false, false};
 
-// ── GRAM init ─────────────────────────────────────────────────────────────────
-static void clearFullGRAM() {
-    tft.startWrite();
-    tft.writecommand(0x2A);
-    tft.writedata(0x00); tft.writedata(0x00); tft.writedata(0x00); tft.writedata(0xEF);
-    tft.writecommand(0x2B);
-    tft.writedata(0x00); tft.writedata(0x00); tft.writedata(0x01); tft.writedata(0x3F);
-    tft.writecommand(0x2C);
-    tft.pushColor(TFT_BLACK, 240 * 320);
-    tft.endWrite();
-}
 
 // ── Cat drawing ───────────────────────────────────────────────────────────────
+static void drawEyes(int cx, int cy, bool eyeOpen) {
+    tft.fillRect(cx - 28, cy - 50, 56, 26, C_CAT);  // restore head colour before drawing eyes
+    if (eyeOpen) {
+        tft.fillCircle(cx - 15, cy - 37, 11, TFT_WHITE);
+        tft.fillCircle(cx + 15, cy - 37, 11, TFT_WHITE);
+        tft.fillCircle(cx - 14, cy - 37,  5, TFT_BLACK);
+        tft.fillCircle(cx + 16, cy - 37,  5, TFT_BLACK);
+        tft.fillRect(cx - 19, cy - 43, 4, 4, TFT_WHITE);
+        tft.fillRect(cx + 12, cy - 43, 4, 4, TFT_WHITE);
+    } else {
+        tft.fillRoundRect(cx - 24, cy - 41, 20, 7, 3, C_DARK);
+        tft.fillRoundRect(cx +  4, cy - 41, 20, 7, 3, C_DARK);
+    }
+}
+
 static void drawCat(int cx, int cy, CatMood mood, bool eyeOpen) {
     bool happy = (mood == CatMood::Happy || mood == CatMood::Celebrate);
 
-    tft.fillRect(cx - 62, cy - 86, 124, 144, TFT_BLACK);
+    tft.fillRect(cx - 50, cy - 88, 100, 146, TFT_BLACK);
 
-    // Ears (outer then inner pink)
-    tft.fillTriangle(cx - 26, cy - 86, cx - 52, cy - 62, cx -  8, cy - 62, C_CAT);
-    tft.fillTriangle(cx + 26, cy - 86, cx + 52, cy - 62, cx +  8, cy - 62, C_CAT);
-    tft.fillTriangle(cx - 26, cy - 78, cx - 45, cy - 64, cx - 12, cy - 64, C_PINK);
-    tft.fillTriangle(cx + 26, cy - 78, cx + 45, cy - 64, cx + 12, cy - 64, C_PINK);
+    // Ears
+    tft.fillTriangle(cx - 16, cy - 86, cx - 32, cy - 62, cx -  2, cy - 62, C_CAT);
+    tft.fillTriangle(cx + 16, cy - 86, cx + 32, cy - 62, cx +  2, cy - 62, C_CAT);
+    tft.fillTriangle(cx - 16, cy - 80, cx - 28, cy - 64, cx -  5, cy - 64, C_PINK);
+    tft.fillTriangle(cx + 16, cy - 80, cx + 28, cy - 64, cx +  5, cy - 64, C_PINK);
 
     // Head
     tft.fillRoundRect(cx - 44, cy - 64, 88, 66, 20, C_CAT);
@@ -175,6 +179,21 @@ static void clearSparkles(int cx, int cy) {
 }
 
 // ── Zone draws ────────────────────────────────────────────────────────────────
+static void drawHeaderTick() {
+    time_t epoch = ntpClient.getEpochTime();
+    struct tm* t = localtime(&epoch);
+    int h12 = t->tm_hour % 12;
+    if (h12 == 0) h12 = 12;
+    const char* ampm = (t->tm_hour < 12) ? "am" : "pm";
+    char hmBuf[6];
+    snprintf(hmBuf, sizeof(hmBuf), "%d:%02d", h12, t->tm_min);
+    char ssBuf[8];
+    snprintf(ssBuf, sizeof(ssBuf), ":%02d %s", t->tm_sec, ampm);
+    // Font 2 is fixed-width so drawing with bg colour self-erases previous value
+    tft.setTextColor(C_DIM, TFT_BLACK);
+    tft.drawString(ssBuf, 6 + tft.textWidth(hmBuf, 4) + 2, HEADER_Y + 14, 2);
+}
+
 static void drawHeader() {
     time_t epoch = ntpClient.getEpochTime();
     struct tm* t = localtime(&epoch);
@@ -248,6 +267,17 @@ static void drawPicker() {
         tft.setTextColor(fg, bg);
         tft.drawString(PICK_LBL[i], bx + (btnW - tw) / 2, PICKER_Y + 17, 2);
     }
+}
+
+static void drawTimerDigits() {
+    uint32_t rem = timerWidget.remaining();
+    uint16_t col = timerWidget.isFinished() ? TFT_RED
+                 : timerWidget.isRunning()  ? TFT_GREEN
+                                            : TFT_YELLOW;
+    char buf[6];
+    snprintf(buf, sizeof(buf), "%02d:%02d", rem / 60, rem % 60);
+    tft.setTextColor(col, TFT_BLACK);  // bg colour self-erases previous digits
+    tft.drawString(buf, 8, TIMER_Y + 3, 6);
 }
 
 static void drawTimerRow() {
@@ -346,10 +376,10 @@ static void updateCatAnim() {
         cat.mood = CatMood::Idle; changed = true;
     }
 
-    // Blink (idle only)
+    // Blink (idle only) — eye-only redraw to avoid full-zone flash
     if (cat.mood == CatMood::Idle) {
-        if ( cat.eyeOpen && now - cat.lastBlink > 4000) { cat.eyeOpen = false; cat.lastBlink = now; changed = true; }
-        if (!cat.eyeOpen && now - cat.lastBlink >  150) { cat.eyeOpen = true;                       changed = true; }
+        if ( cat.eyeOpen && now - cat.lastBlink > 4000) { cat.eyeOpen = false; cat.lastBlink = now; dirty.eyesOnly = true; }
+        if (!cat.eyeOpen && now - cat.lastBlink >  150) { cat.eyeOpen = true;                       dirty.eyesOnly = true; }
     } else if (!cat.eyeOpen) {
         cat.eyeOpen = true; changed = true;
     }
@@ -396,8 +426,8 @@ void setup() {
     digitalWrite(TFT_BACKLIGHT_PIN, HIGH);
 
     tft.init();
-    clearFullGRAM();
     tft.setRotation(0);
+    tft.invertDisplay(false);  // ST7789_Init.h hardcodes INVON; this panel needs INVOFF
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.drawCentreString("Starting...", CX, 150, 4);
@@ -452,27 +482,35 @@ void loop() {
     // Cat animation
     updateCatAnim();
 
-    // Header tick (once per second)
+    // Header tick — full redraw on minute change, seconds-only otherwise
     {
         static int prevSec = -1;
+        static int prevMin = -1;
         time_t ep = ntpClient.getEpochTime();
         struct tm* tm = localtime(&ep);
-        if (tm->tm_sec != prevSec) { prevSec = tm->tm_sec; dirty.header = true; }
+        if (tm->tm_sec != prevSec) {
+            prevSec = tm->tm_sec;
+            if (tm->tm_min != prevMin) { prevMin = tm->tm_min; dirty.header = true; }
+            else                        { dirty.headerTick = true; }
+        }
     }
 
     // Timer row refresh while running
     {
         static unsigned long lastTimerDraw = 0;
         if (timerWidget.isRunning() && now - lastTimerDraw >= 500) {
-            lastTimerDraw  = now;
-            dirty.timerRow = true;
+            lastTimerDraw   = now;
+            dirty.timerTick = true;
         }
     }
 
-    if (dirty.header)   { drawHeader();   dirty.header   = false; }
-    if (dirty.animal)   { drawAnimal();   dirty.animal   = false; }
-    if (dirty.picker)   { drawPicker();   dirty.picker   = false; }
-    if (dirty.timerRow) { drawTimerRow(); dirty.timerRow = false; }
+    if (dirty.header)             { drawHeader();      dirty.header     = false; dirty.headerTick = false; }
+    else if (dirty.headerTick)   { drawHeaderTick();  dirty.headerTick = false; }
+    if (dirty.animal)        { drawAnimal();                            dirty.animal    = false; dirty.eyesOnly = false; }
+    else if (dirty.eyesOnly) { drawEyes(CAT_CX, CAT_CY, cat.eyeOpen); dirty.eyesOnly  = false; }
+    if (dirty.picker)        { drawPicker();                            dirty.picker    = false; }
+    if (dirty.timerRow)      { drawTimerRow();  dirty.timerRow  = false; dirty.timerTick = false; }
+    else if (dirty.timerTick){ drawTimerDigits(); dirty.timerTick = false; }
 
     delay(50);
 }
