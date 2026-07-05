@@ -11,118 +11,162 @@
 #include "WeatherClient.h"
 #include "TimerWidget.h"
 
-// ── Hardware ────────────────────────────────────────────────────────────────
+// Portrait 240x320 (USB at top)
+static constexpr int CX = 120;  // horizontal centre
+
+// ── Hardware ─────────────────────────────────────────────────────────────────
 TFT_eSPI tft;
 SPIClass touchSPI(HSPI);
 XPT2046_Touchscreen touch(TOUCH_CS, TOUCH_IRQ);
 
-// ── Services ────────────────────────────────────────────────────────────────
-WiFiUDP    ntpUDP;
-NTPClient  ntpClient(ntpUDP, NTP_SERVER);
+// ── Services ─────────────────────────────────────────────────────────────────
+WiFiUDP       ntpUDP;
+NTPClient     ntpClient(ntpUDP, NTP_SERVER);
 ConfigManager configMgr;
 WeatherClient weather;
-TimerWidget   timer;
+TimerWidget   timerWidget;
 
-// ── State ───────────────────────────────────────────────────────────────────
+// ── State ─────────────────────────────────────────────────────────────────────
 enum class Screen { Clock, Timer };
 Screen currentScreen = Screen::Clock;
-
 unsigned long lastWeatherUpdate = 0;
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
-void drawClock() {
-    tft.fillScreen(TFT_BLACK);
+// Clear a horizontal band and return y for next element
+static void clearBand(int y, int h) {
+    tft.fillRect(0, y, 240, h, TFT_BLACK);
+}
 
+// ── Clock screen ──────────────────────────────────────────────────────────────
+void drawClock() {
     time_t epoch = ntpClient.getEpochTime();
     struct tm* t = localtime(&epoch);
 
-    char timeBuf[9];
-    snprintf(timeBuf, sizeof(timeBuf), "%02d:%02d:%02d", t->tm_hour, t->tm_min, t->tm_sec);
+    // HH:MM — font 7 (7-seg, 75px tall). Draw with bg so it self-erases.
+    char hmBuf[6];
+    snprintf(hmBuf, sizeof(hmBuf), "%02d:%02d", t->tm_hour, t->tm_min);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.setTextSize(1);
-    tft.drawString(timeBuf, 60, 90, 7);
+    tft.drawCentreString(hmBuf, CX, 30, 7);
 
-    char dateBuf[20];
-    snprintf(dateBuf, sizeof(dateBuf), "%04d-%02d-%02d", t->tm_year + 1900, t->tm_mon + 1, t->tm_mday);
-    tft.drawString(dateBuf, 80, 155, 4);
+    // Seconds — font 4 (26px tall)
+    char secBuf[3];
+    snprintf(secBuf, sizeof(secBuf), "%02d", t->tm_sec);
+    tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    tft.drawCentreString(secBuf, CX, 120, 4);
 
+    // Date — font 4
+    char dateBuf[12];
+    snprintf(dateBuf, sizeof(dateBuf), "%04d-%02d-%02d",
+             t->tm_year + 1900, t->tm_mon + 1, t->tm_mday);
+    tft.setTextColor(TFT_LIGHTGREY, TFT_BLACK);
+    tft.drawCentreString(dateBuf, CX, 165, 4);
+
+    // Weather — variable-length text so clear the band first
+    clearBand(210, 40);
     if (weather.data().valid) {
         char wBuf[40];
-        snprintf(wBuf, sizeof(wBuf), "%.1f C  %s",
-            weather.data().tempC,
-            WeatherClient::descriptionForCode(weather.data().weatherCode));
-        tft.drawString(wBuf, 20, 200, 2);
+        snprintf(wBuf, sizeof(wBuf), "%.1fC  %s",
+                 weather.data().tempC,
+                 WeatherClient::descriptionForCode(weather.data().weatherCode));
+        tft.setTextColor(TFT_CYAN, TFT_BLACK);
+        tft.drawCentreString(wBuf, CX, 220, 2);
+    } else {
+        tft.setTextColor(TFT_DARKGREY, TFT_BLACK);
+        tft.drawCentreString("No weather data", CX, 220, 2);
     }
 }
 
+// ── Timer screen ──────────────────────────────────────────────────────────────
 void drawTimer() {
-    tft.fillScreen(TFT_BLACK);
-    timer.tick();
+    timerWidget.tick();
 
-    uint32_t rem = timer.remaining();
-    uint32_t mins = rem / 60;
-    uint32_t secs = rem % 60;
-
+    uint32_t rem  = timerWidget.remaining();
     char buf[6];
-    snprintf(buf, sizeof(buf), "%02d:%02d", mins, secs);
+    snprintf(buf, sizeof(buf), "%02d:%02d", rem / 60, rem % 60);
 
-    uint16_t colour = timer.isFinished() ? TFT_RED
-                    : timer.isRunning()  ? TFT_GREEN
-                                         : TFT_YELLOW;
+    uint16_t colour = timerWidget.isFinished() ? TFT_RED
+                    : timerWidget.isRunning()   ? TFT_GREEN
+                                                : TFT_YELLOW;
     tft.setTextColor(colour, TFT_BLACK);
-    tft.drawString(buf, 60, 90, 7);
+    tft.drawCentreString(buf, CX, 110, 7);
 
+    clearBand(220, 30);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.drawString(timer.isRunning() ? "TAP TO PAUSE" : "TAP TO START", 70, 180, 2);
+    tft.drawCentreString(
+        timerWidget.isRunning() ? "TAP TO PAUSE" : "TAP TO START",
+        CX, 225, 2);
 }
 
+// ── Touch ─────────────────────────────────────────────────────────────────────
 void handleTouch() {
     if (!touch.tirqTouched() || !touch.touched()) return;
-
-    TS_Point p = touch.getPoint();
+    touch.getPoint();
 
     if (currentScreen == Screen::Clock) {
         currentScreen = Screen::Timer;
-        if (!timer.isRunning() && !timer.isFinished()) {
-            timer.start(60);
-        }
+        tft.fillScreen(TFT_BLACK);
+        if (!timerWidget.isRunning() && !timerWidget.isFinished())
+            timerWidget.start(60);
     } else {
-        if (timer.isFinished()) {
-            timer.reset();
+        if (timerWidget.isFinished()) {
+            timerWidget.reset();
+            tft.fillScreen(TFT_BLACK);
             currentScreen = Screen::Clock;
-        } else if (timer.isRunning()) {
-            timer.pause();
+        } else if (timerWidget.isRunning()) {
+            timerWidget.pause();
         } else {
-            timer.resume();
+            timerWidget.resume();
         }
     }
 }
 
-// ── Arduino ─────────────────────────────────────────────────────────────────
+// ── WiFiManager with location params ─────────────────────────────────────────
+void runWiFiManager(ConfigManager& cfg) {
+    char latBuf[12], lonBuf[12], utcBuf[8];
+    snprintf(latBuf, sizeof(latBuf), "%.4f", cfg.config().latitude);
+    snprintf(lonBuf, sizeof(lonBuf), "%.4f", cfg.config().longitude);
+    snprintf(utcBuf, sizeof(utcBuf), "%d",   cfg.config().utcOffsetSeconds);
+
+    WiFiManagerParameter paramLat("lat", "Latitude",          latBuf, 11);
+    WiFiManagerParameter paramLon("lon", "Longitude",         lonBuf, 11);
+    WiFiManagerParameter paramUtc("utc", "UTC Offset (sec)",  utcBuf, 7);
+
+    WiFiManager wm;
+    wm.addParameter(&paramLat);
+    wm.addParameter(&paramLon);
+    wm.addParameter(&paramUtc);
+    wm.setSaveParamsCallback([&]() {
+        cfg.config().latitude         = atof(paramLat.getValue());
+        cfg.config().longitude        = atof(paramLon.getValue());
+        cfg.config().utcOffsetSeconds = atoi(paramUtc.getValue());
+        cfg.save();
+    });
+
+    wm.autoConnect("CYD-Clock");
+}
+
+// ── Arduino ───────────────────────────────────────────────────────────────────
 void setup() {
     Serial.begin(115200);
 
-    // Backlight
     pinMode(TFT_BACKLIGHT_PIN, OUTPUT);
     digitalWrite(TFT_BACKLIGHT_PIN, HIGH);
 
     tft.init();
-    tft.setRotation(1);
+    tft.setRotation(1);         // landscape first — clears all 320x240 physical pixels
     tft.fillScreen(TFT_BLACK);
-    tft.setTextColor(TFT_WHITE);
-    tft.drawString("Starting...", 10, 110, 4);
+    tft.setRotation(0);         // portrait 240x320, USB at top
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.drawCentreString("Starting...", CX, 150, 4);
 
-    // Touch on HSPI
     touchSPI.begin(TOUCH_CLK, TOUCH_MISO, TOUCH_MOSI, TOUCH_CS);
     touch.begin(touchSPI);
-    touch.setRotation(1);
+    touch.setRotation(0);
 
     configMgr.begin();
     configMgr.load();
 
-    // WiFi — captive portal on first boot
-    WiFiManager wm;
-    wm.autoConnect("CYD-Clock");
+    runWiFiManager(configMgr);
 
     ntpClient.begin();
     ntpClient.setTimeOffset(configMgr.config().utcOffsetSeconds);
@@ -131,7 +175,7 @@ void setup() {
     weather.fetch(configMgr.config().latitude, configMgr.config().longitude);
     lastWeatherUpdate = millis();
 
-    tft.fillScreen(TFT_BLACK);
+    tft.fillScreen(TFT_BLACK);  // clean slate before loop starts
 }
 
 void loop() {
@@ -143,11 +187,8 @@ void loop() {
         lastWeatherUpdate = millis();
     }
 
-    if (currentScreen == Screen::Clock) {
-        drawClock();
-    } else {
-        drawTimer();
-    }
+    if (currentScreen == Screen::Clock) drawClock();
+    else                                drawTimer();
 
     delay(500);
 }
