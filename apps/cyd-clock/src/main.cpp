@@ -31,6 +31,22 @@ enum class Screen { Clock, Timer };
 Screen currentScreen = Screen::Clock;
 unsigned long lastWeatherUpdate = 0;
 
+// Directly address all 240×320 ILI9341 GRAM in native coords, bypassing
+// TFT_eSPI rotation transforms. Rotation-based fillScreen leaves the rightmost
+// ~80px untouched because the address window never reaches native cols 240–319.
+static void clearFullGRAM() {
+    tft.startWrite();
+    tft.writecommand(0x2A);                          // CASET: cols 0–239
+    tft.writedata(0x00); tft.writedata(0x00);
+    tft.writedata(0x00); tft.writedata(0xEF);
+    tft.writecommand(0x2B);                          // PASET: rows 0–319
+    tft.writedata(0x00); tft.writedata(0x00);
+    tft.writedata(0x01); tft.writedata(0x3F);
+    tft.writecommand(0x2C);                          // RAMWR
+    tft.pushColor(TFT_BLACK, 240 * 320);
+    tft.endWrite();
+}
+
 // Clear a horizontal band and return y for next element
 static void clearBand(int y, int h) {
     tft.fillRect(0, y, 240, h, TFT_BLACK);
@@ -152,9 +168,9 @@ void setup() {
     digitalWrite(TFT_BACKLIGHT_PIN, HIGH);
 
     tft.init();
-    tft.setRotation(1);         // landscape first — clears all 320x240 physical pixels
-    tft.fillScreen(TFT_BLACK);
-    tft.setRotation(0);         // portrait 240x320, USB at top
+
+    clearFullGRAM();
+    tft.setRotation(0);         // portrait 240×320, USB at bottom
     tft.fillScreen(TFT_BLACK);
     tft.setTextColor(TFT_WHITE, TFT_BLACK);
     tft.drawCentreString("Starting...", CX, 150, 4);
