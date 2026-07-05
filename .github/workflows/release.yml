@@ -35,10 +35,13 @@ jobs:
           node-version: 20
           cache: pnpm
 
-      - name: Install Node dependencies
-        run: pnpm install
+      - name: Configure private registry auth
+        run: echo "//rcompton78.bytesafe.dev/r/compton/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
         env:
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Install Node dependencies
+        run: pnpm install
 
       - name: Get last version tag
         id: last_tag
