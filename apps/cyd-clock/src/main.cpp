@@ -552,6 +552,8 @@ static void runWiFiManager(ConfigManager& cfg) {
         cfg.save();
     });
     wm.setCustomMenuHTML("<a href='/config' class='W l btn'>Configuration</a>");
+    const char* menu[] = {"wifi", "custom", "info", "sep", "update", "exit"};
+    wm.setMenu(menu, 6);
     wm.autoConnect("CYD-Clock");
     wm.startWebPortal();
     wm.server->on("/config",      HTTP_GET,  handleConfigGet);
