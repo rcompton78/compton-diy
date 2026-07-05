@@ -43,24 +43,18 @@ ESP_WEB_TOOLS_URL = "https://unpkg.com/esp-web-tools@10/dist/web/install-button.
 
 # ── esptool helpers ──────────────────────────────────────────────────────────
 
-def find_pio_python():
+def find_esptool():
+    # PlatformIO downloads esptool into ~/.platformio/packages/tool-esptoolpy/
+    pio_esptool = os.path.expanduser("~/.platformio/packages/tool-esptoolpy/esptool.py")
+    if os.path.exists(pio_esptool):
+        return [sys.executable, pio_esptool]
+    # Fall back to system esptool module
     result = subprocess.run(
-        ["python3", "-m", "platformio", "system", "info", "--json-output"],
-        capture_output=True, text=True
-    )
-    try:
-        return json.loads(result.stdout).get("python_exe", sys.executable)
-    except Exception:
-        return sys.executable
-
-
-def find_esptool(pio_python):
-    result = subprocess.run(
-        [pio_python, "-m", "esptool", "version"],
+        [sys.executable, "-m", "esptool", "version"],
         capture_output=True, text=True
     )
     if result.returncode == 0:
-        return [pio_python, "-m", "esptool"]
+        return [sys.executable, "-m", "esptool"]
     raise RuntimeError("esptool not found — ensure PlatformIO is installed.")
 
 
@@ -110,8 +104,7 @@ def bootloader_offset(chip):
 
 def merge_firmware(project_dir, env_name, chip, output_path):
     build_dir  = os.path.join(project_dir, ".pio", "build", env_name)
-    pio_python = find_pio_python()
-    esptool    = find_esptool(pio_python)
+    esptool    = find_esptool()
 
     bootloader = os.path.join(build_dir, "bootloader.bin")
     partitions = os.path.join(build_dir, "partitions.bin")
