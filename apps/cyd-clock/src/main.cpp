@@ -52,6 +52,7 @@ NTPClient     ntpClient(ntpUDP, NTP_SERVER);
 ConfigManager configMgr;
 WeatherClient weather;
 TimerWidget   timerWidget;
+WiFiManager   wm;
 
 // ── Animation ─────────────────────────────────────────────────────────────────
 enum class CatMood { Idle, Happy, Celebrate };
@@ -437,7 +438,6 @@ static void runWiFiManager(ConfigManager& cfg) {
     WiFiManagerParameter paramLon("lon", "Longitude",        lonBuf, 11);
     WiFiManagerParameter paramUtc("utc", "UTC Offset (sec)", utcBuf, 7);
 
-    WiFiManager wm;
     wm.addParameter(&paramLat);
     wm.addParameter(&paramLon);
     wm.addParameter(&paramUtc);
@@ -448,6 +448,7 @@ static void runWiFiManager(ConfigManager& cfg) {
         cfg.save();
     });
     wm.autoConnect("CYD-Clock");
+    wm.startWebPortal();
 }
 
 // ── Arduino ───────────────────────────────────────────────────────────────────
@@ -487,6 +488,7 @@ void setup() {
 }
 
 void loop() {
+    wm.process();
     ntpClient.update();
     handleTouch();
 
