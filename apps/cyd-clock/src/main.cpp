@@ -297,19 +297,25 @@ static void drawTimerRow() {
     }
 
     if (rem > 0 || timerWidget.isFinished()) {
-        // Pause / resume
-        tft.fillRoundRect(150, TIMER_Y + 10, 38, 34, 6, C_BTN);
-        const char* plbl = timerWidget.isRunning() ? "||" : ">";
-        uint16_t pcol = timerWidget.isRunning() ? TFT_YELLOW : TFT_GREEN;
-        tft.setTextColor(pcol, C_BTN);
-        int tw = tft.textWidth(plbl, 4);
-        tft.drawString(plbl, 150 + (38 - tw) / 2, TIMER_Y + 15, 4);
+        if (timerWidget.isRunning()) {
+            // Pause
+            tft.fillRoundRect(150, TIMER_Y + 10, 38, 34, 6, C_BTN);
+            tft.setTextColor(TFT_YELLOW, C_BTN);
+            int tw = tft.textWidth("||", 4);
+            tft.drawString("||", 150 + (38 - tw) / 2, TIMER_Y + 15, 4);
 
-        // Reset
-        tft.fillRoundRect(196, TIMER_Y + 10, 38, 34, 6, C_BTN);
-        tft.setTextColor(0xFD20, C_BTN);  // orange
-        tw = tft.textWidth("X", 4);
-        tft.drawString("X", 196 + (38 - tw) / 2, TIMER_Y + 15, 4);
+            // Reset (X)
+            tft.fillRoundRect(196, TIMER_Y + 10, 38, 34, 6, C_BTN);
+            tft.setTextColor(0xFD20, C_BTN);  // orange
+            tw = tft.textWidth("X", 4);
+            tft.drawString("X", 196 + (38 - tw) / 2, TIMER_Y + 15, 4);
+        } else {
+            // Paused or finished: single reset-to-zero button
+            tft.fillRoundRect(150, TIMER_Y + 10, 84, 34, 6, C_BTN);
+            tft.setTextColor(0xFD20, C_BTN);  // orange
+            int tw = tft.textWidth("0", 4);
+            tft.drawString("0", 150 + (84 - tw) / 2, TIMER_Y + 15, 4);
+        }
     }
 }
 
@@ -335,13 +341,18 @@ static void handleTouch() {
     Serial.printf("Touch x=%d y=%d\n", p.x, p.y);
 
     if (p.y >= TIMER_Y) {
-        if (p.x >= 196 && (timerWidget.remaining() > 0 || timerWidget.isFinished())) {
+        if (timerWidget.isRunning()) {
+            if (p.x >= 196) {
+                timerWidget.reset();
+                if (cat.mood == CatMood::Celebrate) { cat.mood = CatMood::Idle; dirty.animal = true; }
+                dirty.timerRow = true;
+            } else if (p.x >= 150) {
+                timerWidget.pause();
+                dirty.timerRow = true;
+            }
+        } else if ((timerWidget.remaining() > 0 || timerWidget.isFinished()) && p.x >= 150) {
             timerWidget.reset();
             if (cat.mood == CatMood::Celebrate) { cat.mood = CatMood::Idle; dirty.animal = true; }
-            dirty.timerRow = true;
-        } else if (timerWidget.remaining() > 0 || timerWidget.isRunning()) {
-            if (timerWidget.isRunning()) timerWidget.pause();
-            else                         timerWidget.resume();
             dirty.timerRow = true;
         }
     } else if (p.y >= PICKER_Y) {
