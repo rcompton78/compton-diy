@@ -85,8 +85,14 @@ def get_fs_offset(project_dir, env_name):
     if not os.path.exists(partition_path):
         return "0x290000"
 
+    # Partition CSVs use a commented-out header (# Name, Type, SubType, Offset, Size, Flags).
+    # Provide fieldnames explicitly so DictReader doesn't treat the first data row as headers.
+    fields = ["Name", "Type", "SubType", "Offset", "Size", "Flags"]
     with open(partition_path, newline="") as f:
-        reader = csv.DictReader(row for row in f if not row.startswith("#"))
+        reader = csv.DictReader(
+            (row for row in f if not row.startswith("#")),
+            fieldnames=fields,
+        )
         for row in reader:
             name    = row.get("Name", "").strip()
             subtype = row.get("SubType", "").strip()
