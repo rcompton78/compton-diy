@@ -316,12 +316,23 @@ static void drawTimerRow() {
             tft.setTextColor(0xFD20, C_BTN);  // orange
             tw = tft.textWidth("X", 4);
             tft.drawString("X", 196 + (38 - tw) / 2, TIMER_Y + 15, 4);
-        } else {
-            // Paused or finished: single reset-to-zero button
+        } else if (timerWidget.isFinished()) {
+            // Finished: single wide reset button
             tft.fillRoundRect(150, TIMER_Y + 10, 84, 34, 6, C_BTN);
-            tft.setTextColor(0xFD20, C_BTN);  // orange
+            tft.setTextColor(0xFD20, C_BTN);
             int tw = tft.textWidth("0", 4);
             tft.drawString("0", 150 + (84 - tw) / 2, TIMER_Y + 15, 4);
+        } else {
+            // Paused: resume + reset
+            tft.fillRoundRect(150, TIMER_Y + 10, 38, 34, 6, C_BTN);
+            tft.setTextColor(TFT_GREEN, C_BTN);
+            int tw = tft.textWidth(">", 4);
+            tft.drawString(">", 150 + (38 - tw) / 2, TIMER_Y + 15, 4);
+
+            tft.fillRoundRect(196, TIMER_Y + 10, 38, 34, 6, C_BTN);
+            tft.setTextColor(0xFD20, C_BTN);
+            tw = tft.textWidth("0", 4);
+            tft.drawString("0", 196 + (38 - tw) / 2, TIMER_Y + 15, 4);
         }
     }
 }
@@ -360,10 +371,18 @@ static void handleTouch() {
                 timerWidget.pause();
                 dirty.timerRow = true;
             }
-        } else if ((timerWidget.remaining() > 0 || timerWidget.isFinished()) && p.x >= 150) {
+        } else if (timerWidget.isFinished() && p.x >= 150) {
             timerWidget.reset();
             if (cat.mood == CatMood::Celebrate) { cat.mood = CatMood::Idle; dirty.animal = true; }
             dirty.timerRow = true;
+        } else if (timerWidget.remaining() > 0) {
+            if (p.x >= 196) {
+                timerWidget.reset();
+                dirty.timerRow = true;
+            } else if (p.x >= 150) {
+                timerWidget.resume();
+                dirty.timerRow = true;
+            }
         }
     } else if (p.y >= PICKER_Y) {
         int idx = constrain(p.x / (240 / PICK_N), 0, PICK_N - 1);
