@@ -243,7 +243,11 @@ static void drawHeader() {
 }
 
 static void drawAnimal() {
-    tft.fillRect(0, ANIMAL_Y, 240, ANIMAL_H, TFT_BLACK);
+    // Clear only sparkle positions and the cat's bounding box (including ±3px bounce).
+    // Avoids wiping the full 240×175 zone which causes a visible black flash.
+    clearSparkles(CAT_CX, CAT_CY);
+    tft.fillRect(CAT_CX - 50, CAT_CY - 91, 100, 152, TFT_BLACK);
+
     int dy = (cat.mood == CatMood::Celebrate) ? ((cat.frame % 2 == 0) ? -3 : 3) : 0;
     drawCat(CAT_CX, CAT_CY + dy, cat.mood, cat.eyeOpen);
 
@@ -254,8 +258,8 @@ static void drawAnimal() {
     // Feed hint at bottom of animal zone
     tft.fillRect(0, ANIMAL_Y + ANIMAL_H - 14, 240, 14, TFT_BLACK);
     if (cat.mood == CatMood::Idle && !timerWidget.isRunning()) {
-        tft.setTextColor(C_SEP, TFT_BLACK);
-        tft.drawCentreString("tap to feed", CX, ANIMAL_Y + ANIMAL_H - 13, 1);
+        tft.setTextColor(C_PINK, TFT_BLACK);
+        tft.drawCentreString("tap to feed", CX, ANIMAL_Y + ANIMAL_H - 13, 2);
     }
 }
 
