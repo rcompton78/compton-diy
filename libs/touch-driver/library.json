@@ -1,0 +1,11 @@
+{
+  "name": "touch-driver",
+  "version": "1.0.0",
+  "description": "Touch controller abstraction for ESP32 Arduino projects, with swappable backends per board",
+  "keywords": ["touch", "esp32", "xpt2046", "ft6336u"],
+  "frameworks": ["arduino"],
+  "platforms": ["espressif32"],
+  "dependencies": {
+    "https://github.com/PaulStoffregen/XPT2046_Touchscreen.git": "*"
+  }
+}
