@@ -8,6 +8,21 @@
     "build": {
       "executor": "nx:run-commands",
       "options": {
+        "command": "scripts/build-boards.sh apps/cyd-clock",
+        "cwd": "."
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**",
+        "{projectRoot}/include/**",
+        "{projectRoot}/platformio.ini",
+        "{workspaceRoot}/libs/weather-client/src/**"
+      ],
+      "outputs": ["{projectRoot}/.pio/build/cyd", "{projectRoot}/.pio/build/freenove-s3"]
+    },
+    "build-cyd": {
+      "executor": "nx:run-commands",
+      "options": {
         "command": "scripts/pio.sh run -d apps/cyd-clock -e cyd",
         "cwd": "."
       },
@@ -24,6 +39,28 @@
       "executor": "nx:run-commands",
       "options": {
         "command": "scripts/pio.sh run -d apps/cyd-clock -e cyd -t upload",
+        "cwd": "."
+      }
+    },
+    "build-freenove-s3": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/pio.sh run -d apps/cyd-clock -e freenove-s3",
+        "cwd": "."
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**",
+        "{projectRoot}/include/**",
+        "{projectRoot}/platformio.ini",
+        "{workspaceRoot}/libs/weather-client/src/**"
+      ],
+      "outputs": ["{projectRoot}/.pio/build/freenove-s3"]
+    },
+    "flash-freenove-s3": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/pio.sh run -d apps/cyd-clock -e freenove-s3 -t upload",
         "cwd": "."
       }
     },
@@ -57,7 +94,7 @@
         "command": "python3 tools/esp-flasher/generate_release.py --project-dir apps/cyd-clock --name \"CYD Clock\" --build cyd:ESP32 --version ${RELEASE_VERSION:-dev}",
         "cwd": "."
       },
-      "dependsOn": ["build", "build-fs"]
+      "dependsOn": ["build-cyd", "build-fs"]
     }
   }
 }

@@ -52,6 +52,16 @@ Example `project.json` for a PlatformIO app:
 
 > **PlatformIO wrapper:** Always invoke PlatformIO via `scripts/pio.sh` (not `pio` directly). The wrapper uses the repo's `.venv/bin/python3` when available (local dev) and falls back to the system `python3` (CI). Use `cwd: "."` (workspace root) with the `-d <project-dir>` flag so the wrapper can locate itself reliably.
 
+### Multi-board PlatformIO projects
+
+When a single app supports multiple boards via separate `[env:...]` sections in `platformio.ini` (e.g. `cyd-clock` supports `cyd` and `freenove-s3`), follow this target layout:
+
+- `build` — CI-facing, wraps `scripts/build-boards.sh <project-dir>`, which discovers every `[env:...]` section in the project's `platformio.ini` and builds each in turn. Adding a new board only requires a new `[env:...]` section — no script or CI changes needed.
+- `build-<board>` — dev shortcut for a single board, wraps `scripts/pio.sh run -d <project-dir> -e <board>` directly.
+- `flash-<board>` — dev shortcut for uploading to a single board (the default board, if there's a primary one, can keep the unprefixed `flash` name).
+
+Select the board-specific implementation (e.g. touch/display driver backend) at compile time via a per-env build flag macro (e.g. `-D BOARD_CYD=1` / `-D BOARD_FREENOVE_S3=1`), and guard each backend's source files with `#if defined(...)` so PlatformIO's library dependency finder doesn't try to compile backends against libraries that aren't in that env's `lib_deps`.
+
 ## NX Guidelines
 
 <!-- nx configuration start-->

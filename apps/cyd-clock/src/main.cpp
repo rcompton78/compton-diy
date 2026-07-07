@@ -10,7 +10,11 @@
 #include "ConfigManager.h"
 #include "WeatherClient.h"
 #include "TimerWidget.h"
+#if defined(BOARD_FREENOVE_S3)
+#include "Ft6336uTouch.h"
+#else
 #include "Xpt2046Touch.h"
+#endif
 
 // ── Layout (portrait 240×320, USB at bottom) ─────────────────────────────────
 static constexpr int CX        = 120;
@@ -51,8 +55,12 @@ static constexpr int PICK_N = 4;
 
 // ── Hardware ──────────────────────────────────────────────────────────────────
 TFT_eSPI tft;
+#if defined(BOARD_FREENOVE_S3)
+Ft6336uTouch touchDriver(TOUCH_SDA, TOUCH_SCL, TOUCH_RST, TOUCH_IRQ, 240, 320);
+#else
 Xpt2046Touch touchDriver(TOUCH_CS, TOUCH_IRQ, TOUCH_CLK, TOUCH_MISO, TOUCH_MOSI,
                          240, 320, TX_MIN, TX_MAX, TY_MIN, TY_MAX);
+#endif
 
 // ── Services ──────────────────────────────────────────────────────────────────
 WiFiUDP       ntpUDP;
