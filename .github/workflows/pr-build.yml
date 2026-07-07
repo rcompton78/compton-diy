@@ -7,10 +7,13 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:
@@ -37,6 +40,8 @@ jobs:
         run: pnpm install
 
       - name: Build affected firmware
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          pnpm nx affected -t build    --base=origin/${{ github.base_ref }} --head=HEAD
-          pnpm nx affected -t build-fs --base=origin/${{ github.base_ref }} --head=HEAD
+          pnpm nx affected -t build    --base=origin/"$BASE_REF" --head=HEAD
+          pnpm nx affected -t build-fs --base=origin/"$BASE_REF" --head=HEAD
