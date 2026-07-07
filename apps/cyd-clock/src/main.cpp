@@ -256,10 +256,10 @@ static void drawAnimal() {
     }
 
     // Feed hint at bottom of animal zone
-    tft.fillRect(0, ANIMAL_Y + ANIMAL_H - 14, 240, 14, TFT_BLACK);
+    tft.fillRect(0, ANIMAL_Y + ANIMAL_H - 27, 240, 27, TFT_BLACK);
     if (cat.mood == CatMood::Idle && !timerWidget.isRunning()) {
-        tft.setTextColor(C_PINK, TFT_BLACK);
-        tft.drawCentreString("tap to feed", CX, ANIMAL_Y + ANIMAL_H - 13, 2);
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        tft.drawCentreString("tap to feed", CX, ANIMAL_Y + ANIMAL_H - 26, 4);
     }
 }
 
@@ -570,7 +570,7 @@ static void handleConfigPost() {
 // ── WiFiManager ───────────────────────────────────────────────────────────────
 static void runWiFiManager(ConfigManager& cfg) {
     (void)cfg;  // config now managed exclusively via /config web page
-    wm.setCustomMenuHTML("<a href='/config' class='W l btn'>Configuration</a>");
+    wm.setCustomMenuHTML("<form action='/config' method='get'><button>Configuration</button></form><br/>");
     const char* menu[] = {"wifi", "custom", "info", "sep", "update", "exit"};
     wm.setMenu(menu, 6);
     wm.autoConnect("CYD-Clock");
