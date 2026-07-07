@@ -497,7 +497,11 @@ static void updateCatStatus() {
 
     uint32_t lastTreat = configMgr.config().lastTreatEpoch;
     uint32_t threshold = (uint32_t)configMgr.config().hungerMinutes * 60u;
-    uint32_t elapsed   = (lastTreat > 0) ? ((uint32_t)epoch - lastTreat) : threshold + 1;
+    uint32_t now32     = (uint32_t)epoch;
+    uint32_t elapsed;
+    if (lastTreat == 0)          elapsed = threshold + 1;   // never fed → start hungry
+    else if (now32 >= lastTreat) elapsed = now32 - lastTreat;
+    else                         elapsed = 0;               // NTP clock step back → treat as just fed
 
     CatStatus prev = cat.status;
     if (elapsed < threshold / 2)
