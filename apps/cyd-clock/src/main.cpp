@@ -1,7 +1,6 @@
 #include <Arduino.h>
 #include <SPI.h>
 #include <TFT_eSPI.h>
-#include <XPT2046_Touchscreen.h>
 #include <WiFiManager.h>
 #include <WiFi.h>
 #include <NTPClient.h>
@@ -11,6 +10,7 @@
 #include "ConfigManager.h"
 #include "WeatherClient.h"
 #include "TimerWidget.h"
+#include "Xpt2046Touch.h"
 
 // ── Layout (portrait 240×320, USB at bottom) ─────────────────────────────────
 static constexpr int CX        = 120;
@@ -51,8 +51,8 @@ static constexpr int PICK_N = 4;
 
 // ── Hardware ──────────────────────────────────────────────────────────────────
 TFT_eSPI tft;
-SPIClass touchSPI(HSPI);
-XPT2046_Touchscreen touch(TOUCH_CS, TOUCH_IRQ);
+Xpt2046Touch touchDriver(TOUCH_CS, TOUCH_IRQ, TOUCH_CLK, TOUCH_MISO, TOUCH_MOSI,
+                         240, 320, TX_MIN, TX_MAX, TY_MIN, TY_MAX);
 
 // ── Services ──────────────────────────────────────────────────────────────────
 WiFiUDP       ntpUDP;
@@ -388,20 +388,9 @@ static void drawTimerRow() {
 }
 
 // ── Touch ─────────────────────────────────────────────────────────────────────
-struct Point { int x, y; };
-
-static bool readTouch(Point& out) {
-    if (!touch.tirqTouched() || !touch.touched()) return false;
-    TS_Point p = touch.getPoint();
-    if (p.z < 200) return false;
-    out.x = constrain(map(p.x, TX_MIN, TX_MAX, 0, 239), 0, 239);
-    out.y = constrain(map(p.y, TY_MIN, TY_MAX, 0, 319), 0, 319);
-    return true;
-}
-
 static void handleTouch() {
-    Point p;
-    if (!readTouch(p)) return;
+    TouchPoint p;
+    if (!touchDriver.read(p)) return;
     unsigned long now = millis();
     if (now - lastTouchMs < TOUCH_DEBOUNCE_MS) return;
     lastTouchMs = now;
@@ -725,9 +714,7 @@ void setup() {
     tft.setRotation(0);
     tft.invertDisplay(false);  // ST7789_Init.h hardcodes INVON; this panel needs INVOFF
     tft.fillScreen(TFT_BLACK);
-    touchSPI.begin(TOUCH_CLK, TOUCH_MISO, TOUCH_MOSI, TOUCH_CS);
-    touch.begin(touchSPI);
-    touch.setRotation(0);
+    touchDriver.begin();
 
     configMgr.begin();
     configMgr.load();
