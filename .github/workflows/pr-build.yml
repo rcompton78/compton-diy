@@ -1,0 +1,42 @@
+name: PR Build
+
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Configure private registry auth
+        run: echo "//rcompton78.bytesafe.dev/r/compton/:_authToken=${NPM_TOKEN}" >> ~/.npmrc
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Install Node dependencies
+        run: pnpm install
+
+      - name: Build affected firmware
+        run: |
+          pnpm nx affected -t build    --base=origin/${{ github.base_ref }} --head=HEAD
+          pnpm nx affected -t build-fs --base=origin/${{ github.base_ref }} --head=HEAD
