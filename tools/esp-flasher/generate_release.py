@@ -32,6 +32,7 @@ import argparse
 import csv
 import json
 import os
+import shutil
 import subprocess
 import sys
 
@@ -202,6 +203,12 @@ def main():
         merge_firmware(project_dir, v["env"], v["chip"],
                        os.path.join(dist_dir, bin_name))
         builds_for_manifest.append({"chipFamily": v["chip"], "bin": bin_name})
+
+        # Raw (unmerged) app image — needed for OTA uploads, which flash only
+        # the app partition and choke on a bootloader+partition-table image.
+        ota_bin_name = f"{app_slug}{suffix}-ota.bin"
+        ota_src = os.path.join(project_dir, ".pio", "build", v["env"], "firmware.bin")
+        shutil.copy(ota_src, os.path.join(dist_dir, ota_bin_name))
 
     print("==> Generating manifest")
     generate_manifest(args.name, args.version, builds_for_manifest,

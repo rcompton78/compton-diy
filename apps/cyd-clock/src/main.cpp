@@ -567,9 +567,33 @@ static void handleConfigPost() {
     wm.server->send(302, "text/plain", "");
 }
 
+// ── WiFi setup screens ────────────────────────────────────────────────────────
+static void drawWifiConnecting(const String& ssid) {
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(C_DIM, TFT_BLACK);
+    tft.drawCentreString("Connecting to", CX, 90, 2);
+    tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    tft.drawCentreString(ssid.c_str(), CX, 130, 4);
+    tft.setTextColor(C_DIM, TFT_BLACK);
+    tft.drawCentreString("please wait...", CX, 200, 2);
+}
+
+static void drawWifiPortal() {
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.drawCentreString("Connect to WiFi:", CX, 70, 2);
+    tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    tft.drawCentreString("CYD-Clock", CX, 110, 4);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.drawCentreString("then open browser:", CX, 175, 2);
+    tft.setTextColor(TFT_GREEN, TFT_BLACK);
+    tft.drawCentreString("192.168.4.1", CX, 210, 4);
+}
+
 // ── WiFiManager ───────────────────────────────────────────────────────────────
 static void runWiFiManager(ConfigManager& cfg) {
     (void)cfg;  // config now managed exclusively via /config web page
+    wm.setAPCallback([](WiFiManager*) { drawWifiPortal(); });
     wm.setCustomMenuHTML("<form action='/config' method='get'><button>Configuration</button></form><br/>");
     const char* menu[] = {"wifi", "custom", "info", "sep", "update", "exit"};
     wm.setMenu(menu, 6);
@@ -590,15 +614,21 @@ void setup() {
     tft.setRotation(0);
     tft.invertDisplay(false);  // ST7789_Init.h hardcodes INVON; this panel needs INVOFF
     tft.fillScreen(TFT_BLACK);
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.drawCentreString("Starting...", CX, 150, 4);
-
     touchSPI.begin(TOUCH_CLK, TOUCH_MISO, TOUCH_MOSI, TOUCH_CS);
     touch.begin(touchSPI);
     touch.setRotation(0);
 
     configMgr.begin();
     configMgr.load();
+
+    {
+        WiFi.mode(WIFI_STA);  // init driver so esp_wifi_get_config can read NVS
+        String ssid = wm.getWiFiSSID();
+        if (ssid.length() > 0)
+            drawWifiConnecting(ssid);
+        else
+            drawWifiPortal();
+    }
 
     runWiFiManager(configMgr);
 
