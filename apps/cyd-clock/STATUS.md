@@ -52,6 +52,13 @@ Portrait 240×320, USB at bottom:
   - [X] button: reset timer and clear active pick
 - Dirty-flag rendering — only redraws zones that changed, no flicker
 
+## Freenove ESP32-S3 CYD Bring-up
+
+- Board attaches as `/dev/ttyACM0` (native USB-Serial/JTAG) rather than `/dev/ttyUSB0`
+- Colors were inverted on first flash (white background, black cat) — `tft.invertDisplay(false)` in `setup()` was unconditionally undoing the `TFT_INVERSION_ON=1` build flag needed for this panel; now guarded to `BOARD_CYD` only
+- Touch, backlight, and full app (clock/weather/timer/config UI) confirmed working
+- Flash: `pnpm nx run cyd-clock:flash-freenove-s3`
+
 ## Known Issues
 
 ### Weather Not Showing
@@ -85,7 +92,7 @@ pnpm setup
 pnpm nx run cyd-clock:build
 
 # Flash firmware
-pnpm nx run cyd-clock:flash
+pnpm nx run cyd-clock:flash-cyd
 
 # Flash filesystem (only needed if data/ changes)
 pnpm nx run cyd-clock:flash-fs

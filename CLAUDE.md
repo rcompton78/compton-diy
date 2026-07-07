@@ -58,7 +58,7 @@ When a single app supports multiple boards via separate `[env:...]` sections in 
 
 - `build` — CI-facing, wraps `scripts/build-boards.sh <project-dir>`, which discovers every `[env:...]` section in the project's `platformio.ini` and builds each in turn. Adding a new board only requires a new `[env:...]` section — no script or CI changes needed.
 - `build-<board>` — dev shortcut for a single board, wraps `scripts/pio.sh run -d <project-dir> -e <board>` directly.
-- `flash-<board>` — dev shortcut for uploading to a single board (the default board, if there's a primary one, can keep the unprefixed `flash` name).
+- `flash-<board>` — dev shortcut for uploading to a single board. Always prefix with the board name, even for the primary/original board (e.g. `flash-cyd`), so all boards are named consistently.
 
 Select the board-specific implementation (e.g. touch/display driver backend) at compile time via a per-env build flag macro (e.g. `-D BOARD_CYD=1` / `-D BOARD_FREENOVE_S3=1`), and guard each backend's source files with `#if defined(...)` so PlatformIO's library dependency finder doesn't try to compile backends against libraries that aren't in that env's `lib_deps`.
 

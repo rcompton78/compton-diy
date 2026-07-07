@@ -35,7 +35,7 @@
       ],
       "outputs": ["{projectRoot}/.pio/build/cyd"]
     },
-    "flash": {
+    "flash-cyd": {
       "executor": "nx:run-commands",
       "options": {
         "command": "scripts/pio.sh run -d apps/cyd-clock -e cyd -t upload",
