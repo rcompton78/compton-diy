@@ -18,7 +18,10 @@ bool ConfigManager::load() {
     _config.longitude        = doc["lon"]    | _config.longitude;
     _config.timezone         = doc["tz"].as<String>();
     _config.utcOffsetSeconds = doc["utc"]    | _config.utcOffsetSeconds;
-    _config.hungerMinutes    = doc["hunger"] | _config.hungerMinutes;
+    {
+        int h = doc["hunger"] | _config.hungerMinutes;
+        if (h >= 1 && h <= 1440) _config.hungerMinutes = h;
+    }
     _config.lastTreatEpoch   = doc["treat"]  | _config.lastTreatEpoch;
 
     f.close();

@@ -450,10 +450,11 @@ static void handleTouch() {
             cat.since  = now;
             cat.frame  = 0;
             cat.rumbling = false;
-            // Persist last treat time
+            // Persist last treat time as UTC (subtract offset so timezone changes don't shift hunger)
             time_t epoch = ntpClient.getEpochTime();
-            if (epoch > 0) {
-                configMgr.config().lastTreatEpoch = (uint32_t)epoch;
+            time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
+            if (utc > 1000000000) {  // sanity: must be a real NTP-synced time (post-2001)
+                configMgr.config().lastTreatEpoch = (uint32_t)utc;
                 configMgr.save();
             }
             dirty.animal = true;
@@ -493,11 +494,12 @@ static void updateCatAnim() {
 
 static void updateCatStatus() {
     time_t epoch = ntpClient.getEpochTime();
-    if (epoch <= 0) return;  // NTP not synced yet
+    time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
+    if (utc <= 1000000000) return;  // NTP not synced yet (pre-2001 or un-synced offset-only value)
 
     uint32_t lastTreat = configMgr.config().lastTreatEpoch;
     uint32_t threshold = (uint32_t)configMgr.config().hungerMinutes * 60u;
-    uint32_t now32     = (uint32_t)epoch;
+    uint32_t now32     = (uint32_t)utc;
     uint32_t elapsed;
     if (lastTreat == 0)          elapsed = threshold + 1;   // never fed → start hungry
     else if (now32 >= lastTreat) elapsed = now32 - lastTreat;
