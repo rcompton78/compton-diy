@@ -6,6 +6,8 @@ struct AppConfig {
     float longitude = -113.4938;
     String timezone = "MST7MDT";
     int utcOffsetSeconds = -25200;
+    int hungerMinutes = 60;
+    uint32_t lastTreatEpoch = 0;  // Unix epoch of last treat; 0 = never fed
 };
 
 class ConfigManager {
