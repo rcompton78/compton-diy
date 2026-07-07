@@ -11,11 +11,18 @@ concurrency:
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Compute version
+        id: version
+        run: |
+          echo "version=$(date -u +%Y.%m.%d)-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-python@v5
         with:
@@ -50,16 +57,25 @@ jobs:
 
       - name: Generate releases
         env:
-          RELEASE_VERSION: latest
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: pnpm nx run-many -t release
 
       - name: Generate flasher index
-        run: python3 tools/esp-flasher/generate_index.py --version=latest
+        run: python3 tools/esp-flasher/generate_index.py --version="${{ steps.version.outputs.version }}"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: dist/
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ steps.version.outputs.version }}" \
+            dist/*/*-ota.bin \
+            --title "Firmware ${{ steps.version.outputs.version }}" \
+            --notes "Automated build from ${{ github.sha }}. Upload the *-ota.bin matching your device via its config portal's Update page."
 
   deploy-pages:
     needs: build-and-release
