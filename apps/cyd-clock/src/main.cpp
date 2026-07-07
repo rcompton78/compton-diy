@@ -391,7 +391,9 @@ static void handleTouch() {
         }
     } else if (p.y >= PICKER_Y) {
         int idx = constrain(p.x / (240 / PICK_N), 0, PICK_N - 1);
+        bool wasFinished = timerWidget.isFinished();
         timerWidget.addTime(PICK_SEC[idx]);
+        if (wasFinished && cat.mood == CatMood::Celebrate) { cat.mood = CatMood::Idle; dirty.animal = true; }
         dirty.timerRow = true;
     } else if (p.y >= ANIMAL_Y) {
         cat.mood  = CatMood::Happy;
@@ -497,11 +499,18 @@ async function search(k){
     const r=await fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(q)+'&count=8&language=en&format=json');
     const d=await r.json();
     if(!d.results||!d.results.length){el.innerHTML='<div class="city">No results</div>';return;}
-    el.innerHTML=d.results.map(c=>`<div class="city" tabindex="0"
-      onclick="pick('${k}',${c.latitude},${c.longitude},'${c.timezone||''}')"
-      onkeydown="if(event.key==='Enter')pick('${k}',${c.latitude},${c.longitude},'${c.timezone||''}')">
-      <strong>${c.name}</strong>${c.admin1?', '+c.admin1:''} <small>${c.country}</small>
-    </div>`).join('');
+    el.innerHTML='';
+    d.results.forEach(c=>{
+      const div=document.createElement('div');
+      div.className='city';div.tabIndex=0;
+      const b=document.createElement('strong');b.textContent=c.name;div.appendChild(b);
+      if(c.admin1){div.appendChild(document.createTextNode(', '+c.admin1));}
+      const sm=document.createElement('small');sm.textContent=' '+c.country;div.appendChild(sm);
+      const fn=()=>pick(k,c.latitude,c.longitude,c.timezone||'');
+      div.addEventListener('click',fn);
+      div.addEventListener('keydown',e=>{if(e.key==='Enter')fn();});
+      el.appendChild(div);
+    });
   }catch(e){el.innerHTML='<div class="city">Network error</div>';}
 }
 function utcFromTz(tz){
@@ -540,12 +549,19 @@ static void handleConfigGet() {
 }
 
 static void handleConfigPost() {
-    if (wm.server->hasArg("lat")) configMgr.config().latitude         = wm.server->arg("lat").toFloat();
-    if (wm.server->hasArg("lon")) configMgr.config().longitude        = wm.server->arg("lon").toFloat();
-    if (wm.server->hasArg("utc")) configMgr.config().utcOffsetSeconds = wm.server->arg("utc").toInt();
+    float lat = wm.server->arg("lat").toFloat();
+    float lon = wm.server->arg("lon").toFloat();
+    int   utc = wm.server->arg("utc").toInt();
+    if (lat < -90.0f || lat > 90.0f || lon < -180.0f || lon > 180.0f || utc < -50400 || utc > 50400) {
+        wm.server->send(400, "text/plain", "Invalid values");
+        return;
+    }
+    configMgr.config().latitude         = lat;
+    configMgr.config().longitude        = lon;
+    configMgr.config().utcOffsetSeconds = utc;
     configMgr.save();
-    ntpClient.setTimeOffset(configMgr.config().utcOffsetSeconds);
-    lastWeatherFetch = 0;  // force immediate weather refresh on next loop
+    ntpClient.setTimeOffset(utc);
+    lastWeatherFetch = millis() - WEATHER_UPDATE_INTERVAL_MS - 1;
     dirty.header = true;
     wm.server->sendHeader("Location", "/config?saved=1");
     wm.server->send(302, "text/plain", "");
@@ -553,24 +569,7 @@ static void handleConfigPost() {
 
 // ── WiFiManager ───────────────────────────────────────────────────────────────
 static void runWiFiManager(ConfigManager& cfg) {
-    char latBuf[12], lonBuf[12], utcBuf[8];
-    snprintf(latBuf, sizeof(latBuf), "%.4f", cfg.config().latitude);
-    snprintf(lonBuf, sizeof(lonBuf), "%.4f", cfg.config().longitude);
-    snprintf(utcBuf, sizeof(utcBuf), "%d",   cfg.config().utcOffsetSeconds);
-
-    WiFiManagerParameter paramLat("lat", "Latitude",         latBuf, 11);
-    WiFiManagerParameter paramLon("lon", "Longitude",        lonBuf, 11);
-    WiFiManagerParameter paramUtc("utc", "UTC Offset (sec)", utcBuf, 7);
-
-    wm.addParameter(&paramLat);
-    wm.addParameter(&paramLon);
-    wm.addParameter(&paramUtc);
-    wm.setSaveParamsCallback([&]() {
-        cfg.config().latitude         = atof(paramLat.getValue());
-        cfg.config().longitude        = atof(paramLon.getValue());
-        cfg.config().utcOffsetSeconds = atoi(paramUtc.getValue());
-        cfg.save();
-    });
+    (void)cfg;  // config now managed exclusively via /config web page
     wm.setCustomMenuHTML("<a href='/config' class='W l btn'>Configuration</a>");
     const char* menu[] = {"wifi", "custom", "info", "sep", "update", "exit"};
     wm.setMenu(menu, 6);

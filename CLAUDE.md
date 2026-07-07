@@ -35,7 +35,7 @@ pnpm nx show projects
 
 1. Create the project directory under `apps/<name>/` or `libs/<name>/`.
 2. Add a `project.json` to register it with NX and define targets (`build`, `flash`, `test`, etc.).
-3. For PlatformIO projects, targets typically wrap `pio run`, `pio run -t upload`, and `pio test`.
+3. For PlatformIO projects, targets typically wrap `pio run`, `pio run -t upload`, and `pio test` via `scripts/pio.sh` (see wrapper note below).
 
 Example `project.json` for a PlatformIO app:
 

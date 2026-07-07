@@ -23,6 +23,7 @@ void TimerWidget::addTime(uint32_t seconds) {
         _running    = true;
     } else {
         _durationMs += addMs;
+        if (_durationMs > 5999 * 1000UL) _durationMs = 5999 * 1000UL;  // cap at 99:59
     }
 }
 
