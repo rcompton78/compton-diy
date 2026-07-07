@@ -9,7 +9,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_DIR="$1"
 PIO_TARGET="${2:-}"
 
-mapfile -t ENVS < <(grep -oP '^\[env:\K[^\]]+' "$REPO_ROOT/$PROJECT_DIR/platformio.ini")
+ENVS=()
+while IFS= read -r env; do
+    ENVS+=("$env")
+done < <(sed -n 's/^\[env:\(.*\)\]$/\1/p' "$REPO_ROOT/$PROJECT_DIR/platformio.ini")
 
 if [ "${#ENVS[@]}" -eq 0 ]; then
     echo "No [env:...] sections found in $PROJECT_DIR/platformio.ini" >&2
