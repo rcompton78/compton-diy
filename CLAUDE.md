@@ -62,6 +62,14 @@ When a single app supports multiple boards via separate `[env:...]` sections in 
 
 Select the board-specific implementation (e.g. touch/display driver backend) at compile time via a per-env build flag macro (e.g. `-D BOARD_CYD=1` / `-D BOARD_FREENOVE_S3=1`), and guard each backend's source files with `#if defined(...)` so PlatformIO's library dependency finder doesn't try to compile backends against libraries that aren't in that env's `lib_deps`.
 
+### Release workflow
+
+`.github/workflows/release.yml` runs on every push to `master`. A project's `release` target (see `apps/cyd-clock/project.json`) wraps `tools/esp-flasher/generate_release.py` with one `--build <env>:<chip>` flag per supported board, producing a merged `.bin`, an OTA `.bin`, and an ESP Web Tools manifest entry per board under `dist/<project>/`.
+
+- **Pages deploy always rebuilds every project** (`nx run-many -t build/build-fs/release`) so the web flasher index at `dist/index.html` stays complete regardless of what changed in a given push — Pages replaces the whole site on each deploy, so an affected-only build would drop unaffected projects' flashers from the live site.
+- **GitHub Release creation is gated on `nx affected`** — only projects with a `release` target that actually changed since the prior commit on `master` (via `nx show projects --affected --withTarget release`) get their `.bin`s attached to the new release. A push that doesn't touch any firmware project's sources skips creating a release entirely.
+- When adding a new board to an existing project, add its `--build <env>:<chip>` flag and matching `dependsOn` entry to that project's `release` target.
+
 ## NX Guidelines
 
 <!-- nx configuration start-->

@@ -24,6 +24,17 @@ jobs:
         run: |
           echo "version=$(date -u +%Y.%m.%d)-${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
+      - name: Compute affected base
+        id: base
+        env:
+          EVENT_BEFORE: ${{ github.event.before }}
+        run: |
+          BASE="$EVENT_BEFORE"
+          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE" 2>/dev/null; then
+            BASE=$(git rev-parse HEAD~1)
+          fi
+          echo "sha=$BASE" >> "$GITHUB_OUTPUT"
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -68,14 +79,34 @@ jobs:
         with:
           path: dist/
 
+      - name: Determine affected firmware projects
+        id: affected
+        run: |
+          PROJECTS=$(pnpm nx show projects --affected --withTarget release \
+            --base="${{ steps.base.outputs.sha }}" --head="${{ github.sha }}" --json \
+            | jq -r '.[]')
+          {
+            echo "projects<<EOF"
+            echo "$PROJECTS"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Create GitHub release
+        if: steps.affected.outputs.projects != ''
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AFFECTED_PROJECTS: ${{ steps.affected.outputs.projects }}
         run: |
+          ASSETS=()
+          while IFS= read -r project; do
+            [ -z "$project" ] && continue
+            ASSETS+=(dist/"$project"/*-ota.bin)
+          done <<< "$AFFECTED_PROJECTS"
+
           gh release create "${{ steps.version.outputs.version }}" \
-            dist/*/*-ota.bin \
+            "${ASSETS[@]}" \
             --title "Firmware ${{ steps.version.outputs.version }}" \
-            --notes "Automated build from ${{ github.sha }}. Upload the *-ota.bin matching your device via its config portal's Update page."
+            --notes "Automated build from ${{ github.sha }}. Changed: $(echo "$AFFECTED_PROJECTS" | paste -sd, -). Upload the *-ota.bin matching your device via its config portal's Update page."
 
   deploy-pages:
     needs: build-and-release
