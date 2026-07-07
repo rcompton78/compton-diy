@@ -6,6 +6,7 @@
   "frameworks": ["arduino"],
   "platforms": ["espressif32"],
   "dependencies": {
-    "XPT2046_Touchscreen": "https://github.com/PaulStoffregen/XPT2046_Touchscreen.git#v1.4"
+    "XPT2046_Touchscreen": "https://github.com/PaulStoffregen/XPT2046_Touchscreen.git#v1.4",
+    "FT6336U": "https://github.com/aselectroworks/Arduino-FT6336U.git#a439f3963c2ba85954debb880c84e35944d362a7"
   }
 }

@@ -1,5 +1,7 @@
 #include "Xpt2046Touch.h"
 
+#if !defined(BOARD_FREENOVE_S3)
+
 Xpt2046Touch::Xpt2046Touch(uint8_t csPin, uint8_t irqPin, uint8_t clkPin, uint8_t misoPin, uint8_t mosiPin,
                            int screenWidth, int screenHeight,
                            int xMin, int xMax, int yMin, int yMax,
@@ -24,3 +26,5 @@ bool Xpt2046Touch::read(TouchPoint& out) {
     out.y = constrain(map(p.y, _yMin, _yMax, 0, _screenHeight - 1), 0, _screenHeight - 1);
     return true;
 }
+
+#endif  // !BOARD_FREENOVE_S3
