@@ -8,8 +8,8 @@
     "build": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "python3 -m platformio run -e cyd",
-        "cwd": "apps/cyd-clock"
+        "command": "scripts/pio.sh run -d apps/cyd-clock -e cyd",
+        "cwd": "."
       },
       "cache": true,
       "inputs": [
@@ -23,15 +23,15 @@
     "flash": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "python3 -m platformio run -e cyd -t upload",
-        "cwd": "apps/cyd-clock"
+        "command": "scripts/pio.sh run -d apps/cyd-clock -e cyd -t upload",
+        "cwd": "."
       }
     },
     "build-fs": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "python3 -m platformio run -e cyd -t buildfs",
-        "cwd": "apps/cyd-clock"
+        "command": "scripts/pio.sh run -d apps/cyd-clock -e cyd -t buildfs",
+        "cwd": "."
       },
       "cache": true,
       "inputs": ["{projectRoot}/data/**"],
@@ -40,15 +40,15 @@
     "flash-fs": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "python3 -m platformio run -e cyd -t uploadfs",
-        "cwd": "apps/cyd-clock"
+        "command": "scripts/pio.sh run -d apps/cyd-clock -e cyd -t uploadfs",
+        "cwd": "."
       }
     },
     "monitor": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "python3 -m platformio device monitor",
-        "cwd": "apps/cyd-clock"
+        "command": "scripts/pio.sh device monitor -d apps/cyd-clock",
+        "cwd": "."
       }
     },
     "release": {

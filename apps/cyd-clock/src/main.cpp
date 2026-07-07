@@ -3,6 +3,7 @@
 #include <TFT_eSPI.h>
 #include <XPT2046_Touchscreen.h>
 #include <WiFiManager.h>
+#include <WiFi.h>
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 
@@ -37,7 +38,7 @@ static constexpr uint16_t C_DIM  = 0x7BEF;  // dim text
 
 // Quick-pick durations
 static constexpr uint32_t    PICK_SEC[] = {60, 300, 600, 1800};
-static constexpr const char* PICK_LBL[] = {"1m", "5m", "10m", "30m"};
+static constexpr const char* PICK_LBL[] = {"+1", "+5", "+10", "+30"};
 static constexpr int PICK_N = 4;
 
 // ── Hardware ──────────────────────────────────────────────────────────────────
@@ -51,6 +52,7 @@ NTPClient     ntpClient(ntpUDP, NTP_SERVER);
 ConfigManager configMgr;
 WeatherClient weather;
 TimerWidget   timerWidget;
+WiFiManager   wm;
 
 // ── Animation ─────────────────────────────────────────────────────────────────
 enum class CatMood { Idle, Happy, Celebrate };
@@ -65,10 +67,10 @@ struct {
 } cat;
 
 // ── App state ─────────────────────────────────────────────────────────────────
-int  activePick        = -1;
-bool timerDonePrev     = false;
+bool timerDonePrev          = false;
 unsigned long lastWeatherFetch = 0;
 unsigned long lastTouchMs      = 0;
+unsigned long showIpUntilMs    = 0;
 
 struct { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick; } dirty = {true, true, true, true, false, false, false};
 
@@ -217,10 +219,15 @@ static void drawHeader() {
     tft.setTextColor(C_DIM, TFT_BLACK);
     tft.drawString(ssBuf, 6 + hmWidth + 2, HEADER_Y + 14, 2);
 
-    // Weather — font 2, right-aligned
+    // Weather / IP — font 2, right-aligned
     int timeEnd = 6 + hmWidth + 2 + tft.textWidth(ssBuf, 2) + 4;
     tft.fillRect(timeEnd, HEADER_Y, 240 - timeEnd, HEADER_H - 1, TFT_BLACK);
-    if (weather.data().valid) {
+    if (showIpUntilMs > millis()) {
+        String ip = WiFi.localIP().toString();
+        tft.setTextColor(TFT_GREEN, TFT_BLACK);
+        int tw = tft.textWidth(ip.c_str(), 1);
+        tft.drawString(ip.c_str(), max(timeEnd, 238 - tw), HEADER_Y + 15, 1);
+    } else if (weather.data().valid) {
         char wBuf[20];
         snprintf(wBuf, sizeof(wBuf), "%.0fC %s",
                  weather.data().tempC,
@@ -236,7 +243,11 @@ static void drawHeader() {
 }
 
 static void drawAnimal() {
-    tft.fillRect(0, ANIMAL_Y, 240, ANIMAL_H, TFT_BLACK);
+    // Clear only sparkle positions and the cat's bounding box (including ±3px bounce).
+    // Avoids wiping the full 240×175 zone which causes a visible black flash.
+    clearSparkles(CAT_CX, CAT_CY);
+    tft.fillRect(CAT_CX - 50, CAT_CY - 91, 100, 152, TFT_BLACK);
+
     int dy = (cat.mood == CatMood::Celebrate) ? ((cat.frame % 2 == 0) ? -3 : 3) : 0;
     drawCat(CAT_CX, CAT_CY + dy, cat.mood, cat.eyeOpen);
 
@@ -245,10 +256,10 @@ static void drawAnimal() {
     }
 
     // Feed hint at bottom of animal zone
-    tft.fillRect(0, ANIMAL_Y + ANIMAL_H - 14, 240, 14, TFT_BLACK);
+    tft.fillRect(0, ANIMAL_Y + ANIMAL_H - 27, 240, 27, TFT_BLACK);
     if (cat.mood == CatMood::Idle && !timerWidget.isRunning()) {
-        tft.setTextColor(C_SEP, TFT_BLACK);
-        tft.drawCentreString("tap to feed", CX, ANIMAL_Y + ANIMAL_H - 13, 1);
+        tft.setTextColor(TFT_WHITE, TFT_BLACK);
+        tft.drawCentreString("tap to feed", CX, ANIMAL_Y + ANIMAL_H - 26, 4);
     }
 }
 
@@ -258,13 +269,10 @@ static void drawPicker() {
 
     constexpr int btnW = 60;
     for (int i = 0; i < PICK_N; i++) {
-        int bx    = i * btnW;
-        bool on   = (i == activePick);
-        uint16_t bg = on ? C_BACT : C_BTN;
-        uint16_t fg = on ? TFT_WHITE : C_DIM;
-        tft.fillRoundRect(bx + 3, PICKER_Y + 7, btnW - 6, PICKER_H - 14, 6, bg);
+        int bx = i * btnW;
+        tft.fillRoundRect(bx + 3, PICKER_Y + 7, btnW - 6, PICKER_H - 14, 6, C_BTN);
         int tw = tft.textWidth(PICK_LBL[i], 2);
-        tft.setTextColor(fg, bg);
+        tft.setTextColor(TFT_WHITE, C_BTN);
         tft.drawString(PICK_LBL[i], bx + (btnW - tw) / 2, PICKER_Y + 17, 2);
     }
 }
@@ -301,19 +309,36 @@ static void drawTimerRow() {
     }
 
     if (rem > 0 || timerWidget.isFinished()) {
-        // Pause / resume
-        tft.fillRoundRect(150, TIMER_Y + 10, 38, 34, 6, C_BTN);
-        const char* plbl = timerWidget.isRunning() ? "||" : ">";
-        uint16_t pcol = timerWidget.isRunning() ? TFT_YELLOW : TFT_GREEN;
-        tft.setTextColor(pcol, C_BTN);
-        int tw = tft.textWidth(plbl, 4);
-        tft.drawString(plbl, 150 + (38 - tw) / 2, TIMER_Y + 15, 4);
+        if (timerWidget.isRunning()) {
+            // Pause
+            tft.fillRoundRect(150, TIMER_Y + 10, 38, 34, 6, C_BTN);
+            tft.setTextColor(TFT_YELLOW, C_BTN);
+            int tw = tft.textWidth("||", 4);
+            tft.drawString("||", 150 + (38 - tw) / 2, TIMER_Y + 15, 4);
 
-        // Reset
-        tft.fillRoundRect(196, TIMER_Y + 10, 38, 34, 6, C_BTN);
-        tft.setTextColor(0xFD20, C_BTN);  // orange
-        tw = tft.textWidth("X", 4);
-        tft.drawString("X", 196 + (38 - tw) / 2, TIMER_Y + 15, 4);
+            // Reset (X)
+            tft.fillRoundRect(196, TIMER_Y + 10, 38, 34, 6, C_BTN);
+            tft.setTextColor(0xFD20, C_BTN);  // orange
+            tw = tft.textWidth("X", 4);
+            tft.drawString("X", 196 + (38 - tw) / 2, TIMER_Y + 15, 4);
+        } else if (timerWidget.isFinished()) {
+            // Finished: single wide reset button
+            tft.fillRoundRect(150, TIMER_Y + 10, 84, 34, 6, C_BTN);
+            tft.setTextColor(0xFD20, C_BTN);
+            int tw = tft.textWidth("0", 4);
+            tft.drawString("0", 150 + (84 - tw) / 2, TIMER_Y + 15, 4);
+        } else {
+            // Paused: resume + reset
+            tft.fillRoundRect(150, TIMER_Y + 10, 38, 34, 6, C_BTN);
+            tft.setTextColor(TFT_GREEN, C_BTN);
+            int tw = tft.textWidth(">", 4);
+            tft.drawString(">", 150 + (38 - tw) / 2, TIMER_Y + 15, 4);
+
+            tft.fillRoundRect(196, TIMER_Y + 10, 38, 34, 6, C_BTN);
+            tft.setTextColor(0xFD20, C_BTN);
+            tw = tft.textWidth("0", 4);
+            tft.drawString("0", 196 + (38 - tw) / 2, TIMER_Y + 15, 4);
+        }
     }
 }
 
@@ -338,23 +363,37 @@ static void handleTouch() {
 
     Serial.printf("Touch x=%d y=%d\n", p.x, p.y);
 
-    if (p.y >= TIMER_Y) {
-        if (p.x >= 196 && (timerWidget.remaining() > 0 || timerWidget.isFinished())) {
+    if (p.y < HEADER_Y + HEADER_H && p.x < 120) {
+        showIpUntilMs = now + 7000;
+        dirty.header  = true;
+    } else if (p.y >= TIMER_Y) {
+        if (timerWidget.isRunning()) {
+            if (p.x >= 196) {
+                timerWidget.reset();
+                if (cat.mood == CatMood::Celebrate) { cat.mood = CatMood::Idle; dirty.animal = true; }
+                dirty.timerRow = true;
+            } else if (p.x >= 150) {
+                timerWidget.pause();
+                dirty.timerRow = true;
+            }
+        } else if (timerWidget.isFinished() && p.x >= 150) {
             timerWidget.reset();
-            activePick = -1;
             if (cat.mood == CatMood::Celebrate) { cat.mood = CatMood::Idle; dirty.animal = true; }
-            dirty.picker   = true;
             dirty.timerRow = true;
-        } else if (timerWidget.remaining() > 0 || timerWidget.isRunning()) {
-            if (timerWidget.isRunning()) timerWidget.pause();
-            else                         timerWidget.resume();
-            dirty.timerRow = true;
+        } else if (timerWidget.remaining() > 0) {
+            if (p.x >= 196) {
+                timerWidget.reset();
+                dirty.timerRow = true;
+            } else if (p.x >= 150) {
+                timerWidget.resume();
+                dirty.timerRow = true;
+            }
         }
     } else if (p.y >= PICKER_Y) {
         int idx = constrain(p.x / (240 / PICK_N), 0, PICK_N - 1);
-        activePick = idx;
-        timerWidget.start(PICK_SEC[idx]);
-        dirty.picker   = true;
+        bool wasFinished = timerWidget.isFinished();
+        timerWidget.addTime(PICK_SEC[idx]);
+        if (wasFinished && cat.mood == CatMood::Celebrate) { cat.mood = CatMood::Idle; dirty.animal = true; }
         dirty.timerRow = true;
     } else if (p.y >= ANIMAL_Y) {
         cat.mood  = CatMood::Happy;
@@ -394,28 +433,150 @@ static void updateCatAnim() {
     if (changed) dirty.animal = true;
 }
 
+// ── Config web page ───────────────────────────────────────────────────────────
+
+static const char CONFIG_HTML[] PROGMEM = R"html(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CYD Clock · Config</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px;background:#111;color:#ddd}
+h2{margin-top:0}
+h3{margin:20px 0 10px;font-size:1rem;color:#aaa;border-bottom:1px solid #333;padding-bottom:6px}
+label{display:block;font-size:.82rem;color:#888;margin-bottom:2px}
+input{display:block;width:100%;padding:8px;margin-bottom:14px;background:#1e1e1e;color:#ddd;border:1px solid #333;border-radius:5px}
+.row{display:flex;gap:8px}
+.row input{flex:1;margin-bottom:0}
+button{padding:9px 16px;background:#0070f3;color:#fff;border:none;border-radius:5px;cursor:pointer}
+button:hover{background:#005ec4}
+.drop{margin:8px 0 14px;border:1px solid #333;border-radius:5px;max-height:200px;overflow-y:auto;display:none}
+.city{padding:10px 12px;cursor:pointer;border-bottom:1px solid #222}
+.city:hover,.city:focus{background:#1e1e1e;outline:none}
+.city small{color:#666}
+.banner{padding:10px;border-radius:5px;margin-bottom:14px}
+.ok{background:#063}
+</style>
+</head><body>
+<h2>Configuration</h2>
+%%MSG%%
+<form method="POST" action="/save-config">
+
+<h3>Weather location</h3>
+<label>City search</label>
+<div class="row">
+<input id="wcs" placeholder="e.g. Paris, Toronto…" oninput="deb('w',this.value)">
+<button type="button" onclick="search('w')">Search</button>
+</div>
+<div id="wres" class="drop"></div>
+<label>Latitude</label>
+<input name="lat" id="lat" value="%%LAT%%">
+<label>Longitude</label>
+<input name="lon" id="lon" value="%%LON%%">
+
+<h3>Timezone (for clock)</h3>
+<label>City search</label>
+<div class="row">
+<input id="tcs" placeholder="e.g. London, New York…" oninput="deb('t',this.value)">
+<button type="button" onclick="search('t')">Search</button>
+</div>
+<div id="tres" class="drop"></div>
+<label>UTC Offset (seconds)</label>
+<input name="utc" id="utc" type="number" value="%%UTC%%">
+
+<button type="submit" style="width:100%;margin-top:8px">Save</button>
+</form>
+<script>
+const tm={};
+function deb(k,v){clearTimeout(tm[k]);if(v.length>1)tm[k]=setTimeout(()=>search(k),500)}
+async function search(k){
+  const q=document.getElementById(k+'cs').value.trim();
+  if(!q)return;
+  const el=document.getElementById(k+'res');
+  el.style.display='block';el.innerHTML='<div class="city">Searching…</div>';
+  try{
+    const r=await fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(q)+'&count=8&language=en&format=json');
+    const d=await r.json();
+    if(!d.results||!d.results.length){el.innerHTML='<div class="city">No results</div>';return;}
+    el.innerHTML='';
+    d.results.forEach(c=>{
+      const div=document.createElement('div');
+      div.className='city';div.tabIndex=0;
+      const b=document.createElement('strong');b.textContent=c.name;div.appendChild(b);
+      if(c.admin1){div.appendChild(document.createTextNode(', '+c.admin1));}
+      const sm=document.createElement('small');sm.textContent=' '+c.country;div.appendChild(sm);
+      const fn=()=>pick(k,c.latitude,c.longitude,c.timezone||'');
+      div.addEventListener('click',fn);
+      div.addEventListener('keydown',e=>{if(e.key==='Enter')fn();});
+      el.appendChild(div);
+    });
+  }catch(e){el.innerHTML='<div class="city">Network error</div>';}
+}
+function utcFromTz(tz){
+  try{
+    const p=new Intl.DateTimeFormat('en',{timeZone:tz,timeZoneName:'longOffset'}).formatToParts(new Date());
+    const s=p.find(x=>x.type==='timeZoneName').value;
+    const m=s.match(/GMT([+-]?)(\d{2}):(\d{2})/);
+    return m?(m[1]==='-'?-1:1)*(+m[2]*3600+ +m[3]*60):null;
+  }catch(e){return null;}
+}
+function pick(k,lat,lon,tz){
+  document.getElementById(k+'res').style.display='none';
+  document.getElementById(k+'cs').value='';
+  if(k==='w'){
+    document.getElementById('lat').value=lat;
+    document.getElementById('lon').value=lon;
+  } else {
+    const off=utcFromTz(tz);
+    if(off!==null)document.getElementById('utc').value=off;
+  }
+}
+</script>
+</body></html>
+)html";
+
+static void handleConfigGet() {
+    String page = String(FPSTR(CONFIG_HTML));
+    page.replace("%%LAT%%", String(configMgr.config().latitude,  4));
+    page.replace("%%LON%%", String(configMgr.config().longitude, 4));
+    page.replace("%%UTC%%", String(configMgr.config().utcOffsetSeconds));
+    String msg = "";
+    if (wm.server->hasArg("saved"))
+        msg = "<div class='banner ok'>Settings saved.</div>";
+    page.replace("%%MSG%%", msg);
+    wm.server->send(200, "text/html", page);
+}
+
+static void handleConfigPost() {
+    float lat = wm.server->arg("lat").toFloat();
+    float lon = wm.server->arg("lon").toFloat();
+    int   utc = wm.server->arg("utc").toInt();
+    if (lat < -90.0f || lat > 90.0f || lon < -180.0f || lon > 180.0f || utc < -50400 || utc > 50400) {
+        wm.server->send(400, "text/plain", "Invalid values");
+        return;
+    }
+    configMgr.config().latitude         = lat;
+    configMgr.config().longitude        = lon;
+    configMgr.config().utcOffsetSeconds = utc;
+    configMgr.save();
+    ntpClient.setTimeOffset(utc);
+    lastWeatherFetch = millis() - WEATHER_UPDATE_INTERVAL_MS - 1;
+    dirty.header = true;
+    wm.server->sendHeader("Location", "/config?saved=1");
+    wm.server->send(302, "text/plain", "");
+}
+
 // ── WiFiManager ───────────────────────────────────────────────────────────────
 static void runWiFiManager(ConfigManager& cfg) {
-    char latBuf[12], lonBuf[12], utcBuf[8];
-    snprintf(latBuf, sizeof(latBuf), "%.4f", cfg.config().latitude);
-    snprintf(lonBuf, sizeof(lonBuf), "%.4f", cfg.config().longitude);
-    snprintf(utcBuf, sizeof(utcBuf), "%d",   cfg.config().utcOffsetSeconds);
-
-    WiFiManagerParameter paramLat("lat", "Latitude",         latBuf, 11);
-    WiFiManagerParameter paramLon("lon", "Longitude",        lonBuf, 11);
-    WiFiManagerParameter paramUtc("utc", "UTC Offset (sec)", utcBuf, 7);
-
-    WiFiManager wm;
-    wm.addParameter(&paramLat);
-    wm.addParameter(&paramLon);
-    wm.addParameter(&paramUtc);
-    wm.setSaveParamsCallback([&]() {
-        cfg.config().latitude         = atof(paramLat.getValue());
-        cfg.config().longitude        = atof(paramLon.getValue());
-        cfg.config().utcOffsetSeconds = atoi(paramUtc.getValue());
-        cfg.save();
-    });
+    (void)cfg;  // config now managed exclusively via /config web page
+    wm.setCustomMenuHTML("<form action='/config' method='get'><button>Configuration</button></form><br/>");
+    const char* menu[] = {"wifi", "custom", "info", "sep", "update", "exit"};
+    wm.setMenu(menu, 6);
     wm.autoConnect("CYD-Clock");
+    wm.startWebPortal();
+    wm.server->on("/config",      HTTP_GET,  handleConfigGet);
+    wm.server->on("/save-config", HTTP_POST, handleConfigPost);
 }
 
 // ── Arduino ───────────────────────────────────────────────────────────────────
@@ -455,10 +616,17 @@ void setup() {
 }
 
 void loop() {
+    wm.process();
     ntpClient.update();
     handleTouch();
 
     unsigned long now = millis();
+
+    // IP display expiry
+    if (showIpUntilMs > 0 && now >= showIpUntilMs) {
+        showIpUntilMs = 0;
+        dirty.header  = true;
+    }
 
     // Weather refresh
     if (now - lastWeatherFetch > WEATHER_UPDATE_INTERVAL_MS) {

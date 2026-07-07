@@ -8,6 +8,25 @@ void TimerWidget::start(uint32_t durationSeconds) {
     _finished   = false;
 }
 
+void TimerWidget::addTime(uint32_t seconds) {
+    uint32_t addMs = seconds * 1000UL;
+    if (_finished) {
+        _durationMs = addMs;
+        _elapsedMs  = 0;
+        _startMs    = millis();
+        _running    = true;
+        _finished   = false;
+    } else if (_durationMs == 0 && !_running) {
+        _durationMs = addMs;
+        _elapsedMs  = 0;
+        _startMs    = millis();
+        _running    = true;
+    } else {
+        _durationMs += addMs;
+        if (_durationMs > 5999 * 1000UL) _durationMs = 5999 * 1000UL;  // cap at 99:59
+    }
+}
+
 void TimerWidget::pause() {
     if (!_running) return;
     _elapsedMs += millis() - _startMs;
@@ -21,9 +40,10 @@ void TimerWidget::resume() {
 }
 
 void TimerWidget::reset() {
-    _running   = false;
-    _finished  = false;
-    _elapsedMs = 0;
+    _running    = false;
+    _finished   = false;
+    _durationMs = 0;
+    _elapsedMs  = 0;
 }
 
 void TimerWidget::tick() {
