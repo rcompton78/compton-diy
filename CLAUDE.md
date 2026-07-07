@@ -43,12 +43,14 @@ Example `project.json` for a PlatformIO app:
 {
   "name": "my-sensor",
   "targets": {
-    "build": { "executor": "nx:run-commands", "options": { "command": "pio run", "cwd": "apps/my-sensor" } },
-    "flash": { "executor": "nx:run-commands", "options": { "command": "pio run -t upload", "cwd": "apps/my-sensor" } },
-    "test":  { "executor": "nx:run-commands", "options": { "command": "pio test", "cwd": "apps/my-sensor" } }
+    "build": { "executor": "nx:run-commands", "options": { "command": "scripts/pio.sh run -d apps/my-sensor", "cwd": "." } },
+    "flash": { "executor": "nx:run-commands", "options": { "command": "scripts/pio.sh run -d apps/my-sensor -t upload", "cwd": "." } },
+    "test":  { "executor": "nx:run-commands", "options": { "command": "scripts/pio.sh test -d apps/my-sensor", "cwd": "." } }
   }
 }
 ```
+
+> **PlatformIO wrapper:** Always invoke PlatformIO via `scripts/pio.sh` (not `pio` directly). The wrapper uses the repo's `.venv/bin/python3` when available (local dev) and falls back to the system `python3` (CI). Use `cwd: "."` (workspace root) with the `-d <project-dir>` flag so the wrapper can locate itself reliably.
 
 ## NX Guidelines
 

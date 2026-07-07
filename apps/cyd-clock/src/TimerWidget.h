@@ -4,6 +4,7 @@
 class TimerWidget {
 public:
     void start(uint32_t durationSeconds);
+    // If finished or idle, starts a fresh countdown; otherwise extends the running/paused duration.
     void addTime(uint32_t seconds);
     void pause();
     void resume();
