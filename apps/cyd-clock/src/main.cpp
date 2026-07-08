@@ -660,7 +660,7 @@ static bool isInSleepWindow(int nowMinutes) {
 
 struct SleepPos { int x, y; };
 static constexpr SleepPos SLEEP_CLOCK_POS[] = {
-    { 30,  60}, {130,  60}, { 30, 160}, {130, 160}, { 30, 250}, {130, 250},
+    { 20,  60}, {100,  60}, { 20, 160}, {100, 160}, { 20, 250}, {100, 250},
 };
 static constexpr int SLEEP_CLOCK_POS_N = 6;
 
@@ -668,6 +668,7 @@ static void updateSleepScreen(unsigned long now) {
     static unsigned long nextMoveMs = 0;
     static uint8_t posIdx = 0;
     static bool hasDrawn = false;
+    static int lastX = 0, lastY = 0, lastW = 0;
 
     if (!sleepScreenActive) {
         tft.fillScreen(TFT_BLACK);   // once per sleep session, not every frame
@@ -677,7 +678,9 @@ static void updateSleepScreen(unsigned long now) {
     }
     if (now >= nextMoveMs) {
         if (hasDrawn) {
-            tft.fillRect(SLEEP_CLOCK_POS[posIdx].x - 4, SLEEP_CLOCK_POS[posIdx].y - 4, 100, 40, TFT_BLACK);
+            // Erase exactly what was drawn — text width varies with digit count (e.g.
+            // "9:05" vs "12:34"), so a fixed-size erase rect can leave stray pixels behind.
+            tft.fillRect(lastX - 4, lastY - 4, lastW + 8, 40, TFT_BLACK);
         }
         posIdx = (posIdx + 1) % SLEEP_CLOCK_POS_N;
 
@@ -688,7 +691,11 @@ static void updateSleepScreen(unsigned long now) {
         snprintf(buf, sizeof(buf), "%d:%02d", h12, t->tm_min);
 
         tft.setTextColor(C_SLEEP_DIM, TFT_BLACK);
-        tft.drawString(buf, SLEEP_CLOCK_POS[posIdx].x, SLEEP_CLOCK_POS[posIdx].y, 4);
+        int x = SLEEP_CLOCK_POS[posIdx].x, y = SLEEP_CLOCK_POS[posIdx].y;
+        tft.drawString(buf, x, y, 4);
+        lastX = x;
+        lastY = y;
+        lastW = tft.textWidth(buf, 4);
         hasDrawn = true;
         nextMoveMs = now + random(10000, 15001);  // 10-15s cadence
     }
