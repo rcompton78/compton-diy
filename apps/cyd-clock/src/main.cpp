@@ -32,6 +32,12 @@ static constexpr int TREAT_Y  = 178;  // top edge
 static constexpr int TREAT_W  = 50;
 static constexpr int TREAT_H  = 34;
 
+// Play button — bottom-left of animal zone, mirrors the treat button
+static constexpr int PLAY_X  = 5;
+static constexpr int PLAY_Y  = 178;
+static constexpr int PLAY_W  = 50;
+static constexpr int PLAY_H  = 34;
+
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
 static constexpr int TY_MIN = 300, TY_MAX = 3800;
@@ -47,6 +53,8 @@ static constexpr uint16_t C_BACT  = 0x065F;  // active button
 static constexpr uint16_t C_DIM   = 0x7BEF;  // dim text
 static constexpr uint16_t C_FISH   = 0xFD20;  // treat button fish (orange)
 static constexpr uint16_t C_RUMBLE = 0xFC98;  // hunger line animation (warm peach)
+static constexpr uint16_t C_YARN   = 0xF811;  // play button yarn ball (magenta/berry)
+static constexpr uint16_t C_ZZZ    = 0x7BFF;  // boredom "Zz" overlay (dim blue-gray)
 
 // Quick-pick durations
 static constexpr uint32_t    PICK_SEC[] = {60, 300, 600, 1800};
@@ -71,12 +79,14 @@ TimerWidget   timerWidget;
 WiFiManager   wm;
 
 // ── Animation ─────────────────────────────────────────────────────────────────
-enum class CatMood   { Idle, Happy, Celebrate };
-enum class CatStatus { Content, Peckish, Hungry };  // Content=0-50%, Peckish=50-100%, Hungry=100%+
+enum class CatMood    { Idle, Happy, Celebrate };
+enum class CatStatus  { Content, Peckish, Hungry };   // Content=0-50%, Peckish=50-100%, Hungry=100%+
+enum class CatBoredom { Entertained, Bored, VeryBored }; // mirrors CatStatus tiers
 
 struct {
-    CatMood   mood              = CatMood::Idle;
-    CatStatus status            = CatStatus::Content;
+    CatMood    mood              = CatMood::Idle;
+    CatStatus  status            = CatStatus::Content;
+    CatBoredom boredom           = CatBoredom::Entertained;
     unsigned long since         = 0;
     bool eyeOpen                = true;
     unsigned long lastBlink     = 0;
@@ -84,6 +94,8 @@ struct {
     unsigned long lastFrame     = 0;
     unsigned long lastRumble    = 0;  // for tummy rumble animation
     bool rumbling               = false;
+    unsigned long lastZzz       = 0;  // for boredom "Zz" toggle animation
+    bool napping                = false;
 } cat;
 
 // ── App state ─────────────────────────────────────────────────────────────────
@@ -92,7 +104,7 @@ unsigned long lastWeatherFetch = 0;
 unsigned long lastTouchMs      = 0;
 unsigned long showIpUntilMs    = 0;
 
-struct { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick, hungerLines; } dirty = {true, true, true, true, false, false, false, false};
+struct { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick, hungerLines, zzzFx; } dirty = {true, true, true, true, false, false, false, false, false};
 
 
 // ── Cat drawing ───────────────────────────────────────────────────────────────
@@ -111,9 +123,9 @@ static void drawEyes(int cx, int cy, bool eyeOpen) {
     }
 }
 
-static void drawCat(int cx, int cy, CatMood mood, CatStatus status, bool eyeOpen) {
-    bool happy  = (mood == CatMood::Happy || mood == CatMood::Celebrate);
-    bool hungry = (status == CatStatus::Hungry) && !happy;
+static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom boredom, bool eyeOpen) {
+    bool happy = (mood == CatMood::Happy || mood == CatMood::Celebrate);
+    bool sad   = (status == CatStatus::Hungry || boredom == CatBoredom::VeryBored) && !happy;
 
     tft.fillRect(cx - 50, cy - 88, 100, 146, TFT_BLACK);
 
@@ -154,7 +166,7 @@ static void drawCat(int cx, int cy, CatMood mood, CatStatus status, bool eyeOpen
         tft.drawLine(cx -  3, cy - 3,  cx,     cy - 5, C_DARK);
         tft.drawLine(cx,      cy - 5,  cx + 3, cy - 3, C_DARK);
         tft.drawLine(cx +  3, cy - 3,  cx + 10,cy - 8, C_DARK);
-    } else if (hungry) {
+    } else if (sad) {
         // Frown
         tft.drawLine(cx - 10, cy - 4,  cx - 3, cy - 9, C_DARK);
         tft.drawLine(cx -  3, cy - 9,  cx,     cy - 7, C_DARK);
@@ -216,6 +228,21 @@ static void drawHungerLines(int cx, int cy, bool show) {
     tft.drawFastHLine(bx,      by + 16, 14, col);
 }
 
+static void drawBoredomZzz(int cx, int cy, bool show) {
+    // "Zz" cloud, entirely outside the head/ears — one to the right, two cascading
+    // up-and-out to the left.
+    static const int8_t dx[] = { 70, -70, -70 };
+    static const int8_t dy[] = {-40, -40, -60 };
+    for (int i = 0; i < 3; i++) {
+        int x = cx + dx[i], y = cy + dy[i];
+        tft.fillRect(x - 2, y - 10, 22, 14, TFT_BLACK);
+        if (show) {
+            tft.setTextColor(C_ZZZ, TFT_BLACK);
+            tft.drawString("Zz", x, y - 8, 1);
+        }
+    }
+}
+
 static void drawTreatBtn() {
     tft.fillRoundRect(TREAT_X, TREAT_Y, TREAT_W, TREAT_H, 6, C_BTN);
 
@@ -229,6 +256,18 @@ static void drawTreatBtn() {
     tft.fillTriangle(fcx + 10, fcy, fcx + 22, fcy - 7, fcx + 22, fcy + 7, C_FISH);
     // Eye
     tft.fillCircle(fcx - 5, fcy - 2, 2, TFT_BLACK);
+}
+
+static void drawPlayBtn() {
+    tft.fillRoundRect(PLAY_X, PLAY_Y, PLAY_W, PLAY_H, 6, C_BTN);
+
+    // Yarn ball: filled circle body, crossing "wound yarn" lines, loose end
+    int ycx = PLAY_X + 20, ycy = PLAY_Y + 17;
+    tft.fillCircle(ycx, ycy, 10, C_YARN);
+    tft.drawLine(ycx - 8, ycy - 5, ycx + 8, ycy + 5, C_BTN);
+    tft.drawLine(ycx - 8, ycy + 5, ycx + 8, ycy - 5, C_BTN);
+    tft.drawLine(ycx - 6, ycy,     ycx + 6, ycy,     C_BTN);
+    tft.drawLine(ycx + 8, ycy + 6, ycx + 14, ycy + 10, C_YARN);
 }
 
 // ── Zone draws ────────────────────────────────────────────────────────────────
@@ -300,7 +339,7 @@ static void drawAnimal() {
     tft.fillRect(CAT_CX - 50, CAT_CY - 91, 100, 152, TFT_BLACK);
 
     int dy = (cat.mood == CatMood::Celebrate) ? ((cat.frame % 2 == 0) ? -3 : 3) : 0;
-    drawCat(CAT_CX, CAT_CY + dy, cat.mood, cat.status, cat.eyeOpen);
+    drawCat(CAT_CX, CAT_CY + dy, cat.mood, cat.status, cat.boredom, cat.eyeOpen);
 
     if (cat.mood == CatMood::Happy || cat.mood == CatMood::Celebrate) {
         drawSparkles(CAT_CX, CAT_CY, cat.frame);
@@ -311,9 +350,16 @@ static void drawAnimal() {
         drawHungerLines(CAT_CX, CAT_CY, cat.rumbling);
     }
 
-    // Clear hint area and draw treat button
-    tft.fillRect(0, ANIMAL_Y + ANIMAL_H - 27, TREAT_X - 2, 27, TFT_BLACK);
+    // Boredom "Zz" overlay — sits outside the main clear rect, so always redraw/erase
+    // here regardless of tier; cat.napping already encodes whether it should show
+    // (only true while Content and Bored/VeryBored — hunger takes precedence).
+    drawBoredomZzz(CAT_CX, CAT_CY, cat.napping);
+
+    // Clear hint area and draw treat + play buttons
+    tft.fillRect(PLAY_X + PLAY_W, ANIMAL_Y + ANIMAL_H - 27,
+                 TREAT_X - (PLAY_X + PLAY_W) - 2, 27, TFT_BLACK);
     drawTreatBtn();
+    drawPlayBtn();
 }
 
 static void drawPicker() {
@@ -455,6 +501,22 @@ static void handleTouch() {
                 configMgr.save();
             }
             dirty.animal = true;
+        } else if (p.x >= PLAY_X && p.x <= PLAY_X + PLAY_W &&
+                   p.y >= PLAY_Y && p.y <= PLAY_Y + PLAY_H) {
+            // Play with the cat
+            cat.mood    = CatMood::Celebrate;
+            cat.boredom = CatBoredom::Entertained;
+            cat.since   = now;
+            cat.frame   = 0;
+            cat.napping = false;
+            // Persist last play time as UTC (subtract offset so timezone changes don't shift boredom)
+            time_t epoch = ntpClient.getEpochTime();
+            time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
+            if (utc > 1000000000) {  // sanity: must be a real NTP-synced time (post-2001)
+                configMgr.config().lastPlayEpoch = (uint32_t)utc;
+                configMgr.save();
+            }
+            dirty.animal = true;
         }
     }
 }
@@ -533,6 +595,51 @@ static void updateCatStatus() {
     }
 }
 
+static void updateCatBoredom() {
+    time_t epoch = ntpClient.getEpochTime();
+    time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
+    if (utc <= 1000000000) return;  // NTP not synced yet (pre-2001 or un-synced offset-only value)
+
+    uint32_t lastPlay  = configMgr.config().lastPlayEpoch;
+    uint32_t threshold = (uint32_t)configMgr.config().boredomMinutes * 60u;
+    uint32_t now32     = (uint32_t)utc;
+    uint32_t elapsed;
+    if (lastPlay == 0)           elapsed = threshold + 1;   // never played → start bored
+    else if (now32 >= lastPlay)  elapsed = now32 - lastPlay;
+    else                         elapsed = 0;                // NTP clock step back → treat as just played
+
+    CatBoredom prev = cat.boredom;
+    if (elapsed < threshold / 2)
+        cat.boredom = CatBoredom::Entertained;
+    else if (elapsed < threshold)
+        cat.boredom = CatBoredom::Bored;
+    else
+        cat.boredom = CatBoredom::VeryBored;
+
+    if (cat.boredom != prev) dirty.animal = true;
+
+    // "Zz" toggle: 5 s cycle for Bored, 2 s cycle for VeryBored — only redraws when content
+    bool shouldNap = (cat.boredom == CatBoredom::Bored || cat.boredom == CatBoredom::VeryBored)
+                     && cat.status == CatStatus::Content
+                     && cat.mood == CatMood::Idle;
+    if (shouldNap) {
+        unsigned long now = millis();
+        unsigned long interval = (cat.boredom == CatBoredom::VeryBored) ? 2000UL : 5000UL;
+        if (!cat.napping && now - cat.lastZzz > interval) {
+            cat.napping = true;
+            cat.lastZzz = now;
+            dirty.zzzFx = true;
+        } else if (cat.napping && now - cat.lastZzz > 400) {
+            cat.napping = false;
+            cat.lastZzz = now;
+            dirty.zzzFx = true;
+        }
+    } else if (cat.napping) {
+        cat.napping = false;
+        dirty.zzzFx = true;
+    }
+}
+
 // ── Config web page ───────────────────────────────────────────────────────────
 
 static const char CONFIG_HTML[] PROGMEM = R"html(<!DOCTYPE html>
@@ -578,6 +685,10 @@ button:hover{background:#005ec4}
 <h3>Cat hunger</h3>
 <label>Minutes until hungry</label>
 <input name="hunger" id="hunger" type="number" min="1" max="1440" value="%%HUNGER%%">
+
+<h3>Cat boredom</h3>
+<label>Minutes until bored</label>
+<input name="boredom" id="boredom" type="number" min="1" max="1440" value="%%BOREDOM%%">
 
 <h3>Timezone (for clock)</h3>
 <label>City search</label>
@@ -646,6 +757,7 @@ static void handleConfigGet() {
     page.replace("%%LON%%",    String(configMgr.config().longitude, 4));
     page.replace("%%UTC%%",    String(configMgr.config().utcOffsetSeconds));
     page.replace("%%HUNGER%%", String(configMgr.config().hungerMinutes));
+    page.replace("%%BOREDOM%%", String(configMgr.config().boredomMinutes));
     String msg = "";
     if (wm.server->hasArg("saved"))
         msg = "<div class='banner ok'>Settings saved.</div>";
@@ -654,12 +766,13 @@ static void handleConfigGet() {
 }
 
 static void handleConfigPost() {
-    float lat    = wm.server->arg("lat").toFloat();
-    float lon    = wm.server->arg("lon").toFloat();
-    int   utc    = wm.server->arg("utc").toInt();
-    int   hunger = wm.server->arg("hunger").toInt();
+    float lat     = wm.server->arg("lat").toFloat();
+    float lon     = wm.server->arg("lon").toFloat();
+    int   utc     = wm.server->arg("utc").toInt();
+    int   hunger  = wm.server->arg("hunger").toInt();
+    int   boredom = wm.server->arg("boredom").toInt();
     if (lat < -90.0f || lat > 90.0f || lon < -180.0f || lon > 180.0f || utc < -50400 || utc > 50400
-        || hunger < 1 || hunger > 1440) {
+        || hunger < 1 || hunger > 1440 || boredom < 1 || boredom > 1440) {
         wm.server->send(400, "text/plain", "Invalid values");
         return;
     }
@@ -667,6 +780,7 @@ static void handleConfigPost() {
     configMgr.config().longitude        = lon;
     configMgr.config().utcOffsetSeconds = utc;
     configMgr.config().hungerMinutes    = hunger;
+    configMgr.config().boredomMinutes   = boredom;
     configMgr.save();
     ntpClient.setTimeOffset(utc);
     lastWeatherFetch = millis() - WEATHER_UPDATE_INTERVAL_MS - 1;
@@ -786,9 +900,10 @@ void loop() {
     }
     timerDonePrev = timerDoneNow;
 
-    // Cat animation and hunger status
+    // Cat animation, hunger, and boredom status
     updateCatAnim();
     updateCatStatus();
+    updateCatBoredom();
 
     // Header tick — full redraw on minute change, seconds-only otherwise
     {
@@ -814,9 +929,10 @@ void loop() {
 
     if (dirty.header)             { drawHeader();      dirty.header     = false; dirty.headerTick = false; }
     else if (dirty.headerTick)   { drawHeaderTick();  dirty.headerTick = false; }
-    if (dirty.animal)             { drawAnimal();                                dirty.animal = false; dirty.eyesOnly = false; dirty.hungerLines = false; }
+    if (dirty.animal)             { drawAnimal();                                dirty.animal = false; dirty.eyesOnly = false; dirty.hungerLines = false; dirty.zzzFx = false; }
     else if (dirty.eyesOnly)      { drawEyes(CAT_CX, CAT_CY, cat.eyeOpen);     dirty.eyesOnly = false; }
     else if (dirty.hungerLines)   { drawHungerLines(CAT_CX, CAT_CY, cat.rumbling); dirty.hungerLines = false; }
+    else if (dirty.zzzFx)         { drawBoredomZzz(CAT_CX, CAT_CY, cat.napping);   dirty.zzzFx = false; }
     if (dirty.picker)        { drawPicker();                            dirty.picker    = false; }
     if (dirty.timerRow)      { drawTimerRow();  dirty.timerRow  = false; dirty.timerTick = false; }
     else if (dirty.timerTick){ drawTimerDigits(); dirty.timerTick = false; }
