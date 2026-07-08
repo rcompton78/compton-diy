@@ -81,9 +81,12 @@ jobs:
 
       - name: Determine affected firmware projects
         id: affected
+        env:
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+          HEAD_SHA: ${{ github.sha }}
         run: |
           PROJECTS=$(pnpm nx show projects --affected --withTarget release \
-            --base="${{ steps.base.outputs.sha }}" --head="${{ github.sha }}" --json \
+            --base="$BASE_SHA" --head="$HEAD_SHA" --json \
             | jq -r '.[]')
           {
             echo "projects<<EOF"
@@ -96,17 +99,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           AFFECTED_PROJECTS: ${{ steps.affected.outputs.projects }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          COMMIT_SHA: ${{ github.sha }}
         run: |
+          shopt -s nullglob
           ASSETS=()
           while IFS= read -r project; do
             [ -z "$project" ] && continue
             ASSETS+=(dist/"$project"/*-ota.bin)
           done <<< "$AFFECTED_PROJECTS"
 
-          gh release create "${{ steps.version.outputs.version }}" \
+          gh release create "$RELEASE_VERSION" \
             "${ASSETS[@]}" \
-            --title "Firmware ${{ steps.version.outputs.version }}" \
-            --notes "Automated build from ${{ github.sha }}. Changed: $(echo "$AFFECTED_PROJECTS" | paste -sd, -). Upload the *-ota.bin matching your device via its config portal's Update page."
+            --title "Firmware $RELEASE_VERSION" \
+            --notes "Automated build from $COMMIT_SHA. Changed: $(echo "$AFFECTED_PROJECTS" | paste -sd, -). Upload the *-ota.bin matching your device via its config portal's Update page."
 
   deploy-pages:
     needs: build-and-release
