@@ -36,6 +36,10 @@ bool ConfigManager::load() {
         int w = doc["sleepWake"] | _config.sleepWakeMinutes;
         if (w >= 0 && w <= 1439) _config.sleepWakeMinutes = w;
     }
+    {
+        String n = doc["name"] | _config.catName;
+        if (n.length() >= 1 && n.length() <= 16) _config.catName = n;
+    }
 
     f.close();
     return true;
@@ -56,6 +60,7 @@ bool ConfigManager::save() {
     doc["play"]    = _config.lastPlayEpoch;
     doc["sleepBed"]  = _config.sleepBedMinutes;
     doc["sleepWake"] = _config.sleepWakeMinutes;
+    doc["name"]      = _config.catName;
 
     serializeJson(doc, f);
     f.close();

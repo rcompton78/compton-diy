@@ -362,6 +362,8 @@ static void drawAnimal() {
     // Clear hint area and draw treat + play buttons
     tft.fillRect(PLAY_X + PLAY_W, ANIMAL_Y + ANIMAL_H - 27,
                  TREAT_X - (PLAY_X + PLAY_W) - 2, 27, TFT_BLACK);
+    tft.setTextColor(C_DIM, TFT_BLACK);
+    tft.drawCentreString(configMgr.config().catName.c_str(), CX, ANIMAL_Y + ANIMAL_H - 22, 2);
     drawTreatBtn();
     drawPlayBtn();
 }
@@ -743,6 +745,10 @@ button:hover{background:#005ec4}
 <label>Longitude</label>
 <input name="lon" id="lon" value="%%LON%%">
 
+<h3>Cat name</h3>
+<label>Name</label>
+<input name="name" id="name" maxlength="16" value="%%NAME%%">
+
 <h3>Cat hunger</h3>
 <label>Minutes until hungry</label>
 <input name="hunger" id="hunger" type="number" min="1" max="1440" value="%%HUNGER%%">
@@ -818,6 +824,23 @@ function pick(k,lat,lon,tz){
 </body></html>
 )html";
 
+static String htmlEscape(const String& s) {
+    String out;
+    out.reserve(s.length());
+    for (size_t i = 0; i < s.length(); ++i) {
+        char c = s[i];
+        switch (c) {
+            case '&':  out += "&amp;";  break;
+            case '<':  out += "&lt;";   break;
+            case '>':  out += "&gt;";   break;
+            case '"':  out += "&quot;"; break;
+            case '\'': out += "&#x27;"; break;
+            default:   out += c;
+        }
+    }
+    return out;
+}
+
 static String minutesToHHMM(int minutes) {
     char buf[6];
     snprintf(buf, sizeof(buf), "%02d:%02d", minutes / 60, minutes % 60);
@@ -841,6 +864,7 @@ static void handleConfigGet() {
     page.replace("%%BOREDOM%%", String(configMgr.config().boredomMinutes));
     page.replace("%%SLEEPBED%%",  minutesToHHMM(configMgr.config().sleepBedMinutes));
     page.replace("%%SLEEPWAKE%%", minutesToHHMM(configMgr.config().sleepWakeMinutes));
+    page.replace("%%NAME%%", htmlEscape(configMgr.config().catName));
     String msg = "";
     if (wm.server->hasArg("saved"))
         msg = "<div class='banner ok'>Settings saved.</div>";
@@ -857,9 +881,16 @@ static void handleConfigPost() {
     int   sleepBed = 0, sleepWake = 0;
     bool  sleepBedOk  = parseHHMM(wm.server->arg("sleepBed"),  sleepBed);
     bool  sleepWakeOk = parseHHMM(wm.server->arg("sleepWake"), sleepWake);
+    String name = wm.server->arg("name");
+    name.trim();
+    if (name.length() == 0) name = "Biscuit";
+    bool nameOk = name.length() <= 16;
+    for (size_t i = 0; nameOk && i < name.length(); ++i) {
+        if ((unsigned char)name[i] < 0x20 || (unsigned char)name[i] == 0x7F) nameOk = false;
+    }
     if (lat < -90.0f || lat > 90.0f || lon < -180.0f || lon > 180.0f || utc < -50400 || utc > 50400
         || hunger < 1 || hunger > 1440 || boredom < 1 || boredom > 1440
-        || !sleepBedOk || !sleepWakeOk) {
+        || !sleepBedOk || !sleepWakeOk || !nameOk) {
         wm.server->send(400, "text/plain", "Invalid values");
         return;
     }
@@ -870,10 +901,12 @@ static void handleConfigPost() {
     configMgr.config().boredomMinutes   = boredom;
     configMgr.config().sleepBedMinutes  = sleepBed;
     configMgr.config().sleepWakeMinutes = sleepWake;
+    configMgr.config().catName          = name;
     configMgr.save();
     ntpClient.setTimeOffset(utc);
     lastWeatherFetch = millis() - WEATHER_UPDATE_INTERVAL_MS - 1;
     dirty.header = true;
+    dirty.animal = true;
     wm.server->sendHeader("Location", "/config?saved=1");
     wm.server->send(302, "text/plain", "");
 }

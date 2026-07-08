@@ -12,6 +12,7 @@ struct AppConfig {
     uint32_t lastPlayEpoch = 0;  // Unix epoch of last play; 0 = never played
     int sleepBedMinutes = 1320;   // 22:00, minutes since midnight
     int sleepWakeMinutes = 420;   // 07:00, minutes since midnight
+    String catName = "Biscuit";   // Max 16 characters
 };
 
 class ConfigManager {
