@@ -8,6 +8,8 @@ struct AppConfig {
     int utcOffsetSeconds = -25200;
     int hungerMinutes = 60;
     uint32_t lastTreatEpoch = 0;  // Unix epoch of last treat; 0 = never fed
+    int boredomMinutes = 90;
+    uint32_t lastPlayEpoch = 0;  // Unix epoch of last play; 0 = never played
 };
 
 class ConfigManager {

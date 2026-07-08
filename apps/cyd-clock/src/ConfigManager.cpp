@@ -23,6 +23,11 @@ bool ConfigManager::load() {
         if (h >= 1 && h <= 1440) _config.hungerMinutes = h;
     }
     _config.lastTreatEpoch   = doc["treat"]  | _config.lastTreatEpoch;
+    {
+        int b = doc["boredom"] | _config.boredomMinutes;
+        if (b >= 1 && b <= 1440) _config.boredomMinutes = b;
+    }
+    _config.lastPlayEpoch    = doc["play"]   | _config.lastPlayEpoch;
 
     f.close();
     return true;
@@ -39,6 +44,8 @@ bool ConfigManager::save() {
     doc["utc"]    = _config.utcOffsetSeconds;
     doc["hunger"] = _config.hungerMinutes;
     doc["treat"]  = _config.lastTreatEpoch;
+    doc["boredom"] = _config.boredomMinutes;
+    doc["play"]    = _config.lastPlayEpoch;
 
     serializeJson(doc, f);
     f.close();
