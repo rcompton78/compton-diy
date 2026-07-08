@@ -720,7 +720,9 @@ void setup() {
 
     tft.init();
     tft.setRotation(0);
+#if defined(BOARD_CYD)
     tft.invertDisplay(false);  // ST7789_Init.h hardcodes INVON; this panel needs INVOFF
+#endif
     tft.fillScreen(TFT_BLACK);
     touchDriver.begin();
 
