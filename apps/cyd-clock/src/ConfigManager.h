@@ -10,6 +10,8 @@ struct AppConfig {
     uint32_t lastTreatEpoch = 0;  // Unix epoch of last treat; 0 = never fed
     int boredomMinutes = 90;
     uint32_t lastPlayEpoch = 0;  // Unix epoch of last play; 0 = never played
+    int sleepBedMinutes = 1320;   // 22:00, minutes since midnight
+    int sleepWakeMinutes = 420;   // 07:00, minutes since midnight
 };
 
 class ConfigManager {

@@ -55,6 +55,7 @@ static constexpr uint16_t C_FISH   = 0xFD20;  // treat button fish (orange)
 static constexpr uint16_t C_RUMBLE = 0xFC98;  // hunger line animation (warm peach)
 static constexpr uint16_t C_YARN   = 0xF811;  // play button yarn ball (magenta/berry)
 static constexpr uint16_t C_ZZZ    = 0x7BFF;  // boredom "Zz" overlay (dim blue-gray)
+static constexpr uint16_t C_SLEEP_DIM = 0x632C;  // dim gray-blue, for the sleep-screen clock (~40% brightness)
 
 // Quick-pick durations
 static constexpr uint32_t    PICK_SEC[] = {60, 300, 600, 1800};
@@ -103,6 +104,9 @@ bool timerDonePrev          = false;
 unsigned long lastWeatherFetch = 0;
 unsigned long lastTouchMs      = 0;
 unsigned long showIpUntilMs    = 0;
+bool asleep                    = false;  // set each loop before handleTouch(); read by handleTouch()
+unsigned long peekUntilMs      = 0;      // 0 = not peeking; mirrors the showIpUntilMs idiom
+bool sleepScreenActive         = false;  // true once the black sleep screen has been painted this session
 
 struct { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick, hungerLines, zzzFx; } dirty = {true, true, true, true, false, false, false, false, false};
 
@@ -352,7 +356,7 @@ static void drawAnimal() {
 
     // Boredom "Zz" overlay — sits outside the main clear rect, so always redraw/erase
     // here regardless of tier; cat.napping already encodes whether it should show
-    // (only true while Content and Bored/VeryBored — hunger takes precedence).
+    // (true whenever Bored/VeryBored, independent of hunger status).
     drawBoredomZzz(CAT_CX, CAT_CY, cat.napping);
 
     // Clear hint area and draw treat + play buttons
@@ -450,6 +454,11 @@ static void handleTouch() {
     lastTouchMs = now;
 
     Serial.printf("Touch x=%d y=%d\n", p.x, p.y);
+
+    if (asleep) {
+        peekUntilMs = now + 7000;  // ~7s full-UI peek; doesn't touch the schedule
+        return;                     // consume the touch, skip normal zone dispatch
+    }
 
     if (p.y < HEADER_Y + HEADER_H && p.x < 120) {
         showIpUntilMs = now + 7000;
@@ -574,12 +583,12 @@ static void updateCatStatus() {
 
     if (cat.status != prev) dirty.animal = true;
 
-    // Tummy rumble: 5 s cycle for Peckish, 2 s cycle for Hungry — only redraws the lines
+    // Tummy rumble: 3.5 s cycle for Peckish, 1.5 s cycle for Hungry — only redraws the lines
     bool shouldRumble = (cat.status == CatStatus::Peckish || cat.status == CatStatus::Hungry)
                         && cat.mood == CatMood::Idle;
     if (shouldRumble) {
         unsigned long now = millis();
-        unsigned long interval = (cat.status == CatStatus::Hungry) ? 2000UL : 5000UL;
+        unsigned long interval = (cat.status == CatStatus::Hungry) ? 1500UL : 3500UL;
         if (!cat.rumbling && now - cat.lastRumble > interval) {
             cat.rumbling   = true;
             cat.lastRumble = now;
@@ -618,13 +627,13 @@ static void updateCatBoredom() {
 
     if (cat.boredom != prev) dirty.animal = true;
 
-    // "Zz" toggle: 5 s cycle for Bored, 2 s cycle for VeryBored — only redraws when content
+    // "Zz" toggle: 3.5 s cycle for Bored, 1.5 s cycle for VeryBored — plays independently of
+    // hunger status (drawn outside the head, so it never visually collides with the tummy lines)
     bool shouldNap = (cat.boredom == CatBoredom::Bored || cat.boredom == CatBoredom::VeryBored)
-                     && cat.status == CatStatus::Content
                      && cat.mood == CatMood::Idle;
     if (shouldNap) {
         unsigned long now = millis();
-        unsigned long interval = (cat.boredom == CatBoredom::VeryBored) ? 2000UL : 5000UL;
+        unsigned long interval = (cat.boredom == CatBoredom::VeryBored) ? 1500UL : 3500UL;
         if (!cat.napping && now - cat.lastZzz > interval) {
             cat.napping = true;
             cat.lastZzz = now;
@@ -637,6 +646,51 @@ static void updateCatBoredom() {
     } else if (cat.napping) {
         cat.napping = false;
         dirty.zzzFx = true;
+    }
+}
+
+// ── Sleep window ──────────────────────────────────────────────────────────────
+static bool isInSleepWindow(int nowMinutes) {
+    int bed  = configMgr.config().sleepBedMinutes;
+    int wake = configMgr.config().sleepWakeMinutes;
+    if (bed == wake) return false;               // degenerate: treat as "sleep disabled"
+    if (bed < wake) return nowMinutes >= bed && nowMinutes < wake;   // same-day window
+    return nowMinutes >= bed || nowMinutes < wake;                   // wraps midnight
+}
+
+struct SleepPos { int x, y; };
+static constexpr SleepPos SLEEP_CLOCK_POS[] = {
+    { 30,  60}, {130,  60}, { 30, 160}, {130, 160}, { 30, 250}, {130, 250},
+};
+static constexpr int SLEEP_CLOCK_POS_N = 6;
+
+static void updateSleepScreen(unsigned long now) {
+    static unsigned long nextMoveMs = 0;
+    static uint8_t posIdx = 0;
+    static bool hasDrawn = false;
+
+    if (!sleepScreenActive) {
+        tft.fillScreen(TFT_BLACK);   // once per sleep session, not every frame
+        sleepScreenActive = true;
+        hasDrawn = false;
+        nextMoveMs = 0;              // force immediate first draw
+    }
+    if (now >= nextMoveMs) {
+        if (hasDrawn) {
+            tft.fillRect(SLEEP_CLOCK_POS[posIdx].x - 4, SLEEP_CLOCK_POS[posIdx].y - 4, 100, 40, TFT_BLACK);
+        }
+        posIdx = (posIdx + 1) % SLEEP_CLOCK_POS_N;
+
+        time_t epoch = ntpClient.getEpochTime();
+        struct tm* t = localtime(&epoch);
+        int h12 = t->tm_hour % 12; if (h12 == 0) h12 = 12;
+        char buf[6];
+        snprintf(buf, sizeof(buf), "%d:%02d", h12, t->tm_min);
+
+        tft.setTextColor(C_SLEEP_DIM, TFT_BLACK);
+        tft.drawString(buf, SLEEP_CLOCK_POS[posIdx].x, SLEEP_CLOCK_POS[posIdx].y, 4);
+        hasDrawn = true;
+        nextMoveMs = now + random(10000, 15001);  // 10-15s cadence
     }
 }
 
@@ -689,6 +743,12 @@ button:hover{background:#005ec4}
 <h3>Cat boredom</h3>
 <label>Minutes until bored</label>
 <input name="boredom" id="boredom" type="number" min="1" max="1440" value="%%BOREDOM%%">
+
+<h3>Cat sleep</h3>
+<label>Bed time</label>
+<input name="sleepBed" id="sleepBed" type="time" value="%%SLEEPBED%%">
+<label>Wake time</label>
+<input name="sleepWake" id="sleepWake" type="time" value="%%SLEEPWAKE%%">
 
 <h3>Timezone (for clock)</h3>
 <label>City search</label>
@@ -751,6 +811,20 @@ function pick(k,lat,lon,tz){
 </body></html>
 )html";
 
+static String minutesToHHMM(int minutes) {
+    char buf[6];
+    snprintf(buf, sizeof(buf), "%02d:%02d", minutes / 60, minutes % 60);
+    return String(buf);
+}
+
+static bool parseHHMM(const String& s, int& outMinutes) {
+    int h, m;
+    if (sscanf(s.c_str(), "%d:%d", &h, &m) != 2) return false;
+    if (h < 0 || h > 23 || m < 0 || m > 59) return false;
+    outMinutes = h * 60 + m;
+    return true;
+}
+
 static void handleConfigGet() {
     String page = String(FPSTR(CONFIG_HTML));
     page.replace("%%LAT%%",    String(configMgr.config().latitude,  4));
@@ -758,6 +832,8 @@ static void handleConfigGet() {
     page.replace("%%UTC%%",    String(configMgr.config().utcOffsetSeconds));
     page.replace("%%HUNGER%%", String(configMgr.config().hungerMinutes));
     page.replace("%%BOREDOM%%", String(configMgr.config().boredomMinutes));
+    page.replace("%%SLEEPBED%%",  minutesToHHMM(configMgr.config().sleepBedMinutes));
+    page.replace("%%SLEEPWAKE%%", minutesToHHMM(configMgr.config().sleepWakeMinutes));
     String msg = "";
     if (wm.server->hasArg("saved"))
         msg = "<div class='banner ok'>Settings saved.</div>";
@@ -771,8 +847,12 @@ static void handleConfigPost() {
     int   utc     = wm.server->arg("utc").toInt();
     int   hunger  = wm.server->arg("hunger").toInt();
     int   boredom = wm.server->arg("boredom").toInt();
+    int   sleepBed = 0, sleepWake = 0;
+    bool  sleepBedOk  = parseHHMM(wm.server->arg("sleepBed"),  sleepBed);
+    bool  sleepWakeOk = parseHHMM(wm.server->arg("sleepWake"), sleepWake);
     if (lat < -90.0f || lat > 90.0f || lon < -180.0f || lon > 180.0f || utc < -50400 || utc > 50400
-        || hunger < 1 || hunger > 1440 || boredom < 1 || boredom > 1440) {
+        || hunger < 1 || hunger > 1440 || boredom < 1 || boredom > 1440
+        || !sleepBedOk || !sleepWakeOk) {
         wm.server->send(400, "text/plain", "Invalid values");
         return;
     }
@@ -781,6 +861,8 @@ static void handleConfigPost() {
     configMgr.config().utcOffsetSeconds = utc;
     configMgr.config().hungerMinutes    = hunger;
     configMgr.config().boredomMinutes   = boredom;
+    configMgr.config().sleepBedMinutes  = sleepBed;
+    configMgr.config().sleepWakeMinutes = sleepWake;
     configMgr.save();
     ntpClient.setTimeOffset(utc);
     lastWeatherFetch = millis() - WEATHER_UPDATE_INTERVAL_MS - 1;
@@ -871,9 +953,35 @@ void setup() {
 void loop() {
     wm.process();
     ntpClient.update();
-    handleTouch();
 
     unsigned long now = millis();
+    if (peekUntilMs > 0 && now >= peekUntilMs) peekUntilMs = 0;  // peek expired
+
+    {
+        time_t epoch = ntpClient.getEpochTime();
+        time_t utcCheck = epoch - (time_t)configMgr.config().utcOffsetSeconds;
+        bool ntpSynced = utcCheck > 1000000000;  // sanity: must be a real NTP-synced time (post-2001)
+        struct tm* tmNow = localtime(&epoch);
+        int nowMinutes = tmNow->tm_hour * 60 + tmNow->tm_min;
+        bool inSleepWindow = ntpSynced && isInSleepWindow(nowMinutes);
+        asleep = inSleepWindow && peekUntilMs == 0;
+
+        handleTouch();  // may start a peek if `asleep` was true
+
+        bool sleepingNow = inSleepWindow && peekUntilMs == 0;  // re-check post-touch
+        if (sleepingNow) {
+            updateSleepScreen(now);
+            delay(50);
+            return;
+        }
+        if (sleepScreenActive) {
+            sleepScreenActive = false;
+            // Full clear: the sleep clock's last-drawn position may sit outside the
+            // partial clear-rects the zone draws use, leaving stray digits behind otherwise.
+            tft.fillScreen(TFT_BLACK);
+            dirty.header = dirty.animal = dirty.picker = dirty.timerRow = true;  // clean full repaint on wake/peek
+        }
+    }
 
     // IP display expiry
     if (showIpUntilMs > 0 && now >= showIpUntilMs) {

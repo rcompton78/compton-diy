@@ -28,6 +28,14 @@ bool ConfigManager::load() {
         if (b >= 1 && b <= 1440) _config.boredomMinutes = b;
     }
     _config.lastPlayEpoch    = doc["play"]   | _config.lastPlayEpoch;
+    {
+        int b = doc["sleepBed"] | _config.sleepBedMinutes;
+        if (b >= 0 && b <= 1439) _config.sleepBedMinutes = b;
+    }
+    {
+        int w = doc["sleepWake"] | _config.sleepWakeMinutes;
+        if (w >= 0 && w <= 1439) _config.sleepWakeMinutes = w;
+    }
 
     f.close();
     return true;
@@ -46,6 +54,8 @@ bool ConfigManager::save() {
     doc["treat"]  = _config.lastTreatEpoch;
     doc["boredom"] = _config.boredomMinutes;
     doc["play"]    = _config.lastPlayEpoch;
+    doc["sleepBed"]  = _config.sleepBedMinutes;
+    doc["sleepWake"] = _config.sleepWakeMinutes;
 
     serializeJson(doc, f);
     f.close();
