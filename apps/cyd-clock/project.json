@@ -91,10 +91,10 @@
     "release": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "python3 tools/esp-flasher/generate_release.py --project-dir apps/cyd-clock --name \"CYD Clock\" --build cyd:ESP32 --version ${RELEASE_VERSION:-dev}",
+        "command": "python3 tools/esp-flasher/generate_release.py --project-dir apps/cyd-clock --name \"CYD Clock\" --build cyd:ESP32 --build freenove-s3:ESP32-S3 --version ${RELEASE_VERSION:-dev}",
         "cwd": "."
       },
-      "dependsOn": ["build-cyd", "build-fs"]
+      "dependsOn": ["build-cyd", "build-freenove-s3", "build-fs"]
     }
   }
 }

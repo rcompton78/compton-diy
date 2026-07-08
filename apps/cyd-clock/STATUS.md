@@ -104,8 +104,7 @@ pnpm nx run cyd-clock:monitor
 ## CI Pipeline
 
 - Triggers on every push to `master`
-- Uses `nx affected` — only rebuilds changed apps
-- Versioning via `@compton/nx-version` (creates `cyd-clock@x.y.z` tags)
+- Builds and packages every project (`nx run-many`) so the web flasher index always stays complete; a GitHub Release is only created if `nx affected` finds a project with a `release` target changed since the prior commit
+- `release` target builds both `cyd` and `freenove-s3` envs and packages a `.bin`/manifest entry for each
 - Deploys web flasher to GitHub Pages: `https://rcompton78.github.io/compton-diy/`
 - `NPM_TOKEN` secret set on repo for Bytesafe `@compton` registry
-- **Note:** `@compton/nx-version@0.9.1` depends on `@nx/devkit@20.8.0` but repo uses NX 22 — watch for runtime errors on first CI run
