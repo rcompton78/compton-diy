@@ -38,11 +38,11 @@ static constexpr int PLAY_Y  = 178;
 static constexpr int PLAY_W  = 50;
 static constexpr int PLAY_H  = 34;
 
-// Meds button — fills the cat-name gap between play and treat buttons; only shown/hit-tested while sick
-static constexpr int MEDS_X  = PLAY_X + PLAY_W + 2;
-static constexpr int MEDS_Y  = 178;
-static constexpr int MEDS_W  = TREAT_X - (PLAY_X + PLAY_W) - 4;
-static constexpr int MEDS_H  = 34;
+// Meds button — same size as play, stacked just above it with a small gap; only shown/hit-tested while sick
+static constexpr int MEDS_X  = PLAY_X;
+static constexpr int MEDS_Y  = PLAY_Y - PLAY_H - 8;
+static constexpr int MEDS_W  = PLAY_W;
+static constexpr int MEDS_H  = PLAY_H;
 
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
@@ -395,17 +395,17 @@ static void drawAnimal() {
     // (true whenever Bored/VeryBored, independent of hunger status).
     drawBoredomZzz(CAT_CX, CAT_CY, cat.napping);
 
-    // Clear hint area (sized to the meds button, the largest thing drawn here) and draw
-    // treat + play buttons
-    tft.fillRect(MEDS_X, MEDS_Y, MEDS_W, MEDS_H, TFT_BLACK);
-    if (cat.health == CatHealth::Sick) {
-        drawMedsBtn();
-    } else {
-        tft.setTextColor(C_DIM, TFT_BLACK);
-        tft.drawCentreString(configMgr.config().catName.c_str(), CX, ANIMAL_Y + ANIMAL_H - 22, 2);
-    }
+    // Clear hint area and draw treat + play buttons
+    tft.fillRect(PLAY_X + PLAY_W, ANIMAL_Y + ANIMAL_H - 27,
+                 TREAT_X - (PLAY_X + PLAY_W) - 2, 27, TFT_BLACK);
+    tft.setTextColor(C_DIM, TFT_BLACK);
+    tft.drawCentreString(configMgr.config().catName.c_str(), CX, ANIMAL_Y + ANIMAL_H - 22, 2);
     drawTreatBtn();
     drawPlayBtn();
+
+    // Meds button — only visible while sick, stacked above the play button
+    tft.fillRect(MEDS_X, MEDS_Y, MEDS_W, MEDS_H, TFT_BLACK);
+    if (cat.health == CatHealth::Sick) drawMedsBtn();
 }
 
 static void drawPicker() {
