@@ -479,7 +479,6 @@ static void drawAnimal() {
     clearSparkles(CAT_CX, CAT_CY);
     tft.fillRect(CAT_CX - 50, CAT_CY - 91, 100, 152, TFT_BLACK);
 
-    // Points balance — top-right of the cat's head, just under the header's weather text
     if (peekingAsleep) {
         drawSleepingCat(CAT_CX, CAT_CY);
     } else {
@@ -501,9 +500,10 @@ static void drawAnimal() {
     // internally and would otherwise wipe this out.
     char ptsBuf[16];
     snprintf(ptsBuf, sizeof(ptsBuf), "%lu pts", (unsigned long)configMgr.config().points);
-    // Own clear rect since this sits to the right of the cat's bounding box (x>170),
-    // outside the fillRect at the top of this function.
-    tft.fillRect(140, ANIMAL_Y, 100, 20, TFT_BLACK);
+    // Own clear rect since this sits to the right of the cat's bounding box, outside the
+    // fillRect at the top of this function — starts past x=152 so it doesn't clip the
+    // cat's right ear (drawCat()'s ear triangle reaches up to roughly x=152, y=65).
+    tft.fillRect(155, ANIMAL_Y, 85, 20, TFT_BLACK);
     tft.setTextColor(TFT_YELLOW, TFT_BLACK);
     int ptsWidth = tft.textWidth(ptsBuf, 2);
     tft.drawString(ptsBuf, 234 - ptsWidth, ANIMAL_Y + 4, 2);
