@@ -461,18 +461,21 @@ static void drawAnimal() {
     // peeking during the sleep window, since status animations shouldn't show then.
     drawBoredomZzz(CAT_CX, CAT_CY, !peekingAsleep && cat.napping);
 
-    // Clear hint area and draw treat + play buttons
-    tft.fillRect(PLAY_X + PLAY_W, ANIMAL_Y + ANIMAL_H - 27,
-                 TREAT_X - (PLAY_X + PLAY_W) - 2, 27, TFT_BLACK);
-    tft.setTextColor(C_DIM, TFT_BLACK);
-    tft.drawCentreString(configMgr.config().catName.c_str(), CX, ANIMAL_Y + ANIMAL_H - 22, 2);
-    drawTreatBtn();
-    drawPlayBtn();
-    drawWaterBtn();  // always available, stacked above the treat button
+    // Clear hint area and draw treat + play buttons — hidden while peeking during the
+    // sleep window, since the scene should be calm/non-interactive, not just visually frozen.
+    if (!peekingAsleep) {
+        tft.fillRect(PLAY_X + PLAY_W, ANIMAL_Y + ANIMAL_H - 27,
+                     TREAT_X - (PLAY_X + PLAY_W) - 2, 27, TFT_BLACK);
+        tft.setTextColor(C_DIM, TFT_BLACK);
+        tft.drawCentreString(configMgr.config().catName.c_str(), CX, ANIMAL_Y + ANIMAL_H - 22, 2);
+        drawTreatBtn();
+        drawPlayBtn();
+        drawWaterBtn();  // always available, stacked above the treat button
 
-    // Meds button — only visible while sick, stacked above the play button
-    tft.fillRect(MEDS_X, MEDS_Y, MEDS_W, MEDS_H, TFT_BLACK);
-    if (cat.health == CatHealth::Sick) drawMedsBtn();
+        // Meds button — only visible while sick, stacked above the play button
+        tft.fillRect(MEDS_X, MEDS_Y, MEDS_W, MEDS_H, TFT_BLACK);
+        if (cat.health == CatHealth::Sick) drawMedsBtn();
+    }
 }
 
 static void drawPicker() {
@@ -591,9 +594,11 @@ static void handleTouch() {
 
     Serial.printf("Touch x=%d y=%d\n", p.x, p.y);
 
-    if (asleep) {
+    if (asleep || peekingAsleep) {
         peekUntilMs = now + 7000;  // ~7s full-UI peek; doesn't touch the schedule
-        return;                     // consume the touch, skip normal zone dispatch
+        return;                     // consume the touch, skip normal zone dispatch — including
+                                     // touches during an already-active peek, so the frozen
+                                     // sleeping scene can't be poked via treat/play/meds/water
     }
 
     if (p.y < HEADER_Y + HEADER_H && p.x < 120) {
