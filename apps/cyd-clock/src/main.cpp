@@ -599,6 +599,18 @@ static void drawTimerRow() {
     }
 }
 
+// Persists a care action's timestamp as UTC and, if the action addressed a genuine
+// need, awards points — sharing one NTP/epoch/save sequence across treat/play/meds/water.
+static void persistCareAction(uint32_t& lastEpochField, bool wasNeeded, uint32_t pointsAwarded) {
+    time_t epoch = ntpClient.getEpochTime();
+    time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
+    if (utc > 1000000000) {  // sanity: must be a real NTP-synced time (post-2001)
+        lastEpochField = (uint32_t)utc;
+        if (wasNeeded) configMgr.config().points += pointsAwarded;
+        configMgr.save();
+    }
+}
+
 // ── Touch ─────────────────────────────────────────────────────────────────────
 static void handleTouch() {
     TouchPoint p;
@@ -696,13 +708,7 @@ static void handleTouch() {
             cat.frame  = 0;
             cat.rumbling = false;
             // Persist last treat time as UTC (subtract offset so timezone changes don't shift hunger)
-            time_t epoch = ntpClient.getEpochTime();
-            time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
-            if (utc > 1000000000) {  // sanity: must be a real NTP-synced time (post-2001)
-                configMgr.config().lastTreatEpoch = (uint32_t)utc;
-                if (wasNeeded) configMgr.config().points += POINTS_TREAT;
-                configMgr.save();
-            }
+            persistCareAction(configMgr.config().lastTreatEpoch, wasNeeded, POINTS_TREAT);
             dirty.animal = true;
         } else if (p.x >= PLAY_X && p.x <= PLAY_X + PLAY_W &&
                    p.y >= PLAY_Y && p.y <= PLAY_Y + PLAY_H) {
@@ -714,13 +720,7 @@ static void handleTouch() {
             cat.frame   = 0;
             cat.napping = false;
             // Persist last play time as UTC (subtract offset so timezone changes don't shift boredom)
-            time_t epoch = ntpClient.getEpochTime();
-            time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
-            if (utc > 1000000000) {  // sanity: must be a real NTP-synced time (post-2001)
-                configMgr.config().lastPlayEpoch = (uint32_t)utc;
-                if (wasNeeded) configMgr.config().points += POINTS_PLAY;
-                configMgr.save();
-            }
+            persistCareAction(configMgr.config().lastPlayEpoch, wasNeeded, POINTS_PLAY);
             dirty.animal = true;
         } else if (cat.health == CatHealth::Sick &&
                    p.x >= MEDS_X && p.x <= MEDS_X + MEDS_W &&
@@ -730,15 +730,9 @@ static void handleTouch() {
             cat.health = CatHealth::Healthy;
             cat.since  = now;
             cat.frame  = 0;
-            // Persist last meds time as UTC (subtract offset so timezone changes don't shift the cooldown)
-            time_t epoch = ntpClient.getEpochTime();
-            time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
-            if (utc > 1000000000) {  // sanity: must be a real NTP-synced time (post-2001)
-                configMgr.config().lastMedsEpoch = (uint32_t)utc;
-                // Hit-test above already requires CatHealth::Sick to reach this branch, so meds always help
-                configMgr.config().points += POINTS_MEDS;
-                configMgr.save();
-            }
+            // Persist last meds time as UTC (subtract offset so timezone changes don't shift the cooldown).
+            // Hit-test above already requires CatHealth::Sick to reach this branch, so meds always help.
+            persistCareAction(configMgr.config().lastMedsEpoch, /*wasNeeded=*/true, POINTS_MEDS);
             dirty.animal = true;
         } else if (p.x >= WATER_X && p.x <= WATER_X + WATER_W &&
                    p.y >= WATER_Y && p.y <= WATER_Y + WATER_H) {
@@ -749,13 +743,7 @@ static void handleTouch() {
             cat.since  = now;
             cat.frame  = 0;
             // Persist last water time as UTC (subtract offset so timezone changes don't shift the cooldown)
-            time_t epoch = ntpClient.getEpochTime();
-            time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
-            if (utc > 1000000000) {  // sanity: must be a real NTP-synced time (post-2001)
-                configMgr.config().lastWaterEpoch = (uint32_t)utc;
-                if (wasNeeded) configMgr.config().points += POINTS_WATER;
-                configMgr.save();
-            }
+            persistCareAction(configMgr.config().lastWaterEpoch, wasNeeded, POINTS_WATER);
             dirty.animal = true;
         }
     }
