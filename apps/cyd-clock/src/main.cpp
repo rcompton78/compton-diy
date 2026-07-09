@@ -859,7 +859,8 @@ button:hover{background:#005ec4}
 <label>Minimum hours between sick events</label>
 <input name="sickCooldown" id="sickCooldown" type="number" min="1" max="168" value="%%SICKCOOLDOWN%%">
 <label>Force sick in N minutes (test only, 0 = off)</label>
-<input name="forceSickMinutes" id="forceSickMinutes" type="number" min="0" max="1440" value="0">
+<input name="forceSickMinutes" id="forceSickMinutes" type="number" min="0" max="1440" value="%%FORCESICK%%">
+<label style="margin-top:-8px">%%FORCESICKSTATUS%%</label>
 
 <h3>Cat sleep</h3>
 <label>Bed time</label>
@@ -967,6 +968,18 @@ static void handleConfigGet() {
     page.replace("%%HUNGER%%", String(configMgr.config().hungerMinutes));
     page.replace("%%BOREDOM%%", String(configMgr.config().boredomMinutes));
     page.replace("%%SICKCOOLDOWN%%", String(configMgr.config().sickCooldownHours));
+    {
+        unsigned long now = millis();
+        String status;
+        int remainMin = 0;
+        if (forceSickDeadlineMs != 0 && forceSickDeadlineMs > now) {
+            unsigned long remainMs = forceSickDeadlineMs - now;
+            remainMin = (int)((remainMs + 59999UL) / 60000UL);  // round up so it doesn't show 0 right after arming
+            status = "Armed — sick in ~" + String(remainMin) + " min.";
+        }
+        page.replace("%%FORCESICK%%", String(remainMin));
+        page.replace("%%FORCESICKSTATUS%%", status);
+    }
     page.replace("%%SLEEPBED%%",  minutesToHHMM(configMgr.config().sleepBedMinutes));
     page.replace("%%SLEEPWAKE%%", minutesToHHMM(configMgr.config().sleepWakeMinutes));
     page.replace("%%NAME%%", htmlEscape(configMgr.config().catName));
