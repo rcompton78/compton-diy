@@ -45,6 +45,11 @@ bool ConfigManager::load() {
         if (s >= 1 && s <= 168) _config.sickCooldownHours = s;
     }
     _config.lastMedsEpoch = doc["meds"] | _config.lastMedsEpoch;
+    {
+        int t = doc["thirstCooldown"] | _config.thirstCooldownHours;
+        if (t >= 1 && t <= 168) _config.thirstCooldownHours = t;
+    }
+    _config.lastWaterEpoch = doc["water"] | _config.lastWaterEpoch;
 
     f.close();
     return true;
@@ -68,6 +73,8 @@ bool ConfigManager::save() {
     doc["name"]      = _config.catName;
     doc["sickCooldown"] = _config.sickCooldownHours;
     doc["meds"]          = _config.lastMedsEpoch;
+    doc["thirstCooldown"] = _config.thirstCooldownHours;
+    doc["water"]           = _config.lastWaterEpoch;
 
     serializeJson(doc, f);
     f.close();

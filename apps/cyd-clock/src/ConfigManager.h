@@ -15,6 +15,8 @@ struct AppConfig {
     String catName = "Biscuit";   // Max 16 characters
     int sickCooldownHours = 4;    // min hours between sick events
     uint32_t lastMedsEpoch = 0;   // Unix epoch of last meds; 0 = never medicated
+    int thirstCooldownHours = 4;    // min hours between thirsty events
+    uint32_t lastWaterEpoch = 0;    // Unix epoch of last water; 0 = never watered
 };
 
 class ConfigManager {

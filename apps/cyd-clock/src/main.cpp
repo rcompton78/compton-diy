@@ -44,6 +44,13 @@ static constexpr int MEDS_Y  = PLAY_Y - PLAY_H - 8;
 static constexpr int MEDS_W  = PLAY_W;
 static constexpr int MEDS_H  = PLAY_H;
 
+// Water button — same size as treat, stacked just above it with a small gap; always shown, since
+// water (unlike meds) can be given any time, not only while the cat is thirsty
+static constexpr int WATER_X  = TREAT_X;
+static constexpr int WATER_Y  = TREAT_Y - TREAT_H - 8;
+static constexpr int WATER_W  = TREAT_W;
+static constexpr int WATER_H  = TREAT_H;
+
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
 static constexpr int TY_MIN = 300, TY_MAX = 3800;
@@ -64,6 +71,7 @@ static constexpr uint16_t C_ZZZ    = 0x7BFF;  // boredom "Zz" overlay (dim blue-
 static constexpr uint16_t C_SLEEP_DIM = 0x632C;  // dim gray-blue, for the sleep-screen clock (~40% brightness)
 static constexpr uint16_t C_SICK   = 0x9E66;  // queasy cheek blush (sickly green)
 static constexpr uint16_t C_MEDS   = 0xF800;  // meds button cross (red)
+static constexpr uint16_t C_WATER  = 0x04FF;  // water button droplet (blue)
 
 // Quick-pick durations
 static constexpr uint32_t    PICK_SEC[] = {60, 300, 600, 1800};
@@ -92,12 +100,14 @@ enum class CatMood    { Idle, Happy, Celebrate };
 enum class CatStatus  { Content, Peckish, Hungry };   // Content=0-50%, Peckish=50-100%, Hungry=100%+
 enum class CatBoredom { Entertained, Bored, VeryBored }; // mirrors CatStatus tiers
 enum class CatHealth  { Healthy, Sick };              // random event, cleared by meds
+enum class CatThirst  { Hydrated, Thirsty };          // random event, cleared by water
 
 struct {
     CatMood    mood              = CatMood::Idle;
     CatStatus  status            = CatStatus::Content;
     CatBoredom boredom           = CatBoredom::Entertained;
     CatHealth  health            = CatHealth::Healthy;
+    CatThirst  thirst            = CatThirst::Hydrated;
     unsigned long since         = 0;
     bool eyeOpen                = true;
     unsigned long lastBlink     = 0;
@@ -108,6 +118,7 @@ struct {
     unsigned long lastZzz       = 0;  // for boredom "Zz" toggle animation
     bool napping                = false;
     unsigned long lastSickCheck = 0;  // for the periodic sick-eligibility roll
+    unsigned long lastThirstCheck = 0;  // for the periodic thirst-eligibility roll
 } cat;
 
 // ── App state ─────────────────────────────────────────────────────────────────
@@ -119,6 +130,7 @@ bool asleep                    = false;  // set each loop before handleTouch(); 
 unsigned long peekUntilMs      = 0;      // 0 = not peeking; mirrors the showIpUntilMs idiom
 bool sleepScreenActive         = false;  // true once the black sleep screen has been painted this session
 unsigned long forceSickDeadlineMs = 0;   // test-only: armed via /config, 0 = not armed, not persisted
+unsigned long forceThirstDeadlineMs = 0; // test-only: armed via /config, 0 = not armed, not persisted
 
 struct { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick, hungerLines, zzzFx; } dirty = {true, true, true, true, false, false, false, false, false};
 
@@ -139,10 +151,11 @@ static void drawEyes(int cx, int cy, bool eyeOpen) {
     }
 }
 
-static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom boredom, CatHealth health, bool eyeOpen) {
-    bool happy  = (mood == CatMood::Happy || mood == CatMood::Celebrate);
-    bool queasy = (health == CatHealth::Sick) && !happy;
-    bool sad    = (status == CatStatus::Hungry || boredom == CatBoredom::VeryBored) && !happy && !queasy;
+static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom boredom, CatHealth health, CatThirst thirst, bool eyeOpen) {
+    bool happy   = (mood == CatMood::Happy || mood == CatMood::Celebrate);
+    bool queasy  = (health == CatHealth::Sick) && !happy;
+    bool thirsty = (thirst == CatThirst::Thirsty);
+    bool sad     = (status == CatStatus::Hungry || boredom == CatBoredom::VeryBored || thirsty) && !happy && !queasy;
 
     tft.fillRect(cx - 50, cy - 88, 100, 146, TFT_BLACK);
 
@@ -204,6 +217,13 @@ static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom b
     if (queasy) {
         tft.fillCircle(cx - 22, cy - 24, 5, C_SICK);
         tft.fillCircle(cx + 22, cy - 24, 5, C_SICK);
+    }
+
+    // Thirsty signal — a single water drop at the temple, dripping-sweat style
+    if (thirsty) {
+        int tdx = cx + 30, tdy = cy - 48;
+        tft.fillTriangle(tdx, tdy - 5, tdx - 4, tdy + 3, tdx + 4, tdy + 3, C_WATER);
+        tft.fillCircle(tdx, tdy + 4, 4, C_WATER);
     }
 
     // Body
@@ -310,6 +330,15 @@ static void drawMedsBtn() {
     tft.fillRect(bx + 7, by + 9, 10, 4, C_MEDS);
 }
 
+static void drawWaterBtn() {
+    tft.fillRoundRect(WATER_X, WATER_Y, WATER_W, WATER_H, 6, C_BTN);
+
+    // Water droplet: triangle tip + rounded body
+    int wcx = WATER_X + WATER_W / 2, wcy = WATER_Y + 8;
+    tft.fillTriangle(wcx, wcy - 6, wcx - 8, wcy + 6, wcx + 8, wcy + 6, C_WATER);
+    tft.fillCircle(wcx, wcy + 8, 8, C_WATER);
+}
+
 // ── Zone draws ────────────────────────────────────────────────────────────────
 static void drawHeaderTick() {
     time_t epoch = ntpClient.getEpochTime();
@@ -379,7 +408,7 @@ static void drawAnimal() {
     tft.fillRect(CAT_CX - 50, CAT_CY - 91, 100, 152, TFT_BLACK);
 
     int dy = (cat.mood == CatMood::Celebrate) ? ((cat.frame % 2 == 0) ? -3 : 3) : 0;
-    drawCat(CAT_CX, CAT_CY + dy, cat.mood, cat.status, cat.boredom, cat.health, cat.eyeOpen);
+    drawCat(CAT_CX, CAT_CY + dy, cat.mood, cat.status, cat.boredom, cat.health, cat.thirst, cat.eyeOpen);
 
     if (cat.mood == CatMood::Happy || cat.mood == CatMood::Celebrate) {
         drawSparkles(CAT_CX, CAT_CY, cat.frame);
@@ -402,6 +431,7 @@ static void drawAnimal() {
     tft.drawCentreString(configMgr.config().catName.c_str(), CX, ANIMAL_Y + ANIMAL_H - 22, 2);
     drawTreatBtn();
     drawPlayBtn();
+    drawWaterBtn();  // always available, stacked above the treat button
 
     // Meds button — only visible while sick, stacked above the play button
     tft.fillRect(MEDS_X, MEDS_Y, MEDS_W, MEDS_H, TFT_BLACK);
@@ -584,6 +614,21 @@ static void handleTouch() {
                 configMgr.save();
             }
             dirty.animal = true;
+        } else if (p.x >= WATER_X && p.x <= WATER_X + WATER_W &&
+                   p.y >= WATER_Y && p.y <= WATER_Y + WATER_H) {
+            // Give water — always available, unlike meds which only responds while sick
+            cat.mood   = CatMood::Celebrate;
+            cat.thirst = CatThirst::Hydrated;
+            cat.since  = now;
+            cat.frame  = 0;
+            // Persist last water time as UTC (subtract offset so timezone changes don't shift the cooldown)
+            time_t epoch = ntpClient.getEpochTime();
+            time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
+            if (utc > 1000000000) {  // sanity: must be a real NTP-synced time (post-2001)
+                configMgr.config().lastWaterEpoch = (uint32_t)utc;
+                configMgr.save();
+            }
+            dirty.animal = true;
         }
     }
 }
@@ -749,6 +794,48 @@ static void updateCatHealth() {
     }
 }
 
+// Random-onset check cadence/odds for the thirst event, once the cooldown has elapsed —
+// mirrors updateCatHealth()'s cadence/odds for the sick event.
+static constexpr unsigned long THIRST_CHECK_INTERVAL_MS = 60000UL;  // ~1 min between rolls
+static constexpr int           THIRST_TRIGGER_PER_MILLE = 2;        // ~0.2% chance per roll
+
+static void updateCatThirst() {
+    // Test-only forced trigger, armed via the /config page's "force thirsty" field
+    if (forceThirstDeadlineMs != 0 && millis() >= forceThirstDeadlineMs) {
+        forceThirstDeadlineMs = 0;
+        if (cat.thirst == CatThirst::Hydrated) {
+            cat.thirst   = CatThirst::Thirsty;
+            dirty.animal = true;
+        }
+        return;
+    }
+
+    if (cat.thirst == CatThirst::Thirsty) return;  // already thirsty, waiting for water
+
+    time_t epoch = ntpClient.getEpochTime();
+    time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
+    if (utc <= 1000000000) return;  // NTP not synced yet (pre-2001 or un-synced offset-only value)
+
+    uint32_t lastWater = configMgr.config().lastWaterEpoch;
+    uint32_t threshold = (uint32_t)configMgr.config().thirstCooldownHours * 3600u;
+    uint32_t now32      = (uint32_t)utc;
+    uint32_t elapsed;
+    if (lastWater == 0)          elapsed = threshold + 1;   // never watered → immediately eligible
+    else if (now32 >= lastWater) elapsed = now32 - lastWater;
+    else                         elapsed = 0;                // NTP clock step back → treat as just watered
+
+    if (elapsed < threshold) return;  // still in cooldown, not yet eligible
+
+    unsigned long now = millis();
+    if (now - cat.lastThirstCheck < THIRST_CHECK_INTERVAL_MS) return;
+    cat.lastThirstCheck = now;
+
+    if ((int)random(1000) < THIRST_TRIGGER_PER_MILLE) {
+        cat.thirst   = CatThirst::Thirsty;
+        dirty.animal = true;
+    }
+}
+
 // ── Sleep window ──────────────────────────────────────────────────────────────
 static bool isInSleepWindow(int nowMinutes) {
     int bed  = configMgr.config().sleepBedMinutes;
@@ -803,12 +890,7 @@ static void updateSleepScreen(unsigned long now) {
 
 // ── Config web page ───────────────────────────────────────────────────────────
 
-static const char CONFIG_HTML[] PROGMEM = R"html(<!DOCTYPE html>
-<html><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CYD Clock · Config</title>
-<style>
+static const char CONFIG_STYLE[] PROGMEM = R"css(
 *{box-sizing:border-box}
 body{font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px;background:#111;color:#ddd}
 h2{margin-top:0}
@@ -825,23 +907,36 @@ button:hover{background:#005ec4}
 .city small{color:#666}
 .banner{padding:10px;border-radius:5px;margin-bottom:14px}
 .ok{background:#063}
-</style>
+.nav{display:block;width:100%;padding:16px;margin-bottom:14px;background:#1e1e1e;color:#ddd;border:1px solid #333;border-radius:8px;text-align:center;text-decoration:none;font-size:1.1rem}
+.nav:hover{background:#262626}
+.back{display:inline-block;margin-bottom:14px;color:#888;text-decoration:none;font-size:.85rem}
+.back:hover{color:#ddd}
+)css";
+
+static const char CONFIG_HOME_HTML[] PROGMEM = R"html(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CYD Clock · Config</title>
+<style>%%STYLE%%</style>
 </head><body>
 <h2>Configuration</h2>
-%%MSG%%
-<form method="POST" action="/save-config">
+<a class="nav" href="/config/cat">Cat</a>
+<a class="nav" href="/config/city">City (weather &amp; timezone)</a>
+</body></html>
+)html";
 
-<h3>Weather location</h3>
-<label>City search</label>
-<div class="row">
-<input id="wcs" placeholder="e.g. Paris, Toronto…" oninput="deb('w',this.value)">
-<button type="button" onclick="search('w')">Search</button>
-</div>
-<div id="wres" class="drop"></div>
-<label>Latitude</label>
-<input name="lat" id="lat" value="%%LAT%%">
-<label>Longitude</label>
-<input name="lon" id="lon" value="%%LON%%">
+static const char CONFIG_CAT_HTML[] PROGMEM = R"html(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CYD Clock · Cat Config</title>
+<style>%%STYLE%%</style>
+</head><body>
+<a class="back" href="/config">&larr; Configuration</a>
+<h2>Cat</h2>
+%%MSG%%
+<form method="POST" action="/save-config/cat">
 
 <h3>Cat name</h3>
 <label>Name</label>
@@ -862,11 +957,47 @@ button:hover{background:#005ec4}
 <input name="forceSickMinutes" id="forceSickMinutes" type="number" min="0" max="1440" value="%%FORCESICK%%">
 <label style="margin-top:-8px">%%FORCESICKSTATUS%%</label>
 
+<h3>Cat thirst</h3>
+<label>Minimum hours between thirsty events</label>
+<input name="thirstCooldown" id="thirstCooldown" type="number" min="1" max="168" value="%%THIRSTCOOLDOWN%%">
+<label>Force thirsty in N minutes (test only, 0 = off)</label>
+<input name="forceThirstMinutes" id="forceThirstMinutes" type="number" min="0" max="1440" value="%%FORCETHIRST%%">
+<label style="margin-top:-8px">%%FORCETHIRSTSTATUS%%</label>
+
 <h3>Cat sleep</h3>
 <label>Bed time</label>
 <input name="sleepBed" id="sleepBed" type="time" value="%%SLEEPBED%%">
 <label>Wake time</label>
 <input name="sleepWake" id="sleepWake" type="time" value="%%SLEEPWAKE%%">
+
+<button type="submit" style="width:100%;margin-top:8px">Save</button>
+</form>
+</body></html>
+)html";
+
+static const char CONFIG_CITY_HTML[] PROGMEM = R"html(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CYD Clock · City Config</title>
+<style>%%STYLE%%</style>
+</head><body>
+<a class="back" href="/config">&larr; Configuration</a>
+<h2>City</h2>
+%%MSG%%
+<form method="POST" action="/save-config/city">
+
+<h3>Weather location</h3>
+<label>City search</label>
+<div class="row">
+<input id="wcs" placeholder="e.g. Paris, Toronto…" oninput="deb('w',this.value)">
+<button type="button" onclick="search('w')">Search</button>
+</div>
+<div id="wres" class="drop"></div>
+<label>Latitude</label>
+<input name="lat" id="lat" value="%%LAT%%">
+<label>Longitude</label>
+<input name="lon" id="lon" value="%%LON%%">
 
 <h3>Timezone (for clock)</h3>
 <label>City search</label>
@@ -960,14 +1091,31 @@ static bool parseHHMM(const String& s, int& outMinutes) {
     return true;
 }
 
-static void handleConfigGet() {
-    String page = String(FPSTR(CONFIG_HTML));
-    page.replace("%%LAT%%",    String(configMgr.config().latitude,  4));
-    page.replace("%%LON%%",    String(configMgr.config().longitude, 4));
-    page.replace("%%UTC%%",    String(configMgr.config().utcOffsetSeconds));
+static void handleConfigHome() {
+    String page = String(FPSTR(CONFIG_HOME_HTML));
+    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    wm.server->send(200, "text/html", page);
+}
+
+static void handleConfigCatGet() {
+    String page = String(FPSTR(CONFIG_CAT_HTML));
+    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
     page.replace("%%HUNGER%%", String(configMgr.config().hungerMinutes));
     page.replace("%%BOREDOM%%", String(configMgr.config().boredomMinutes));
     page.replace("%%SICKCOOLDOWN%%", String(configMgr.config().sickCooldownHours));
+    page.replace("%%THIRSTCOOLDOWN%%", String(configMgr.config().thirstCooldownHours));
+    {
+        unsigned long now = millis();
+        String status;
+        int remainMin = 0;
+        if (forceThirstDeadlineMs != 0 && forceThirstDeadlineMs > now) {
+            unsigned long remainMs = forceThirstDeadlineMs - now;
+            remainMin = (int)((remainMs + 59999UL) / 60000UL);  // round up so it doesn't show 0 right after arming
+            status = "Armed — thirsty in ~" + String(remainMin) + " min.";
+        }
+        page.replace("%%FORCETHIRST%%", String(remainMin));
+        page.replace("%%FORCETHIRSTSTATUS%%", status);
+    }
     {
         unsigned long now = millis();
         String status;
@@ -990,14 +1138,26 @@ static void handleConfigGet() {
     wm.server->send(200, "text/html", page);
 }
 
-static void handleConfigPost() {
-    float lat     = wm.server->arg("lat").toFloat();
-    float lon     = wm.server->arg("lon").toFloat();
-    int   utc     = wm.server->arg("utc").toInt();
+static void handleConfigCityGet() {
+    String page = String(FPSTR(CONFIG_CITY_HTML));
+    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    page.replace("%%LAT%%", String(configMgr.config().latitude,  4));
+    page.replace("%%LON%%", String(configMgr.config().longitude, 4));
+    page.replace("%%UTC%%", String(configMgr.config().utcOffsetSeconds));
+    String msg = "";
+    if (wm.server->hasArg("saved"))
+        msg = "<div class='banner ok'>Settings saved.</div>";
+    page.replace("%%MSG%%", msg);
+    wm.server->send(200, "text/html", page);
+}
+
+static void handleConfigCatPost() {
     int   hunger  = wm.server->arg("hunger").toInt();
     int   boredom = wm.server->arg("boredom").toInt();
     int   sickCooldown = wm.server->arg("sickCooldown").toInt();
     int   forceSickMinutes = wm.server->arg("forceSickMinutes").toInt();
+    int   thirstCooldown = wm.server->arg("thirstCooldown").toInt();
+    int   forceThirstMinutes = wm.server->arg("forceThirstMinutes").toInt();
     int   sleepBed = 0, sleepWake = 0;
     bool  sleepBedOk  = parseHHMM(wm.server->arg("sleepBed"),  sleepBed);
     bool  sleepWakeOk = parseHHMM(wm.server->arg("sleepWake"), sleepWake);
@@ -1008,30 +1168,46 @@ static void handleConfigPost() {
     for (size_t i = 0; nameOk && i < name.length(); ++i) {
         if ((unsigned char)name[i] < 0x20 || (unsigned char)name[i] == 0x7F) nameOk = false;
     }
-    if (lat < -90.0f || lat > 90.0f || lon < -180.0f || lon > 180.0f || utc < -50400 || utc > 50400
-        || hunger < 1 || hunger > 1440 || boredom < 1 || boredom > 1440
+    if (hunger < 1 || hunger > 1440 || boredom < 1 || boredom > 1440
         || sickCooldown < 1 || sickCooldown > 168
         || forceSickMinutes < 0 || forceSickMinutes > 1440
+        || thirstCooldown < 1 || thirstCooldown > 168
+        || forceThirstMinutes < 0 || forceThirstMinutes > 1440
         || !sleepBedOk || !sleepWakeOk || !nameOk) {
+        wm.server->send(400, "text/plain", "Invalid values");
+        return;
+    }
+    configMgr.config().hungerMinutes    = hunger;
+    configMgr.config().boredomMinutes   = boredom;
+    configMgr.config().sickCooldownHours = sickCooldown;
+    if (forceSickMinutes > 0) forceSickDeadlineMs = millis() + (unsigned long)forceSickMinutes * 60000UL;
+    configMgr.config().thirstCooldownHours = thirstCooldown;
+    if (forceThirstMinutes > 0) forceThirstDeadlineMs = millis() + (unsigned long)forceThirstMinutes * 60000UL;
+    configMgr.config().sleepBedMinutes  = sleepBed;
+    configMgr.config().sleepWakeMinutes = sleepWake;
+    configMgr.config().catName          = name;
+    configMgr.save();
+    dirty.animal = true;
+    wm.server->sendHeader("Location", "/config/cat?saved=1");
+    wm.server->send(302, "text/plain", "");
+}
+
+static void handleConfigCityPost() {
+    float lat = wm.server->arg("lat").toFloat();
+    float lon = wm.server->arg("lon").toFloat();
+    int   utc = wm.server->arg("utc").toInt();
+    if (lat < -90.0f || lat > 90.0f || lon < -180.0f || lon > 180.0f || utc < -50400 || utc > 50400) {
         wm.server->send(400, "text/plain", "Invalid values");
         return;
     }
     configMgr.config().latitude         = lat;
     configMgr.config().longitude        = lon;
     configMgr.config().utcOffsetSeconds = utc;
-    configMgr.config().hungerMinutes    = hunger;
-    configMgr.config().boredomMinutes   = boredom;
-    configMgr.config().sickCooldownHours = sickCooldown;
-    if (forceSickMinutes > 0) forceSickDeadlineMs = millis() + (unsigned long)forceSickMinutes * 60000UL;
-    configMgr.config().sleepBedMinutes  = sleepBed;
-    configMgr.config().sleepWakeMinutes = sleepWake;
-    configMgr.config().catName          = name;
     configMgr.save();
     ntpClient.setTimeOffset(utc);
     lastWeatherFetch = millis() - WEATHER_UPDATE_INTERVAL_MS - 1;
     dirty.header = true;
-    dirty.animal = true;
-    wm.server->sendHeader("Location", "/config?saved=1");
+    wm.server->sendHeader("Location", "/config/city?saved=1");
     wm.server->send(302, "text/plain", "");
 }
 
@@ -1067,8 +1243,11 @@ static void runWiFiManager(ConfigManager& cfg) {
     wm.setMenu(menu, 6);
     wm.autoConnect("CYD-Clock");
     wm.startWebPortal();
-    wm.server->on("/config",      HTTP_GET,  handleConfigGet);
-    wm.server->on("/save-config", HTTP_POST, handleConfigPost);
+    wm.server->on("/config",           HTTP_GET,  handleConfigHome);
+    wm.server->on("/config/cat",       HTTP_GET,  handleConfigCatGet);
+    wm.server->on("/config/city",      HTTP_GET,  handleConfigCityGet);
+    wm.server->on("/save-config/cat",  HTTP_POST, handleConfigCatPost);
+    wm.server->on("/save-config/city", HTTP_POST, handleConfigCityPost);
 }
 
 // ── Arduino ───────────────────────────────────────────────────────────────────
@@ -1177,6 +1356,7 @@ void loop() {
     updateCatStatus();
     updateCatBoredom();
     updateCatHealth();
+    updateCatThirst();
 
     // Header tick — full redraw on minute change, seconds-only otherwise
     {
