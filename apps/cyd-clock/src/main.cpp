@@ -38,6 +38,12 @@ static constexpr int PLAY_Y  = 178;
 static constexpr int PLAY_W  = 50;
 static constexpr int PLAY_H  = 34;
 
+// Meds button — same size as play, stacked just above it with a small gap; only shown/hit-tested while sick
+static constexpr int MEDS_X  = PLAY_X;
+static constexpr int MEDS_Y  = PLAY_Y - PLAY_H - 8;
+static constexpr int MEDS_W  = PLAY_W;
+static constexpr int MEDS_H  = PLAY_H;
+
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
 static constexpr int TY_MIN = 300, TY_MAX = 3800;
@@ -56,6 +62,8 @@ static constexpr uint16_t C_RUMBLE = 0xFC98;  // hunger line animation (warm pea
 static constexpr uint16_t C_YARN   = 0xF811;  // play button yarn ball (magenta/berry)
 static constexpr uint16_t C_ZZZ    = 0x7BFF;  // boredom "Zz" overlay (dim blue-gray)
 static constexpr uint16_t C_SLEEP_DIM = 0x632C;  // dim gray-blue, for the sleep-screen clock (~40% brightness)
+static constexpr uint16_t C_SICK   = 0x9E66;  // queasy cheek blush (sickly green)
+static constexpr uint16_t C_MEDS   = 0xF800;  // meds button cross (red)
 
 // Quick-pick durations
 static constexpr uint32_t    PICK_SEC[] = {60, 300, 600, 1800};
@@ -83,11 +91,13 @@ WiFiManager   wm;
 enum class CatMood    { Idle, Happy, Celebrate };
 enum class CatStatus  { Content, Peckish, Hungry };   // Content=0-50%, Peckish=50-100%, Hungry=100%+
 enum class CatBoredom { Entertained, Bored, VeryBored }; // mirrors CatStatus tiers
+enum class CatHealth  { Healthy, Sick };              // random event, cleared by meds
 
 struct {
     CatMood    mood              = CatMood::Idle;
     CatStatus  status            = CatStatus::Content;
     CatBoredom boredom           = CatBoredom::Entertained;
+    CatHealth  health            = CatHealth::Healthy;
     unsigned long since         = 0;
     bool eyeOpen                = true;
     unsigned long lastBlink     = 0;
@@ -97,6 +107,7 @@ struct {
     bool rumbling               = false;
     unsigned long lastZzz       = 0;  // for boredom "Zz" toggle animation
     bool napping                = false;
+    unsigned long lastSickCheck = 0;  // for the periodic sick-eligibility roll
 } cat;
 
 // ── App state ─────────────────────────────────────────────────────────────────
@@ -107,6 +118,7 @@ unsigned long showIpUntilMs    = 0;
 bool asleep                    = false;  // set each loop before handleTouch(); read by handleTouch()
 unsigned long peekUntilMs      = 0;      // 0 = not peeking; mirrors the showIpUntilMs idiom
 bool sleepScreenActive         = false;  // true once the black sleep screen has been painted this session
+unsigned long forceSickDeadlineMs = 0;   // test-only: armed via /config, 0 = not armed, not persisted
 
 struct { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick, hungerLines, zzzFx; } dirty = {true, true, true, true, false, false, false, false, false};
 
@@ -127,9 +139,10 @@ static void drawEyes(int cx, int cy, bool eyeOpen) {
     }
 }
 
-static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom boredom, bool eyeOpen) {
-    bool happy = (mood == CatMood::Happy || mood == CatMood::Celebrate);
-    bool sad   = (status == CatStatus::Hungry || boredom == CatBoredom::VeryBored) && !happy;
+static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom boredom, CatHealth health, bool eyeOpen) {
+    bool happy  = (mood == CatMood::Happy || mood == CatMood::Celebrate);
+    bool queasy = (health == CatHealth::Sick) && !happy;
+    bool sad    = (status == CatStatus::Hungry || boredom == CatBoredom::VeryBored) && !happy && !queasy;
 
     tft.fillRect(cx - 50, cy - 88, 100, 146, TFT_BLACK);
 
@@ -170,6 +183,12 @@ static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom b
         tft.drawLine(cx -  3, cy - 3,  cx,     cy - 5, C_DARK);
         tft.drawLine(cx,      cy - 5,  cx + 3, cy - 3, C_DARK);
         tft.drawLine(cx +  3, cy - 3,  cx + 10,cy - 8, C_DARK);
+    } else if (queasy) {
+        // Wavy zigzag — distinct from the frown, reads as "off"
+        tft.drawLine(cx - 10, cy - 6,  cx - 5, cy - 3, C_DARK);
+        tft.drawLine(cx -  5, cy - 3,  cx,     cy - 7, C_DARK);
+        tft.drawLine(cx,      cy - 7,  cx + 5, cy - 3, C_DARK);
+        tft.drawLine(cx +  5, cy - 3,  cx + 10,cy - 6, C_DARK);
     } else if (sad) {
         // Frown
         tft.drawLine(cx - 10, cy - 4,  cx - 3, cy - 9, C_DARK);
@@ -179,6 +198,12 @@ static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom b
     } else {
         tft.drawLine(cx - 6, cy - 9, cx,     cy - 6, C_DARK);
         tft.drawLine(cx,     cy - 6, cx + 6, cy - 9, C_DARK);
+    }
+
+    // Queasy cheek blush
+    if (queasy) {
+        tft.fillCircle(cx - 22, cy - 24, 5, C_SICK);
+        tft.fillCircle(cx + 22, cy - 24, 5, C_SICK);
     }
 
     // Body
@@ -274,6 +299,17 @@ static void drawPlayBtn() {
     tft.drawLine(ycx + 8, ycy + 6, ycx + 14, ycy + 10, C_YARN);
 }
 
+static void drawMedsBtn() {
+    tft.fillRoundRect(MEDS_X, MEDS_Y, MEDS_W, MEDS_H, 6, C_BTN);
+
+    // Pill bottle: rounded rect body + cap, red cross on the front
+    int bx = MEDS_X + MEDS_W / 2 - 12, by = MEDS_Y + 6;
+    tft.fillRoundRect(bx, by, 24, 22, 4, TFT_WHITE);
+    tft.fillRect(bx + 4, by - 4, 16, 5, C_DIM);
+    tft.fillRect(bx + 10, by + 6, 4, 10, C_MEDS);
+    tft.fillRect(bx + 7, by + 9, 10, 4, C_MEDS);
+}
+
 // ── Zone draws ────────────────────────────────────────────────────────────────
 static void drawHeaderTick() {
     time_t epoch = ntpClient.getEpochTime();
@@ -343,7 +379,7 @@ static void drawAnimal() {
     tft.fillRect(CAT_CX - 50, CAT_CY - 91, 100, 152, TFT_BLACK);
 
     int dy = (cat.mood == CatMood::Celebrate) ? ((cat.frame % 2 == 0) ? -3 : 3) : 0;
-    drawCat(CAT_CX, CAT_CY + dy, cat.mood, cat.status, cat.boredom, cat.eyeOpen);
+    drawCat(CAT_CX, CAT_CY + dy, cat.mood, cat.status, cat.boredom, cat.health, cat.eyeOpen);
 
     if (cat.mood == CatMood::Happy || cat.mood == CatMood::Celebrate) {
         drawSparkles(CAT_CX, CAT_CY, cat.frame);
@@ -366,6 +402,10 @@ static void drawAnimal() {
     tft.drawCentreString(configMgr.config().catName.c_str(), CX, ANIMAL_Y + ANIMAL_H - 22, 2);
     drawTreatBtn();
     drawPlayBtn();
+
+    // Meds button — only visible while sick, stacked above the play button
+    tft.fillRect(MEDS_X, MEDS_Y, MEDS_W, MEDS_H, TFT_BLACK);
+    if (cat.health == CatHealth::Sick) drawMedsBtn();
 }
 
 static void drawPicker() {
@@ -528,6 +568,22 @@ static void handleTouch() {
                 configMgr.save();
             }
             dirty.animal = true;
+        } else if (cat.health == CatHealth::Sick &&
+                   p.x >= MEDS_X && p.x <= MEDS_X + MEDS_W &&
+                   p.y >= MEDS_Y && p.y <= MEDS_Y + MEDS_H) {
+            // Give meds
+            cat.mood   = CatMood::Celebrate;
+            cat.health = CatHealth::Healthy;
+            cat.since  = now;
+            cat.frame  = 0;
+            // Persist last meds time as UTC (subtract offset so timezone changes don't shift the cooldown)
+            time_t epoch = ntpClient.getEpochTime();
+            time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
+            if (utc > 1000000000) {  // sanity: must be a real NTP-synced time (post-2001)
+                configMgr.config().lastMedsEpoch = (uint32_t)utc;
+                configMgr.save();
+            }
+            dirty.animal = true;
         }
     }
 }
@@ -651,6 +707,48 @@ static void updateCatBoredom() {
     }
 }
 
+// Random-onset check cadence/odds for the sick event, once the cooldown has elapsed —
+// mirrors the random(10000, 15001) idiom used for the sleep-screen clock cadence.
+static constexpr unsigned long SICK_CHECK_INTERVAL_MS       = 60000UL;  // ~1 min between rolls
+static constexpr int           SICK_TRIGGER_PER_MILLE       = 2;        // ~0.2% chance per roll
+
+static void updateCatHealth() {
+    // Test-only forced trigger, armed via the /config page's "force sick" field
+    if (forceSickDeadlineMs != 0 && millis() >= forceSickDeadlineMs) {
+        forceSickDeadlineMs = 0;
+        if (cat.health == CatHealth::Healthy) {
+            cat.health   = CatHealth::Sick;
+            dirty.animal = true;
+        }
+        return;
+    }
+
+    if (cat.health == CatHealth::Sick) return;  // already sick, waiting for meds
+
+    time_t epoch = ntpClient.getEpochTime();
+    time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
+    if (utc <= 1000000000) return;  // NTP not synced yet (pre-2001 or un-synced offset-only value)
+
+    uint32_t lastMeds  = configMgr.config().lastMedsEpoch;
+    uint32_t threshold = (uint32_t)configMgr.config().sickCooldownHours * 3600u;
+    uint32_t now32     = (uint32_t)utc;
+    uint32_t elapsed;
+    if (lastMeds == 0)          elapsed = threshold + 1;   // never medicated → immediately eligible
+    else if (now32 >= lastMeds) elapsed = now32 - lastMeds;
+    else                        elapsed = 0;                // NTP clock step back → treat as just medicated
+
+    if (elapsed < threshold) return;  // still in cooldown, not yet eligible
+
+    unsigned long now = millis();
+    if (now - cat.lastSickCheck < SICK_CHECK_INTERVAL_MS) return;
+    cat.lastSickCheck = now;
+
+    if ((int)random(1000) < SICK_TRIGGER_PER_MILLE) {
+        cat.health   = CatHealth::Sick;
+        dirty.animal = true;
+    }
+}
+
 // ── Sleep window ──────────────────────────────────────────────────────────────
 static bool isInSleepWindow(int nowMinutes) {
     int bed  = configMgr.config().sleepBedMinutes;
@@ -757,6 +855,13 @@ button:hover{background:#005ec4}
 <label>Minutes until bored</label>
 <input name="boredom" id="boredom" type="number" min="1" max="1440" value="%%BOREDOM%%">
 
+<h3>Cat health</h3>
+<label>Minimum hours between sick events</label>
+<input name="sickCooldown" id="sickCooldown" type="number" min="1" max="168" value="%%SICKCOOLDOWN%%">
+<label>Force sick in N minutes (test only, 0 = off)</label>
+<input name="forceSickMinutes" id="forceSickMinutes" type="number" min="0" max="1440" value="%%FORCESICK%%">
+<label style="margin-top:-8px">%%FORCESICKSTATUS%%</label>
+
 <h3>Cat sleep</h3>
 <label>Bed time</label>
 <input name="sleepBed" id="sleepBed" type="time" value="%%SLEEPBED%%">
@@ -862,6 +967,19 @@ static void handleConfigGet() {
     page.replace("%%UTC%%",    String(configMgr.config().utcOffsetSeconds));
     page.replace("%%HUNGER%%", String(configMgr.config().hungerMinutes));
     page.replace("%%BOREDOM%%", String(configMgr.config().boredomMinutes));
+    page.replace("%%SICKCOOLDOWN%%", String(configMgr.config().sickCooldownHours));
+    {
+        unsigned long now = millis();
+        String status;
+        int remainMin = 0;
+        if (forceSickDeadlineMs != 0 && forceSickDeadlineMs > now) {
+            unsigned long remainMs = forceSickDeadlineMs - now;
+            remainMin = (int)((remainMs + 59999UL) / 60000UL);  // round up so it doesn't show 0 right after arming
+            status = "Armed — sick in ~" + String(remainMin) + " min.";
+        }
+        page.replace("%%FORCESICK%%", String(remainMin));
+        page.replace("%%FORCESICKSTATUS%%", status);
+    }
     page.replace("%%SLEEPBED%%",  minutesToHHMM(configMgr.config().sleepBedMinutes));
     page.replace("%%SLEEPWAKE%%", minutesToHHMM(configMgr.config().sleepWakeMinutes));
     page.replace("%%NAME%%", htmlEscape(configMgr.config().catName));
@@ -878,6 +996,8 @@ static void handleConfigPost() {
     int   utc     = wm.server->arg("utc").toInt();
     int   hunger  = wm.server->arg("hunger").toInt();
     int   boredom = wm.server->arg("boredom").toInt();
+    int   sickCooldown = wm.server->arg("sickCooldown").toInt();
+    int   forceSickMinutes = wm.server->arg("forceSickMinutes").toInt();
     int   sleepBed = 0, sleepWake = 0;
     bool  sleepBedOk  = parseHHMM(wm.server->arg("sleepBed"),  sleepBed);
     bool  sleepWakeOk = parseHHMM(wm.server->arg("sleepWake"), sleepWake);
@@ -890,6 +1010,8 @@ static void handleConfigPost() {
     }
     if (lat < -90.0f || lat > 90.0f || lon < -180.0f || lon > 180.0f || utc < -50400 || utc > 50400
         || hunger < 1 || hunger > 1440 || boredom < 1 || boredom > 1440
+        || sickCooldown < 1 || sickCooldown > 168
+        || forceSickMinutes < 0 || forceSickMinutes > 1440
         || !sleepBedOk || !sleepWakeOk || !nameOk) {
         wm.server->send(400, "text/plain", "Invalid values");
         return;
@@ -899,6 +1021,8 @@ static void handleConfigPost() {
     configMgr.config().utcOffsetSeconds = utc;
     configMgr.config().hungerMinutes    = hunger;
     configMgr.config().boredomMinutes   = boredom;
+    configMgr.config().sickCooldownHours = sickCooldown;
+    if (forceSickMinutes > 0) forceSickDeadlineMs = millis() + (unsigned long)forceSickMinutes * 60000UL;
     configMgr.config().sleepBedMinutes  = sleepBed;
     configMgr.config().sleepWakeMinutes = sleepWake;
     configMgr.config().catName          = name;
@@ -1048,10 +1172,11 @@ void loop() {
     }
     timerDonePrev = timerDoneNow;
 
-    // Cat animation, hunger, and boredom status
+    // Cat animation, hunger, boredom, and health status
     updateCatAnim();
     updateCatStatus();
     updateCatBoredom();
+    updateCatHealth();
 
     // Header tick — full redraw on minute change, seconds-only otherwise
     {

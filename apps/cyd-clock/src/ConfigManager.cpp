@@ -40,6 +40,11 @@ bool ConfigManager::load() {
         String n = doc["name"] | _config.catName;
         if (n.length() >= 1 && n.length() <= 16) _config.catName = n;
     }
+    {
+        int s = doc["sickCooldown"] | _config.sickCooldownHours;
+        if (s >= 1 && s <= 168) _config.sickCooldownHours = s;
+    }
+    _config.lastMedsEpoch = doc["meds"] | _config.lastMedsEpoch;
 
     f.close();
     return true;
@@ -61,6 +66,8 @@ bool ConfigManager::save() {
     doc["sleepBed"]  = _config.sleepBedMinutes;
     doc["sleepWake"] = _config.sleepWakeMinutes;
     doc["name"]      = _config.catName;
+    doc["sickCooldown"] = _config.sickCooldownHours;
+    doc["meds"]          = _config.lastMedsEpoch;
 
     serializeJson(doc, f);
     f.close();

@@ -13,6 +13,8 @@ struct AppConfig {
     int sleepBedMinutes = 1320;   // 22:00, minutes since midnight
     int sleepWakeMinutes = 420;   // 07:00, minutes since midnight
     String catName = "Biscuit";   // Max 16 characters
+    int sickCooldownHours = 4;    // min hours between sick events
+    uint32_t lastMedsEpoch = 0;   // Unix epoch of last meds; 0 = never medicated
 };
 
 class ConfigManager {
