@@ -73,6 +73,9 @@ static constexpr uint16_t C_SLEEP_DIM = 0x632C;  // dim gray-blue, for the sleep
 static constexpr uint16_t C_SICK   = 0x9E66;  // queasy cheek blush (sickly green)
 static constexpr uint16_t C_MEDS   = 0xF800;  // meds button cross (red)
 static constexpr uint16_t C_WATER  = 0x04FF;  // water button droplet (blue)
+static constexpr uint16_t C_BLANKET      = 0x4BB6;  // cozy dusty-blue blanket, sleep-peek scene
+static constexpr uint16_t C_BLANKET_TRIM = 0xD69A;  // warm cream fold trim on the blanket edge
+static constexpr uint16_t C_BEAR         = 0x9A46;  // teddy bear peeking out beside the head (brown)
 
 // Quick-pick durations
 static constexpr uint32_t    PICK_SEC[] = {60, 300, 600, 1800};
@@ -133,6 +136,7 @@ unsigned long lastTouchMs      = 0;
 unsigned long showIpUntilMs    = 0;
 bool asleep                    = false;  // set each loop before handleTouch(); read by handleTouch()
 unsigned long peekUntilMs      = 0;      // 0 = not peeking; mirrors the showIpUntilMs idiom
+bool peekingAsleep             = false;  // true while touch-peeking during the sleep window — freezes cat state, draws the sleeping scene
 bool sleepScreenActive         = false;  // true once the black sleep screen has been painted this session
 unsigned long forceSickDeadlineMs = 0;   // test-only: armed via /config, 0 = not armed, not persisted
 unsigned long forceThirstDeadlineMs = 0; // test-only: armed via /config, 0 = not armed, not persisted
@@ -245,6 +249,38 @@ static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom b
     // Tail (right side)
     tft.fillRoundRect(cx + 26, cy + 18, 12, 36, 6, C_CAT);
     tft.fillRoundRect(cx + 14, cy + 50, 28, 10, 5, C_CAT);
+}
+
+// Calm, static "asleep" scene for the sleep-window peek: reuses drawCat() with a
+// content/closed-eyed state (no status decorations), then layers a blanket over the
+// body/paws/tail up to the neck, with a small teddy bear peeking out beside the head.
+// Stays within drawAnimal()'s CAT_CX±50 clear-rect bounds.
+// Blanket/bear are store items (DIY-25 epic) not yet purchasable — gated off until
+// DIY-28 wires them to real ownership state. Left in place, ready to flip on.
+static constexpr bool HAS_BLANKET = false;
+static constexpr bool HAS_BEAR    = false;
+
+static void drawSleepingCat(int cx, int cy) {
+    drawCat(cx, cy, CatMood::Idle, CatStatus::Content, CatBoredom::Entertained,
+            CatHealth::Healthy, CatThirst::Hydrated, /*eyeOpen=*/false);
+
+    if (HAS_BLANKET) {
+        // Blanket — covers body/paws/tail, starts right at the neckline
+        tft.fillRoundRect(cx - 40, cy, 80, 60, 12, C_BLANKET);
+        tft.fillRect(cx - 40, cy + 4, 80, 6, C_BLANKET_TRIM);  // folded-edge trim
+    }
+
+    if (HAS_BEAR) {
+        // Teddy bear, peeking out beside the head, tucked into the blanket's top edge
+        int bx = cx - 40, by = cy - 6;
+        tft.fillCircle(bx - 6, by - 9, 4, C_BEAR);   // left ear
+        tft.fillCircle(bx + 5, by - 9, 4, C_BEAR);   // right ear
+        tft.fillCircle(bx,     by,     8, C_BEAR);   // head
+        tft.fillCircle(bx,     by + 3, 3, C_BLANKET_TRIM);  // snout
+        tft.fillCircle(bx - 3, by - 2, 1, C_DARK);   // left eye
+        tft.fillCircle(bx + 3, by - 2, 1, C_DARK);   // right eye
+        tft.fillCircle(bx,     by + 1, 1, C_DARK);   // nose
+    }
 }
 
 static void drawSparkles(int cx, int cy, uint8_t frame) {
@@ -412,35 +448,43 @@ static void drawAnimal() {
     clearSparkles(CAT_CX, CAT_CY);
     tft.fillRect(CAT_CX - 50, CAT_CY - 91, 100, 152, TFT_BLACK);
 
-    int dy = (cat.mood == CatMood::Celebrate) ? ((cat.frame % 2 == 0) ? -3 : 3) : 0;
-    drawCat(CAT_CX, CAT_CY + dy, cat.mood, cat.status, cat.boredom, cat.health, cat.thirst, cat.eyeOpen);
+    if (peekingAsleep) {
+        drawSleepingCat(CAT_CX, CAT_CY);
+    } else {
+        int dy = (cat.mood == CatMood::Celebrate) ? ((cat.frame % 2 == 0) ? -3 : 3) : 0;
+        drawCat(CAT_CX, CAT_CY + dy, cat.mood, cat.status, cat.boredom, cat.health, cat.thirst, cat.eyeOpen);
 
-    if (cat.mood == CatMood::Happy || cat.mood == CatMood::Celebrate) {
-        drawSparkles(CAT_CX, CAT_CY, cat.frame);
-    }
+        if (cat.mood == CatMood::Happy || cat.mood == CatMood::Celebrate) {
+            drawSparkles(CAT_CX, CAT_CY, cat.frame);
+        }
 
-    // Hunger lines on tummy (Peckish or Hungry, only painted when rumbling)
-    if (cat.status == CatStatus::Peckish || cat.status == CatStatus::Hungry) {
-        drawHungerLines(CAT_CX, CAT_CY, cat.rumbling);
+        // Hunger lines on tummy (Peckish or Hungry, only painted when rumbling)
+        if (cat.status == CatStatus::Peckish || cat.status == CatStatus::Hungry) {
+            drawHungerLines(CAT_CX, CAT_CY, cat.rumbling);
+        }
     }
 
     // Boredom "Zz" overlay — sits outside the main clear rect, so always redraw/erase
     // here regardless of tier; cat.napping already encodes whether it should show
-    // (true whenever Bored/VeryBored, independent of hunger status).
-    drawBoredomZzz(CAT_CX, CAT_CY, cat.napping);
+    // (true whenever Bored/VeryBored, independent of hunger status). Forced off while
+    // peeking during the sleep window, since status animations shouldn't show then.
+    drawBoredomZzz(CAT_CX, CAT_CY, !peekingAsleep && cat.napping);
 
-    // Clear hint area and draw treat + play buttons
-    tft.fillRect(PLAY_X + PLAY_W, ANIMAL_Y + ANIMAL_H - 27,
-                 TREAT_X - (PLAY_X + PLAY_W) - 2, 27, TFT_BLACK);
-    tft.setTextColor(C_DIM, TFT_BLACK);
-    tft.drawCentreString(configMgr.config().catName.c_str(), CX, ANIMAL_Y + ANIMAL_H - 22, 2);
-    drawTreatBtn();
-    drawPlayBtn();
-    drawWaterBtn();  // always available, stacked above the treat button
+    // Clear hint area and draw treat + play buttons — hidden while peeking during the
+    // sleep window, since the scene should be calm/non-interactive, not just visually frozen.
+    if (!peekingAsleep) {
+        tft.fillRect(PLAY_X + PLAY_W, ANIMAL_Y + ANIMAL_H - 27,
+                     TREAT_X - (PLAY_X + PLAY_W) - 2, 27, TFT_BLACK);
+        tft.setTextColor(C_DIM, TFT_BLACK);
+        tft.drawCentreString(configMgr.config().catName.c_str(), CX, ANIMAL_Y + ANIMAL_H - 22, 2);
+        drawTreatBtn();
+        drawPlayBtn();
+        drawWaterBtn();  // always available, stacked above the treat button
 
-    // Meds button — only visible while sick, stacked above the play button
-    tft.fillRect(MEDS_X, MEDS_Y, MEDS_W, MEDS_H, TFT_BLACK);
-    if (cat.health == CatHealth::Sick) drawMedsBtn();
+        // Meds button — only visible while sick, stacked above the play button
+        tft.fillRect(MEDS_X, MEDS_Y, MEDS_W, MEDS_H, TFT_BLACK);
+        if (cat.health == CatHealth::Sick) drawMedsBtn();
+    }
 }
 
 static void drawPicker() {
@@ -559,9 +603,11 @@ static void handleTouch() {
 
     Serial.printf("Touch x=%d y=%d\n", p.x, p.y);
 
-    if (asleep) {
+    if (asleep || peekingAsleep) {
         peekUntilMs = now + 7000;  // ~7s full-UI peek; doesn't touch the schedule
-        return;                     // consume the touch, skip normal zone dispatch
+        return;                     // consume the touch, skip normal zone dispatch — including
+                                     // touches during an already-active peek, so the frozen
+                                     // sleeping scene can't be poked via treat/play/meds/water
     }
 
     if (p.y < HEADER_Y + HEADER_H && p.x < 120) {
@@ -1380,6 +1426,12 @@ void loop() {
         handleTouch();  // may start a peek if `asleep` was true
 
         bool sleepingNow = inSleepWindow && peekUntilMs == 0;  // re-check post-touch
+        bool wasPeekingAsleep = peekingAsleep;
+        peekingAsleep = inSleepWindow && peekUntilMs > 0;       // re-check post-touch, mirrors sleepingNow
+        // Force a clean repaint on any peekingAsleep transition — covers the sleep
+        // window itself ending mid-peek, which otherwise wouldn't force a redraw and
+        // could leave the blanket/bear scene stuck on screen after waking.
+        if (peekingAsleep != wasPeekingAsleep) dirty.animal = true;
         if (sleepingNow) {
             updateSleepScreen(now);
             delay(50);
@@ -1419,12 +1471,16 @@ void loop() {
     }
     timerDonePrev = timerDoneNow;
 
-    // Cat animation, hunger, boredom, and health status
-    updateCatAnim();
-    updateCatStatus();
-    updateCatBoredom();
-    updateCatHealth();
-    updateCatThirst();
+    // Cat animation, hunger, boredom, and health status — frozen while peeking during
+    // the sleep window so the sleeping scene stays calm and static (no blinking/hunger/
+    // boredom/sick/thirst state changes).
+    if (!peekingAsleep) {
+        updateCatAnim();
+        updateCatStatus();
+        updateCatBoredom();
+        updateCatHealth();
+        updateCatThirst();
+    }
 
     // Header tick — full redraw on minute change, seconds-only otherwise
     {
