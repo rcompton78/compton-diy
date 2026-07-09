@@ -10,6 +10,7 @@
 #include "ConfigManager.h"
 #include "WeatherClient.h"
 #include "TimerWidget.h"
+#include "StopwatchWidget.h"
 #if defined(BOARD_FREENOVE_S3)
 #include "Ft6336uTouch.h"
 #else
@@ -93,7 +94,11 @@ NTPClient     ntpClient(ntpUDP, NTP_SERVER);
 ConfigManager configMgr;
 WeatherClient weather;
 TimerWidget   timerWidget;
+StopwatchWidget stopwatchWidget;
 WiFiManager   wm;
+
+enum class TimerMode { Countdown, Stopwatch };
+TimerMode timerMode = TimerMode::Countdown;
 
 // ── Animation ─────────────────────────────────────────────────────────────────
 enum class CatMood    { Idle, Happy, Celebrate };
@@ -442,6 +447,8 @@ static void drawPicker() {
     tft.fillRect(0, PICKER_Y, 240, PICKER_H, TFT_BLACK);
     tft.drawFastHLine(0, PICKER_Y, 240, C_SEP);
 
+    if (timerMode != TimerMode::Countdown) return;  // no quick-pick durations in stopwatch mode
+
     constexpr int btnW = 60;
     for (int i = 0; i < PICK_N; i++) {
         int bx = i * btnW;
@@ -453,67 +460,92 @@ static void drawPicker() {
 }
 
 static void drawTimerDigits() {
-    uint32_t rem = timerWidget.remaining();
-    uint16_t col = timerWidget.isFinished() ? TFT_RED
-                 : timerWidget.isRunning()  ? TFT_GREEN
-                                            : TFT_YELLOW;
-    char buf[6];
-    snprintf(buf, sizeof(buf), "%02d:%02d", rem / 60, rem % 60);
+    char buf[8];  // "100:00\0" — widest possible mm:ss once minutes hit 3 digits
+    uint16_t col;
+    if (timerMode == TimerMode::Countdown) {
+        uint32_t rem = timerWidget.remaining();
+        col = timerWidget.isFinished() ? TFT_RED
+            : timerWidget.isRunning()  ? TFT_GREEN
+                                       : TFT_YELLOW;
+        snprintf(buf, sizeof(buf), "%02d:%02d", rem / 60, rem % 60);
+    } else {
+        uint32_t el = stopwatchWidget.elapsedSeconds();
+        col = stopwatchWidget.isRunning() ? TFT_GREEN : TFT_YELLOW;
+        snprintf(buf, sizeof(buf), "%02d:%02d", el / 60, el % 60);
+    }
     tft.setTextColor(col, TFT_BLACK);  // bg colour self-erases previous digits
     tft.drawString(buf, 8, TIMER_Y + 3, 6);
+}
+
+// Draws one timer-row control button at the given slot and label/colour.
+static void drawTimerBtn(int x, int w, const char* label, uint16_t col) {
+    tft.fillRoundRect(x, TIMER_Y + 10, w, 34, 6, C_BTN);
+    tft.setTextColor(col, C_BTN);
+    int tw = tft.textWidth(label, 4);
+    tft.drawString(label, x + (w - tw) / 2, TIMER_Y + 15, 4);
+}
+
+// Running state: pause (left) + reset/stop (right) — shared by countdown and stopwatch.
+static void drawPauseStopButtons() {
+    drawTimerBtn(150, 38, "||", TFT_YELLOW);
+    drawTimerBtn(196, 38, "X", 0xFD20);  // orange
+}
+
+// Paused state (elapsed/remaining > 0): resume (left) + clear (right) — shared by both modes.
+static void drawResumeClearButtons() {
+    drawTimerBtn(150, 38, ">", TFT_GREEN);
+    drawTimerBtn(196, 38, "0", 0xFD20);
 }
 
 static void drawTimerRow() {
     tft.fillRect(0, TIMER_Y, 240, TIMER_H, TFT_BLACK);
     tft.drawFastHLine(0, TIMER_Y, 240, C_SEP);
 
-    uint32_t rem = timerWidget.remaining();
+    if (timerMode == TimerMode::Countdown) {
+        uint32_t rem = timerWidget.remaining();
 
-    uint16_t timeCol = TFT_GREEN;
-    if (timerWidget.isFinished())      timeCol = TFT_RED;
-    else if (!timerWidget.isRunning()) timeCol = TFT_YELLOW;
+        uint16_t timeCol = TFT_GREEN;
+        if (timerWidget.isFinished())      timeCol = TFT_RED;
+        else if (!timerWidget.isRunning()) timeCol = TFT_YELLOW;
 
-    if (rem > 0 || timerWidget.isFinished()) {
-        char buf[6];
-        snprintf(buf, sizeof(buf), "%02d:%02d", rem / 60, rem % 60);
-        tft.setTextColor(timeCol, TFT_BLACK);
-        tft.drawString(buf, 8, TIMER_Y + 3, 6);  // font 6 = 48px tall, fits in 55px
-    } else {
-        tft.setTextColor(C_SEP, TFT_BLACK);
-        tft.drawString("--:--", 8, TIMER_Y + 3, 6);
+        if (rem > 0 || timerWidget.isFinished()) {
+            char buf[8];
+            snprintf(buf, sizeof(buf), "%02d:%02d", rem / 60, rem % 60);
+            tft.setTextColor(timeCol, TFT_BLACK);
+            tft.drawString(buf, 8, TIMER_Y + 3, 6);  // font 6 = 48px tall, fits in 55px
+        } else {
+            tft.setTextColor(C_SEP, TFT_BLACK);
+            tft.drawString("--:--", 8, TIMER_Y + 3, 6);
+        }
+
+        if (rem > 0 || timerWidget.isFinished()) {
+            if (timerWidget.isRunning()) {
+                drawPauseStopButtons();
+            } else if (timerWidget.isFinished()) {
+                // Finished: single wide reset button
+                drawTimerBtn(150, 84, "0", 0xFD20);
+            } else {
+                drawResumeClearButtons();
+            }
+        }
+        return;
     }
 
-    if (rem > 0 || timerWidget.isFinished()) {
-        if (timerWidget.isRunning()) {
-            // Pause
-            tft.fillRoundRect(150, TIMER_Y + 10, 38, 34, 6, C_BTN);
-            tft.setTextColor(TFT_YELLOW, C_BTN);
-            int tw = tft.textWidth("||", 4);
-            tft.drawString("||", 150 + (38 - tw) / 2, TIMER_Y + 15, 4);
+    // Stopwatch mode
+    uint32_t el = stopwatchWidget.elapsedSeconds();
+    uint16_t timeCol = stopwatchWidget.isRunning() ? TFT_GREEN : TFT_YELLOW;
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%02d:%02d", el / 60, el % 60);
+    tft.setTextColor(timeCol, TFT_BLACK);
+    tft.drawString(buf, 8, TIMER_Y + 3, 6);
 
-            // Reset (X)
-            tft.fillRoundRect(196, TIMER_Y + 10, 38, 34, 6, C_BTN);
-            tft.setTextColor(0xFD20, C_BTN);  // orange
-            tw = tft.textWidth("X", 4);
-            tft.drawString("X", 196 + (38 - tw) / 2, TIMER_Y + 15, 4);
-        } else if (timerWidget.isFinished()) {
-            // Finished: single wide reset button
-            tft.fillRoundRect(150, TIMER_Y + 10, 84, 34, 6, C_BTN);
-            tft.setTextColor(0xFD20, C_BTN);
-            int tw = tft.textWidth("0", 4);
-            tft.drawString("0", 150 + (84 - tw) / 2, TIMER_Y + 15, 4);
-        } else {
-            // Paused: resume + reset
-            tft.fillRoundRect(150, TIMER_Y + 10, 38, 34, 6, C_BTN);
-            tft.setTextColor(TFT_GREEN, C_BTN);
-            int tw = tft.textWidth(">", 4);
-            tft.drawString(">", 150 + (38 - tw) / 2, TIMER_Y + 15, 4);
-
-            tft.fillRoundRect(196, TIMER_Y + 10, 38, 34, 6, C_BTN);
-            tft.setTextColor(0xFD20, C_BTN);
-            tw = tft.textWidth("0", 4);
-            tft.drawString("0", 196 + (38 - tw) / 2, TIMER_Y + 15, 4);
-        }
+    if (stopwatchWidget.isRunning()) {
+        drawPauseStopButtons();
+    } else if (el == 0) {
+        // Idle: single wide start button
+        drawTimerBtn(150, 84, ">", TFT_GREEN);
+    } else {
+        drawResumeClearButtons();
     }
 }
 
@@ -535,35 +567,71 @@ static void handleTouch() {
     if (p.y < HEADER_Y + HEADER_H && p.x < 120) {
         showIpUntilMs = now + 7000;
         dirty.header  = true;
+    } else if (p.y >= TIMER_Y && p.x < 150) {
+        // Digits zone toggles between countdown timer and stopwatch mode
+        timerMode = (timerMode == TimerMode::Countdown) ? TimerMode::Stopwatch : TimerMode::Countdown;
+        timerWidget.reset();
+        stopwatchWidget.reset();
+        if (cat.mood == CatMood::Celebrate) { cat.mood = CatMood::Idle; dirty.animal = true; }
+        dirty.timerRow = true;
+        dirty.picker   = true;
     } else if (p.y >= TIMER_Y) {
-        if (timerWidget.isRunning()) {
-            if (p.x >= 196) {
+        if (timerMode == TimerMode::Countdown) {
+            if (timerWidget.isRunning()) {
+                if (p.x >= 196) {
+                    timerWidget.reset();
+                    if (cat.mood == CatMood::Celebrate) { cat.mood = CatMood::Idle; dirty.animal = true; }
+                    dirty.timerRow = true;
+                } else if (p.x >= 150) {
+                    timerWidget.pause();
+                    dirty.timerRow = true;
+                }
+            } else if (timerWidget.isFinished() && p.x >= 150) {
                 timerWidget.reset();
                 if (cat.mood == CatMood::Celebrate) { cat.mood = CatMood::Idle; dirty.animal = true; }
                 dirty.timerRow = true;
-            } else if (p.x >= 150) {
-                timerWidget.pause();
-                dirty.timerRow = true;
+            } else if (timerWidget.remaining() > 0) {
+                if (p.x >= 196) {
+                    timerWidget.reset();
+                    dirty.timerRow = true;
+                } else if (p.x >= 150) {
+                    timerWidget.resume();
+                    dirty.timerRow = true;
+                }
             }
-        } else if (timerWidget.isFinished() && p.x >= 150) {
-            timerWidget.reset();
-            if (cat.mood == CatMood::Celebrate) { cat.mood = CatMood::Idle; dirty.animal = true; }
-            dirty.timerRow = true;
-        } else if (timerWidget.remaining() > 0) {
-            if (p.x >= 196) {
-                timerWidget.reset();
-                dirty.timerRow = true;
-            } else if (p.x >= 150) {
-                timerWidget.resume();
-                dirty.timerRow = true;
+        } else {
+            // Stopwatch mode
+            if (stopwatchWidget.isRunning()) {
+                if (p.x >= 196) {
+                    stopwatchWidget.reset();
+                    dirty.timerRow = true;
+                } else if (p.x >= 150) {
+                    stopwatchWidget.pause();
+                    dirty.timerRow = true;
+                }
+            } else if (stopwatchWidget.elapsedSeconds() == 0) {
+                if (p.x >= 150) {
+                    stopwatchWidget.start();
+                    dirty.timerRow = true;
+                }
+            } else {
+                if (p.x >= 196) {
+                    stopwatchWidget.reset();
+                    dirty.timerRow = true;
+                } else if (p.x >= 150) {
+                    stopwatchWidget.resume();
+                    dirty.timerRow = true;
+                }
             }
         }
     } else if (p.y >= PICKER_Y) {
-        int idx = constrain(p.x / (240 / PICK_N), 0, PICK_N - 1);
-        bool wasFinished = timerWidget.isFinished();
-        timerWidget.addTime(PICK_SEC[idx]);
-        if (wasFinished && cat.mood == CatMood::Celebrate) { cat.mood = CatMood::Idle; dirty.animal = true; }
-        dirty.timerRow = true;
+        if (timerMode == TimerMode::Countdown) {
+            int idx = constrain(p.x / (240 / PICK_N), 0, PICK_N - 1);
+            bool wasFinished = timerWidget.isFinished();
+            timerWidget.addTime(PICK_SEC[idx]);
+            if (wasFinished && cat.mood == CatMood::Celebrate) { cat.mood = CatMood::Idle; dirty.animal = true; }
+            dirty.timerRow = true;
+        }
     } else if (p.y >= ANIMAL_Y) {
         // Treat button hit test
         if (p.x >= TREAT_X && p.x <= TREAT_X + TREAT_W &&
@@ -1374,7 +1442,9 @@ void loop() {
     // Timer row refresh while running
     {
         static unsigned long lastTimerDraw = 0;
-        if (timerWidget.isRunning() && now - lastTimerDraw >= 500) {
+        bool activeAndRunning = (timerMode == TimerMode::Countdown) ? timerWidget.isRunning()
+                                                                     : stopwatchWidget.isRunning();
+        if (activeAndRunning && now - lastTimerDraw >= 500) {
             lastTimerDraw   = now;
             dirty.timerTick = true;
         }
