@@ -479,6 +479,7 @@ static void drawAnimal() {
     clearSparkles(CAT_CX, CAT_CY);
     tft.fillRect(CAT_CX - 50, CAT_CY - 91, 100, 152, TFT_BLACK);
 
+    // Points balance — top-right of the cat's head, just under the header's weather text
     if (peekingAsleep) {
         drawSleepingCat(CAT_CX, CAT_CY);
     } else {
@@ -495,19 +496,32 @@ static void drawAnimal() {
         }
     }
 
+    // Points balance — top-right of the cat's head, just under the header's weather text.
+    // Drawn after drawCat()/drawSleepingCat() since both repaint their own clear rect
+    // internally and would otherwise wipe this out.
+    char ptsBuf[16];
+    snprintf(ptsBuf, sizeof(ptsBuf), "%lu pts", (unsigned long)configMgr.config().points);
+    // Own clear rect since this sits to the right of the cat's bounding box (x>170),
+    // outside the fillRect at the top of this function.
+    tft.fillRect(140, ANIMAL_Y, 100, 20, TFT_BLACK);
+    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
+    int ptsWidth = tft.textWidth(ptsBuf, 2);
+    tft.drawString(ptsBuf, 234 - ptsWidth, ANIMAL_Y + 4, 2);
+
     // Boredom "Zz" overlay — sits outside the main clear rect, so always redraw/erase
     // here regardless of tier; cat.napping already encodes whether it should show
     // (true whenever Bored/VeryBored, independent of hunger status). Forced off while
     // peeking during the sleep window, since status animations shouldn't show then.
     drawBoredomZzz(CAT_CX, CAT_CY, !peekingAsleep && cat.napping);
 
-    // Clear hint area and draw treat + play buttons — hidden while peeking during the
-    // sleep window, since the scene should be calm/non-interactive, not just visually frozen.
+    // Name label stays visible even while peeking during the sleep window — only the
+    // action buttons are hidden, since the scene should be calm/non-interactive there.
+    tft.fillRect(PLAY_X + PLAY_W, ANIMAL_Y + ANIMAL_H - 27,
+                 TREAT_X - (PLAY_X + PLAY_W) - 2, 27, TFT_BLACK);
+    tft.setTextColor(C_DIM, TFT_BLACK);
+    tft.drawCentreString(configMgr.config().catName.c_str(), CX, ANIMAL_Y + ANIMAL_H - 22, 2);
+
     if (!peekingAsleep) {
-        tft.fillRect(PLAY_X + PLAY_W, ANIMAL_Y + ANIMAL_H - 27,
-                     TREAT_X - (PLAY_X + PLAY_W) - 2, 27, TFT_BLACK);
-        tft.setTextColor(C_DIM, TFT_BLACK);
-        tft.drawCentreString(configMgr.config().catName.c_str(), CX, ANIMAL_Y + ANIMAL_H - 22, 2);
         drawTreatBtn();
         drawPlayBtn();
         drawWaterBtn();  // always available, stacked above the treat button
@@ -631,7 +645,10 @@ static void persistCareAction(uint32_t& lastEpochField, bool wasNeeded, uint32_t
     time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
     if (utc > 1000000000) {  // sanity: must be a real NTP-synced time (post-2001)
         lastEpochField = (uint32_t)utc;
-        if (wasNeeded) configMgr.config().points += pointsAwarded;
+        if (wasNeeded) {
+            configMgr.config().points += pointsAwarded;
+            dirty.animal = true;
+        }
         configMgr.save();
     }
 }
@@ -647,10 +664,12 @@ static void handleTouch() {
     Serial.printf("Touch x=%d y=%d\n", p.x, p.y);
 
     if (asleep || peekingAsleep) {
-        peekUntilMs = now + 7000;  // ~7s full-UI peek; doesn't touch the schedule
-        return;                     // consume the touch, skip normal zone dispatch — including
-                                     // touches during an already-active peek, so the frozen
-                                     // sleeping scene can't be poked via treat/play/meds/water
+        peekUntilMs = now + 7000;  // (re)start/extend the peek on any touch, so fiddling with
+                                    // the timer doesn't let the sleep window reclaim the screen
+        bool interactiveDuringSleep =
+            (p.y < HEADER_Y + HEADER_H && p.x < 120) ||  // header: tap to show IP
+            (p.y >= PICKER_Y);                            // picker + timer/stopwatch row
+        if (!interactiveDuringSleep) return;  // animal zone: peek only, no action dispatch
     }
 
     if (p.y < HEADER_Y + HEADER_H && p.x < 120) {
@@ -1064,10 +1083,10 @@ static const char CONFIG_HOME_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CYD Clock · Config</title>
+<title>Cat Control Panel</title>
 <style>%%STYLE%%</style>
 </head><body>
-<h2>Configuration</h2>
+<h2>Cat Control Panel</h2>
 <a class="nav" href="/config/cat">Cat</a>
 <a class="nav" href="/config/city">City (weather &amp; timezone)</a>
 <a class="nav" href="/config/store">Store</a>
@@ -1078,7 +1097,7 @@ static const char CONFIG_CAT_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CYD Clock · Cat Config</title>
+<title>Cat Control Panel · Cat Config</title>
 <style>%%STYLE%%</style>
 </head><body>
 <a class="back" href="/config">&larr; Configuration</a>
@@ -1127,7 +1146,7 @@ static const char CONFIG_CITY_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CYD Clock · City Config</title>
+<title>Cat Control Panel · City Config</title>
 <style>%%STYLE%%</style>
 </head><body>
 <a class="back" href="/config">&larr; Configuration</a>
@@ -1212,7 +1231,7 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CYD Clock · Store</title>
+<title>Cat Control Panel · Store</title>
 <style>%%STYLE%%</style>
 </head><body>
 <a class="back" href="/config">&larr; Configuration</a>
@@ -1455,6 +1474,7 @@ static void handleConfigStorePost() {
         wm.server->send(302, "text/plain", "");
         return;
     }
+    dirty.animal = true;
     wm.server->sendHeader("Location", "/config/store?saved=1");
     wm.server->send(302, "text/plain", "");
 }
@@ -1486,7 +1506,8 @@ static void drawWifiPortal() {
 static void runWiFiManager(ConfigManager& cfg) {
     (void)cfg;  // config now managed exclusively via /config web page
     wm.setAPCallback([](WiFiManager*) { drawWifiPortal(); });
-    wm.setCustomMenuHTML("<form action='/config' method='get'><button>Configuration</button></form><br/>");
+    wm.setTitle("Cat Control Panel");
+    wm.setCustomMenuHTML("<form action='/config' method='get'><button>Cat Control Panel</button></form><br/>");
     const char* menu[] = {"wifi", "custom", "info", "sep", "update", "exit"};
     wm.setMenu(menu, 6);
     wm.autoConnect("CYD-Clock");
