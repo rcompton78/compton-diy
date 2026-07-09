@@ -266,10 +266,8 @@ static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom b
 // items — a blanket over the body/paws/tail up to the neck, and/or a teddy bear.
 // Stays within drawAnimal()'s CAT_CX±50 clear-rect bounds.
 
-// Teddy bear peeking out beside the head, tucked into the blanket's top edge —
-// only reads correctly when the blanket is also owned to tuck behind.
-static void drawTeddyPeeking(int cx, int cy) {
-    int bx = cx - 40, by = cy - 6;
+// Shared ear/head/snout/eyes/nose art reused by both teddy variants below.
+static void drawTeddyHead(int bx, int by) {
     tft.fillCircle(bx - 6, by - 9, 4, C_BEAR);   // left ear
     tft.fillCircle(bx + 5, by - 9, 4, C_BEAR);   // right ear
     tft.fillCircle(bx,     by,     8, C_BEAR);   // head
@@ -279,17 +277,18 @@ static void drawTeddyPeeking(int cx, int cy) {
     tft.fillCircle(bx,     by + 1, 1, C_DARK);   // nose
 }
 
+// Teddy bear peeking out beside the head, tucked into the blanket's top edge —
+// only reads correctly when the blanket is also owned to tuck behind.
+static void drawTeddyPeeking(int cx, int cy) {
+    int bx = cx - 40, by = cy - 6;
+    drawTeddyHead(bx, by);
+}
+
 // Full-body teddy bear sitting beside the cat — used when the teddy is owned without
 // the blanket, since there's no blanket edge to tuck a lone head behind.
 static void drawTeddyFull(int cx, int cy) {
     int bx = cx - 38, by = cy - 8;
-    tft.fillCircle(bx - 6, by - 9, 4, C_BEAR);   // left ear
-    tft.fillCircle(bx + 5, by - 9, 4, C_BEAR);   // right ear
-    tft.fillCircle(bx,     by,     8, C_BEAR);   // head
-    tft.fillCircle(bx,     by + 3, 3, C_BLANKET_TRIM);  // snout
-    tft.fillCircle(bx - 3, by - 2, 1, C_DARK);   // left eye
-    tft.fillCircle(bx + 3, by - 2, 1, C_DARK);   // right eye
-    tft.fillCircle(bx,     by + 1, 1, C_DARK);   // nose
+    drawTeddyHead(bx, by);
     tft.fillRoundRect(bx - 9, by + 7, 18, 26, 8, C_BEAR);  // body
     tft.fillCircle(bx, by + 18, 5, C_BLANKET_TRIM);        // belly patch
     tft.fillCircle(bx - 6, by + 33, 4, C_BEAR);            // left foot
