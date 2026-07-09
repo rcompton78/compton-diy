@@ -52,6 +52,12 @@ static constexpr int WATER_Y  = TREAT_Y - TREAT_H - 8;
 static constexpr int WATER_W  = TREAT_W;
 static constexpr int WATER_H  = TREAT_H;
 
+// Gamification: point award per care action, only when it actually addressed a real need
+static constexpr uint32_t POINTS_TREAT = 5;
+static constexpr uint32_t POINTS_PLAY  = 5;
+static constexpr uint32_t POINTS_WATER = 3;
+static constexpr uint32_t POINTS_MEDS  = 8;
+
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
 static constexpr int TY_MIN = 300, TY_MAX = 3800;
@@ -683,6 +689,7 @@ static void handleTouch() {
         if (p.x >= TREAT_X && p.x <= TREAT_X + TREAT_W &&
             p.y >= TREAT_Y && p.y <= TREAT_Y + TREAT_H) {
             // Feed the cat
+            bool wasNeeded = (cat.status == CatStatus::Peckish || cat.status == CatStatus::Hungry);
             cat.mood   = CatMood::Celebrate;
             cat.status = CatStatus::Content;
             cat.since  = now;
@@ -693,12 +700,14 @@ static void handleTouch() {
             time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
             if (utc > 1000000000) {  // sanity: must be a real NTP-synced time (post-2001)
                 configMgr.config().lastTreatEpoch = (uint32_t)utc;
+                if (wasNeeded) configMgr.config().points += POINTS_TREAT;
                 configMgr.save();
             }
             dirty.animal = true;
         } else if (p.x >= PLAY_X && p.x <= PLAY_X + PLAY_W &&
                    p.y >= PLAY_Y && p.y <= PLAY_Y + PLAY_H) {
             // Play with the cat
+            bool wasNeeded = (cat.boredom == CatBoredom::Bored || cat.boredom == CatBoredom::VeryBored);
             cat.mood    = CatMood::Celebrate;
             cat.boredom = CatBoredom::Entertained;
             cat.since   = now;
@@ -709,6 +718,7 @@ static void handleTouch() {
             time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
             if (utc > 1000000000) {  // sanity: must be a real NTP-synced time (post-2001)
                 configMgr.config().lastPlayEpoch = (uint32_t)utc;
+                if (wasNeeded) configMgr.config().points += POINTS_PLAY;
                 configMgr.save();
             }
             dirty.animal = true;
@@ -725,12 +735,15 @@ static void handleTouch() {
             time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
             if (utc > 1000000000) {  // sanity: must be a real NTP-synced time (post-2001)
                 configMgr.config().lastMedsEpoch = (uint32_t)utc;
+                // Hit-test above already requires CatHealth::Sick to reach this branch, so meds always help
+                configMgr.config().points += POINTS_MEDS;
                 configMgr.save();
             }
             dirty.animal = true;
         } else if (p.x >= WATER_X && p.x <= WATER_X + WATER_W &&
                    p.y >= WATER_Y && p.y <= WATER_Y + WATER_H) {
             // Give water — always available, unlike meds which only responds while sick
+            bool wasNeeded = (cat.thirst == CatThirst::Thirsty);
             cat.mood   = CatMood::Celebrate;
             cat.thirst = CatThirst::Hydrated;
             cat.since  = now;
@@ -740,6 +753,7 @@ static void handleTouch() {
             time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
             if (utc > 1000000000) {  // sanity: must be a real NTP-synced time (post-2001)
                 configMgr.config().lastWaterEpoch = (uint32_t)utc;
+                if (wasNeeded) configMgr.config().points += POINTS_WATER;
                 configMgr.save();
             }
             dirty.animal = true;

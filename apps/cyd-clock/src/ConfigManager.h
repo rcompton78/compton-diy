@@ -17,6 +17,7 @@ struct AppConfig {
     uint32_t lastMedsEpoch = 0;   // Unix epoch of last meds; 0 = never medicated
     int thirstCooldownHours = 4;    // min hours between thirsty events
     uint32_t lastWaterEpoch = 0;    // Unix epoch of last water; 0 = never watered
+    uint32_t points = 0;            // Gamification points earned from timely care actions
 };
 
 class ConfigManager {
