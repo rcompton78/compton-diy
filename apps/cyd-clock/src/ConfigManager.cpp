@@ -51,6 +51,8 @@ bool ConfigManager::load() {
     }
     _config.lastWaterEpoch = doc["water"] | _config.lastWaterEpoch;
     _config.points = doc["points"] | _config.points;
+    _config.ownsBlanket = doc["blanket"] | _config.ownsBlanket;
+    _config.ownsTeddy   = doc["teddy"]   | _config.ownsTeddy;
 
     f.close();
     return true;
@@ -77,6 +79,8 @@ bool ConfigManager::save() {
     doc["thirstCooldown"] = _config.thirstCooldownHours;
     doc["water"]           = _config.lastWaterEpoch;
     doc["points"]          = _config.points;
+    doc["blanket"]         = _config.ownsBlanket;
+    doc["teddy"]           = _config.ownsTeddy;
 
     serializeJson(doc, f);
     f.close();

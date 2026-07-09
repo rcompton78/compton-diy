@@ -58,6 +58,10 @@ static constexpr uint32_t POINTS_PLAY  = 5;
 static constexpr uint32_t POINTS_WATER = 3;
 static constexpr uint32_t POINTS_MEDS  = 8;
 
+// Gamification: store item costs
+static constexpr uint32_t STORE_COST_TEDDY   = 10;
+static constexpr uint32_t STORE_COST_BLANKET = 15;
+
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
 static constexpr int TY_MIN = 300, TY_MAX = 3800;
@@ -1027,6 +1031,12 @@ button:hover{background:#005ec4}
 .nav:hover{background:#262626}
 .back{display:inline-block;margin-bottom:14px;color:#888;text-decoration:none;font-size:.85rem}
 .back:hover{color:#ddd}
+.balance{font-size:1.4rem;margin-bottom:14px}
+.item{display:flex;justify-content:space-between;align-items:center;padding:14px;margin-bottom:10px;background:#1e1e1e;border:1px solid #333;border-radius:8px}
+.item button{margin:0}
+.item button:disabled{background:#333;color:#777;cursor:not-allowed}
+.owned{color:#4b6}
+.err{background:#631}
 )css";
 
 static const char CONFIG_HOME_HTML[] PROGMEM = R"html(<!DOCTYPE html>
@@ -1039,6 +1049,7 @@ static const char CONFIG_HOME_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h2>Configuration</h2>
 <a class="nav" href="/config/cat">Cat</a>
 <a class="nav" href="/config/city">City (weather &amp; timezone)</a>
+<a class="nav" href="/config/store">Store</a>
 </body></html>
 )html";
 
@@ -1176,6 +1187,31 @@ function pick(k,lat,lon,tz){
 </body></html>
 )html";
 
+static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CYD Clock · Store</title>
+<style>%%STYLE%%</style>
+</head><body>
+<a class="back" href="/config">&larr; Configuration</a>
+<h2>Store</h2>
+%%MSG%%
+<div class="balance">Points: <strong>%%POINTS%%</strong></div>
+
+<div class="item">
+<span>Teddy bear</span>
+%%TEDDY_ACTION%%
+</div>
+
+<div class="item">
+<span>Blanket</span>
+%%BLANKET_ACTION%%
+</div>
+
+</body></html>
+)html";
+
 static String htmlEscape(const String& s) {
     String out;
     out.reserve(s.length());
@@ -1267,6 +1303,39 @@ static void handleConfigCityGet() {
     wm.server->send(200, "text/html", page);
 }
 
+// Renders the buy button/owned-label markup for one store item.
+static String storeItemAction(const char* item, bool owned, uint32_t cost, uint32_t points) {
+    if (owned) return "<span class='owned'>Owned</span>";
+    String html = "<form method='POST' action='/save-config/store'>";
+    html += "<input type='hidden' name='item' value='" + String(item) + "'>";
+    html += "<button type='submit'";
+    if (points < cost) html += " disabled";
+    html += ">Buy for " + String(cost) + "</button></form>";
+    return html;
+}
+
+static void handleConfigStoreGet() {
+    String page = String(FPSTR(CONFIG_STORE_HTML));
+    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    uint32_t points = configMgr.config().points;
+    page.replace("%%POINTS%%", String(points));
+    page.replace("%%TEDDY_ACTION%%",
+                 storeItemAction("teddy", configMgr.config().ownsTeddy, STORE_COST_TEDDY, points));
+    page.replace("%%BLANKET_ACTION%%",
+                 storeItemAction("blanket", configMgr.config().ownsBlanket, STORE_COST_BLANKET, points));
+    String msg = "";
+    if (wm.server->hasArg("saved")) {
+        msg = "<div class='banner ok'>Purchase complete.</div>";
+    } else if (wm.server->hasArg("err")) {
+        String err = wm.server->arg("err");
+        if (err == "funds") msg = "<div class='banner err'>Not enough points.</div>";
+        else if (err == "owned") msg = "<div class='banner err'>You already own that item.</div>";
+        else if (err == "save") msg = "<div class='banner err'>Purchase failed to save — please try again.</div>";
+    }
+    page.replace("%%MSG%%", msg);
+    wm.server->send(200, "text/html", page);
+}
+
 static void handleConfigCatPost() {
     int   hunger  = wm.server->arg("hunger").toInt();
     int   boredom = wm.server->arg("boredom").toInt();
@@ -1327,6 +1396,48 @@ static void handleConfigCityPost() {
     wm.server->send(302, "text/plain", "");
 }
 
+static void handleConfigStorePost() {
+    String item = wm.server->arg("item");
+    uint32_t cost;
+    bool alreadyOwned;
+    if (item == "teddy") {
+        cost = STORE_COST_TEDDY;
+        alreadyOwned = configMgr.config().ownsTeddy;
+    } else if (item == "blanket") {
+        cost = STORE_COST_BLANKET;
+        alreadyOwned = configMgr.config().ownsBlanket;
+    } else {
+        wm.server->send(400, "text/plain", "Unknown item");
+        return;
+    }
+
+    if (alreadyOwned) {
+        wm.server->sendHeader("Location", "/config/store?err=owned");
+        wm.server->send(302, "text/plain", "");
+        return;
+    }
+    if (configMgr.config().points < cost) {
+        wm.server->sendHeader("Location", "/config/store?err=funds");
+        wm.server->send(302, "text/plain", "");
+        return;
+    }
+
+    configMgr.config().points -= cost;
+    if (item == "teddy") configMgr.config().ownsTeddy = true;
+    else configMgr.config().ownsBlanket = true;
+    if (!configMgr.save()) {
+        // Roll back in-memory state since persistence failed.
+        configMgr.config().points += cost;
+        if (item == "teddy") configMgr.config().ownsTeddy = false;
+        else configMgr.config().ownsBlanket = false;
+        wm.server->sendHeader("Location", "/config/store?err=save");
+        wm.server->send(302, "text/plain", "");
+        return;
+    }
+    wm.server->sendHeader("Location", "/config/store?saved=1");
+    wm.server->send(302, "text/plain", "");
+}
+
 // ── WiFi setup screens ────────────────────────────────────────────────────────
 static void drawWifiConnecting(const String& ssid) {
     tft.fillScreen(TFT_BLACK);
@@ -1362,8 +1473,10 @@ static void runWiFiManager(ConfigManager& cfg) {
     wm.server->on("/config",           HTTP_GET,  handleConfigHome);
     wm.server->on("/config/cat",       HTTP_GET,  handleConfigCatGet);
     wm.server->on("/config/city",      HTTP_GET,  handleConfigCityGet);
+    wm.server->on("/config/store",     HTTP_GET,  handleConfigStoreGet);
     wm.server->on("/save-config/cat",  HTTP_POST, handleConfigCatPost);
     wm.server->on("/save-config/city", HTTP_POST, handleConfigCityPost);
+    wm.server->on("/save-config/store", HTTP_POST, handleConfigStorePost);
 }
 
 // ── Arduino ───────────────────────────────────────────────────────────────────

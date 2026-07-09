@@ -18,6 +18,8 @@ struct AppConfig {
     int thirstCooldownHours = 4;    // min hours between thirsty events
     uint32_t lastWaterEpoch = 0;    // Unix epoch of last water; 0 = never watered
     uint32_t points = 0;            // Gamification points earned from timely care actions
+    bool ownsBlanket = false;       // Store purchase: blanket
+    bool ownsTeddy   = false;       // Store purchase: teddy bear
 };
 
 class ConfigManager {
