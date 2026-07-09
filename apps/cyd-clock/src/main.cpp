@@ -262,34 +262,56 @@ static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom b
 }
 
 // Calm, static "asleep" scene for the sleep-window peek: reuses drawCat() with a
-// content/closed-eyed state (no status decorations), then layers a blanket over the
-// body/paws/tail up to the neck, with a small teddy bear peeking out beside the head.
+// content/closed-eyed state (no status decorations), then layers on owned store
+// items — a blanket over the body/paws/tail up to the neck, and/or a teddy bear.
 // Stays within drawAnimal()'s CAT_CX±50 clear-rect bounds.
-// Blanket/bear are store items (DIY-25 epic) not yet purchasable — gated off until
-// DIY-28 wires them to real ownership state. Left in place, ready to flip on.
-static constexpr bool HAS_BLANKET = false;
-static constexpr bool HAS_BEAR    = false;
+
+// Teddy bear peeking out beside the head, tucked into the blanket's top edge —
+// only reads correctly when the blanket is also owned to tuck behind.
+static void drawTeddyPeeking(int cx, int cy) {
+    int bx = cx - 40, by = cy - 6;
+    tft.fillCircle(bx - 6, by - 9, 4, C_BEAR);   // left ear
+    tft.fillCircle(bx + 5, by - 9, 4, C_BEAR);   // right ear
+    tft.fillCircle(bx,     by,     8, C_BEAR);   // head
+    tft.fillCircle(bx,     by + 3, 3, C_BLANKET_TRIM);  // snout
+    tft.fillCircle(bx - 3, by - 2, 1, C_DARK);   // left eye
+    tft.fillCircle(bx + 3, by - 2, 1, C_DARK);   // right eye
+    tft.fillCircle(bx,     by + 1, 1, C_DARK);   // nose
+}
+
+// Full-body teddy bear sitting beside the cat — used when the teddy is owned without
+// the blanket, since there's no blanket edge to tuck a lone head behind.
+static void drawTeddyFull(int cx, int cy) {
+    int bx = cx - 38, by = cy - 8;
+    tft.fillCircle(bx - 6, by - 9, 4, C_BEAR);   // left ear
+    tft.fillCircle(bx + 5, by - 9, 4, C_BEAR);   // right ear
+    tft.fillCircle(bx,     by,     8, C_BEAR);   // head
+    tft.fillCircle(bx,     by + 3, 3, C_BLANKET_TRIM);  // snout
+    tft.fillCircle(bx - 3, by - 2, 1, C_DARK);   // left eye
+    tft.fillCircle(bx + 3, by - 2, 1, C_DARK);   // right eye
+    tft.fillCircle(bx,     by + 1, 1, C_DARK);   // nose
+    tft.fillRoundRect(bx - 9, by + 7, 18, 26, 8, C_BEAR);  // body
+    tft.fillCircle(bx, by + 18, 5, C_BLANKET_TRIM);        // belly patch
+    tft.fillCircle(bx - 6, by + 33, 4, C_BEAR);            // left foot
+    tft.fillCircle(bx + 6, by + 33, 4, C_BEAR);            // right foot
+}
 
 static void drawSleepingCat(int cx, int cy) {
     drawCat(cx, cy, CatMood::Idle, CatStatus::Content, CatBoredom::Entertained,
             CatHealth::Healthy, CatThirst::Hydrated, /*eyeOpen=*/false);
 
-    if (HAS_BLANKET) {
+    bool hasBlanket = configMgr.config().ownsBlanket;
+    bool hasTeddy   = configMgr.config().ownsTeddy;
+
+    if (hasBlanket) {
         // Blanket — covers body/paws/tail, starts right at the neckline
         tft.fillRoundRect(cx - 40, cy, 80, 60, 12, C_BLANKET);
         tft.fillRect(cx - 40, cy + 4, 80, 6, C_BLANKET_TRIM);  // folded-edge trim
     }
 
-    if (HAS_BEAR) {
-        // Teddy bear, peeking out beside the head, tucked into the blanket's top edge
-        int bx = cx - 40, by = cy - 6;
-        tft.fillCircle(bx - 6, by - 9, 4, C_BEAR);   // left ear
-        tft.fillCircle(bx + 5, by - 9, 4, C_BEAR);   // right ear
-        tft.fillCircle(bx,     by,     8, C_BEAR);   // head
-        tft.fillCircle(bx,     by + 3, 3, C_BLANKET_TRIM);  // snout
-        tft.fillCircle(bx - 3, by - 2, 1, C_DARK);   // left eye
-        tft.fillCircle(bx + 3, by - 2, 1, C_DARK);   // right eye
-        tft.fillCircle(bx,     by + 1, 1, C_DARK);   // nose
+    if (hasTeddy) {
+        if (hasBlanket) drawTeddyPeeking(cx, cy);
+        else             drawTeddyFull(cx, cy);
     }
 }
 
