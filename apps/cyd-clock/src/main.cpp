@@ -460,7 +460,7 @@ static void drawPicker() {
 }
 
 static void drawTimerDigits() {
-    char buf[6];
+    char buf[8];  // "100:00\0" — widest possible mm:ss once minutes hit 3 digits
     uint16_t col;
     if (timerMode == TimerMode::Countdown) {
         uint32_t rem = timerWidget.remaining();
@@ -477,6 +477,26 @@ static void drawTimerDigits() {
     tft.drawString(buf, 8, TIMER_Y + 3, 6);
 }
 
+// Draws one timer-row control button at the given slot and label/colour.
+static void drawTimerBtn(int x, int w, const char* label, uint16_t col) {
+    tft.fillRoundRect(x, TIMER_Y + 10, w, 34, 6, C_BTN);
+    tft.setTextColor(col, C_BTN);
+    int tw = tft.textWidth(label, 4);
+    tft.drawString(label, x + (w - tw) / 2, TIMER_Y + 15, 4);
+}
+
+// Running state: pause (left) + reset/stop (right) — shared by countdown and stopwatch.
+static void drawPauseStopButtons() {
+    drawTimerBtn(150, 38, "||", TFT_YELLOW);
+    drawTimerBtn(196, 38, "X", 0xFD20);  // orange
+}
+
+// Paused state (elapsed/remaining > 0): resume (left) + clear (right) — shared by both modes.
+static void drawResumeClearButtons() {
+    drawTimerBtn(150, 38, ">", TFT_GREEN);
+    drawTimerBtn(196, 38, "0", 0xFD20);
+}
+
 static void drawTimerRow() {
     tft.fillRect(0, TIMER_Y, 240, TIMER_H, TFT_BLACK);
     tft.drawFastHLine(0, TIMER_Y, 240, C_SEP);
@@ -489,7 +509,7 @@ static void drawTimerRow() {
         else if (!timerWidget.isRunning()) timeCol = TFT_YELLOW;
 
         if (rem > 0 || timerWidget.isFinished()) {
-            char buf[6];
+            char buf[8];
             snprintf(buf, sizeof(buf), "%02d:%02d", rem / 60, rem % 60);
             tft.setTextColor(timeCol, TFT_BLACK);
             tft.drawString(buf, 8, TIMER_Y + 3, 6);  // font 6 = 48px tall, fits in 55px
@@ -500,34 +520,12 @@ static void drawTimerRow() {
 
         if (rem > 0 || timerWidget.isFinished()) {
             if (timerWidget.isRunning()) {
-                // Pause
-                tft.fillRoundRect(150, TIMER_Y + 10, 38, 34, 6, C_BTN);
-                tft.setTextColor(TFT_YELLOW, C_BTN);
-                int tw = tft.textWidth("||", 4);
-                tft.drawString("||", 150 + (38 - tw) / 2, TIMER_Y + 15, 4);
-
-                // Reset (X)
-                tft.fillRoundRect(196, TIMER_Y + 10, 38, 34, 6, C_BTN);
-                tft.setTextColor(0xFD20, C_BTN);  // orange
-                tw = tft.textWidth("X", 4);
-                tft.drawString("X", 196 + (38 - tw) / 2, TIMER_Y + 15, 4);
+                drawPauseStopButtons();
             } else if (timerWidget.isFinished()) {
                 // Finished: single wide reset button
-                tft.fillRoundRect(150, TIMER_Y + 10, 84, 34, 6, C_BTN);
-                tft.setTextColor(0xFD20, C_BTN);
-                int tw = tft.textWidth("0", 4);
-                tft.drawString("0", 150 + (84 - tw) / 2, TIMER_Y + 15, 4);
+                drawTimerBtn(150, 84, "0", 0xFD20);
             } else {
-                // Paused: resume + reset
-                tft.fillRoundRect(150, TIMER_Y + 10, 38, 34, 6, C_BTN);
-                tft.setTextColor(TFT_GREEN, C_BTN);
-                int tw = tft.textWidth(">", 4);
-                tft.drawString(">", 150 + (38 - tw) / 2, TIMER_Y + 15, 4);
-
-                tft.fillRoundRect(196, TIMER_Y + 10, 38, 34, 6, C_BTN);
-                tft.setTextColor(0xFD20, C_BTN);
-                tw = tft.textWidth("0", 4);
-                tft.drawString("0", 196 + (38 - tw) / 2, TIMER_Y + 15, 4);
+                drawResumeClearButtons();
             }
         }
         return;
@@ -536,40 +534,18 @@ static void drawTimerRow() {
     // Stopwatch mode
     uint32_t el = stopwatchWidget.elapsedSeconds();
     uint16_t timeCol = stopwatchWidget.isRunning() ? TFT_GREEN : TFT_YELLOW;
-    char buf[6];
+    char buf[8];
     snprintf(buf, sizeof(buf), "%02d:%02d", el / 60, el % 60);
     tft.setTextColor(timeCol, TFT_BLACK);
     tft.drawString(buf, 8, TIMER_Y + 3, 6);
 
     if (stopwatchWidget.isRunning()) {
-        // Pause
-        tft.fillRoundRect(150, TIMER_Y + 10, 38, 34, 6, C_BTN);
-        tft.setTextColor(TFT_YELLOW, C_BTN);
-        int tw = tft.textWidth("||", 4);
-        tft.drawString("||", 150 + (38 - tw) / 2, TIMER_Y + 15, 4);
-
-        // Stop/clear (X)
-        tft.fillRoundRect(196, TIMER_Y + 10, 38, 34, 6, C_BTN);
-        tft.setTextColor(0xFD20, C_BTN);  // orange
-        tw = tft.textWidth("X", 4);
-        tft.drawString("X", 196 + (38 - tw) / 2, TIMER_Y + 15, 4);
+        drawPauseStopButtons();
     } else if (el == 0) {
         // Idle: single wide start button
-        tft.fillRoundRect(150, TIMER_Y + 10, 84, 34, 6, C_BTN);
-        tft.setTextColor(TFT_GREEN, C_BTN);
-        int tw = tft.textWidth(">", 4);
-        tft.drawString(">", 150 + (84 - tw) / 2, TIMER_Y + 15, 4);
+        drawTimerBtn(150, 84, ">", TFT_GREEN);
     } else {
-        // Paused: resume + clear
-        tft.fillRoundRect(150, TIMER_Y + 10, 38, 34, 6, C_BTN);
-        tft.setTextColor(TFT_GREEN, C_BTN);
-        int tw = tft.textWidth(">", 4);
-        tft.drawString(">", 150 + (38 - tw) / 2, TIMER_Y + 15, 4);
-
-        tft.fillRoundRect(196, TIMER_Y + 10, 38, 34, 6, C_BTN);
-        tft.setTextColor(0xFD20, C_BTN);
-        tw = tft.textWidth("0", 4);
-        tft.drawString("0", 196 + (38 - tw) / 2, TIMER_Y + 15, 4);
+        drawResumeClearButtons();
     }
 }
 
