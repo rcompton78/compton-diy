@@ -1425,8 +1425,16 @@ static void handleConfigStorePost() {
     configMgr.config().points -= cost;
     if (item == "teddy") configMgr.config().ownsTeddy = true;
     else configMgr.config().ownsBlanket = true;
-    bool saved = configMgr.save();
-    wm.server->sendHeader("Location", saved ? "/config/store?saved=1" : "/config/store?err=save");
+    if (!configMgr.save()) {
+        // Roll back in-memory state since persistence failed.
+        configMgr.config().points += cost;
+        if (item == "teddy") configMgr.config().ownsTeddy = false;
+        else configMgr.config().ownsBlanket = false;
+        wm.server->sendHeader("Location", "/config/store?err=save");
+        wm.server->send(302, "text/plain", "");
+        return;
+    }
+    wm.server->sendHeader("Location", "/config/store?saved=1");
     wm.server->send(302, "text/plain", "");
 }
 
