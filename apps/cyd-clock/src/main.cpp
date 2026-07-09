@@ -1330,6 +1330,7 @@ static void handleConfigStoreGet() {
         String err = wm.server->arg("err");
         if (err == "funds") msg = "<div class='banner err'>Not enough points.</div>";
         else if (err == "owned") msg = "<div class='banner err'>You already own that item.</div>";
+        else if (err == "save") msg = "<div class='banner err'>Purchase failed to save — please try again.</div>";
     }
     page.replace("%%MSG%%", msg);
     wm.server->send(200, "text/html", page);
@@ -1424,8 +1425,8 @@ static void handleConfigStorePost() {
     configMgr.config().points -= cost;
     if (item == "teddy") configMgr.config().ownsTeddy = true;
     else configMgr.config().ownsBlanket = true;
-    configMgr.save();
-    wm.server->sendHeader("Location", "/config/store?saved=1");
+    bool saved = configMgr.save();
+    wm.server->sendHeader("Location", saved ? "/config/store?saved=1" : "/config/store?err=save");
     wm.server->send(302, "text/plain", "");
 }
 
