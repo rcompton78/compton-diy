@@ -255,23 +255,32 @@ static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom b
 // content/closed-eyed state (no status decorations), then layers a blanket over the
 // body/paws/tail up to the neck, with a small teddy bear peeking out beside the head.
 // Stays within drawAnimal()'s CAT_CX±50 clear-rect bounds.
+// Blanket/bear are store items (DIY-25 epic) not yet purchasable — gated off until
+// DIY-28 wires them to real ownership state. Left in place, ready to flip on.
+static constexpr bool HAS_BLANKET = false;
+static constexpr bool HAS_BEAR    = false;
+
 static void drawSleepingCat(int cx, int cy) {
     drawCat(cx, cy, CatMood::Idle, CatStatus::Content, CatBoredom::Entertained,
             CatHealth::Healthy, CatThirst::Hydrated, /*eyeOpen=*/false);
 
-    // Blanket — covers body/paws/tail, starts right at the neckline
-    tft.fillRoundRect(cx - 40, cy, 80, 60, 12, C_BLANKET);
-    tft.fillRect(cx - 40, cy + 4, 80, 6, C_BLANKET_TRIM);  // folded-edge trim
+    if (HAS_BLANKET) {
+        // Blanket — covers body/paws/tail, starts right at the neckline
+        tft.fillRoundRect(cx - 40, cy, 80, 60, 12, C_BLANKET);
+        tft.fillRect(cx - 40, cy + 4, 80, 6, C_BLANKET_TRIM);  // folded-edge trim
+    }
 
-    // Teddy bear, peeking out beside the head, tucked into the blanket's top edge
-    int bx = cx - 40, by = cy - 6;
-    tft.fillCircle(bx - 6, by - 9, 4, C_BEAR);   // left ear
-    tft.fillCircle(bx + 5, by - 9, 4, C_BEAR);   // right ear
-    tft.fillCircle(bx,     by,     8, C_BEAR);   // head
-    tft.fillCircle(bx,     by + 3, 3, C_BLANKET_TRIM);  // snout
-    tft.fillCircle(bx - 3, by - 2, 1, C_DARK);   // left eye
-    tft.fillCircle(bx + 3, by - 2, 1, C_DARK);   // right eye
-    tft.fillCircle(bx,     by + 1, 1, C_DARK);   // nose
+    if (HAS_BEAR) {
+        // Teddy bear, peeking out beside the head, tucked into the blanket's top edge
+        int bx = cx - 40, by = cy - 6;
+        tft.fillCircle(bx - 6, by - 9, 4, C_BEAR);   // left ear
+        tft.fillCircle(bx + 5, by - 9, 4, C_BEAR);   // right ear
+        tft.fillCircle(bx,     by,     8, C_BEAR);   // head
+        tft.fillCircle(bx,     by + 3, 3, C_BLANKET_TRIM);  // snout
+        tft.fillCircle(bx - 3, by - 2, 1, C_DARK);   // left eye
+        tft.fillCircle(bx + 3, by - 2, 1, C_DARK);   // right eye
+        tft.fillCircle(bx,     by + 1, 1, C_DARK);   // nose
+    }
 }
 
 static void drawSparkles(int cx, int cy, uint8_t frame) {
