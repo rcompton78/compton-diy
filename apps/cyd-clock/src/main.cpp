@@ -60,6 +60,7 @@ static constexpr uint32_t POINTS_MEDS  = 8;
 
 // Gamification: store item costs
 static constexpr uint32_t STORE_COST_TEDDY   = 10;
+static constexpr uint32_t STORE_COST_BUNNY   = 10;
 static constexpr uint32_t STORE_COST_BLANKET = 15;  // per blanket color
 
 // Touch calibration — print "Touch: x= y=" from serial to tune
@@ -83,7 +84,8 @@ static constexpr uint16_t C_SLEEP_DIM = 0x632C;  // dim gray-blue, for the sleep
 static constexpr uint16_t C_SICK   = 0x9E66;  // queasy cheek blush (sickly green)
 static constexpr uint16_t C_MEDS   = 0xF800;  // meds button cross (red)
 static constexpr uint16_t C_WATER  = 0x04FF;  // water button droplet (blue)
-static constexpr uint16_t C_BEAR = 0x9A46;  // teddy bear peeking out beside the head (brown)
+static constexpr uint16_t C_BEAR  = 0x9A46;  // teddy bear peeking out beside the head (brown)
+static constexpr uint16_t C_BUNNY = 0xC618;  // grey bunny peeking out beside the head (grey)
 
 // Blanket color catalog — each color is purchased separately in the store and can be
 // equipped independently in the dressing room. `id` is the stable identifier used in
@@ -106,16 +108,31 @@ static constexpr BlanketColor BLANKET_COLORS[] = {
 };
 static constexpr int BLANKET_COLOR_COUNT = sizeof(BLANKET_COLORS) / sizeof(BLANKET_COLORS[0]);
 
+// Forward declarations: each stuffy's sleep-scene art, defined further below alongside
+// drawSleepingCat(). Declared here so the STUFFIES[] catalog can reference them directly —
+// picking the equipped stuffy's shape is then a plain function-pointer call, no per-stuffy
+// branching needed at the call site.
+static void drawTeddyPeeking(int cx, int cy, uint16_t accentColor);
+static void drawTeddyFull(int cx, int cy, uint16_t accentColor);
+static void drawBunnyPeeking(int cx, int cy, uint16_t accentColor);
+static void drawBunnyFull(int cx, int cy, uint16_t accentColor);
+
 // Stuffy catalog — same purchase/equip model as blanket colors, so more stuffies can be
 // added later without changing the store/dressing-room plumbing. `id` is the stable
-// identifier used in store/dressing-room form posts and persisted config.
+// identifier used in store/dressing-room form posts and persisted config. `drawPeeking`/
+// `drawFull` are the sleep-scene art for this stuffy — only one stuffy is ever equipped at
+// a time (see equippedStuffyIndex()), so equipping the bunny replaces the teddy bear at
+// night rather than showing both.
 struct Stuffy {
     const char* id;
     const char* label;
     uint32_t cost;
+    void (*drawPeeking)(int cx, int cy, uint16_t accentColor);
+    void (*drawFull)(int cx, int cy, uint16_t accentColor);
 };
 static constexpr Stuffy STUFFIES[] = {
-    {"teddy", "Teddy Bear", STORE_COST_TEDDY},
+    {"teddy", "Teddy Bear",  STORE_COST_TEDDY, drawTeddyPeeking, drawTeddyFull},
+    {"bunny", "Grey Bunny",  STORE_COST_BUNNY, drawBunnyPeeking, drawBunnyFull},
 };
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
 
@@ -353,6 +370,37 @@ static void drawTeddyFull(int cx, int cy, uint16_t accentColor) {
     tft.fillCircle(bx + 6, by + 33, 4, C_BEAR);            // right foot
 }
 
+// Shared ear/head/snout/eyes/nose art reused by both bunny variants below — same layout as
+// drawTeddyHead() but with tall narrow ears instead of round ones.
+static void drawBunnyHead(int bx, int by, uint16_t snoutColor) {
+    tft.fillEllipse(bx - 5, by - 14, 3, 8, C_BUNNY);  // left ear
+    tft.fillEllipse(bx + 5, by - 14, 3, 8, C_BUNNY);  // right ear
+    tft.fillCircle(bx,     by,     8, C_BUNNY);   // head
+    tft.fillCircle(bx,     by + 3, 3, snoutColor);  // snout
+    tft.fillCircle(bx - 3, by - 2, 1, C_DARK);   // left eye
+    tft.fillCircle(bx + 3, by - 2, 1, C_DARK);   // right eye
+    tft.fillCircle(bx,     by + 1, 1, C_DARK);   // nose
+}
+
+// Grey bunny peeking out beside the head, tucked into the blanket's top edge —
+// only reads correctly when the blanket is also owned to tuck behind.
+static void drawBunnyPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 40, by = cy - 6;
+    drawBunnyHead(bx, by, accentColor);
+}
+
+// Full-body grey bunny sitting beside the cat — used when the bunny is owned without
+// the blanket, since there's no blanket edge to tuck a lone head behind.
+static void drawBunnyFull(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 38, by = cy - 8;
+    drawBunnyHead(bx, by, accentColor);
+    tft.fillRoundRect(bx - 8, by + 7, 16, 24, 8, C_BUNNY);  // body
+    tft.fillCircle(bx, by + 17, 4, accentColor);            // belly patch
+    tft.fillCircle(bx - 5, by + 31, 4, C_BUNNY);            // left foot
+    tft.fillCircle(bx + 5, by + 31, 4, C_BUNNY);            // right foot
+    tft.fillCircle(bx, by + 33, 3, TFT_WHITE);              // fluffy tail
+}
+
 // Deeply-closed, sleepy eyes for the sleep-window peek — thinner and gently curled at
 // the outer corners than drawEyes()'s blink-style dash, so the cat reads as actually
 // asleep rather than mid-blink.
@@ -371,8 +419,8 @@ static void drawSleepingCat(int cx, int cy) {
 
     int  blanketIdx = equippedBlanketIndex();
     bool hasBlanket = blanketIdx >= 0;
-    bool hasTeddy   = equippedStuffyIndex() >= 0;
-    // Teddy's snout/belly accent reuses the blanket's trim color when a blanket is
+    int  stuffyIdx  = equippedStuffyIndex();
+    // The stuffy's snout/belly accent reuses the blanket's trim color when a blanket is
     // equipped (so they read as a matching set), falling back to the default trim
     // color of the first catalog entry when no blanket is owned.
     uint16_t accentColor = BLANKET_COLORS[hasBlanket ? blanketIdx : 0].trim;
@@ -384,9 +432,12 @@ static void drawSleepingCat(int cx, int cy) {
         tft.fillRect(cx - 40, cy + 4, 80, 6, color.trim);  // folded-edge trim
     }
 
-    if (hasTeddy) {
-        if (hasBlanket) drawTeddyPeeking(cx, cy, accentColor);
-        else             drawTeddyFull(cx, cy, accentColor);
+    if (stuffyIdx >= 0) {
+        // Only one stuffy is ever equipped at a time, so switching the dressing-room
+        // selection (e.g. teddy → bunny) simply swaps which catalog entry's art draws here.
+        const Stuffy& stuffy = STUFFIES[stuffyIdx];
+        if (hasBlanket) stuffy.drawPeeking(cx, cy, accentColor);
+        else             stuffy.drawFull(cx, cy, accentColor);
     }
 }
 
