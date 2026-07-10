@@ -119,10 +119,12 @@ static void drawBunnyFull(int cx, int cy, uint16_t accentColor);
 
 // Stuffy catalog — same purchase/equip model as blanket colors, so more stuffies can be
 // added later without changing the store/dressing-room plumbing. `id` is the stable
-// identifier used in store/dressing-room form posts and persisted config. `drawPeeking`/
-// `drawFull` are the sleep-scene art for this stuffy — only one stuffy is ever equipped at
-// a time (see equippedStuffyIndex()), so equipping the bunny replaces the teddy bear at
-// night rather than showing both.
+// identifier used in store/dressing-room form requests; ConfigManager persists ownership
+// as an `ownedStuffies` bitmask and the equipped selection as a numeric `equippedStuffy`
+// index (both keyed by catalog position), not the string id. `drawPeeking`/`drawFull` are
+// the sleep-scene art for this stuffy — only one stuffy is ever equipped at a time (see
+// equippedStuffyIndex()), so equipping the bunny replaces the teddy bear at night rather
+// than showing both.
 struct Stuffy {
     const char* id;
     const char* label;
