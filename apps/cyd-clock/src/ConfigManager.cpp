@@ -46,8 +46,8 @@ bool ConfigManager::load() {
     }
     _config.lastMedsEpoch = doc["meds"] | _config.lastMedsEpoch;
     {
-        int t = doc["thirstCooldown"] | _config.thirstCooldownHours;
-        if (t >= 1 && t <= 168) _config.thirstCooldownHours = t;
+        int t = doc["thirstForceMinutes"] | _config.thirstForceMinutes;
+        if (t >= 1 && t <= 1440) _config.thirstForceMinutes = t;
     }
     _config.lastWaterEpoch = doc["water"] | _config.lastWaterEpoch;
     _config.points = doc["points"] | _config.points;
@@ -86,7 +86,7 @@ bool ConfigManager::save() {
     doc["name"]      = _config.catName;
     doc["sickCooldown"] = _config.sickCooldownHours;
     doc["meds"]          = _config.lastMedsEpoch;
-    doc["thirstCooldown"] = _config.thirstCooldownHours;
+    doc["thirstForceMinutes"] = _config.thirstForceMinutes;
     doc["water"]           = _config.lastWaterEpoch;
     doc["points"]          = _config.points;
     doc["blanketColors"]   = _config.ownedBlanketColors;

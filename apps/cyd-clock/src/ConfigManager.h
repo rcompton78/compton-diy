@@ -15,7 +15,7 @@ struct AppConfig {
     String catName = "Biscuit";   // Max 16 characters
     int sickCooldownHours = 4;    // min hours between sick events
     uint32_t lastMedsEpoch = 0;   // Unix epoch of last meds; 0 = never medicated
-    int thirstCooldownHours = 4;    // min hours between thirsty events
+    int thirstForceMinutes = 120;   // force thirsty after this many minutes without water, absent an earlier random trigger
     uint32_t lastWaterEpoch = 0;    // Unix epoch of last water; 0 = never watered
     uint32_t points = 0;            // Gamification points earned from timely care actions
     uint8_t ownedBlanketColors  = 0;  // Store purchase: bitmask, bit N = owns blanket color N
