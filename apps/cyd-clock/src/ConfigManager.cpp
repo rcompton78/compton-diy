@@ -51,8 +51,18 @@ bool ConfigManager::load() {
     }
     _config.lastWaterEpoch = doc["water"] | _config.lastWaterEpoch;
     _config.points = doc["points"] | _config.points;
-    _config.ownsBlanket = doc["blanket"] | _config.ownsBlanket;
-    _config.ownsTeddy   = doc["teddy"]   | _config.ownsTeddy;
+    {
+        uint8_t colors = doc["blanketColors"] | (uint8_t)0;
+        if (colors == 0 && (doc["blanket"] | false)) colors = 1;  // migrate legacy single-blanket flag
+        _config.ownedBlanketColors = colors;
+    }
+    _config.equippedBlanketColor = doc["blanketEquipped"] | _config.equippedBlanketColor;
+    {
+        uint8_t stuffies = doc["stuffies"] | (uint8_t)0;
+        if (stuffies == 0 && (doc["teddy"] | false)) stuffies = 1;  // migrate legacy single-teddy flag
+        _config.ownedStuffies = stuffies;
+    }
+    _config.equippedStuffy = doc["stuffyEquipped"] | _config.equippedStuffy;
 
     f.close();
     return true;
@@ -79,8 +89,10 @@ bool ConfigManager::save() {
     doc["thirstCooldown"] = _config.thirstCooldownHours;
     doc["water"]           = _config.lastWaterEpoch;
     doc["points"]          = _config.points;
-    doc["blanket"]         = _config.ownsBlanket;
-    doc["teddy"]           = _config.ownsTeddy;
+    doc["blanketColors"]   = _config.ownedBlanketColors;
+    doc["blanketEquipped"] = _config.equippedBlanketColor;
+    doc["stuffies"]        = _config.ownedStuffies;
+    doc["stuffyEquipped"]  = _config.equippedStuffy;
 
     serializeJson(doc, f);
     f.close();

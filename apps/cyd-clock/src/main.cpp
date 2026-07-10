@@ -60,7 +60,7 @@ static constexpr uint32_t POINTS_MEDS  = 8;
 
 // Gamification: store item costs
 static constexpr uint32_t STORE_COST_TEDDY   = 10;
-static constexpr uint32_t STORE_COST_BLANKET = 15;
+static constexpr uint32_t STORE_COST_BLANKET = 15;  // per blanket color
 
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
@@ -83,9 +83,39 @@ static constexpr uint16_t C_SLEEP_DIM = 0x632C;  // dim gray-blue, for the sleep
 static constexpr uint16_t C_SICK   = 0x9E66;  // queasy cheek blush (sickly green)
 static constexpr uint16_t C_MEDS   = 0xF800;  // meds button cross (red)
 static constexpr uint16_t C_WATER  = 0x04FF;  // water button droplet (blue)
-static constexpr uint16_t C_BLANKET      = 0x4BB6;  // cozy dusty-blue blanket, sleep-peek scene
-static constexpr uint16_t C_BLANKET_TRIM = 0xD69A;  // warm cream fold trim on the blanket edge
-static constexpr uint16_t C_BEAR         = 0x9A46;  // teddy bear peeking out beside the head (brown)
+static constexpr uint16_t C_BEAR = 0x9A46;  // teddy bear peeking out beside the head (brown)
+
+// Blanket color catalog — each color is purchased separately in the store and can be
+// equipped independently in the dressing room. `id` is the stable identifier used in
+// store/dressing-room form posts and persisted config; never reorder/reuse indices for
+// a different color, since ownership is stored as a bitmask keyed by array index.
+struct BlanketColor {
+    const char* id;
+    const char* label;
+    uint16_t base;
+    uint16_t trim;
+    const char* webColor;  // CSS hex approximation of `base`, for coloring its label in the config UI
+};
+static constexpr BlanketColor BLANKET_COLORS[] = {
+    {"dusty_blue", "Dusty Blue", 0x4BB6, 0xD69A, "#6b8cae"},  // cozy dusty-blue blanket, warm cream fold trim
+    {"cream",      "Cream",      0xFFFA, 0xCD51, "#e8d9b5"},  // soft cream blanket, tan fold trim
+    {"blush_pink", "Blush Pink", 0xF619, 0xDB92, "#e6a8bc"},  // blush pink blanket, deeper rose fold trim
+    {"lavender",   "Lavender",   0xB3FB, 0xE69E, "#b57edc"},  // lavender blanket, pale lilac fold trim
+};
+static constexpr int BLANKET_COLOR_COUNT = sizeof(BLANKET_COLORS) / sizeof(BLANKET_COLORS[0]);
+
+// Stuffy catalog — same purchase/equip model as blanket colors, so more stuffies can be
+// added later without changing the store/dressing-room plumbing. `id` is the stable
+// identifier used in store/dressing-room form posts and persisted config.
+struct Stuffy {
+    const char* id;
+    const char* label;
+    uint32_t cost;
+};
+static constexpr Stuffy STUFFIES[] = {
+    {"teddy", "Teddy Bear", STORE_COST_TEDDY},
+};
+static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
 
 // Quick-pick durations
 static constexpr uint32_t    PICK_SEC[] = {60, 300, 600, 1800};
@@ -266,12 +296,38 @@ static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom b
 // items — a blanket over the body/paws/tail up to the neck, and/or a teddy bear.
 // Stays within drawAnimal()'s CAT_CX±50 clear-rect bounds.
 
+// Resolves which blanket color to display: the equipped color if it's actually owned,
+// otherwise the lowest-index owned color (covers stale/out-of-range equipped state), or
+// -1 if no blanket color is owned at all.
+static int equippedBlanketIndex() {
+    uint8_t owned = configMgr.config().ownedBlanketColors;
+    if (owned == 0) return -1;
+    uint8_t eq = configMgr.config().equippedBlanketColor;
+    if (eq < BLANKET_COLOR_COUNT && (owned & (1 << eq))) return eq;
+    for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
+        if (owned & (1 << i)) return i;
+    }
+    return -1;
+}
+
+// Same resolution logic as equippedBlanketIndex(), for the stuffy catalog.
+static int equippedStuffyIndex() {
+    uint8_t owned = configMgr.config().ownedStuffies;
+    if (owned == 0) return -1;
+    uint8_t eq = configMgr.config().equippedStuffy;
+    if (eq < STUFFY_COUNT && (owned & (1 << eq))) return eq;
+    for (int i = 0; i < STUFFY_COUNT; i++) {
+        if (owned & (1 << i)) return i;
+    }
+    return -1;
+}
+
 // Shared ear/head/snout/eyes/nose art reused by both teddy variants below.
-static void drawTeddyHead(int bx, int by) {
+static void drawTeddyHead(int bx, int by, uint16_t snoutColor) {
     tft.fillCircle(bx - 6, by - 9, 4, C_BEAR);   // left ear
     tft.fillCircle(bx + 5, by - 9, 4, C_BEAR);   // right ear
     tft.fillCircle(bx,     by,     8, C_BEAR);   // head
-    tft.fillCircle(bx,     by + 3, 3, C_BLANKET_TRIM);  // snout
+    tft.fillCircle(bx,     by + 3, 3, snoutColor);  // snout
     tft.fillCircle(bx - 3, by - 2, 1, C_DARK);   // left eye
     tft.fillCircle(bx + 3, by - 2, 1, C_DARK);   // right eye
     tft.fillCircle(bx,     by + 1, 1, C_DARK);   // nose
@@ -279,38 +335,56 @@ static void drawTeddyHead(int bx, int by) {
 
 // Teddy bear peeking out beside the head, tucked into the blanket's top edge —
 // only reads correctly when the blanket is also owned to tuck behind.
-static void drawTeddyPeeking(int cx, int cy) {
+static void drawTeddyPeeking(int cx, int cy, uint16_t accentColor) {
     int bx = cx - 40, by = cy - 6;
-    drawTeddyHead(bx, by);
+    drawTeddyHead(bx, by, accentColor);
 }
 
 // Full-body teddy bear sitting beside the cat — used when the teddy is owned without
 // the blanket, since there's no blanket edge to tuck a lone head behind.
-static void drawTeddyFull(int cx, int cy) {
+static void drawTeddyFull(int cx, int cy, uint16_t accentColor) {
     int bx = cx - 38, by = cy - 8;
-    drawTeddyHead(bx, by);
+    drawTeddyHead(bx, by, accentColor);
     tft.fillRoundRect(bx - 9, by + 7, 18, 26, 8, C_BEAR);  // body
-    tft.fillCircle(bx, by + 18, 5, C_BLANKET_TRIM);        // belly patch
+    tft.fillCircle(bx, by + 18, 5, accentColor);           // belly patch
     tft.fillCircle(bx - 6, by + 33, 4, C_BEAR);            // left foot
     tft.fillCircle(bx + 6, by + 33, 4, C_BEAR);            // right foot
+}
+
+// Deeply-closed, sleepy eyes for the sleep-window peek — thinner and gently curled at
+// the outer corners than drawEyes()'s blink-style dash, so the cat reads as actually
+// asleep rather than mid-blink.
+static void drawSleepyEyes(int cx, int cy) {
+    tft.fillRect(cx - 28, cy - 50, 56, 26, C_CAT);  // restore head colour before drawing eyes
+    tft.fillRoundRect(cx - 24, cy - 39, 20, 3, 1, C_DARK);
+    tft.fillRoundRect(cx +  4, cy - 39, 20, 3, 1, C_DARK);
+    tft.drawLine(cx - 24, cy - 39, cx - 27, cy - 42, C_DARK);  // outer curl, left eye
+    tft.drawLine(cx + 24, cy - 39, cx + 27, cy - 42, C_DARK);  // outer curl, right eye
 }
 
 static void drawSleepingCat(int cx, int cy) {
     drawCat(cx, cy, CatMood::Idle, CatStatus::Content, CatBoredom::Entertained,
             CatHealth::Healthy, CatThirst::Hydrated, /*eyeOpen=*/false);
+    drawSleepyEyes(cx, cy);
 
-    bool hasBlanket = configMgr.config().ownsBlanket;
-    bool hasTeddy   = configMgr.config().ownsTeddy;
+    int  blanketIdx = equippedBlanketIndex();
+    bool hasBlanket = blanketIdx >= 0;
+    bool hasTeddy   = equippedStuffyIndex() >= 0;
+    // Teddy's snout/belly accent reuses the blanket's trim color when a blanket is
+    // equipped (so they read as a matching set), falling back to the default trim
+    // color of the first catalog entry when no blanket is owned.
+    uint16_t accentColor = BLANKET_COLORS[hasBlanket ? blanketIdx : 0].trim;
 
     if (hasBlanket) {
+        const BlanketColor& color = BLANKET_COLORS[blanketIdx];
         // Blanket — covers body/paws/tail, starts right at the neckline
-        tft.fillRoundRect(cx - 40, cy, 80, 60, 12, C_BLANKET);
-        tft.fillRect(cx - 40, cy + 4, 80, 6, C_BLANKET_TRIM);  // folded-edge trim
+        tft.fillRoundRect(cx - 40, cy, 80, 60, 12, color.base);
+        tft.fillRect(cx - 40, cy + 4, 80, 6, color.trim);  // folded-edge trim
     }
 
     if (hasTeddy) {
-        if (hasBlanket) drawTeddyPeeking(cx, cy);
-        else             drawTeddyFull(cx, cy);
+        if (hasBlanket) drawTeddyPeeking(cx, cy, accentColor);
+        else             drawTeddyFull(cx, cy, accentColor);
     }
 }
 
@@ -1077,6 +1151,8 @@ button:hover{background:#005ec4}
 .item button:disabled{background:#333;color:#777;cursor:not-allowed}
 .owned{color:#4b6}
 .err{background:#631}
+.pick{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:1rem;color:#ddd}
+.pick input{display:inline-block;width:auto;margin:0}
 )css";
 
 static const char CONFIG_HOME_HTML[] PROGMEM = R"html(<!DOCTYPE html>
@@ -1090,6 +1166,7 @@ static const char CONFIG_HOME_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <a class="nav" href="/config/cat">Cat</a>
 <a class="nav" href="/config/city">City (weather &amp; timezone)</a>
 <a class="nav" href="/config/store">Store</a>
+<a class="nav" href="/config/dress">Dressing Room</a>
 </body></html>
 )html";
 
@@ -1239,16 +1316,35 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 %%MSG%%
 <div class="balance">Points: <strong>%%POINTS%%</strong></div>
 
-<div class="item">
-<span>Teddy bear</span>
-%%TEDDY_ACTION%%
-</div>
+<h3>Stuffies (night only)</h3>
+%%STUFFY_ITEMS%%
 
-<div class="item">
-<span>Blanket</span>
-%%BLANKET_ACTION%%
-</div>
+<h3>Blankets (night only)</h3>
+%%BLANKET_ITEMS%%
 
+</body></html>
+)html";
+
+static const char CONFIG_DRESS_HTML[] PROGMEM = R"html(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cat Control Panel · Dressing Room</title>
+<style>%%STYLE%%</style>
+</head><body>
+<a class="back" href="/config">&larr; Configuration</a>
+<h2>Dressing Room</h2>
+%%MSG%%
+<form method="POST" action="/save-config/dress">
+
+<h3>Stuffies (night only)</h3>
+%%STUFFY_OPTIONS%%
+
+<h3>Blankets (night only)</h3>
+%%BLANKET_OPTIONS%%
+
+<button type="submit" style="width:100%;margin-top:8px">Save</button>
+</form>
 </body></html>
 )html";
 
@@ -1359,10 +1455,22 @@ static void handleConfigStoreGet() {
     page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
     uint32_t points = configMgr.config().points;
     page.replace("%%POINTS%%", String(points));
-    page.replace("%%TEDDY_ACTION%%",
-                 storeItemAction("teddy", configMgr.config().ownsTeddy, STORE_COST_TEDDY, points));
-    page.replace("%%BLANKET_ACTION%%",
-                 storeItemAction("blanket", configMgr.config().ownsBlanket, STORE_COST_BLANKET, points));
+    String stuffyItems = "";
+    for (int i = 0; i < STUFFY_COUNT; i++) {
+        bool owned = configMgr.config().ownedStuffies & (1 << i);
+        stuffyItems += "<div class='item'><span>" + String(STUFFIES[i].label) + "</span>";
+        stuffyItems += storeItemAction(STUFFIES[i].id, owned, STUFFIES[i].cost, points);
+        stuffyItems += "</div>\n";
+    }
+    page.replace("%%STUFFY_ITEMS%%", stuffyItems);
+    String blanketItems = "";
+    for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
+        bool owned = configMgr.config().ownedBlanketColors & (1 << i);
+        blanketItems += "<div class='item'><span style='color:" + String(BLANKET_COLORS[i].webColor) + "'>Blanket - " + String(BLANKET_COLORS[i].label) + "</span>";
+        blanketItems += storeItemAction(BLANKET_COLORS[i].id, owned, STORE_COST_BLANKET, points);
+        blanketItems += "</div>\n";
+    }
+    page.replace("%%BLANKET_ITEMS%%", blanketItems);
     String msg = "";
     if (wm.server->hasArg("saved")) {
         msg = "<div class='banner ok'>Purchase complete.</div>";
@@ -1440,15 +1548,23 @@ static void handleConfigStorePost() {
     String item = wm.server->arg("item");
     uint32_t cost;
     bool alreadyOwned;
-    if (item == "teddy") {
-        cost = STORE_COST_TEDDY;
-        alreadyOwned = configMgr.config().ownsTeddy;
-    } else if (item == "blanket") {
-        cost = STORE_COST_BLANKET;
-        alreadyOwned = configMgr.config().ownsBlanket;
+    int stuffyIdx = -1, blanketIdx = -1;
+    for (int i = 0; i < STUFFY_COUNT; i++) {
+        if (item == STUFFIES[i].id) { stuffyIdx = i; break; }
+    }
+    if (stuffyIdx >= 0) {
+        cost = STUFFIES[stuffyIdx].cost;
+        alreadyOwned = configMgr.config().ownedStuffies & (1 << stuffyIdx);
     } else {
-        wm.server->send(400, "text/plain", "Unknown item");
-        return;
+        for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
+            if (item == BLANKET_COLORS[i].id) { blanketIdx = i; break; }
+        }
+        if (blanketIdx < 0) {
+            wm.server->send(400, "text/plain", "Unknown item");
+            return;
+        }
+        cost = STORE_COST_BLANKET;
+        alreadyOwned = configMgr.config().ownedBlanketColors & (1 << blanketIdx);
     }
 
     if (alreadyOwned) {
@@ -1463,19 +1579,109 @@ static void handleConfigStorePost() {
     }
 
     configMgr.config().points -= cost;
-    if (item == "teddy") configMgr.config().ownsTeddy = true;
-    else configMgr.config().ownsBlanket = true;
+    if (blanketIdx >= 0) {
+        configMgr.config().ownedBlanketColors |= (1 << blanketIdx);
+        configMgr.config().equippedBlanketColor = blanketIdx;  // newly bought color becomes equipped
+    } else {
+        configMgr.config().ownedStuffies |= (1 << stuffyIdx);
+        configMgr.config().equippedStuffy = stuffyIdx;  // newly bought stuffy becomes equipped
+    }
     if (!configMgr.save()) {
         // Roll back in-memory state since persistence failed.
         configMgr.config().points += cost;
-        if (item == "teddy") configMgr.config().ownsTeddy = false;
-        else configMgr.config().ownsBlanket = false;
+        if (blanketIdx >= 0) configMgr.config().ownedBlanketColors &= ~(1 << blanketIdx);
+        else configMgr.config().ownedStuffies &= ~(1 << stuffyIdx);
         wm.server->sendHeader("Location", "/config/store?err=save");
         wm.server->send(302, "text/plain", "");
         return;
     }
     dirty.animal = true;
     wm.server->sendHeader("Location", "/config/store?saved=1");
+    wm.server->send(302, "text/plain", "");
+}
+
+static void handleConfigDressGet() {
+    String page = String(FPSTR(CONFIG_DRESS_HTML));
+    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+
+    uint8_t owned = configMgr.config().ownedBlanketColors;
+    int equippedIdx = equippedBlanketIndex();
+    String options = "";
+    if (owned == 0) {
+        options = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
+    } else {
+        for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
+            if (!(owned & (1 << i))) continue;
+            options += "<label class='pick'><input type='radio' name='blanketColor' value='";
+            options += BLANKET_COLORS[i].id;
+            options += "'";
+            if (i == equippedIdx) options += " checked";
+            options += "> <span style='color:" + String(BLANKET_COLORS[i].webColor) + "'>"
+                     + String(BLANKET_COLORS[i].label) + "</span></label>";
+        }
+    }
+    page.replace("%%BLANKET_OPTIONS%%", options);
+
+    uint8_t ownedStuffies = configMgr.config().ownedStuffies;
+    int equippedStuffyIdx = equippedStuffyIndex();
+    String stuffyOptions = "";
+    if (ownedStuffies == 0) {
+        stuffyOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
+    } else {
+        for (int i = 0; i < STUFFY_COUNT; i++) {
+            if (!(ownedStuffies & (1 << i))) continue;
+            stuffyOptions += "<label class='pick'><input type='radio' name='stuffy' value='";
+            stuffyOptions += STUFFIES[i].id;
+            stuffyOptions += "'";
+            if (i == equippedStuffyIdx) stuffyOptions += " checked";
+            stuffyOptions += "> " + String(STUFFIES[i].label) + "</label>";
+        }
+    }
+    page.replace("%%STUFFY_OPTIONS%%", stuffyOptions);
+
+    String msg = "";
+    if (wm.server->hasArg("saved"))
+        msg = "<div class='banner ok'>Saved.</div>";
+    page.replace("%%MSG%%", msg);
+    wm.server->send(200, "text/html", page);
+}
+
+static void handleConfigDressPost() {
+    bool changed = false;
+
+    String colorId = wm.server->arg("blanketColor");
+    if (colorId.length() > 0) {
+        int idx = -1;
+        for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
+            if (colorId == BLANKET_COLORS[i].id) { idx = i; break; }
+        }
+        if (idx < 0 || !(configMgr.config().ownedBlanketColors & (1 << idx))) {
+            wm.server->send(400, "text/plain", "Invalid selection");
+            return;
+        }
+        configMgr.config().equippedBlanketColor = idx;
+        changed = true;
+    }
+
+    String stuffyId = wm.server->arg("stuffy");
+    if (stuffyId.length() > 0) {
+        int idx = -1;
+        for (int i = 0; i < STUFFY_COUNT; i++) {
+            if (stuffyId == STUFFIES[i].id) { idx = i; break; }
+        }
+        if (idx < 0 || !(configMgr.config().ownedStuffies & (1 << idx))) {
+            wm.server->send(400, "text/plain", "Invalid selection");
+            return;
+        }
+        configMgr.config().equippedStuffy = idx;
+        changed = true;
+    }
+
+    if (changed) {
+        configMgr.save();
+        dirty.animal = true;
+    }
+    wm.server->sendHeader("Location", "/config/dress?saved=1");
     wm.server->send(302, "text/plain", "");
 }
 
@@ -1516,9 +1722,11 @@ static void runWiFiManager(ConfigManager& cfg) {
     wm.server->on("/config/cat",       HTTP_GET,  handleConfigCatGet);
     wm.server->on("/config/city",      HTTP_GET,  handleConfigCityGet);
     wm.server->on("/config/store",     HTTP_GET,  handleConfigStoreGet);
+    wm.server->on("/config/dress",     HTTP_GET,  handleConfigDressGet);
     wm.server->on("/save-config/cat",  HTTP_POST, handleConfigCatPost);
     wm.server->on("/save-config/city", HTTP_POST, handleConfigCityPost);
     wm.server->on("/save-config/store", HTTP_POST, handleConfigStorePost);
+    wm.server->on("/save-config/dress", HTTP_POST, handleConfigDressPost);
 }
 
 // ── Arduino ───────────────────────────────────────────────────────────────────
