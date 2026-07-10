@@ -101,6 +101,8 @@ static constexpr BlanketColor BLANKET_COLORS[] = {
     {"cream",      "Cream",      0xFFFA, 0xCD51, "#e8d9b5"},  // soft cream blanket, tan fold trim
     {"blush_pink", "Blush Pink", 0xF619, 0xDB92, "#e6a8bc"},  // blush pink blanket, deeper rose fold trim
     {"lavender",   "Lavender",   0xB3FB, 0xE69E, "#b57edc"},  // lavender blanket, pale lilac fold trim
+    {"lemon_yellow", "Lemon Yellow", 0xF6CB, 0xD502, "#F7D959"},  // Bambu PLA Lemon Yellow blanket, mustard-gold fold trim
+    {"apple_green",  "Apple Green",  0xC711, 0x7D2A, "#C2E189"},  // Bambu PLA Apple Green blanket, deeper leaf-green fold trim
 };
 static constexpr int BLANKET_COLOR_COUNT = sizeof(BLANKET_COLORS) / sizeof(BLANKET_COLORS[0]);
 
@@ -1028,8 +1030,10 @@ static void updateCatHealth() {
     }
 }
 
-// Random-onset check cadence/odds for the thirst event, once the cooldown has elapsed —
-// mirrors updateCatHealth()'s cadence/odds for the sick event.
+// Random-onset check cadence/odds for the thirst event, checked from the moment the cat is
+// last watered (no cooldown gate) — small odds per roll, backstopped by a guaranteed forced
+// trigger once `thirstForceMinutes` elapses without water so thirst can't go unbounded long
+// on bad luck alone (unlike updateCatHealth()'s sick event, which has no forced deadline).
 static constexpr unsigned long THIRST_CHECK_INTERVAL_MS = 60000UL;  // ~1 min between rolls
 static constexpr int           THIRST_TRIGGER_PER_MILLE = 2;        // ~0.2% chance per roll
 
@@ -1050,15 +1054,19 @@ static void updateCatThirst() {
     time_t utc   = epoch - (time_t)configMgr.config().utcOffsetSeconds;
     if (utc <= 1000000000) return;  // NTP not synced yet (pre-2001 or un-synced offset-only value)
 
-    uint32_t lastWater = configMgr.config().lastWaterEpoch;
-    uint32_t threshold = (uint32_t)configMgr.config().thirstCooldownHours * 3600u;
-    uint32_t now32      = (uint32_t)utc;
+    uint32_t lastWater      = configMgr.config().lastWaterEpoch;
+    uint32_t forceThreshold = (uint32_t)configMgr.config().thirstForceMinutes * 60u;
+    uint32_t now32          = (uint32_t)utc;
     uint32_t elapsed;
-    if (lastWater == 0)          elapsed = threshold + 1;   // never watered → immediately eligible
+    if (lastWater == 0)          elapsed = forceThreshold;   // never watered → immediately at the force deadline
     else if (now32 >= lastWater) elapsed = now32 - lastWater;
-    else                         elapsed = 0;                // NTP clock step back → treat as just watered
+    else                         elapsed = 0;                 // NTP clock step back → treat as just watered
 
-    if (elapsed < threshold) return;  // still in cooldown, not yet eligible
+    if (elapsed >= forceThreshold) {
+        cat.thirst   = CatThirst::Thirsty;
+        dirty.animal = true;
+        return;
+    }
 
     unsigned long now = millis();
     if (now - cat.lastThirstCheck < THIRST_CHECK_INTERVAL_MS) return;
@@ -1202,8 +1210,8 @@ static const char CONFIG_CAT_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <label style="margin-top:-8px">%%FORCESICKSTATUS%%</label>
 
 <h3>Cat thirst</h3>
-<label>Minimum hours between thirsty events</label>
-<input name="thirstCooldown" id="thirstCooldown" type="number" min="1" max="168" value="%%THIRSTCOOLDOWN%%">
+<label>Force thirsty after N minutes without water</label>
+<input name="thirstForceMinutes" id="thirstForceMinutes" type="number" min="1" max="1440" value="%%THIRSTFORCEMINUTES%%">
 <label>Force thirsty in N minutes (test only, 0 = off)</label>
 <input name="forceThirstMinutes" id="forceThirstMinutes" type="number" min="0" max="1440" value="%%FORCETHIRST%%">
 <label style="margin-top:-8px">%%FORCETHIRSTSTATUS%%</label>
@@ -1391,7 +1399,7 @@ static void handleConfigCatGet() {
     page.replace("%%HUNGER%%", String(configMgr.config().hungerMinutes));
     page.replace("%%BOREDOM%%", String(configMgr.config().boredomMinutes));
     page.replace("%%SICKCOOLDOWN%%", String(configMgr.config().sickCooldownHours));
-    page.replace("%%THIRSTCOOLDOWN%%", String(configMgr.config().thirstCooldownHours));
+    page.replace("%%THIRSTFORCEMINUTES%%", String(configMgr.config().thirstForceMinutes));
     {
         unsigned long now = millis();
         String status;
@@ -1489,7 +1497,7 @@ static void handleConfigCatPost() {
     int   boredom = wm.server->arg("boredom").toInt();
     int   sickCooldown = wm.server->arg("sickCooldown").toInt();
     int   forceSickMinutes = wm.server->arg("forceSickMinutes").toInt();
-    int   thirstCooldown = wm.server->arg("thirstCooldown").toInt();
+    int   thirstForceMinutes = wm.server->arg("thirstForceMinutes").toInt();
     int   forceThirstMinutes = wm.server->arg("forceThirstMinutes").toInt();
     int   sleepBed = 0, sleepWake = 0;
     bool  sleepBedOk  = parseHHMM(wm.server->arg("sleepBed"),  sleepBed);
@@ -1504,7 +1512,7 @@ static void handleConfigCatPost() {
     if (hunger < 1 || hunger > 1440 || boredom < 1 || boredom > 1440
         || sickCooldown < 1 || sickCooldown > 168
         || forceSickMinutes < 0 || forceSickMinutes > 1440
-        || thirstCooldown < 1 || thirstCooldown > 168
+        || thirstForceMinutes < 1 || thirstForceMinutes > 1440
         || forceThirstMinutes < 0 || forceThirstMinutes > 1440
         || !sleepBedOk || !sleepWakeOk || !nameOk) {
         wm.server->send(400, "text/plain", "Invalid values");
@@ -1514,7 +1522,7 @@ static void handleConfigCatPost() {
     configMgr.config().boredomMinutes   = boredom;
     configMgr.config().sickCooldownHours = sickCooldown;
     if (forceSickMinutes > 0) forceSickDeadlineMs = millis() + (unsigned long)forceSickMinutes * 60000UL;
-    configMgr.config().thirstCooldownHours = thirstCooldown;
+    configMgr.config().thirstForceMinutes = thirstForceMinutes;
     if (forceThirstMinutes > 0) forceThirstDeadlineMs = millis() + (unsigned long)forceThirstMinutes * 60000UL;
     configMgr.config().sleepBedMinutes  = sleepBed;
     configMgr.config().sleepWakeMinutes = sleepWake;
