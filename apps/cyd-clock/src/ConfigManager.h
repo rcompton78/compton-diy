@@ -18,8 +18,10 @@ struct AppConfig {
     int thirstCooldownHours = 4;    // min hours between thirsty events
     uint32_t lastWaterEpoch = 0;    // Unix epoch of last water; 0 = never watered
     uint32_t points = 0;            // Gamification points earned from timely care actions
-    bool ownsBlanket = false;       // Store purchase: blanket
-    bool ownsTeddy   = false;       // Store purchase: teddy bear
+    uint8_t ownedBlanketColors  = 0;  // Store purchase: bitmask, bit N = owns blanket color N
+    uint8_t equippedBlanketColor = 0; // Dressing room: index of the blanket color to display
+    uint8_t ownedStuffies  = 0;      // Store purchase: bitmask, bit N = owns stuffy N
+    uint8_t equippedStuffy = 0;      // Dressing room: index of the stuffy to display
 };
 
 class ConfigManager {
