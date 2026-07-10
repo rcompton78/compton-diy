@@ -60,7 +60,7 @@ static constexpr uint32_t POINTS_MEDS  = 8;
 
 // Gamification: store item costs
 static constexpr uint32_t STORE_COST_TEDDY   = 10;
-static constexpr uint32_t STORE_COST_BUNNY   = 10;
+static constexpr uint32_t STORE_COST_BUNNY   = 25;
 static constexpr uint32_t STORE_COST_BLANKET = 15;  // per blanket color
 
 // Touch calibration — print "Touch: x= y=" from serial to tune
