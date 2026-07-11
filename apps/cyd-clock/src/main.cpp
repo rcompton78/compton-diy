@@ -54,14 +54,15 @@ static constexpr int WATER_H  = TREAT_H;
 
 // Gamification: point award per care action, only when it actually addressed a real need
 static constexpr uint32_t POINTS_TREAT = 5;
-static constexpr uint32_t POINTS_PLAY  = 5;
+static constexpr uint32_t POINTS_PLAY  = 3;
 static constexpr uint32_t POINTS_WATER = 3;
 static constexpr uint32_t POINTS_MEDS  = 8;
 
 // Gamification: store item costs
-static constexpr uint32_t STORE_COST_TEDDY   = 10;
-static constexpr uint32_t STORE_COST_BUNNY   = 25;
-static constexpr uint32_t STORE_COST_BLANKET = 15;  // per blanket color
+static constexpr uint32_t STORE_COST_TEDDY    = 60;
+static constexpr uint32_t STORE_COST_BUNNY    = 60;
+static constexpr uint32_t STORE_COST_SQUIRREL = 150;
+static constexpr uint32_t STORE_COST_BLANKET  = 40;  // per blanket color
 
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
@@ -84,8 +85,10 @@ static constexpr uint16_t C_SLEEP_DIM = 0x632C;  // dim gray-blue, for the sleep
 static constexpr uint16_t C_SICK   = 0x9E66;  // queasy cheek blush (sickly green)
 static constexpr uint16_t C_MEDS   = 0xF800;  // meds button cross (red)
 static constexpr uint16_t C_WATER  = 0x04FF;  // water button droplet (blue)
-static constexpr uint16_t C_BEAR  = 0x9A46;  // teddy bear peeking out beside the head (brown)
-static constexpr uint16_t C_BUNNY = 0xC618;  // grey bunny peeking out beside the head (grey)
+static constexpr uint16_t C_NEW_ITEM = 0x07FF;  // points balance flash color, hinting at an unseen store item (cyan)
+static constexpr uint16_t C_BEAR     = 0x9A46;  // teddy bear peeking out beside the head (brown)
+static constexpr uint16_t C_BUNNY    = 0xC618;  // grey bunny peeking out beside the head (grey)
+static constexpr uint16_t C_SQUIRREL = 0xCA25;  // red squirrel peeking out beside the head (rust orange)
 
 // Blanket color catalog — each color is purchased separately in the store and can be
 // equipped independently in the dressing room. `id` is the stable identifier used in
@@ -116,6 +119,8 @@ static void drawTeddyPeeking(int cx, int cy, uint16_t accentColor);
 static void drawTeddyFull(int cx, int cy, uint16_t accentColor);
 static void drawBunnyPeeking(int cx, int cy, uint16_t accentColor);
 static void drawBunnyFull(int cx, int cy, uint16_t accentColor);
+static void drawSquirrelPeeking(int cx, int cy, uint16_t accentColor);
+static void drawSquirrelFull(int cx, int cy, uint16_t accentColor);
 
 // Stuffy catalog — same purchase/equip model as blanket colors, so more stuffies can be
 // added later without changing the store/dressing-room plumbing. `id` is the stable
@@ -133,10 +138,17 @@ struct Stuffy {
     void (*drawFull)(int cx, int cy, uint16_t accentColor);
 };
 static constexpr Stuffy STUFFIES[] = {
-    {"teddy", "Teddy Bear",  STORE_COST_TEDDY, drawTeddyPeeking, drawTeddyFull},
-    {"bunny", "Grey Bunny",  STORE_COST_BUNNY, drawBunnyPeeking, drawBunnyFull},
+    {"teddy",    "Teddy Bear",   STORE_COST_TEDDY,    drawTeddyPeeking,    drawTeddyFull},
+    {"bunny",    "Grey Bunny",   STORE_COST_BUNNY,    drawBunnyPeeking,    drawBunnyFull},
+    {"squirrel", "Red Squirrel", STORE_COST_SQUIRREL, drawSquirrelPeeking, drawSquirrelFull},
 };
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
+
+// Sentinel stored in equippedBlanketColor/equippedStuffy to mean "explicitly unequipped by
+// the user in the dressing room", as opposed to 0 which means "no selection made yet, fall
+// back to the lowest-index owned item" (see equippedBlanketIndex()/equippedStuffyIndex()).
+// Never a valid catalog index since both catalogs stay well under 255 entries.
+static constexpr uint8_t EQUIP_NONE = 0xFF;
 
 // Quick-pick durations
 static constexpr uint32_t    PICK_SEC[] = {60, 300, 600, 1800};
@@ -203,6 +215,7 @@ unsigned long forceSickDeadlineMs = 0;   // test-only: armed via /config, 0 = no
 unsigned long forceThirstDeadlineMs = 0; // test-only: armed via /config, 0 = not armed, not persisted
 
 struct { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick, hungerLines, zzzFx; } dirty = {true, true, true, true, false, false, false, false, false};
+bool pointsFlashOn = false;  // toggled every ~500ms while hasNewStoreItems(); read by drawPoints()
 
 
 // ── Cat drawing ───────────────────────────────────────────────────────────────
@@ -324,6 +337,7 @@ static int equippedBlanketIndex() {
     uint8_t owned = configMgr.config().ownedBlanketColors;
     if (owned == 0) return -1;
     uint8_t eq = configMgr.config().equippedBlanketColor;
+    if (eq == EQUIP_NONE) return -1;  // user explicitly unequipped
     if (eq < BLANKET_COLOR_COUNT && (owned & (1 << eq))) return eq;
     for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
         if (owned & (1 << i)) return i;
@@ -336,11 +350,20 @@ static int equippedStuffyIndex() {
     uint8_t owned = configMgr.config().ownedStuffies;
     if (owned == 0) return -1;
     uint8_t eq = configMgr.config().equippedStuffy;
+    if (eq == EQUIP_NONE) return -1;  // user explicitly unequipped
     if (eq < STUFFY_COUNT && (owned & (1 << eq))) return eq;
     for (int i = 0; i < STUFFY_COUNT; i++) {
         if (owned & (1 << i)) return i;
     }
     return -1;
+}
+
+// True whenever the store catalog has grown (a new stuffy or blanket color shipped in a
+// firmware update) since the last time the user opened the store page — cleared by
+// handleConfigStoreGet(), which stamps the current catalog sizes as "seen".
+static bool hasNewStoreItems() {
+    return STUFFY_COUNT > configMgr.config().seenStuffyCount ||
+           BLANKET_COLOR_COUNT > configMgr.config().seenBlanketColorCount;
 }
 
 // Shared ear/head/snout/eyes/nose art reused by both teddy variants below.
@@ -401,6 +424,45 @@ static void drawBunnyFull(int cx, int cy, uint16_t accentColor) {
     tft.fillCircle(bx - 5, by + 31, 4, C_BUNNY);            // left foot
     tft.fillCircle(bx + 5, by + 31, 4, C_BUNNY);            // right foot
     tft.fillCircle(bx, by + 33, 3, TFT_WHITE);              // fluffy tail
+}
+
+// Shared ear/head/snout/eyes/nose art reused by both squirrel variants below — same layout
+// as drawTeddyHead() but with smaller rounded ears, sized to leave room for the bushy tail
+// arcing up behind.
+static void drawSquirrelHead(int bx, int by, uint16_t snoutColor) {
+    tft.fillCircle(bx - 5, by - 8, 3, C_SQUIRREL);  // left ear
+    tft.fillCircle(bx + 5, by - 8, 3, C_SQUIRREL);  // right ear
+    tft.fillCircle(bx,     by,     8, C_SQUIRREL);  // head
+    tft.fillCircle(bx,     by + 3, 3, snoutColor);  // snout
+    tft.fillCircle(bx - 3, by - 2, 1, C_DARK);   // left eye
+    tft.fillCircle(bx + 3, by - 2, 1, C_DARK);   // right eye
+    tft.fillCircle(bx,     by + 1, 1, C_DARK);   // nose
+}
+
+// Red squirrel peeking out beside the head, tucked into the blanket's top edge — only the
+// tip and a sliver of orange show above the blanket's edge, the rest of the tail tucked
+// behind it, matching the full-body pose's shoulder-poke silhouette.
+static void drawSquirrelPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 40, by = cy - 6;
+    tft.fillCircle(bx + 12, by + 2, 5, C_SQUIRREL);   // bit of orange poking over the shoulder
+    tft.fillCircle(bx + 13, by - 4, 4, accentColor);  // white tip
+    drawSquirrelHead(bx, by, accentColor);
+}
+
+// Full-body red squirrel sitting beside the cat — used when the squirrel is owned without
+// the blanket, since there's no blanket edge to tuck a lone head behind. The bushy tail
+// stays tucked mostly behind the body, with just its tip and a bit of orange curling up
+// over the shoulder — the premium stuffy's distinguishing silhouette.
+static void drawSquirrelFull(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 38, by = cy - 8;
+    tft.fillCircle(bx + 10, by + 12, 6, C_SQUIRREL);   // tail base, tucked behind the body
+    tft.fillCircle(bx + 13, by + 4,  5, C_SQUIRREL);   // a bit of orange curling up
+    tft.fillCircle(bx + 14, by - 2,  4, accentColor);  // white tip poking over the shoulder
+    drawSquirrelHead(bx, by, accentColor);
+    tft.fillRoundRect(bx - 8, by + 7, 16, 24, 8, C_SQUIRREL);  // body
+    tft.fillCircle(bx, by + 17, 4, accentColor);               // belly patch
+    tft.fillCircle(bx - 5, by + 31, 4, C_SQUIRREL);            // left foot
+    tft.fillCircle(bx + 5, by + 31, 4, C_SQUIRREL);            // right foot
 }
 
 // Deeply-closed, sleepy eyes for the sleep-window peek — thinner and gently curled at
@@ -602,6 +664,21 @@ static void drawHeader() {
     }
 }
 
+// Points balance — top-right of the cat's head, just under the header's weather text.
+// Own clear rect since this sits to the right of the cat's bounding box, outside
+// drawAnimal()'s clear rect — starts past x=152 so it doesn't clip the cat's right ear
+// (drawCat()'s ear triangle reaches up to roughly x=152, y=65). Flashes between yellow and
+// cyan while hasNewStoreItems() is true, as a hint to check the store for something new.
+static void drawPoints() {
+    char ptsBuf[16];
+    snprintf(ptsBuf, sizeof(ptsBuf), "%lu pts", (unsigned long)configMgr.config().points);
+    tft.fillRect(155, ANIMAL_Y, 85, 20, TFT_BLACK);
+    uint16_t color = (hasNewStoreItems() && pointsFlashOn) ? C_NEW_ITEM : TFT_YELLOW;
+    tft.setTextColor(color, TFT_BLACK);
+    int ptsWidth = tft.textWidth(ptsBuf, 2);
+    tft.drawString(ptsBuf, 234 - ptsWidth, ANIMAL_Y + 4, 2);
+}
+
 static void drawAnimal() {
     // Clear only sparkle positions and the cat's bounding box (including ±3px bounce).
     // Avoids wiping the full 240×175 zone which causes a visible black flash.
@@ -624,18 +701,9 @@ static void drawAnimal() {
         }
     }
 
-    // Points balance — top-right of the cat's head, just under the header's weather text.
-    // Drawn after drawCat()/drawSleepingCat() since both repaint their own clear rect
-    // internally and would otherwise wipe this out.
-    char ptsBuf[16];
-    snprintf(ptsBuf, sizeof(ptsBuf), "%lu pts", (unsigned long)configMgr.config().points);
-    // Own clear rect since this sits to the right of the cat's bounding box, outside the
-    // fillRect at the top of this function — starts past x=152 so it doesn't clip the
-    // cat's right ear (drawCat()'s ear triangle reaches up to roughly x=152, y=65).
-    tft.fillRect(155, ANIMAL_Y, 85, 20, TFT_BLACK);
-    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-    int ptsWidth = tft.textWidth(ptsBuf, 2);
-    tft.drawString(ptsBuf, 234 - ptsWidth, ANIMAL_Y + 4, 2);
+    // Points balance — drawn after drawCat()/drawSleepingCat() since both repaint their own
+    // clear rect internally and would otherwise wipe this out.
+    drawPoints();
 
     // Boredom "Zz" overlay — sits outside the main clear rect, so always redraw/erase
     // here regardless of tier; cat.napping already encodes whether it should show
@@ -1373,7 +1441,7 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <style>%%STYLE%%</style>
 </head><body>
 <a class="back" href="/config">&larr; Configuration</a>
-<h2>Store</h2>
+<h2 id="storeTitle">Store</h2>
 %%MSG%%
 <div class="balance">Points: <strong>%%POINTS%%</strong></div>
 
@@ -1382,6 +1450,27 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 
 <h3>Blankets (night only)</h3>
 %%BLANKET_ITEMS%%
+
+<form id="cheatForm" method="POST" action="/save-config/cheat" style="display:none;margin-top:12px">
+<button type="submit">+50 points</button>
+</form>
+<script>
+// Easter egg: tap the "Store" heading 7 times in a row (no other tap in between)
+// to reveal a cheat button that grants 50 points.
+(function(){
+    var taps = 0;
+    var title = document.getElementById('storeTitle');
+    var cheat = document.getElementById('cheatForm');
+    document.addEventListener('click', function(e){
+        if (e.target === title) {
+            taps++;
+            if (taps >= 7) cheat.style.display = 'block';
+        } else {
+            taps = 0;
+        }
+    });
+})();
+</script>
 
 </body></html>
 )html";
@@ -1512,6 +1601,13 @@ static String storeItemAction(const char* item, bool owned, uint32_t cost, uint3
 }
 
 static void handleConfigStoreGet() {
+    // Clear the on-device points flash by stamping the current catalog sizes as "seen" —
+    // any store visit acknowledges every item added up to this point.
+    if (hasNewStoreItems()) {
+        configMgr.config().seenStuffyCount       = (uint8_t)STUFFY_COUNT;
+        configMgr.config().seenBlanketColorCount = (uint8_t)BLANKET_COLOR_COUNT;
+        configMgr.save();
+    }
     String page = String(FPSTR(CONFIG_STORE_HTML));
     page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
     uint32_t points = configMgr.config().points;
@@ -1533,7 +1629,9 @@ static void handleConfigStoreGet() {
     }
     page.replace("%%BLANKET_ITEMS%%", blanketItems);
     String msg = "";
-    if (wm.server->hasArg("saved")) {
+    if (wm.server->hasArg("cheat")) {
+        msg = "<div class='banner ok'>+50 points!</div>";
+    } else if (wm.server->hasArg("saved")) {
         msg = "<div class='banner ok'>Purchase complete.</div>";
     } else if (wm.server->hasArg("err")) {
         String err = wm.server->arg("err");
@@ -1543,6 +1641,15 @@ static void handleConfigStoreGet() {
     }
     page.replace("%%MSG%%", msg);
     wm.server->send(200, "text/html", page);
+}
+
+// Easter egg: grants 50 points, reached only via the hidden cheat button revealed by
+// tapping the store heading 7 times in a row (see CONFIG_STORE_HTML's inline script).
+static void handleConfigStoreCheatPost() {
+    configMgr.config().points += 50;
+    configMgr.save();
+    wm.server->sendHeader("Location", "/config/store?cheat=1");
+    wm.server->send(302, "text/plain", "");
 }
 
 static void handleConfigCatPost() {
@@ -1671,6 +1778,9 @@ static void handleConfigDressGet() {
     if (owned == 0) {
         options = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
     } else {
+        options += "<label class='pick'><input type='radio' name='blanketColor' value='none'";
+        if (equippedIdx < 0) options += " checked";
+        options += "> None</label>";
         for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
             if (!(owned & (1 << i))) continue;
             options += "<label class='pick'><input type='radio' name='blanketColor' value='";
@@ -1689,6 +1799,9 @@ static void handleConfigDressGet() {
     if (ownedStuffies == 0) {
         stuffyOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
     } else {
+        stuffyOptions += "<label class='pick'><input type='radio' name='stuffy' value='none'";
+        if (equippedStuffyIdx < 0) stuffyOptions += " checked";
+        stuffyOptions += "> None</label>";
         for (int i = 0; i < STUFFY_COUNT; i++) {
             if (!(ownedStuffies & (1 << i))) continue;
             stuffyOptions += "<label class='pick'><input type='radio' name='stuffy' value='";
@@ -1711,7 +1824,10 @@ static void handleConfigDressPost() {
     bool changed = false;
 
     String colorId = wm.server->arg("blanketColor");
-    if (colorId.length() > 0) {
+    if (colorId == "none") {
+        configMgr.config().equippedBlanketColor = EQUIP_NONE;
+        changed = true;
+    } else if (colorId.length() > 0) {
         int idx = -1;
         for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
             if (colorId == BLANKET_COLORS[i].id) { idx = i; break; }
@@ -1725,7 +1841,10 @@ static void handleConfigDressPost() {
     }
 
     String stuffyId = wm.server->arg("stuffy");
-    if (stuffyId.length() > 0) {
+    if (stuffyId == "none") {
+        configMgr.config().equippedStuffy = EQUIP_NONE;
+        changed = true;
+    } else if (stuffyId.length() > 0) {
         int idx = -1;
         for (int i = 0; i < STUFFY_COUNT; i++) {
             if (stuffyId == STUFFIES[i].id) { idx = i; break; }
@@ -1787,6 +1906,7 @@ static void runWiFiManager(ConfigManager& cfg) {
     wm.server->on("/save-config/cat",  HTTP_POST, handleConfigCatPost);
     wm.server->on("/save-config/city", HTTP_POST, handleConfigCityPost);
     wm.server->on("/save-config/store", HTTP_POST, handleConfigStorePost);
+    wm.server->on("/save-config/cheat", HTTP_POST, handleConfigStoreCheatPost);
     wm.server->on("/save-config/dress", HTTP_POST, handleConfigDressPost);
 }
 
@@ -1919,6 +2039,24 @@ void loop() {
             if (tm->tm_min != prevMin) { prevMin = tm->tm_min; dirty.header = true; }
             else                        { dirty.headerTick = true; }
         }
+    }
+
+    // Points flash — while the store has an unseen new item, toggle the points balance's
+    // color every 500ms; repaint once more with the flash off the moment it's cleared
+    // (i.e. the user just opened the store) so it doesn't linger mid-flash.
+    {
+        static unsigned long lastFlash = 0;
+        static bool wasNew = false;
+        bool isNew = hasNewStoreItems();
+        if (isNew && now - lastFlash >= 500) {
+            lastFlash = now;
+            pointsFlashOn = !pointsFlashOn;
+            drawPoints();
+        } else if (!isNew && wasNew) {
+            pointsFlashOn = false;
+            drawPoints();
+        }
+        wasNew = isNew;
     }
 
     // Timer row refresh while running

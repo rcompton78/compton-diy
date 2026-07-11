@@ -63,6 +63,8 @@ bool ConfigManager::load() {
         _config.ownedStuffies = stuffies;
     }
     _config.equippedStuffy = doc["stuffyEquipped"] | _config.equippedStuffy;
+    _config.seenStuffyCount       = doc["seenStuffies"] | _config.seenStuffyCount;
+    _config.seenBlanketColorCount = doc["seenBlankets"]  | _config.seenBlanketColorCount;
 
     f.close();
     return true;
@@ -93,6 +95,8 @@ bool ConfigManager::save() {
     doc["blanketEquipped"] = _config.equippedBlanketColor;
     doc["stuffies"]        = _config.ownedStuffies;
     doc["stuffyEquipped"]  = _config.equippedStuffy;
+    doc["seenStuffies"]    = _config.seenStuffyCount;
+    doc["seenBlankets"]    = _config.seenBlanketColorCount;
 
     serializeJson(doc, f);
     f.close();

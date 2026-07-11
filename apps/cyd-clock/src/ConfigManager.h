@@ -22,6 +22,8 @@ struct AppConfig {
     uint8_t equippedBlanketColor = 0; // Dressing room: index of the blanket color to display
     uint8_t ownedStuffies  = 0;      // Store purchase: bitmask, bit N = owns stuffy N
     uint8_t equippedStuffy = 0;      // Dressing room: index of the stuffy to display
+    uint8_t seenStuffyCount       = 0;  // Highest STUFFY_COUNT the store page has shown the user
+    uint8_t seenBlanketColorCount = 0;  // Highest BLANKET_COLOR_COUNT the store page has shown the user
 };
 
 class ConfigManager {
