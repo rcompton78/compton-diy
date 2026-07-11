@@ -143,6 +143,12 @@ static constexpr Stuffy STUFFIES[] = {
 };
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
 
+// Sentinel stored in equippedBlanketColor/equippedStuffy to mean "explicitly unequipped by
+// the user in the dressing room", as opposed to 0 which means "no selection made yet, fall
+// back to the lowest-index owned item" (see equippedBlanketIndex()/equippedStuffyIndex()).
+// Never a valid catalog index since both catalogs stay well under 255 entries.
+static constexpr uint8_t EQUIP_NONE = 0xFF;
+
 // Quick-pick durations
 static constexpr uint32_t    PICK_SEC[] = {60, 300, 600, 1800};
 static constexpr const char* PICK_LBL[] = {"+1", "+5", "+10", "+30"};
@@ -329,6 +335,7 @@ static int equippedBlanketIndex() {
     uint8_t owned = configMgr.config().ownedBlanketColors;
     if (owned == 0) return -1;
     uint8_t eq = configMgr.config().equippedBlanketColor;
+    if (eq == EQUIP_NONE) return -1;  // user explicitly unequipped
     if (eq < BLANKET_COLOR_COUNT && (owned & (1 << eq))) return eq;
     for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
         if (owned & (1 << i)) return i;
@@ -341,6 +348,7 @@ static int equippedStuffyIndex() {
     uint8_t owned = configMgr.config().ownedStuffies;
     if (owned == 0) return -1;
     uint8_t eq = configMgr.config().equippedStuffy;
+    if (eq == EQUIP_NONE) return -1;  // user explicitly unequipped
     if (eq < STUFFY_COUNT && (owned & (1 << eq))) return eq;
     for (int i = 0; i < STUFFY_COUNT; i++) {
         if (owned & (1 << i)) return i;
@@ -421,25 +429,25 @@ static void drawSquirrelHead(int bx, int by, uint16_t snoutColor) {
     tft.fillCircle(bx,     by + 1, 1, C_DARK);   // nose
 }
 
-// Red squirrel peeking out beside the head, tucked into the blanket's top edge — the
-// signature bushy tail arcs up behind the head so the squirrel still reads distinctly
-// even with its body hidden behind the blanket.
+// Red squirrel peeking out beside the head, tucked into the blanket's top edge — only the
+// tip and a sliver of orange show above the blanket's edge, the rest of the tail tucked
+// behind it, matching the full-body pose's shoulder-poke silhouette.
 static void drawSquirrelPeeking(int cx, int cy, uint16_t accentColor) {
     int bx = cx - 40, by = cy - 6;
-    tft.fillCircle(bx + 6,  by - 16, 6, C_SQUIRREL);
-    tft.fillCircle(bx + 10, by - 22, 5, C_SQUIRREL);
-    tft.fillCircle(bx + 12, by - 29, 4, accentColor);  // tail tip
+    tft.fillCircle(bx + 12, by + 2, 5, C_SQUIRREL);   // bit of orange poking over the shoulder
+    tft.fillCircle(bx + 13, by - 4, 4, accentColor);  // white tip
     drawSquirrelHead(bx, by, accentColor);
 }
 
 // Full-body red squirrel sitting beside the cat — used when the squirrel is owned without
 // the blanket, since there's no blanket edge to tuck a lone head behind. The bushy tail
-// arcs up over its back, the premium stuffy's distinguishing silhouette.
+// stays tucked mostly behind the body, with just its tip and a bit of orange curling up
+// over the shoulder — the premium stuffy's distinguishing silhouette.
 static void drawSquirrelFull(int cx, int cy, uint16_t accentColor) {
     int bx = cx - 38, by = cy - 8;
-    tft.fillCircle(bx + 10, by + 6,  7, C_SQUIRREL);
-    tft.fillCircle(bx + 14, by - 4,  6, C_SQUIRREL);
-    tft.fillCircle(bx + 15, by - 13, 5, accentColor);  // tail tip
+    tft.fillCircle(bx + 10, by + 12, 6, C_SQUIRREL);   // tail base, tucked behind the body
+    tft.fillCircle(bx + 13, by + 4,  5, C_SQUIRREL);   // a bit of orange curling up
+    tft.fillCircle(bx + 14, by - 2,  4, accentColor);  // white tip poking over the shoulder
     drawSquirrelHead(bx, by, accentColor);
     tft.fillRoundRect(bx - 8, by + 7, 16, 24, 8, C_SQUIRREL);  // body
     tft.fillCircle(bx, by + 17, 4, accentColor);               // belly patch
@@ -1417,7 +1425,7 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <style>%%STYLE%%</style>
 </head><body>
 <a class="back" href="/config">&larr; Configuration</a>
-<h2>Store</h2>
+<h2 id="storeTitle">Store</h2>
 %%MSG%%
 <div class="balance">Points: <strong>%%POINTS%%</strong></div>
 
@@ -1426,6 +1434,27 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 
 <h3>Blankets (night only)</h3>
 %%BLANKET_ITEMS%%
+
+<form id="cheatForm" method="POST" action="/save-config/cheat" style="display:none;margin-top:12px">
+<button type="submit">+50 points</button>
+</form>
+<script>
+// Easter egg: tap the "Store" heading 7 times in a row (no other tap in between)
+// to reveal a cheat button that grants 50 points.
+(function(){
+    var taps = 0;
+    var title = document.getElementById('storeTitle');
+    var cheat = document.getElementById('cheatForm');
+    document.addEventListener('click', function(e){
+        if (e.target === title) {
+            taps++;
+            if (taps >= 7) cheat.style.display = 'block';
+        } else {
+            taps = 0;
+        }
+    });
+})();
+</script>
 
 </body></html>
 )html";
@@ -1577,7 +1606,9 @@ static void handleConfigStoreGet() {
     }
     page.replace("%%BLANKET_ITEMS%%", blanketItems);
     String msg = "";
-    if (wm.server->hasArg("saved")) {
+    if (wm.server->hasArg("cheat")) {
+        msg = "<div class='banner ok'>+50 points!</div>";
+    } else if (wm.server->hasArg("saved")) {
         msg = "<div class='banner ok'>Purchase complete.</div>";
     } else if (wm.server->hasArg("err")) {
         String err = wm.server->arg("err");
@@ -1587,6 +1618,15 @@ static void handleConfigStoreGet() {
     }
     page.replace("%%MSG%%", msg);
     wm.server->send(200, "text/html", page);
+}
+
+// Easter egg: grants 50 points, reached only via the hidden cheat button revealed by
+// tapping the store heading 7 times in a row (see CONFIG_STORE_HTML's inline script).
+static void handleConfigStoreCheatPost() {
+    configMgr.config().points += 50;
+    configMgr.save();
+    wm.server->sendHeader("Location", "/config/store?cheat=1");
+    wm.server->send(302, "text/plain", "");
 }
 
 static void handleConfigCatPost() {
@@ -1715,6 +1755,9 @@ static void handleConfigDressGet() {
     if (owned == 0) {
         options = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
     } else {
+        options += "<label class='pick'><input type='radio' name='blanketColor' value='none'";
+        if (equippedIdx < 0) options += " checked";
+        options += "> None</label>";
         for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
             if (!(owned & (1 << i))) continue;
             options += "<label class='pick'><input type='radio' name='blanketColor' value='";
@@ -1733,6 +1776,9 @@ static void handleConfigDressGet() {
     if (ownedStuffies == 0) {
         stuffyOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
     } else {
+        stuffyOptions += "<label class='pick'><input type='radio' name='stuffy' value='none'";
+        if (equippedStuffyIdx < 0) stuffyOptions += " checked";
+        stuffyOptions += "> None</label>";
         for (int i = 0; i < STUFFY_COUNT; i++) {
             if (!(ownedStuffies & (1 << i))) continue;
             stuffyOptions += "<label class='pick'><input type='radio' name='stuffy' value='";
@@ -1755,7 +1801,10 @@ static void handleConfigDressPost() {
     bool changed = false;
 
     String colorId = wm.server->arg("blanketColor");
-    if (colorId.length() > 0) {
+    if (colorId == "none") {
+        configMgr.config().equippedBlanketColor = EQUIP_NONE;
+        changed = true;
+    } else if (colorId.length() > 0) {
         int idx = -1;
         for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
             if (colorId == BLANKET_COLORS[i].id) { idx = i; break; }
@@ -1769,7 +1818,10 @@ static void handleConfigDressPost() {
     }
 
     String stuffyId = wm.server->arg("stuffy");
-    if (stuffyId.length() > 0) {
+    if (stuffyId == "none") {
+        configMgr.config().equippedStuffy = EQUIP_NONE;
+        changed = true;
+    } else if (stuffyId.length() > 0) {
         int idx = -1;
         for (int i = 0; i < STUFFY_COUNT; i++) {
             if (stuffyId == STUFFIES[i].id) { idx = i; break; }
@@ -1831,6 +1883,7 @@ static void runWiFiManager(ConfigManager& cfg) {
     wm.server->on("/save-config/cat",  HTTP_POST, handleConfigCatPost);
     wm.server->on("/save-config/city", HTTP_POST, handleConfigCityPost);
     wm.server->on("/save-config/store", HTTP_POST, handleConfigStorePost);
+    wm.server->on("/save-config/cheat", HTTP_POST, handleConfigStoreCheatPost);
     wm.server->on("/save-config/dress", HTTP_POST, handleConfigDressPost);
 }
 
