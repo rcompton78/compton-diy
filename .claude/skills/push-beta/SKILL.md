@@ -20,12 +20,19 @@ the repo has a `release` target, use that one; if more than one does, ask which.
    uncommitted changes, show them to the user and ask whether to commit first (a beta
    build should generally come from committed, pushed code so the release notes can
    reference a real commit). If they want it committed, stage and commit with a
-   conventional message, then push.
+   conventional message, then push. **If they decline and uncommitted changes remain,
+   stop here** — do not build or publish a release that doesn't match any real commit.
 
-2. **Push the branch** if it has no upstream yet or is behind:
+2. **Push the branch**, checking the upstream state first:
    ```bash
-   git push -u origin $(git branch --show-current)
+   git fetch origin
+   git status -sb   # shows ahead/behind counts against the upstream, if any
    ```
+   - No upstream yet: `git push -u origin $(git branch --show-current)`.
+   - Upstream exists and is behind/even: `git push origin $(git branch --show-current)`.
+   - Upstream exists and has diverged (local is behind, or both ahead and behind): stop
+     and ask the user whether to rebase or merge before proceeding — don't push through
+     a diverged branch or guess which resolution they want.
 
 3. **Build the release artifacts** for the target project:
    ```bash
@@ -36,11 +43,13 @@ the repo has a `release` target, use that one; if more than one does, ask which.
    `project.json` `release` target builds (check `--build <env>:<chip>` flags there for
    the list of envs).
 
-4. **Publish the prerelease.** Pick a tag distinct per run, e.g.
-   `<branch-name>-beta` (reuse the same tag across pushes on the same branch so
-   `gh release create` naturally errors on a duplicate — in that case use
-   `gh release delete <tag> --yes` first, or just append a short timestamp to keep tags
-   unique; prefer the reuse approach unless the user wants history of every beta build).
+4. **Publish the prerelease.** Prefer a unique tag per run, e.g.
+   `<branch-name>-beta-<short-sha>`, so each build gets its own release with no cleanup
+   needed. If the user instead wants to reuse one tag per branch (overwriting the previous
+   beta rather than accumulating history), delete both the release *and* its git tag first
+   — `gh release delete <tag> --yes --cleanup-tag` — since `gh release delete` alone only
+   removes the GitHub release and leaves the tag behind, which would make the next
+   `gh release create <tag>` fail as a duplicate.
    ```bash
    gh release create <tag> \
      dist/<project>/<project>-*-ota.bin \

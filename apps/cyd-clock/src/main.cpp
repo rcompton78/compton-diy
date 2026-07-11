@@ -1452,7 +1452,7 @@ static const char CONFIG_BACKUP_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 
 <h3>Import</h3>
 <form method="POST" action="/save-config/backup">
-<label>Choose a backup file</label>
+<label for="importFile">Choose a backup file</label>
 <input type="file" id="importFile" accept="application/json">
 <textarea name="json" id="importJson" rows="6" style="width:100%" placeholder="...or paste backup JSON here"></textarea>
 <button type="submit" style="width:100%;margin-top:8px">Restore</button>
@@ -1683,6 +1683,7 @@ static void handleConfigStoreGet() {
         else if (err == "owned") msg = "<div class='banner err'>You already own that item.</div>";
         else if (err == "save") msg = "<div class='banner err'>Purchase failed to save — please try again.</div>";
         else if (err == "resetConfirm") msg = "<div class='banner err'>Type \"reset\" exactly to confirm.</div>";
+        else if (err == "resetSave") msg = "<div class='banner err'>Reset failed to save — please try again.</div>";
     }
     page.replace("%%MSG%%", msg);
     wm.server->send(200, "text/html", page);
@@ -1708,7 +1709,11 @@ static void handleConfigResetPost() {
         return;
     }
     configMgr.resetToDefaults();
-    configMgr.save();
+    if (!configMgr.save()) {
+        wm.server->sendHeader("Location", "/config/store?err=resetSave");
+        wm.server->send(302, "text/plain", "");
+        return;
+    }
     // Same side effects handleConfigCityPost() applies when latitude/longitude/utc change,
     // since resetToDefaults() resets those too.
     ntpClient.setTimeOffset(configMgr.config().utcOffsetSeconds);

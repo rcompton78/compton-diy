@@ -10,7 +10,7 @@ bool ConfigManager::begin() {
 void ConfigManager::fromJson(JsonDocument& doc) {
     _config.latitude         = doc["lat"]    | _config.latitude;
     _config.longitude        = doc["lon"]    | _config.longitude;
-    _config.timezone         = doc["tz"].as<String>();
+    _config.timezone         = doc["tz"] | _config.timezone;
     _config.utcOffsetSeconds = doc["utc"]    | _config.utcOffsetSeconds;
     {
         int h = doc["hunger"] | _config.hungerMinutes;
@@ -46,14 +46,20 @@ void ConfigManager::fromJson(JsonDocument& doc) {
     _config.lastWaterEpoch = doc["water"] | _config.lastWaterEpoch;
     _config.points = doc["points"] | _config.points;
     {
-        uint8_t colors = doc["blanketColors"] | (uint8_t)0;
-        if (colors == 0 && (doc["blanket"] | false)) colors = 1;  // migrate legacy single-blanket flag
+        // Distinguish "blanketColors absent" (preserve current ownership — e.g. a partial
+        // backup import) from "blanketColors present as 0" (an owner-cleared/reset state).
+        uint8_t colors;
+        if (doc["blanketColors"].is<uint8_t>()) colors = doc["blanketColors"];
+        else if (doc["blanket"] | false) colors = 1;  // migrate legacy single-blanket flag
+        else colors = _config.ownedBlanketColors;
         _config.ownedBlanketColors = colors;
     }
     _config.equippedBlanketColor = doc["blanketEquipped"] | _config.equippedBlanketColor;
     {
-        uint8_t stuffies = doc["stuffies"] | (uint8_t)0;
-        if (stuffies == 0 && (doc["teddy"] | false)) stuffies = 1;  // migrate legacy single-teddy flag
+        uint8_t stuffies;
+        if (doc["stuffies"].is<uint8_t>()) stuffies = doc["stuffies"];
+        else if (doc["teddy"] | false) stuffies = 1;  // migrate legacy single-teddy flag
+        else stuffies = _config.ownedStuffies;
         _config.ownedStuffies = stuffies;
     }
     _config.equippedStuffy = doc["stuffyEquipped"] | _config.equippedStuffy;
