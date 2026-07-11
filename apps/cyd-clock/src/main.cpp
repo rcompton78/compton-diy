@@ -59,9 +59,10 @@ static constexpr uint32_t POINTS_WATER = 3;
 static constexpr uint32_t POINTS_MEDS  = 8;
 
 // Gamification: store item costs
-static constexpr uint32_t STORE_COST_TEDDY   = 10;
-static constexpr uint32_t STORE_COST_BUNNY   = 25;
-static constexpr uint32_t STORE_COST_BLANKET = 15;  // per blanket color
+static constexpr uint32_t STORE_COST_TEDDY    = 10;
+static constexpr uint32_t STORE_COST_BUNNY    = 25;
+static constexpr uint32_t STORE_COST_SQUIRREL = 75;
+static constexpr uint32_t STORE_COST_BLANKET  = 15;  // per blanket color
 
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
@@ -84,8 +85,9 @@ static constexpr uint16_t C_SLEEP_DIM = 0x632C;  // dim gray-blue, for the sleep
 static constexpr uint16_t C_SICK   = 0x9E66;  // queasy cheek blush (sickly green)
 static constexpr uint16_t C_MEDS   = 0xF800;  // meds button cross (red)
 static constexpr uint16_t C_WATER  = 0x04FF;  // water button droplet (blue)
-static constexpr uint16_t C_BEAR  = 0x9A46;  // teddy bear peeking out beside the head (brown)
-static constexpr uint16_t C_BUNNY = 0xC618;  // grey bunny peeking out beside the head (grey)
+static constexpr uint16_t C_BEAR     = 0x9A46;  // teddy bear peeking out beside the head (brown)
+static constexpr uint16_t C_BUNNY    = 0xC618;  // grey bunny peeking out beside the head (grey)
+static constexpr uint16_t C_SQUIRREL = 0xCA25;  // red squirrel peeking out beside the head (rust orange)
 
 // Blanket color catalog — each color is purchased separately in the store and can be
 // equipped independently in the dressing room. `id` is the stable identifier used in
@@ -116,6 +118,8 @@ static void drawTeddyPeeking(int cx, int cy, uint16_t accentColor);
 static void drawTeddyFull(int cx, int cy, uint16_t accentColor);
 static void drawBunnyPeeking(int cx, int cy, uint16_t accentColor);
 static void drawBunnyFull(int cx, int cy, uint16_t accentColor);
+static void drawSquirrelPeeking(int cx, int cy, uint16_t accentColor);
+static void drawSquirrelFull(int cx, int cy, uint16_t accentColor);
 
 // Stuffy catalog — same purchase/equip model as blanket colors, so more stuffies can be
 // added later without changing the store/dressing-room plumbing. `id` is the stable
@@ -133,8 +137,9 @@ struct Stuffy {
     void (*drawFull)(int cx, int cy, uint16_t accentColor);
 };
 static constexpr Stuffy STUFFIES[] = {
-    {"teddy", "Teddy Bear",  STORE_COST_TEDDY, drawTeddyPeeking, drawTeddyFull},
-    {"bunny", "Grey Bunny",  STORE_COST_BUNNY, drawBunnyPeeking, drawBunnyFull},
+    {"teddy",    "Teddy Bear",   STORE_COST_TEDDY,    drawTeddyPeeking,    drawTeddyFull},
+    {"bunny",    "Grey Bunny",   STORE_COST_BUNNY,    drawBunnyPeeking,    drawBunnyFull},
+    {"squirrel", "Red Squirrel", STORE_COST_SQUIRREL, drawSquirrelPeeking, drawSquirrelFull},
 };
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
 
@@ -401,6 +406,45 @@ static void drawBunnyFull(int cx, int cy, uint16_t accentColor) {
     tft.fillCircle(bx - 5, by + 31, 4, C_BUNNY);            // left foot
     tft.fillCircle(bx + 5, by + 31, 4, C_BUNNY);            // right foot
     tft.fillCircle(bx, by + 33, 3, TFT_WHITE);              // fluffy tail
+}
+
+// Shared ear/head/snout/eyes/nose art reused by both squirrel variants below — same layout
+// as drawTeddyHead() but with smaller rounded ears, sized to leave room for the bushy tail
+// arcing up behind.
+static void drawSquirrelHead(int bx, int by, uint16_t snoutColor) {
+    tft.fillCircle(bx - 5, by - 8, 3, C_SQUIRREL);  // left ear
+    tft.fillCircle(bx + 5, by - 8, 3, C_SQUIRREL);  // right ear
+    tft.fillCircle(bx,     by,     8, C_SQUIRREL);  // head
+    tft.fillCircle(bx,     by + 3, 3, snoutColor);  // snout
+    tft.fillCircle(bx - 3, by - 2, 1, C_DARK);   // left eye
+    tft.fillCircle(bx + 3, by - 2, 1, C_DARK);   // right eye
+    tft.fillCircle(bx,     by + 1, 1, C_DARK);   // nose
+}
+
+// Red squirrel peeking out beside the head, tucked into the blanket's top edge — the
+// signature bushy tail arcs up behind the head so the squirrel still reads distinctly
+// even with its body hidden behind the blanket.
+static void drawSquirrelPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 40, by = cy - 6;
+    tft.fillCircle(bx + 6,  by - 16, 6, C_SQUIRREL);
+    tft.fillCircle(bx + 10, by - 22, 5, C_SQUIRREL);
+    tft.fillCircle(bx + 12, by - 29, 4, accentColor);  // tail tip
+    drawSquirrelHead(bx, by, accentColor);
+}
+
+// Full-body red squirrel sitting beside the cat — used when the squirrel is owned without
+// the blanket, since there's no blanket edge to tuck a lone head behind. The bushy tail
+// arcs up over its back, the premium stuffy's distinguishing silhouette.
+static void drawSquirrelFull(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 38, by = cy - 8;
+    tft.fillCircle(bx + 10, by + 6,  7, C_SQUIRREL);
+    tft.fillCircle(bx + 14, by - 4,  6, C_SQUIRREL);
+    tft.fillCircle(bx + 15, by - 13, 5, accentColor);  // tail tip
+    drawSquirrelHead(bx, by, accentColor);
+    tft.fillRoundRect(bx - 8, by + 7, 16, 24, 8, C_SQUIRREL);  // body
+    tft.fillCircle(bx, by + 17, 4, accentColor);               // belly patch
+    tft.fillCircle(bx - 5, by + 31, 4, C_SQUIRREL);            // left foot
+    tft.fillCircle(bx + 5, by + 31, 4, C_SQUIRREL);            // right foot
 }
 
 // Deeply-closed, sleepy eyes for the sleep-window peek — thinner and gently curled at
