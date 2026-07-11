@@ -7,16 +7,10 @@ bool ConfigManager::begin() {
     return LittleFS.begin(true);
 }
 
-bool ConfigManager::load() {
-    File f = LittleFS.open(CONFIG_FILE, "r");
-    if (!f) return false;
-
-    JsonDocument doc;
-    if (deserializeJson(doc, f)) { f.close(); return false; }
-
+void ConfigManager::fromJson(JsonDocument& doc) {
     _config.latitude         = doc["lat"]    | _config.latitude;
     _config.longitude        = doc["lon"]    | _config.longitude;
-    _config.timezone         = doc["tz"].as<String>();
+    _config.timezone         = doc["tz"] | _config.timezone;
     _config.utcOffsetSeconds = doc["utc"]    | _config.utcOffsetSeconds;
     {
         int h = doc["hunger"] | _config.hungerMinutes;
@@ -52,29 +46,28 @@ bool ConfigManager::load() {
     _config.lastWaterEpoch = doc["water"] | _config.lastWaterEpoch;
     _config.points = doc["points"] | _config.points;
     {
-        uint8_t colors = doc["blanketColors"] | (uint8_t)0;
-        if (colors == 0 && (doc["blanket"] | false)) colors = 1;  // migrate legacy single-blanket flag
+        // Distinguish "blanketColors absent" (preserve current ownership — e.g. a partial
+        // backup import) from "blanketColors present as 0" (an owner-cleared/reset state).
+        uint8_t colors;
+        if (doc["blanketColors"].is<uint8_t>()) colors = doc["blanketColors"];
+        else if (doc["blanket"] | false) colors = 1;  // migrate legacy single-blanket flag
+        else colors = _config.ownedBlanketColors;
         _config.ownedBlanketColors = colors;
     }
     _config.equippedBlanketColor = doc["blanketEquipped"] | _config.equippedBlanketColor;
     {
-        uint8_t stuffies = doc["stuffies"] | (uint8_t)0;
-        if (stuffies == 0 && (doc["teddy"] | false)) stuffies = 1;  // migrate legacy single-teddy flag
+        uint8_t stuffies;
+        if (doc["stuffies"].is<uint8_t>()) stuffies = doc["stuffies"];
+        else if (doc["teddy"] | false) stuffies = 1;  // migrate legacy single-teddy flag
+        else stuffies = _config.ownedStuffies;
         _config.ownedStuffies = stuffies;
     }
     _config.equippedStuffy = doc["stuffyEquipped"] | _config.equippedStuffy;
     _config.seenStuffyCount       = doc["seenStuffies"] | _config.seenStuffyCount;
     _config.seenBlanketColorCount = doc["seenBlankets"]  | _config.seenBlanketColorCount;
-
-    f.close();
-    return true;
 }
 
-bool ConfigManager::save() {
-    File f = LittleFS.open(CONFIG_FILE, "w");
-    if (!f) return false;
-
-    JsonDocument doc;
+void ConfigManager::toJson(JsonDocument& doc) const {
     doc["lat"]    = _config.latitude;
     doc["lon"]    = _config.longitude;
     doc["tz"]     = _config.timezone;
@@ -97,8 +90,43 @@ bool ConfigManager::save() {
     doc["stuffyEquipped"]  = _config.equippedStuffy;
     doc["seenStuffies"]    = _config.seenStuffyCount;
     doc["seenBlankets"]    = _config.seenBlanketColorCount;
+}
+
+bool ConfigManager::load() {
+    File f = LittleFS.open(CONFIG_FILE, "r");
+    if (!f) return false;
+
+    JsonDocument doc;
+    if (deserializeJson(doc, f)) { f.close(); return false; }
+    fromJson(doc);
+
+    f.close();
+    return true;
+}
+
+bool ConfigManager::save() {
+    File f = LittleFS.open(CONFIG_FILE, "w");
+    if (!f) return false;
+
+    JsonDocument doc;
+    toJson(doc);
 
     serializeJson(doc, f);
     f.close();
+    return true;
+}
+
+String ConfigManager::exportBackupJson() const {
+    JsonDocument doc;
+    toJson(doc);
+    String out;
+    serializeJson(doc, out);
+    return out;
+}
+
+bool ConfigManager::importBackupJson(const String& json) {
+    JsonDocument doc;
+    if (deserializeJson(doc, json)) return false;
+    fromJson(doc);
     return true;
 }
