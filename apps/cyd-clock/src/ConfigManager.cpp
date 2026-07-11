@@ -7,13 +7,7 @@ bool ConfigManager::begin() {
     return LittleFS.begin(true);
 }
 
-bool ConfigManager::load() {
-    File f = LittleFS.open(CONFIG_FILE, "r");
-    if (!f) return false;
-
-    JsonDocument doc;
-    if (deserializeJson(doc, f)) { f.close(); return false; }
-
+void ConfigManager::fromJson(JsonDocument& doc) {
     _config.latitude         = doc["lat"]    | _config.latitude;
     _config.longitude        = doc["lon"]    | _config.longitude;
     _config.timezone         = doc["tz"].as<String>();
@@ -65,16 +59,9 @@ bool ConfigManager::load() {
     _config.equippedStuffy = doc["stuffyEquipped"] | _config.equippedStuffy;
     _config.seenStuffyCount       = doc["seenStuffies"] | _config.seenStuffyCount;
     _config.seenBlanketColorCount = doc["seenBlankets"]  | _config.seenBlanketColorCount;
-
-    f.close();
-    return true;
 }
 
-bool ConfigManager::save() {
-    File f = LittleFS.open(CONFIG_FILE, "w");
-    if (!f) return false;
-
-    JsonDocument doc;
+void ConfigManager::toJson(JsonDocument& doc) const {
     doc["lat"]    = _config.latitude;
     doc["lon"]    = _config.longitude;
     doc["tz"]     = _config.timezone;
@@ -97,8 +84,43 @@ bool ConfigManager::save() {
     doc["stuffyEquipped"]  = _config.equippedStuffy;
     doc["seenStuffies"]    = _config.seenStuffyCount;
     doc["seenBlankets"]    = _config.seenBlanketColorCount;
+}
+
+bool ConfigManager::load() {
+    File f = LittleFS.open(CONFIG_FILE, "r");
+    if (!f) return false;
+
+    JsonDocument doc;
+    if (deserializeJson(doc, f)) { f.close(); return false; }
+    fromJson(doc);
+
+    f.close();
+    return true;
+}
+
+bool ConfigManager::save() {
+    File f = LittleFS.open(CONFIG_FILE, "w");
+    if (!f) return false;
+
+    JsonDocument doc;
+    toJson(doc);
 
     serializeJson(doc, f);
     f.close();
+    return true;
+}
+
+String ConfigManager::exportBackupJson() const {
+    JsonDocument doc;
+    toJson(doc);
+    String out;
+    serializeJson(doc, out);
+    return out;
+}
+
+bool ConfigManager::importBackupJson(const String& json) {
+    JsonDocument doc;
+    if (deserializeJson(doc, json)) return false;
+    fromJson(doc);
     return true;
 }

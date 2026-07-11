@@ -1296,6 +1296,7 @@ static const char CONFIG_HOME_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <a class="nav" href="/config/city">City (weather &amp; timezone)</a>
 <a class="nav" href="/config/store">Store</a>
 <a class="nav" href="/config/dress">Dressing Room</a>
+<a class="nav" href="/config/backup">Backup</a>
 </body></html>
 )html";
 
@@ -1433,6 +1434,42 @@ function pick(k,lat,lon,tz){
 </body></html>
 )html";
 
+static const char CONFIG_BACKUP_HTML[] PROGMEM = R"html(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cat Control Panel · Backup</title>
+<style>%%STYLE%%</style>
+</head><body>
+<a class="back" href="/config">&larr; Configuration</a>
+<h2>Backup</h2>
+%%MSG%%
+
+<h3>Export</h3>
+<p>Your entire config — cat name/schedule, city/timezone, and store/points state. Copy this, or use the download link, and save it somewhere safe.</p>
+<textarea readonly rows="6" style="width:100%">%%EXPORT_JSON%%</textarea>
+<p><a href="/config/backup/export" download="cat-clock-backup.json">Download as file</a></p>
+
+<h3>Import</h3>
+<form method="POST" action="/save-config/backup">
+<label>Choose a backup file</label>
+<input type="file" id="importFile" accept="application/json">
+<textarea name="json" id="importJson" rows="6" style="width:100%" placeholder="...or paste backup JSON here"></textarea>
+<button type="submit" style="width:100%;margin-top:8px">Restore</button>
+</form>
+<script>
+document.getElementById('importFile').addEventListener('change', function(e){
+    var file = e.target.files[0];
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function(evt){ document.getElementById('importJson').value = evt.target.result; };
+    reader.readAsText(file);
+});
+</script>
+
+</body></html>
+)html";
+
 static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
@@ -1454,17 +1491,22 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <form id="cheatForm" method="POST" action="/save-config/cheat" style="display:none;margin-top:12px">
 <button type="submit">+50 points</button>
 </form>
+<form id="resetForm" method="POST" action="/save-config/reset" style="display:none;margin-top:12px">
+<input type="text" name="confirm" placeholder="type reset to confirm">
+<button type="submit" style="width:100%;margin-top:8px">Reset Everything</button>
+</form>
 <script>
 // Easter egg: tap the "Store" heading 7 times in a row (no other tap in between)
-// to reveal a cheat button that grants 50 points.
+// to reveal a cheat button that grants 50 points, and a reset-everything form.
 (function(){
     var taps = 0;
     var title = document.getElementById('storeTitle');
     var cheat = document.getElementById('cheatForm');
+    var reset = document.getElementById('resetForm');
     document.addEventListener('click', function(e){
         if (e.target === title) {
             taps++;
-            if (taps >= 7) cheat.style.display = 'block';
+            if (taps >= 7) { cheat.style.display = 'block'; reset.style.display = 'block'; }
         } else {
             taps = 0;
         }
@@ -1631,6 +1673,8 @@ static void handleConfigStoreGet() {
     String msg = "";
     if (wm.server->hasArg("cheat")) {
         msg = "<div class='banner ok'>+50 points!</div>";
+    } else if (wm.server->hasArg("reset")) {
+        msg = "<div class='banner ok'>Everything has been reset.</div>";
     } else if (wm.server->hasArg("saved")) {
         msg = "<div class='banner ok'>Purchase complete.</div>";
     } else if (wm.server->hasArg("err")) {
@@ -1638,6 +1682,7 @@ static void handleConfigStoreGet() {
         if (err == "funds") msg = "<div class='banner err'>Not enough points.</div>";
         else if (err == "owned") msg = "<div class='banner err'>You already own that item.</div>";
         else if (err == "save") msg = "<div class='banner err'>Purchase failed to save — please try again.</div>";
+        else if (err == "resetConfirm") msg = "<div class='banner err'>Type \"reset\" exactly to confirm.</div>";
     }
     page.replace("%%MSG%%", msg);
     wm.server->send(200, "text/html", page);
@@ -1649,6 +1694,78 @@ static void handleConfigStoreCheatPost() {
     configMgr.config().points += 50;
     configMgr.save();
     wm.server->sendHeader("Location", "/config/store?cheat=1");
+    wm.server->send(302, "text/plain", "");
+}
+
+// Easter egg: wipes the entire config — cat name/schedule, city/timezone, and all
+// gamification state — back to AppConfig's defaults, reached only via the hidden reset
+// form revealed alongside the cheat button (see CONFIG_STORE_HTML's inline script).
+// Requires typing "reset" to guard against an accidental tap/submit.
+static void handleConfigResetPost() {
+    if (wm.server->arg("confirm") != "reset") {
+        wm.server->sendHeader("Location", "/config/store?err=resetConfirm");
+        wm.server->send(302, "text/plain", "");
+        return;
+    }
+    configMgr.resetToDefaults();
+    configMgr.save();
+    // Same side effects handleConfigCityPost() applies when latitude/longitude/utc change,
+    // since resetToDefaults() resets those too.
+    ntpClient.setTimeOffset(configMgr.config().utcOffsetSeconds);
+    lastWeatherFetch = millis() - WEATHER_UPDATE_INTERVAL_MS - 1;
+    dirty.header = true;
+    dirty.animal = true;
+    wm.server->sendHeader("Location", "/config/store?reset=1");
+    wm.server->send(302, "text/plain", "");
+}
+
+static void handleConfigBackupGet() {
+    String page = String(FPSTR(CONFIG_BACKUP_HTML));
+    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    page.replace("%%EXPORT_JSON%%", htmlEscape(configMgr.exportBackupJson()));
+    String msg = "";
+    if (wm.server->hasArg("saved")) {
+        msg = "<div class='banner ok'>Backup restored.</div>";
+    } else if (wm.server->hasArg("err")) {
+        String err = wm.server->arg("err");
+        if (err == "empty") msg = "<div class='banner err'>Paste or choose a backup file first.</div>";
+        else if (err == "parse") msg = "<div class='banner err'>That doesn't look like a valid backup file.</div>";
+        else if (err == "save") msg = "<div class='banner err'>Restore failed to save — please try again.</div>";
+    }
+    page.replace("%%MSG%%", msg);
+    wm.server->send(200, "text/html", page);
+}
+
+static void handleConfigBackupExportGet() {
+    wm.server->sendHeader("Content-Disposition", "attachment; filename=\"cat-clock-backup.json\"");
+    wm.server->send(200, "application/json", configMgr.exportBackupJson());
+}
+
+static void handleConfigBackupPost() {
+    String json = wm.server->arg("json");
+    json.trim();
+    if (json.length() == 0) {
+        wm.server->sendHeader("Location", "/config/backup?err=empty");
+        wm.server->send(302, "text/plain", "");
+        return;
+    }
+    if (!configMgr.importBackupJson(json)) {
+        wm.server->sendHeader("Location", "/config/backup?err=parse");
+        wm.server->send(302, "text/plain", "");
+        return;
+    }
+    if (!configMgr.save()) {
+        wm.server->sendHeader("Location", "/config/backup?err=save");
+        wm.server->send(302, "text/plain", "");
+        return;
+    }
+    // Same side effects handleConfigCityPost() applies when latitude/longitude/utc change,
+    // since a restored backup may carry a different city/timezone than what's currently set.
+    ntpClient.setTimeOffset(configMgr.config().utcOffsetSeconds);
+    lastWeatherFetch = millis() - WEATHER_UPDATE_INTERVAL_MS - 1;
+    dirty.header = true;
+    dirty.animal = true;  // name/points/owned/equipped items may have changed
+    wm.server->sendHeader("Location", "/config/backup?saved=1");
     wm.server->send(302, "text/plain", "");
 }
 
@@ -1903,11 +2020,15 @@ static void runWiFiManager(ConfigManager& cfg) {
     wm.server->on("/config/city",      HTTP_GET,  handleConfigCityGet);
     wm.server->on("/config/store",     HTTP_GET,  handleConfigStoreGet);
     wm.server->on("/config/dress",     HTTP_GET,  handleConfigDressGet);
+    wm.server->on("/config/backup",        HTTP_GET,  handleConfigBackupGet);
+    wm.server->on("/config/backup/export", HTTP_GET,  handleConfigBackupExportGet);
     wm.server->on("/save-config/cat",  HTTP_POST, handleConfigCatPost);
     wm.server->on("/save-config/city", HTTP_POST, handleConfigCityPost);
     wm.server->on("/save-config/store", HTTP_POST, handleConfigStorePost);
     wm.server->on("/save-config/cheat", HTTP_POST, handleConfigStoreCheatPost);
+    wm.server->on("/save-config/reset", HTTP_POST, handleConfigResetPost);
     wm.server->on("/save-config/dress", HTTP_POST, handleConfigDressPost);
+    wm.server->on("/save-config/backup", HTTP_POST, handleConfigBackupPost);
 }
 
 // ── Arduino ───────────────────────────────────────────────────────────────────

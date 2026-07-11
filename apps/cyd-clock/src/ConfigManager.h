@@ -1,5 +1,6 @@
 #pragma once
 #include <Arduino.h>
+#include <ArduinoJson.h>
 
 struct AppConfig {
     float latitude = 53.5461;   // Default: Edmonton, AB
@@ -33,6 +34,25 @@ public:
     bool save();
     AppConfig& config() { return _config; }
 
+    // Resets every field to AppConfig's defaults. Only mutates in-memory state — the
+    // caller must still call save() to persist it, same as every other config mutation.
+    void resetToDefaults() { _config = AppConfig(); }
+
+    // Serializes the entire config as JSON, using the same key names save() writes to
+    // disk — for the web UI's backup export/import. Covers everything needed to restore
+    // full device state: cat name/schedule, city/timezone, and all gamification state.
+    String exportBackupJson() const;
+    // Restores the full config from a previously exported JSON blob, with the same
+    // validation/bounds-checking load() applies. Returns false only if the payload isn't
+    // valid JSON; on success this only mutates in-memory state — the caller must still
+    // call save() to persist it, same as every other config mutation.
+    bool importBackupJson(const String& json);
+
 private:
+    // Shared by save()/exportBackupJson() and load()/importBackupJson() so the on-disk
+    // format and the backup format can never drift apart.
+    void toJson(JsonDocument& doc) const;
+    void fromJson(JsonDocument& doc);
+
     AppConfig _config;
 };
