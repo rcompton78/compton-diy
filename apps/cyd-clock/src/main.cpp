@@ -85,6 +85,7 @@ static constexpr uint16_t C_SLEEP_DIM = 0x632C;  // dim gray-blue, for the sleep
 static constexpr uint16_t C_SICK   = 0x9E66;  // queasy cheek blush (sickly green)
 static constexpr uint16_t C_MEDS   = 0xF800;  // meds button cross (red)
 static constexpr uint16_t C_WATER  = 0x04FF;  // water button droplet (blue)
+static constexpr uint16_t C_NEW_ITEM = 0x07FF;  // points balance flash color, hinting at an unseen store item (cyan)
 static constexpr uint16_t C_BEAR     = 0x9A46;  // teddy bear peeking out beside the head (brown)
 static constexpr uint16_t C_BUNNY    = 0xC618;  // grey bunny peeking out beside the head (grey)
 static constexpr uint16_t C_SQUIRREL = 0xCA25;  // red squirrel peeking out beside the head (rust orange)
@@ -214,6 +215,7 @@ unsigned long forceSickDeadlineMs = 0;   // test-only: armed via /config, 0 = no
 unsigned long forceThirstDeadlineMs = 0; // test-only: armed via /config, 0 = not armed, not persisted
 
 struct { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick, hungerLines, zzzFx; } dirty = {true, true, true, true, false, false, false, false, false};
+bool pointsFlashOn = false;  // toggled every ~500ms while hasNewStoreItems(); read by drawPoints()
 
 
 // ── Cat drawing ───────────────────────────────────────────────────────────────
@@ -354,6 +356,14 @@ static int equippedStuffyIndex() {
         if (owned & (1 << i)) return i;
     }
     return -1;
+}
+
+// True whenever the store catalog has grown (a new stuffy or blanket color shipped in a
+// firmware update) since the last time the user opened the store page — cleared by
+// handleConfigStoreGet(), which stamps the current catalog sizes as "seen".
+static bool hasNewStoreItems() {
+    return STUFFY_COUNT > configMgr.config().seenStuffyCount ||
+           BLANKET_COLOR_COUNT > configMgr.config().seenBlanketColorCount;
 }
 
 // Shared ear/head/snout/eyes/nose art reused by both teddy variants below.
@@ -654,6 +664,21 @@ static void drawHeader() {
     }
 }
 
+// Points balance — top-right of the cat's head, just under the header's weather text.
+// Own clear rect since this sits to the right of the cat's bounding box, outside
+// drawAnimal()'s clear rect — starts past x=152 so it doesn't clip the cat's right ear
+// (drawCat()'s ear triangle reaches up to roughly x=152, y=65). Flashes between yellow and
+// cyan while hasNewStoreItems() is true, as a hint to check the store for something new.
+static void drawPoints() {
+    char ptsBuf[16];
+    snprintf(ptsBuf, sizeof(ptsBuf), "%lu pts", (unsigned long)configMgr.config().points);
+    tft.fillRect(155, ANIMAL_Y, 85, 20, TFT_BLACK);
+    uint16_t color = (hasNewStoreItems() && pointsFlashOn) ? C_NEW_ITEM : TFT_YELLOW;
+    tft.setTextColor(color, TFT_BLACK);
+    int ptsWidth = tft.textWidth(ptsBuf, 2);
+    tft.drawString(ptsBuf, 234 - ptsWidth, ANIMAL_Y + 4, 2);
+}
+
 static void drawAnimal() {
     // Clear only sparkle positions and the cat's bounding box (including ±3px bounce).
     // Avoids wiping the full 240×175 zone which causes a visible black flash.
@@ -676,18 +701,9 @@ static void drawAnimal() {
         }
     }
 
-    // Points balance — top-right of the cat's head, just under the header's weather text.
-    // Drawn after drawCat()/drawSleepingCat() since both repaint their own clear rect
-    // internally and would otherwise wipe this out.
-    char ptsBuf[16];
-    snprintf(ptsBuf, sizeof(ptsBuf), "%lu pts", (unsigned long)configMgr.config().points);
-    // Own clear rect since this sits to the right of the cat's bounding box, outside the
-    // fillRect at the top of this function — starts past x=152 so it doesn't clip the
-    // cat's right ear (drawCat()'s ear triangle reaches up to roughly x=152, y=65).
-    tft.fillRect(155, ANIMAL_Y, 85, 20, TFT_BLACK);
-    tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-    int ptsWidth = tft.textWidth(ptsBuf, 2);
-    tft.drawString(ptsBuf, 234 - ptsWidth, ANIMAL_Y + 4, 2);
+    // Points balance — drawn after drawCat()/drawSleepingCat() since both repaint their own
+    // clear rect internally and would otherwise wipe this out.
+    drawPoints();
 
     // Boredom "Zz" overlay — sits outside the main clear rect, so always redraw/erase
     // here regardless of tier; cat.napping already encodes whether it should show
@@ -1585,6 +1601,13 @@ static String storeItemAction(const char* item, bool owned, uint32_t cost, uint3
 }
 
 static void handleConfigStoreGet() {
+    // Clear the on-device points flash by stamping the current catalog sizes as "seen" —
+    // any store visit acknowledges every item added up to this point.
+    if (hasNewStoreItems()) {
+        configMgr.config().seenStuffyCount       = (uint8_t)STUFFY_COUNT;
+        configMgr.config().seenBlanketColorCount = (uint8_t)BLANKET_COLOR_COUNT;
+        configMgr.save();
+    }
     String page = String(FPSTR(CONFIG_STORE_HTML));
     page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
     uint32_t points = configMgr.config().points;
@@ -2016,6 +2039,24 @@ void loop() {
             if (tm->tm_min != prevMin) { prevMin = tm->tm_min; dirty.header = true; }
             else                        { dirty.headerTick = true; }
         }
+    }
+
+    // Points flash — while the store has an unseen new item, toggle the points balance's
+    // color every 500ms; repaint once more with the flash off the moment it's cleared
+    // (i.e. the user just opened the store) so it doesn't linger mid-flash.
+    {
+        static unsigned long lastFlash = 0;
+        static bool wasNew = false;
+        bool isNew = hasNewStoreItems();
+        if (isNew && now - lastFlash >= 500) {
+            lastFlash = now;
+            pointsFlashOn = !pointsFlashOn;
+            drawPoints();
+        } else if (!isNew && wasNew) {
+            pointsFlashOn = false;
+            drawPoints();
+        }
+        wasNew = isNew;
     }
 
     // Timer row refresh while running
