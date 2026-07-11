@@ -54,7 +54,7 @@ static constexpr int WATER_H  = TREAT_H;
 
 // Gamification: point award per care action, only when it actually addressed a real need
 static constexpr uint32_t POINTS_TREAT = 5;
-static constexpr uint32_t POINTS_PLAY  = 5;
+static constexpr uint32_t POINTS_PLAY  = 3;
 static constexpr uint32_t POINTS_WATER = 3;
 static constexpr uint32_t POINTS_MEDS  = 8;
 
