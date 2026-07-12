@@ -476,13 +476,13 @@ static void drawSquirrelFull(int cx, int cy, uint16_t accentColor) {
 // (its distinguishing white-face silhouette) while eyes sit on top as white-with-pupil
 // dots, since a plain dark dot wouldn't show against the penguin's black head.
 static void drawPenguinHead(int bx, int by, uint16_t faceColor) {
-    tft.fillCircle(bx,     by,     8, C_PENGUIN);       // head
-    tft.fillCircle(bx,     by + 3, 4, faceColor);       // white face patch
-    tft.fillCircle(bx - 3, by - 2, 2, TFT_WHITE);       // left eye white
-    tft.fillCircle(bx + 3, by - 2, 2, TFT_WHITE);       // right eye white
-    tft.fillCircle(bx - 3, by - 2, 1, C_DARK);          // left pupil
-    tft.fillCircle(bx + 3, by - 2, 1, C_DARK);          // right pupil
-    tft.fillTriangle(bx - 2, by + 2, bx + 2, by + 2, bx, by + 6, C_PENGUIN_BEAK);  // beak
+    tft.fillCircle(bx,     by,     10, C_PENGUIN);      // head
+    tft.fillCircle(bx,     by + 4, 5,  faceColor);      // white face patch
+    tft.fillCircle(bx - 4, by - 2, 2,  TFT_WHITE);      // left eye white
+    tft.fillCircle(bx + 4, by - 2, 2,  TFT_WHITE);      // right eye white
+    tft.fillCircle(bx - 4, by - 2, 1,  C_DARK);         // left pupil
+    tft.fillCircle(bx + 4, by - 2, 1,  C_DARK);         // right pupil
+    tft.fillTriangle(bx - 3, by + 3, bx + 3, by + 3, bx, by + 8, C_PENGUIN_BEAK);  // beak
 }
 
 // Penguin peeking out beside the head, tucked into the blanket's top edge —
