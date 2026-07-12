@@ -90,7 +90,7 @@ static constexpr uint16_t C_NEW_ITEM = 0x07FF;  // points balance flash color, h
 static constexpr uint16_t C_BEAR     = 0x9A46;  // teddy bear peeking out beside the head (brown)
 static constexpr uint16_t C_BUNNY    = 0xC618;  // grey bunny peeking out beside the head (grey)
 static constexpr uint16_t C_SQUIRREL = 0xCA25;  // red squirrel peeking out beside the head (rust orange)
-static constexpr uint16_t C_PENGUIN     = 0x0000;  // penguin peeking out beside the head (black)
+static constexpr uint16_t C_PENGUIN      = 0x0000;  // penguin peeking out beside the head (black)
 static constexpr uint16_t C_PENGUIN_BEAK = 0xFD20;  // penguin beak/feet (orange)
 
 // Blanket color catalog — each color is purchased separately in the store and can be
@@ -501,8 +501,8 @@ static void drawPenguinFull(int cx, int cy, uint16_t accentColor) {
     drawPenguinHead(bx, by, accentColor);
     tft.fillRoundRect(bx - 9, by + 7, 18, 26, 9, C_PENGUIN);      // body
     tft.fillRoundRect(bx - 5, by + 10, 10, 20, 5, accentColor);   // white belly patch
-    tft.fillTriangle(bx - 9, by + 15, bx - 15, by + 23, bx - 6, by + 24, C_PENGUIN);  // left flipper
-    tft.fillTriangle(bx + 9, by + 15, bx + 15, by + 23, bx + 6, by + 24, C_PENGUIN);  // right flipper
+    tft.fillTriangle(bx - 9, by + 15, bx - 11, by + 23, bx - 6, by + 24, C_PENGUIN);  // left flipper
+    tft.fillTriangle(bx + 9, by + 15, bx + 11, by + 23, bx + 6, by + 24, C_PENGUIN);  // right flipper
     tft.fillTriangle(bx - 6, by + 33, bx - 9, by + 37, bx - 2, by + 37, C_PENGUIN_BEAK);  // left foot
     tft.fillTriangle(bx + 6, by + 33, bx + 9, by + 37, bx + 2, by + 37, C_PENGUIN_BEAK);  // right foot
 }
