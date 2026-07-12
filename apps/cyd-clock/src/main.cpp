@@ -62,6 +62,7 @@ static constexpr uint32_t POINTS_MEDS  = 8;
 static constexpr uint32_t STORE_COST_TEDDY    = 60;
 static constexpr uint32_t STORE_COST_BUNNY    = 60;
 static constexpr uint32_t STORE_COST_SQUIRREL = 150;
+static constexpr uint32_t STORE_COST_PENGUIN  = 150;
 static constexpr uint32_t STORE_COST_BLANKET  = 40;  // per blanket color
 
 // Touch calibration — print "Touch: x= y=" from serial to tune
@@ -89,6 +90,8 @@ static constexpr uint16_t C_NEW_ITEM = 0x07FF;  // points balance flash color, h
 static constexpr uint16_t C_BEAR     = 0x9A46;  // teddy bear peeking out beside the head (brown)
 static constexpr uint16_t C_BUNNY    = 0xC618;  // grey bunny peeking out beside the head (grey)
 static constexpr uint16_t C_SQUIRREL = 0xCA25;  // red squirrel peeking out beside the head (rust orange)
+static constexpr uint16_t C_PENGUIN      = 0x0000;  // penguin peeking out beside the head (black)
+static constexpr uint16_t C_PENGUIN_BEAK = 0xFD20;  // penguin beak/feet (orange)
 
 // Blanket color catalog — each color is purchased separately in the store and can be
 // equipped independently in the dressing room. `id` is the stable identifier used in
@@ -121,6 +124,8 @@ static void drawBunnyPeeking(int cx, int cy, uint16_t accentColor);
 static void drawBunnyFull(int cx, int cy, uint16_t accentColor);
 static void drawSquirrelPeeking(int cx, int cy, uint16_t accentColor);
 static void drawSquirrelFull(int cx, int cy, uint16_t accentColor);
+static void drawPenguinPeeking(int cx, int cy, uint16_t accentColor);
+static void drawPenguinFull(int cx, int cy, uint16_t accentColor);
 
 // Stuffy catalog — same purchase/equip model as blanket colors, so more stuffies can be
 // added later without changing the store/dressing-room plumbing. `id` is the stable
@@ -141,6 +146,7 @@ static constexpr Stuffy STUFFIES[] = {
     {"teddy",    "Teddy Bear",   STORE_COST_TEDDY,    drawTeddyPeeking,    drawTeddyFull},
     {"bunny",    "Grey Bunny",   STORE_COST_BUNNY,    drawBunnyPeeking,    drawBunnyFull},
     {"squirrel", "Red Squirrel", STORE_COST_SQUIRREL, drawSquirrelPeeking, drawSquirrelFull},
+    {"penguin",  "Penguin",      STORE_COST_PENGUIN,  drawPenguinPeeking,  drawPenguinFull},
 };
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
 
@@ -463,6 +469,42 @@ static void drawSquirrelFull(int cx, int cy, uint16_t accentColor) {
     tft.fillCircle(bx, by + 17, 4, accentColor);               // belly patch
     tft.fillCircle(bx - 5, by + 31, 4, C_SQUIRREL);            // left foot
     tft.fillCircle(bx + 5, by + 31, 4, C_SQUIRREL);            // right foot
+}
+
+// Shared head art reused by both penguin variants below — unlike the other stuffies'
+// snout-and-fur-color heads, the penguin's face patch is always the blanket accent color
+// (its distinguishing white-face silhouette) while eyes sit on top as white-with-pupil
+// dots, since a plain dark dot wouldn't show against the penguin's black head.
+static void drawPenguinHead(int bx, int by, uint16_t faceColor) {
+    tft.fillCircle(bx,     by,     10, C_PENGUIN);      // head
+    tft.fillCircle(bx,     by + 4, 5,  faceColor);      // white face patch
+    tft.fillCircle(bx - 4, by - 2, 2,  TFT_WHITE);      // left eye white
+    tft.fillCircle(bx + 4, by - 2, 2,  TFT_WHITE);      // right eye white
+    tft.fillCircle(bx - 4, by - 2, 1,  C_DARK);         // left pupil
+    tft.fillCircle(bx + 4, by - 2, 1,  C_DARK);         // right pupil
+    tft.fillTriangle(bx - 3, by + 3, bx + 3, by + 3, bx, by + 8, C_PENGUIN_BEAK);  // beak
+}
+
+// Penguin peeking out beside the head, tucked into the blanket's top edge —
+// only reads correctly when the blanket is also owned to tuck behind.
+static void drawPenguinPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 40, by = cy - 6;
+    drawPenguinHead(bx, by, accentColor);
+}
+
+// Full-body penguin sitting beside the cat — used when the penguin is owned without the
+// blanket, since there's no blanket edge to tuck a lone head behind. Flippers and
+// orange feet stay fixed to C_PENGUIN/C_PENGUIN_BEAK rather than the accent color, so the
+// premium stuffy's silhouette reads the same regardless of which blanket is equipped.
+static void drawPenguinFull(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 38, by = cy - 8;
+    drawPenguinHead(bx, by, accentColor);
+    tft.fillRoundRect(bx - 9, by + 7, 18, 26, 9, C_PENGUIN);      // body
+    tft.fillRoundRect(bx - 5, by + 10, 10, 20, 5, accentColor);   // white belly patch
+    tft.fillTriangle(bx - 9, by + 15, bx - 11, by + 23, bx - 6, by + 24, C_PENGUIN);  // left flipper
+    tft.fillTriangle(bx + 9, by + 15, bx + 11, by + 23, bx + 6, by + 24, C_PENGUIN);  // right flipper
+    tft.fillTriangle(bx - 6, by + 33, bx - 9, by + 37, bx - 2, by + 37, C_PENGUIN_BEAK);  // left foot
+    tft.fillTriangle(bx + 6, by + 33, bx + 9, by + 37, bx + 2, by + 37, C_PENGUIN_BEAK);  // right foot
 }
 
 // Deeply-closed, sleepy eyes for the sleep-window peek — thinner and gently curled at
