@@ -71,6 +71,51 @@ Location defaults to `0.0, 0.0` until set via the WiFiManager portal. To configu
 ### UTC Offset
 Currently hardcoded default in `ConfigManager` — user needs to set via portal on first boot.
 
+## Flash Usage (DIY-39, 2026-07-12)
+
+Sizes from `pio run` on the current build:
+
+| Board | Flash used | Partition | % used |
+|---|---|---|---|
+| `cyd` (esp32dev, 4MB) | 1,193,553 B | 1,310,720 B (1.25MB app slot) | **91.1%** |
+| `freenove-s3` (esp32-s3, 8MB) | 1,150,389 B | 3,342,336 B (3.19MB app slot) | 34.4% |
+
+`cyd` is the constrained board — only ~117KB of headroom left before it needs a bigger
+partition scheme, and its 1.25MB app slot comes from the default esp32dev OTA-enabled
+partition table (two app slots, required for the OTA/beta-push release flow).
+
+Symbol-size breakdown of the `cyd` build (`xtensa-esp32-elf-nm --size-sort`) shows the
+growth is **not** coming from our own code — the entire store/cosmetics system (all
+stuffies, blanket colors, dressing room, config backup/import) is ~7KB of the 1.16MB
+image. The bulk is framework/library code:
+
+- mbedtls/TLS: ~129KB
+- WiFi PHY/MAC (802.11/WPA): ~79KB
+- WiFiManager + its captive-portal WebServer/DNSServer: ~55KB
+- WiFi/HTTPClient: ~56KB
+- lwIP TCP/IP stack: ~52KB
+- libc printf/scanf family (float-capable): ~66KB
+- esp-idf misc: ~46KB
+
+The mbedtls/TLS cost traces to `libs/weather-client` using `WiFiClientSecure` +
+`HTTPClient` to call the weather API over HTTPS (`client.setInsecure()` — no cert
+validation, so the full TLS stack is paid for with none of the security benefit).
+
+**Conclusions:**
+- Adding more store items (stuffies, blanket colors, future room themes from DIY-38)
+  is cheap — each one is a few hundred bytes of vector-primitive draw code, not a real
+  flash risk.
+- If `cyd` does run out of headroom, the actual lever is the network/TLS stack, not the
+  store system. Candidate follow-ups (not done here, this card was investigate-only):
+  - Drop `WiFiClientSecure`/HTTPS for the weather API if the provider offers a plain
+    HTTP endpoint, or vendor a minimal TLS client instead of pulling in all of mbedtls
+    via `WiFiClientSecure`
+  - Check whether Arduino-ESP32's newlib-nano/no-float-printf build option is available
+    to shrink the printf/scanf family
+  - Re-check WiFiManager's default partition table — a custom partition scheme without
+    a second OTA slot would roughly double `cyd`'s available app space, at the cost of
+    losing OTA updates on that board
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`
