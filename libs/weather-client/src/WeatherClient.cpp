@@ -1,17 +1,16 @@
 #include "WeatherClient.h"
 #include <HTTPClient.h>
-#include <WiFiClientSecure.h>
+#include <WiFiClient.h>
 #include <ArduinoJson.h>
 
 #define WEATHER_API_HOST "api.open-meteo.com"
 
 bool WeatherClient::fetch(float latitude, float longitude) {
-    WiFiClientSecure client;
-    client.setInsecure();
+    WiFiClient client;
     HTTPClient http;
     char url[256];
     snprintf(url, sizeof(url),
-        "https://" WEATHER_API_HOST "/v1/forecast"
+        "http://" WEATHER_API_HOST "/v1/forecast"
         "?latitude=%.4f&longitude=%.4f"
         "&current_weather=true",
         latitude, longitude);
