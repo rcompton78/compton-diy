@@ -97,24 +97,34 @@ image. The bulk is framework/library code:
 - libc printf/scanf family (float-capable): ~66KB
 - esp-idf misc: ~46KB
 
-The mbedtls/TLS cost traces to `libs/weather-client` using `WiFiClientSecure` +
+The mbedtls/TLS cost traced to `libs/weather-client` using `WiFiClientSecure` +
 `HTTPClient` to call the weather API over HTTPS (`client.setInsecure()` — no cert
-validation, so the full TLS stack is paid for with none of the security benefit).
+validation, so the full TLS stack was paid for with none of the security benefit).
 
 **Conclusions:**
 - Adding more store items (stuffies, blanket colors, future room themes from DIY-38)
   is cheap — each one is a few hundred bytes of vector-primitive draw code, not a real
   flash risk.
-- If `cyd` does run out of headroom, the actual lever is the network/TLS stack, not the
-  store system. Candidate follow-ups (not done here, this card was investigate-only):
-  - Drop `WiFiClientSecure`/HTTPS for the weather API if the provider offers a plain
-    HTTP endpoint, or vendor a minimal TLS client instead of pulling in all of mbedtls
-    via `WiFiClientSecure`
+- The network/TLS stack, not the store system, was the actual lever for `cyd`'s
+  headroom. Remaining candidate follow-ups if more headroom is ever needed:
   - Check whether Arduino-ESP32's newlib-nano/no-float-printf build option is available
     to shrink the printf/scanf family
   - Re-check WiFiManager's default partition table — a custom partition scheme without
     a second OTA slot would roughly double `cyd`'s available app space, at the cost of
     losing OTA updates on that board
+
+### Update (DIY-40, 2026-07-13)
+
+Confirmed Open-Meteo serves plain HTTP (no forced HTTPS redirect), so
+`WeatherClient.cpp` was switched from `WiFiClientSecure`/`https://` to plain
+`WiFiClient`/`http://`. Measured result on `cyd`:
+
+| | Before | After | Saved |
+|---|---|---|---|
+| Flash used | 1,193,553 B | 1,068,401 B | ~122KB |
+| Flash % | 91.1% | 81.5% | — |
+
+`freenove-s3` also builds clean at 30.8% (1,028,985 / 3,342,336 B).
 
 ## Branch & Files
 
