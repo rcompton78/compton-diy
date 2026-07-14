@@ -25,6 +25,9 @@ struct AppConfig {
     uint8_t equippedStuffy = 0;      // Dressing room: index of the stuffy to display
     uint8_t seenStuffyCount       = 0;  // Highest STUFFY_COUNT the store page has shown the user
     uint8_t seenBlanketColorCount = 0;  // Highest BLANKET_COLOR_COUNT the store page has shown the user
+    uint8_t ownedRoomThemes    = 0;  // Store purchase: bitmask, bit N = owns room theme N
+    uint8_t equippedRoomTheme  = 0;  // Dressing room: index of the room theme to display
+    uint8_t seenRoomThemeCount = 0;  // Highest ROOM_THEME_COUNT the store page has shown the user
 };
 
 class ConfigManager {

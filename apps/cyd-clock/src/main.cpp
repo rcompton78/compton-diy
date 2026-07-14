@@ -64,6 +64,8 @@ static constexpr uint32_t STORE_COST_BUNNY    = 60;
 static constexpr uint32_t STORE_COST_SQUIRREL = 150;
 static constexpr uint32_t STORE_COST_PENGUIN  = 150;
 static constexpr uint32_t STORE_COST_BLANKET  = 40;  // per blanket color
+static constexpr uint32_t STORE_COST_ROOM_THEME = 40;  // per flat-color room theme, matches blanket pricing
+static constexpr uint32_t STORE_COST_STARRY_NIGHT = 200;  // premium: has real art (moon + stars), not just a flat fill
 
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
@@ -150,10 +152,49 @@ static constexpr Stuffy STUFFIES[] = {
 };
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
 
-// Sentinel stored in equippedBlanketColor/equippedStuffy to mean "explicitly unequipped by
-// the user in the dressing room", as opposed to 0 which means "no selection made yet, fall
-// back to the lowest-index owned item" (see equippedBlanketIndex()/equippedStuffyIndex()).
-// Never a valid catalog index since both catalogs stay well under 255 entries.
+// Forward declaration: shared flat-color backdrop for themes with no dedicated art of their
+// own, defined further below alongside drawSleepingCat(). Declared here so the ROOM_THEMES[]
+// catalog can reference it directly, same as the stuffy draw-function forward declarations
+// above. Reads its color from the equipped theme's own `bgColor` field — a future theme with
+// real art (starry night, moon, fireplace) would instead point at its own dedicated function.
+static void drawFlatThemeBackground(int x, int y, int w, int h);
+
+// Forward declaration: Starry Night's dedicated backdrop (moon + fixed star field),
+// defined further below alongside drawFlatThemeBackground().
+static void drawStarryNightBackground(int x, int y, int w, int h);
+
+// Room theme catalog — same purchase/equip model as blanket colors and stuffies. `id` is
+// the stable identifier used in store/dressing-room form requests; ConfigManager persists
+// ownership as an `ownedRoomThemes` bitmask and the equipped selection as a numeric
+// `equippedRoomTheme` index (both keyed by catalog position), never reorder/reuse indices.
+// `drawBackground` repaints exactly the rect it's given — the shared "erase to whatever's
+// behind this" primitive used throughout the animal zone (see zoneFillRect()), not just the
+// cat's own box. `bgColor` is a representative solid color for cheap operations like text
+// glyph background erasure, where invoking a full rect-painter call isn't practical.
+struct RoomTheme {
+    const char* id;
+    const char* label;
+    uint32_t cost;
+    uint16_t bgColor;                                   // representative solid color, for cheap text-background erasure
+    void (*drawBackground)(int x, int y, int w, int h);  // repaints exactly this rect of the zone's backdrop
+};
+static constexpr RoomTheme ROOM_THEMES[] = {
+    // Flat-color placeholders (DIY-38), picked to pair with the blanket palette. Moon /
+    // fireplace themes with real art still land in a follow-up card.
+    {"midnight", "Midnight", STORE_COST_ROOM_THEME, 0x18CE, drawFlatThemeBackground},  // deep navy — pairs with Dusty Blue
+    {"twilight", "Twilight", STORE_COST_ROOM_THEME, 0x28C8, drawFlatThemeBackground},  // deep plum — pairs with Lavender
+    {"forest",   "Forest",   STORE_COST_ROOM_THEME, 0x1143, drawFlatThemeBackground},  // deep green — pairs with Apple Green
+    {"rosewood", "Rosewood", STORE_COST_ROOM_THEME, 0x30A4, drawFlatThemeBackground},  // deep wine — pairs with Blush Pink
+    {"amber",    "Amber",    STORE_COST_ROOM_THEME, 0x28E2, drawFlatThemeBackground},  // warm deep brown — pairs with Cream & Lemon Yellow
+    {"starry_night", "Starry Night", STORE_COST_STARRY_NIGHT, TFT_BLACK, drawStarryNightBackground},  // moon + stars on black
+};
+static constexpr int ROOM_THEME_COUNT = sizeof(ROOM_THEMES) / sizeof(ROOM_THEMES[0]);
+
+// Sentinel stored in equippedBlanketColor/equippedStuffy/equippedRoomTheme to mean
+// "explicitly unequipped by the user in the dressing room", as opposed to 0 which means "no
+// selection made yet, fall back to the lowest-index owned item" (see
+// equippedBlanketIndex()/equippedStuffyIndex()/equippedRoomThemeIndex()). Never a valid
+// catalog index since all catalogs stay well under 255 entries.
 static constexpr uint8_t EQUIP_NONE = 0xFF;
 
 // Quick-pick durations
@@ -220,7 +261,7 @@ bool sleepScreenActive         = false;  // true once the black sleep screen has
 unsigned long forceSickDeadlineMs = 0;   // test-only: armed via /config, 0 = not armed, not persisted
 unsigned long forceThirstDeadlineMs = 0; // test-only: armed via /config, 0 = not armed, not persisted
 
-struct { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick, hungerLines, zzzFx; } dirty = {true, true, true, true, false, false, false, false, false};
+struct { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick, hungerLines, zzzFx, animalBg; } dirty = {true, true, true, true, false, false, false, false, false, true};
 bool pointsFlashOn = false;  // toggled every ~500ms while hasNewStoreItems(); read by drawPoints()
 
 
@@ -240,13 +281,19 @@ static void drawEyes(int cx, int cy, bool eyeOpen) {
     }
 }
 
+// Forward declaration: paints exactly the given rect of the animal zone using whichever room
+// theme is equipped (or plain black if none), defined below alongside
+// equippedRoomThemeIndex(). Declared here so drawCat() can call it directly, since drawCat()
+// itself is defined before the resolver it depends on.
+static void zoneFillRect(int x, int y, int w, int h);
+
 static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom boredom, CatHealth health, CatThirst thirst, bool eyeOpen) {
     bool happy   = (mood == CatMood::Happy || mood == CatMood::Celebrate);
     bool queasy  = (health == CatHealth::Sick) && !happy;
     bool thirsty = (thirst == CatThirst::Thirsty);
     bool sad     = (status == CatStatus::Hungry || boredom == CatBoredom::VeryBored || thirsty) && !happy && !queasy;
 
-    tft.fillRect(cx - 50, cy - 88, 100, 146, TFT_BLACK);
+    zoneFillRect(cx - 50, cy - 88, 100, 146);
 
     // Ears
     tft.fillTriangle(cx - 16, cy - 86, cx - 32, cy - 62, cx -  2, cy - 62, C_CAT);
@@ -364,12 +411,59 @@ static int equippedStuffyIndex() {
     return -1;
 }
 
-// True whenever the store catalog has grown (a new stuffy or blanket color shipped in a
-// firmware update) since the last time the user opened the store page — cleared by
-// handleConfigStoreGet(), which stamps the current catalog sizes as "seen".
+// Same resolution logic as equippedBlanketIndex(), for the room theme catalog.
+static int equippedRoomThemeIndex() {
+    uint8_t owned = configMgr.config().ownedRoomThemes;
+    if (owned == 0) return -1;
+    uint8_t eq = configMgr.config().equippedRoomTheme;
+    if (eq == EQUIP_NONE) return -1;  // user explicitly unequipped
+    if (eq < ROOM_THEME_COUNT && (owned & (1 << eq))) return eq;
+    for (int i = 0; i < ROOM_THEME_COUNT; i++) {
+        if (owned & (1 << i)) return i;
+    }
+    return -1;
+}
+
+// Returns the equipped room theme's representative solid color, or TFT_BLACK if none
+// equipped — used for cheap operations like text glyph background erasure, where invoking
+// a full themed repaint isn't practical (TFT_eSPI's font renderer only accepts a solid
+// color, not a callback).
+static uint16_t zoneBgColor() {
+    int idx = equippedRoomThemeIndex();
+    return (idx >= 0) ? ROOM_THEMES[idx].bgColor : TFT_BLACK;
+}
+
+// Repaints exactly the given rect of the animal zone using the equipped room theme's
+// backdrop, or plain black if none equipped — the shared "erase to whatever's behind this"
+// primitive used everywhere in drawAnimal() and its helpers instead of a hardcoded black
+// fill. Keeping these erases narrow and per-element, rather than repainting the full
+// 240×175 zone on every redraw, is deliberate — DIY-8 found a full-zone fill caused visible
+// flicker during the ~4Hz celebration animation. dirty.animalBg (see drawAnimal()) is the
+// one exception, repainting the full zone exactly once whenever the backdrop itself changes.
+//
+// Clips to the zone's vertical bounds first — some callers' rects (e.g. the cat's own
+// clear-rect, sized with headroom for its ear tips and the celebration bounce) extend a few
+// pixels above ANIMAL_Y, which is harmless against a black background but would otherwise
+// paint the theme color over the header separator line.
+static void zoneFillRect(int x, int y, int w, int h) {
+    int y2 = y + h;
+    if (y < ANIMAL_Y) y = ANIMAL_Y;
+    if (y2 > ANIMAL_Y + ANIMAL_H) y2 = ANIMAL_Y + ANIMAL_H;
+    h = y2 - y;
+    if (h <= 0) return;
+
+    int idx = equippedRoomThemeIndex();
+    if (idx >= 0) ROOM_THEMES[idx].drawBackground(x, y, w, h);
+    else tft.fillRect(x, y, w, h, TFT_BLACK);
+}
+
+// True whenever the store catalog has grown (a new stuffy, blanket color, or room theme
+// shipped in a firmware update) since the last time the user opened the store page —
+// cleared by handleConfigStoreGet(), which stamps the current catalog sizes as "seen".
 static bool hasNewStoreItems() {
     return STUFFY_COUNT > configMgr.config().seenStuffyCount ||
-           BLANKET_COLOR_COUNT > configMgr.config().seenBlanketColorCount;
+           BLANKET_COLOR_COUNT > configMgr.config().seenBlanketColorCount ||
+           ROOM_THEME_COUNT > configMgr.config().seenRoomThemeCount;
 }
 
 // Shared ear/head/snout/eyes/nose art reused by both teddy variants below.
@@ -518,6 +612,49 @@ static void drawSleepyEyes(int cx, int cy) {
     tft.drawLine(cx + 24, cy - 39, cx + 27, cy - 42, C_DARK);  // outer curl, right eye
 }
 
+// Shared flat-color backdrop for placeholder themes with no dedicated art yet (DIY-38).
+// Reads the equipped theme's own bgColor rather than hardcoding a color, so every
+// flat-color entry in ROOM_THEMES[] can point at this one function.
+static void drawFlatThemeBackground(int x, int y, int w, int h) {
+    tft.fillRect(x, y, w, h, zoneBgColor());
+}
+
+// Fixed star field for the Starry Night theme — pre-generated positions rather than
+// re-randomized per call, so repeated partial redraws (see zoneFillRect()) always agree.
+// `r` is the fill radius; 0 means a single pixel.
+struct Star { int16_t x, y; uint8_t r; };
+static constexpr Star STARRY_NIGHT_STARS[] = {
+    {60, 55, 0}, {85, 90, 1}, {115, 65, 0}, {145, 100, 0}, {170, 60, 1},
+    {195, 85, 0}, {215, 130, 1}, {60, 145, 0}, {100, 160, 0}, {135, 178, 1},
+    {175, 155, 0}, {205, 178, 0}, {40, 115, 1}, {225, 55, 0}, {150, 45, 0},
+    {90, 45, 1}, {220, 105, 0}, {15, 165, 0},
+};
+static constexpr int STARRY_NIGHT_STAR_COUNT = sizeof(STARRY_NIGHT_STARS) / sizeof(STARRY_NIGHT_STARS[0]);
+
+// "Starry Night" room theme: a small moon near the top-left of the zone, plus a fixed
+// scatter of stars, on a plain black backdrop. tft.setViewport(..., false) clips every draw
+// call below to exactly the requested (x,y,w,h) rect while keeping absolute screen
+// coordinates — this lets the theme draw its whole scene unconditionally on every call,
+// including the frequent small erasures elsewhere in drawAnimal() (a sparkle box, the
+// points corner, etc.), and have only the relevant slice actually reach the display.
+static void drawStarryNightBackground(int x, int y, int w, int h) {
+    tft.setViewport(x, y, w, h, false);
+    tft.fillRect(x, y, w, h, TFT_BLACK);
+
+    // Moon — top-left of the zone, with a couple of small craters for texture
+    tft.fillCircle(24, ANIMAL_Y + 22, 10, 0xFFDB);   // pale warm-white moon
+    tft.fillCircle(21, ANIMAL_Y + 19, 2, 0xEF7A);    // crater
+    tft.fillCircle(28, ANIMAL_Y + 26, 1, 0xEF7A);    // crater
+
+    for (int i = 0; i < STARRY_NIGHT_STAR_COUNT; i++) {
+        const Star& s = STARRY_NIGHT_STARS[i];
+        if (s.r == 0) tft.drawPixel(s.x, s.y, TFT_WHITE);
+        else          tft.fillCircle(s.x, s.y, s.r, TFT_WHITE);
+    }
+
+    tft.resetViewport();
+}
+
 static void drawSleepingCat(int cx, int cy) {
     drawCat(cx, cy, CatMood::Idle, CatStatus::Content, CatBoredom::Entertained,
             CatHealth::Healthy, CatThirst::Hydrated, /*eyeOpen=*/false);
@@ -555,7 +692,7 @@ static void drawSparkles(int cx, int cy, uint8_t frame) {
     for (int i = 0; i < 8; i++) {
         int px = cx + dx[i], py = cy + dy[i];
         if (py < ANIMAL_Y + 2 || py > ANIMAL_Y + ANIMAL_H - 6) continue;
-        tft.fillRect(px - 4, py - 4, 9, 9, TFT_BLACK);
+        zoneFillRect(px - 4, py - 4, 9, 9);
         if ((frame + i) % 2 == 0) {
             tft.drawLine(px - 3, py, px + 3, py, clr[i]);
             tft.drawLine(px, py - 3, px, py + 3, clr[i]);
@@ -569,7 +706,7 @@ static void clearSparkles(int cx, int cy) {
     for (int i = 0; i < 8; i++) {
         int px = cx + dx[i], py = cy + dy[i];
         if (py >= ANIMAL_Y + 2 && py <= ANIMAL_Y + ANIMAL_H - 6)
-            tft.fillRect(px - 4, py - 4, 9, 9, TFT_BLACK);
+            zoneFillRect(px - 4, py - 4, 9, 9);
     }
 }
 
@@ -589,9 +726,9 @@ static void drawBoredomZzz(int cx, int cy, bool show) {
     static const int8_t dy[] = {-40, -40, -60 };
     for (int i = 0; i < 3; i++) {
         int x = cx + dx[i], y = cy + dy[i];
-        tft.fillRect(x - 2, y - 10, 22, 14, TFT_BLACK);
+        zoneFillRect(x - 2, y - 10, 22, 14);
         if (show) {
-            tft.setTextColor(C_ZZZ, TFT_BLACK);
+            tft.setTextColor(C_ZZZ, zoneBgColor());
             tft.drawString("Zz", x, y - 8, 1);
         }
     }
@@ -714,18 +851,24 @@ static void drawHeader() {
 static void drawPoints() {
     char ptsBuf[16];
     snprintf(ptsBuf, sizeof(ptsBuf), "%lu pts", (unsigned long)configMgr.config().points);
-    tft.fillRect(155, ANIMAL_Y, 85, 20, TFT_BLACK);
+    zoneFillRect(155, ANIMAL_Y, 85, 20);
     uint16_t color = (hasNewStoreItems() && pointsFlashOn) ? C_NEW_ITEM : TFT_YELLOW;
-    tft.setTextColor(color, TFT_BLACK);
+    tft.setTextColor(color, zoneBgColor());
     int ptsWidth = tft.textWidth(ptsBuf, 2);
     tft.drawString(ptsBuf, 234 - ptsWidth, ANIMAL_Y + 4, 2);
 }
 
 static void drawAnimal() {
+    if (dirty.animalBg) {
+        zoneFillRect(0, ANIMAL_Y, 240, ANIMAL_H);
+        dirty.animalBg = false;
+    }
     // Clear only sparkle positions and the cat's bounding box (including ±3px bounce).
-    // Avoids wiping the full 240×175 zone which causes a visible black flash.
+    // Avoids wiping the full 240×175 zone on every redraw — DIY-8 found that caused visible
+    // flicker during the ~4Hz celebration animation. dirty.animalBg above is the one
+    // deliberate exception, firing only when the backdrop itself actually changes.
     clearSparkles(CAT_CX, CAT_CY);
-    tft.fillRect(CAT_CX - 50, CAT_CY - 91, 100, 152, TFT_BLACK);
+    zoneFillRect(CAT_CX - 50, CAT_CY - 91, 100, 152);
 
     if (peekingAsleep) {
         drawSleepingCat(CAT_CX, CAT_CY);
@@ -755,9 +898,9 @@ static void drawAnimal() {
 
     // Name label stays visible even while peeking during the sleep window — only the
     // action buttons are hidden, since the scene should be calm/non-interactive there.
-    tft.fillRect(PLAY_X + PLAY_W, ANIMAL_Y + ANIMAL_H - 27,
-                 TREAT_X - (PLAY_X + PLAY_W) - 2, 27, TFT_BLACK);
-    tft.setTextColor(C_DIM, TFT_BLACK);
+    zoneFillRect(PLAY_X + PLAY_W, ANIMAL_Y + ANIMAL_H - 27,
+                 TREAT_X - (PLAY_X + PLAY_W) - 2, 27);
+    tft.setTextColor(C_DIM, zoneBgColor());
     tft.drawCentreString(configMgr.config().catName.c_str(), CX, ANIMAL_Y + ANIMAL_H - 22, 2);
 
     if (!peekingAsleep) {
@@ -766,7 +909,7 @@ static void drawAnimal() {
         drawWaterBtn();  // always available, stacked above the treat button
 
         // Meds button — only visible while sick, stacked above the play button
-        tft.fillRect(MEDS_X, MEDS_Y, MEDS_W, MEDS_H, TFT_BLACK);
+        zoneFillRect(MEDS_X, MEDS_Y, MEDS_W, MEDS_H);
         if (cat.health == CatHealth::Sick) drawMedsBtn();
     }
 }
@@ -1530,6 +1673,9 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h3>Blankets (night only)</h3>
 %%BLANKET_ITEMS%%
 
+<h3>Room Themes</h3>
+%%ROOM_THEME_ITEMS%%
+
 <form id="cheatForm" method="POST" action="/save-config/cheat" style="display:none;margin-top:12px">
 <button type="submit">+50 points</button>
 </form>
@@ -1576,6 +1722,9 @@ static const char CONFIG_DRESS_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 
 <h3>Blankets (night only)</h3>
 %%BLANKET_OPTIONS%%
+
+<h3>Room Themes</h3>
+%%ROOM_THEME_OPTIONS%%
 
 <button type="submit" style="width:100%;margin-top:8px">Save</button>
 </form>
@@ -1690,6 +1839,7 @@ static void handleConfigStoreGet() {
     if (hasNewStoreItems()) {
         configMgr.config().seenStuffyCount       = (uint8_t)STUFFY_COUNT;
         configMgr.config().seenBlanketColorCount = (uint8_t)BLANKET_COLOR_COUNT;
+        configMgr.config().seenRoomThemeCount    = (uint8_t)ROOM_THEME_COUNT;
         configMgr.save();
     }
     String page = String(FPSTR(CONFIG_STORE_HTML));
@@ -1712,6 +1862,14 @@ static void handleConfigStoreGet() {
         blanketItems += "</div>\n";
     }
     page.replace("%%BLANKET_ITEMS%%", blanketItems);
+    String roomThemeItems = "";
+    for (int i = 0; i < ROOM_THEME_COUNT; i++) {
+        bool owned = configMgr.config().ownedRoomThemes & (1 << i);
+        roomThemeItems += "<div class='item'><span>" + String(ROOM_THEMES[i].label) + "</span>";
+        roomThemeItems += storeItemAction(ROOM_THEMES[i].id, owned, ROOM_THEMES[i].cost, points);
+        roomThemeItems += "</div>\n";
+    }
+    page.replace("%%ROOM_THEME_ITEMS%%", roomThemeItems);
     String msg = "";
     if (wm.server->hasArg("cheat")) {
         msg = "<div class='banner ok'>+50 points!</div>";
@@ -1762,6 +1920,7 @@ static void handleConfigResetPost() {
     lastWeatherFetch = millis() - WEATHER_UPDATE_INTERVAL_MS - 1;
     dirty.header = true;
     dirty.animal = true;
+    dirty.animalBg = true;  // reset clears any equipped room theme back to default
     wm.server->sendHeader("Location", "/config/store?reset=1");
     wm.server->send(302, "text/plain", "");
 }
@@ -1812,6 +1971,7 @@ static void handleConfigBackupPost() {
     lastWeatherFetch = millis() - WEATHER_UPDATE_INTERVAL_MS - 1;
     dirty.header = true;
     dirty.animal = true;  // name/points/owned/equipped items may have changed
+    dirty.animalBg = true;  // restored backup may carry a different equipped room theme
     wm.server->sendHeader("Location", "/config/backup?saved=1");
     wm.server->send(302, "text/plain", "");
 }
@@ -1880,7 +2040,7 @@ static void handleConfigStorePost() {
     String item = wm.server->arg("item");
     uint32_t cost;
     bool alreadyOwned;
-    int stuffyIdx = -1, blanketIdx = -1;
+    int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1;
     for (int i = 0; i < STUFFY_COUNT; i++) {
         if (item == STUFFIES[i].id) { stuffyIdx = i; break; }
     }
@@ -1891,12 +2051,20 @@ static void handleConfigStorePost() {
         for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
             if (item == BLANKET_COLORS[i].id) { blanketIdx = i; break; }
         }
-        if (blanketIdx < 0) {
-            wm.server->send(400, "text/plain", "Unknown item");
-            return;
+        if (blanketIdx >= 0) {
+            cost = STORE_COST_BLANKET;
+            alreadyOwned = configMgr.config().ownedBlanketColors & (1 << blanketIdx);
+        } else {
+            for (int i = 0; i < ROOM_THEME_COUNT; i++) {
+                if (item == ROOM_THEMES[i].id) { roomThemeIdx = i; break; }
+            }
+            if (roomThemeIdx < 0) {
+                wm.server->send(400, "text/plain", "Unknown item");
+                return;
+            }
+            cost = ROOM_THEMES[roomThemeIdx].cost;
+            alreadyOwned = configMgr.config().ownedRoomThemes & (1 << roomThemeIdx);
         }
-        cost = STORE_COST_BLANKET;
-        alreadyOwned = configMgr.config().ownedBlanketColors & (1 << blanketIdx);
     }
 
     if (alreadyOwned) {
@@ -1914,6 +2082,9 @@ static void handleConfigStorePost() {
     if (blanketIdx >= 0) {
         configMgr.config().ownedBlanketColors |= (1 << blanketIdx);
         configMgr.config().equippedBlanketColor = blanketIdx;  // newly bought color becomes equipped
+    } else if (roomThemeIdx >= 0) {
+        configMgr.config().ownedRoomThemes |= (1 << roomThemeIdx);
+        configMgr.config().equippedRoomTheme = roomThemeIdx;  // newly bought theme becomes equipped
     } else {
         configMgr.config().ownedStuffies |= (1 << stuffyIdx);
         configMgr.config().equippedStuffy = stuffyIdx;  // newly bought stuffy becomes equipped
@@ -1922,12 +2093,14 @@ static void handleConfigStorePost() {
         // Roll back in-memory state since persistence failed.
         configMgr.config().points += cost;
         if (blanketIdx >= 0) configMgr.config().ownedBlanketColors &= ~(1 << blanketIdx);
+        else if (roomThemeIdx >= 0) configMgr.config().ownedRoomThemes &= ~(1 << roomThemeIdx);
         else configMgr.config().ownedStuffies &= ~(1 << stuffyIdx);
         wm.server->sendHeader("Location", "/config/store?err=save");
         wm.server->send(302, "text/plain", "");
         return;
     }
     dirty.animal = true;
+    dirty.animalBg = true;  // a newly bought room theme auto-equips, changing the backdrop
     wm.server->sendHeader("Location", "/config/store?saved=1");
     wm.server->send(302, "text/plain", "");
 }
@@ -1977,6 +2150,26 @@ static void handleConfigDressGet() {
     }
     page.replace("%%STUFFY_OPTIONS%%", stuffyOptions);
 
+    uint8_t ownedThemes = configMgr.config().ownedRoomThemes;
+    int equippedThemeIdx = equippedRoomThemeIndex();
+    String themeOptions = "";
+    if (ownedThemes == 0) {
+        themeOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
+    } else {
+        themeOptions += "<label class='pick'><input type='radio' name='roomTheme' value='none'";
+        if (equippedThemeIdx < 0) themeOptions += " checked";
+        themeOptions += "> None</label>";
+        for (int i = 0; i < ROOM_THEME_COUNT; i++) {
+            if (!(ownedThemes & (1 << i))) continue;
+            themeOptions += "<label class='pick'><input type='radio' name='roomTheme' value='";
+            themeOptions += ROOM_THEMES[i].id;
+            themeOptions += "'";
+            if (i == equippedThemeIdx) themeOptions += " checked";
+            themeOptions += "> " + String(ROOM_THEMES[i].label) + "</label>";
+        }
+    }
+    page.replace("%%ROOM_THEME_OPTIONS%%", themeOptions);
+
     String msg = "";
     if (wm.server->hasArg("saved"))
         msg = "<div class='banner ok'>Saved.</div>";
@@ -2021,9 +2214,27 @@ static void handleConfigDressPost() {
         changed = true;
     }
 
+    String roomThemeId = wm.server->arg("roomTheme");
+    if (roomThemeId == "none") {
+        configMgr.config().equippedRoomTheme = EQUIP_NONE;
+        changed = true;
+    } else if (roomThemeId.length() > 0) {
+        int idx = -1;
+        for (int i = 0; i < ROOM_THEME_COUNT; i++) {
+            if (roomThemeId == ROOM_THEMES[i].id) { idx = i; break; }
+        }
+        if (idx < 0 || !(configMgr.config().ownedRoomThemes & (1 << idx))) {
+            wm.server->send(400, "text/plain", "Invalid selection");
+            return;
+        }
+        configMgr.config().equippedRoomTheme = idx;
+        changed = true;
+    }
+
     if (changed) {
         configMgr.save();
         dirty.animal = true;
+        dirty.animalBg = true;  // equip/unequip changes the backdrop directly
     }
     wm.server->sendHeader("Location", "/config/dress?saved=1");
     wm.server->send(302, "text/plain", "");
@@ -2157,6 +2368,7 @@ void loop() {
             // partial clear-rects the zone draws use, leaving stray digits behind otherwise.
             tft.fillScreen(TFT_BLACK);
             dirty.header = dirty.animal = dirty.picker = dirty.timerRow = true;  // clean full repaint on wake/peek
+            dirty.animalBg = true;  // fillScreen just wiped the zone's backdrop too
         }
     }
 

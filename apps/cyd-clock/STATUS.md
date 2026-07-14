@@ -102,9 +102,8 @@ The mbedtls/TLS cost traced to `libs/weather-client` using `WiFiClientSecure` +
 validation, so the full TLS stack was paid for with none of the security benefit).
 
 **Conclusions:**
-- Adding more store items (stuffies, blanket colors, future room themes from DIY-38)
-  is cheap — each one is a few hundred bytes of vector-primitive draw code, not a real
-  flash risk.
+- Adding more store items (stuffies, blanket colors, room themes) is cheap — each one is
+  a few hundred bytes of vector-primitive draw code, not a real flash risk.
 - The network/TLS stack, not the store system, was the actual lever for `cyd`'s
   headroom. Remaining candidate follow-ups if more headroom is ever needed:
   - Check whether Arduino-ESP32's newlib-nano/no-float-printf build option is available
@@ -125,6 +124,33 @@ Confirmed Open-Meteo serves plain HTTP (no forced HTTPS redirect), so
 | Flash % | 91.1% | 81.5% | — |
 
 `freenove-s3` also builds clean at 30.8% (1,028,985 / 3,342,336 B).
+
+### Update (DIY-38, 2026-07-13) — Room themes
+
+Added a third store cosmetic category, `RoomTheme`, mirroring the `Stuffy`/`BlanketColor`
+catalog-driven pattern (purchase → own → equip → render). Backed by a shared
+`zoneFillRect()`/`zoneBgColor()` primitive that all animal-zone erasures (cat box, sparkles,
+points, name label, Zz overlay, meds-button hide) now go through instead of a hardcoded
+black fill, so the equipped theme's backdrop shows across the *entire* 240×175 animal zone,
+at all times (not just the sleep-peek scene like blankets/stuffies) — without reintroducing
+the full-zone-redraw flicker bug DIY-8 originally fixed. A new one-shot `dirty.animalBg`
+flag repaints the full zone only when the backdrop actually changes (boot, theme
+bought/equipped/unequipped, reset, backup restore, wake-from-screensaver); routine redraws
+stay as narrow as before.
+
+Six themes shipped: five flat-color placeholders (Midnight, Twilight, Forest, Rosewood,
+Amber — each paired with a blanket color, 40pts) sharing one `drawFlatThemeBackground()`
+function driven by a per-theme `bgColor` field, plus "Starry Night" (200pts) — a moon and a
+fixed 18-star field, the first room theme with real art. Its `drawStarryNightBackground()`
+uses `tft.setViewport(x, y, w, h, false)` to clip drawing to whatever sub-rect is being
+repainted while keeping absolute screen coordinates, so it can draw its whole scene
+unconditionally on every call (including small per-element erasures) with only the relevant
+slice reaching the display — the pattern to reuse for future real-art themes (fireplace,
+etc., see `apps/cyd-clock/STORE_IDEAS.md`).
+
+`cyd` flash: 81.7% (1,070,973 / 1,310,720 B), up from 81.5% post-DIY-40 — confirms the
+"cheap" conclusion above held even with six themes including one with real art.
+`freenove-s3`: 30.9% (1,031,553 / 3,342,336 B).
 
 ## Branch & Files
 
