@@ -62,6 +62,8 @@ jobs:
         run: pnpm install
 
       - name: Build all firmware
+        env:
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
         run: |
           pnpm nx run-many -t build
           pnpm nx run-many -t build-fs

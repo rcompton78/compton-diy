@@ -252,6 +252,136 @@ Implement option **C** as a follow-up card, scoped to `freenove-s3`:
    (e.g. the no-float printf/custom-partition follow-ups noted in the DIY-39
    section above).
 
+**Superseded by the decision below — both boards shipped auto-update, not
+just `freenove-s3`.** Left the investigation and option analysis above intact
+as the record of why this was a real trade-off, not a free feature.
+
+### Implementation (DIY-41, 2026-07-14)
+
+After the investigation above, the decision was made to ship auto-update on
+**both** boards on this card, accepting the `cyd` flash cost, rather than
+board-gating to `freenove-s3` only. If `cyd`'s remaining headroom turns out
+to be too tight in practice, flash-savings work is a separate follow-up card,
+not a blocker for this one.
+
+What shipped:
+
+- `FIRMWARE_VERSION` build flag, wired from CI's `RELEASE_VERSION`
+  (`scripts/pio.sh` defaults it to `"dev"` outside the release workflow;
+  `.github/workflows/release.yml`'s build step now exports it so compiled
+  binaries and the release tag match).
+- New shared lib `libs/ota-update-client` (`OtaUpdateClient`) — checks
+  `api.github.com/repos/rcompton78/compton-diy/releases/latest` over
+  `WiFiClientSecure`, compares the release tag against `FIRMWARE_VERSION`
+  (plain string inequality — versions are monotonically increasing
+  `YYYY.MM.DD-<run>` strings, no semver needed), and if different, downloads
+  the board's `-ota.bin` asset and streams it into `Update.h`. Skips
+  entirely on `"dev"` builds.
+- `ConfigManager` gained `autoUpdateEnabled`/`lastUpdateCheckVersion`/
+  `lastUpdateCheckEpoch`, covered by the existing DIY-35 backup/restore path
+  for free.
+- `main.cpp`: an 18h periodic check in `loop()` (mirrors the existing weather-
+  fetch interval pattern), a blocking download-and-flash with an on-screen
+  progress readout (`drawOtaProgress()` — this is a synchronous operation,
+  same as the weather fetch; no FreeRTOS task juggling), and a new
+  `/config/update` settings page (current version, last-checked info,
+  auto-update toggle, manual "check now" button) following the existing
+  `/config/backup` GET-renders/POST-mutates idiom. The existing WiFiManager
+  `/update` manual-upload page is untouched.
+- `esp_ota_mark_app_valid_cancel_rollback()` called after the first
+  successful post-boot weather fetch. **Caveat, not yet verified on real
+  hardware**: PlatformIO's Arduino framework for ESP32 ships a prebuilt
+  core, so whether `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE` is actually baked
+  into that image (i.e. whether a bad-but-bootable update truly auto-reverts)
+  isn't controllable from this repo's `platformio.ini`. What's certain
+  either way: `Update.h` validates the image (magic byte/size/CRC) before
+  committing the new boot partition, so a corrupt/truncated download can't
+  become bootable — a firmware that flashes clean and then crashes is the
+  unverified case.
+
+**Post-implementation flash sizes** (`pio run` size report, both boards
+build clean):
+
+| Board | Flash used | Partition | % used | Headroom |
+|---|---|---|---|---|
+| `cyd` | 1,213,757 B | 1,310,720 B | **92.6%** | ~97KB (7.4%) |
+| `freenove-s3` | 1,170,089 B | 3,342,336 B | 35.0% | ~2.07MB (65.0%) |
+
+`cyd`'s actual cost landed a bit above the ~125KB estimate — about 142.8KB
+over the pre-DIY-41 baseline of 1,070,973 B, since this also adds
+`HTTPClient`'s redirect handling, `Update.h`'s OTA-write path, `ArduinoJson`'s
+streaming filter parse, and pinned CA certs, on top of bare `WiFiClientSecure`.
+
+### Real-hardware validation (2026-07-14)
+
+Flashed a `cyd` board over USB/WSL and exercised the full path against the
+real GitHub release pipeline (a genuine `master` release, `2026.07.14-40`,
+already existed with both boards' OTA assets attached):
+
+- Built with a deliberately old `FIRMWARE_VERSION` (`2020.01.01-1`), flashed,
+  confirmed via `strings` on the ELF that the version embedded correctly.
+- Used temporary serial instrumentation (since removed) to confirm: the
+  version check succeeded against the pinned-CA connection, found the real
+  release as newer, and downloaded+flashed it — heap stayed healthy
+  throughout (~227KB free at start, bottomed out around **163KB free**
+  during the download, well clear of exhaustion). `applyResult=Success`,
+  device rebooted cleanly and reconnected to WiFi.
+- This resolves both risks flagged during planning: `HTTPClient` redirect
+  handling to `objects.githubusercontent.com` works correctly, and heap
+  headroom on `cyd` (the tighter of the two boards) is not a real concern.
+- One side effect worth noting for anyone repeating this test: a *successful*
+  test run **replaces the flashed build** with whatever's actually on
+  `master` — by design, that's the feature working. Re-flash from this
+  branch afterward (with `FIRMWARE_VERSION=dev` to avoid an immediate
+  repeat) to keep testing branch-local changes.
+- Iterated the UX after this test based on live feedback: the `/config/update`
+  page now distinguishes "check skipped (dev build)" from "already up to
+  date" from "check failed", and a found update sends an immediate "Found
+  &lt;version&gt; — installing" response before blocking on the download
+  (previously the manual "check now" button just dropped the connection
+  mid-request with no feedback). The on-device screen also shows the found
+  version before the progress bar starts.
+- Bumped `UPDATE_CHECK_INTERVAL_MS` from 18h to 1h after confirming the real
+  cost per check (~5.5KB, ~0.3s network time) — GitHub's 60 req/hr
+  unauthenticated limit is shared across all unauthenticated API traffic
+  from the same IP, and even at 1h with both boards checking independently
+  that's only ~2 req/hr, nowhere near the limit.
+
+### Security fix: TLS certificate pinning (2026-07-14)
+
+An automated security review flagged the initial implementation's use of
+`client.setInsecure()` for both the GitHub API check and the firmware
+download — this skips certificate validation entirely, meaning a MITM
+attacker (rogue AP, ARP/DNS spoofing on the same LAN) could serve arbitrary
+firmware that the device would flash and boot. For a weather API call
+(DIY-40's original use of `setInsecure()`) that's a shrug; for something
+that ends in `Update.end(true)` and a reboot into attacker-controlled code,
+it's a real vulnerability. Fixed by pinning the actual root CAs instead:
+
+- **USERTrust ECC Certification Authority** (root of `api.github.com`'s
+  chain, via Sectigo) — valid to 2038.
+- **ISRG Root X1** (root of `objects.githubusercontent.com`'s chain, via
+  Let's Encrypt — the release-asset redirect target) — valid to 2035.
+
+Both chains were captured live (`openssl s_client -showcerts`) and verified
+against these exact roots before pinning. Root-level (not leaf/intermediate)
+pinning was chosen deliberately: GitHub's leaf and intermediate certs rotate
+on the order of weeks to a couple of years, which would silently break this
+feature; the roots above are long-lived, self-signed, and part of every
+standard trust store, so this should hold for years without a firmware
+update of its own. Cost: +2.9KB on `cyd` (92.3% → 92.5%).
+
+**Residual risk, not addressed here**: this closes the network-MITM vector
+but does not verify the firmware image's *authenticity* beyond "served by
+something holding a cert that chains to these roots" — i.e. no code-signing.
+If GitHub's account, the repo, or its release pipeline were ever compromised,
+a malicious binary attached to a release would still flash and boot without
+detection. Adding a detached signature check (e.g. Ed25519, public key baked
+into firmware, verified before `Update.end(true)`) would close that gap too,
+but is a meaningfully bigger lift (key management, a CI signing step) and
+was treated as out of scope for this card. Flagging it here as a known,
+accepted gap rather than silently omitting it.
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`
