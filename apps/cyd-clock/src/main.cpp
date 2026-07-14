@@ -118,6 +118,7 @@ static constexpr BlanketColor BLANKET_COLORS[] = {
     {"lavender",   "Lavender",   0xB3FB, 0xE69E, "#b57edc"},  // lavender blanket, pale lilac fold trim
     {"lemon_yellow", "Lemon Yellow", 0xF6CB, 0xD502, "#F7D959"},  // Bambu PLA Lemon Yellow blanket, mustard-gold fold trim
     {"apple_green",  "Apple Green",  0xC711, 0x7D2A, "#C2E189"},  // Bambu PLA Apple Green blanket, deeper leaf-green fold trim
+    {"tangerine",    "Tangerine",    0xFD2A, 0xD3E5, "#FFA552"},  // warm orange blanket, burnt-orange fold trim
 };
 static constexpr int BLANKET_COLOR_COUNT = sizeof(BLANKET_COLORS) / sizeof(BLANKET_COLORS[0]);
 
@@ -1478,6 +1479,16 @@ button:hover{background:#005ec4}
 .pick input{display:inline-block;width:auto;margin:0}
 )css";
 
+// WiFiManager's own generated pages (root menu, wifi scan/connect, info, exit, the
+// stock /update upload page) use its built-in light-blue theme by default. WiFiManager
+// inserts setCustomHeadElement()'s HTML right after its own <style> block in <head>
+// (see getHTTPHead() in WiFiManager.cpp), so CONFIG_STYLE's generic body/button/input
+// selectors — same rules the /config/* pages use — win the cascade and restyle those
+// pages to match, with no per-page duplication needed. Must be a persistent buffer:
+// WiFiManager stores the raw `const char*` it's given, not a copy, so passing a
+// temporary String's c_str() here would leave it pointing at freed memory.
+static const String WM_CUSTOM_HEAD = "<style>" + String(FPSTR(CONFIG_STYLE)) + "</style>";
+
 static const char CONFIG_HOME_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
@@ -1485,6 +1496,7 @@ static const char CONFIG_HOME_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <title>Cat Control Panel</title>
 <style>%%STYLE%%</style>
 </head><body>
+<a class="back" href="/">&larr; Main Menu</a>
 <h2>Cat Control Panel</h2>
 <a class="nav" href="/config/cat">Cat</a>
 <a class="nav" href="/config/city">City (weather &amp; timezone)</a>
@@ -1688,6 +1700,10 @@ static const char CONFIG_UPDATE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <form method="POST" action="/config/update/check" style="margin-top:12px">
 <button type="submit" style="width:100%">Check now</button>
 </form>
+
+<h3>Manual upload</h3>
+<p>Upload a <code>.bin</code> file directly from your browser, e.g. one downloaded from a GitHub release you don't want to wait for.</p>
+<p><a href="/update">Upload firmware manually &rarr;</a></p>
 </body></html>
 )html";
 
@@ -2442,9 +2458,15 @@ static void runWiFiManager(ConfigManager& cfg) {
     (void)cfg;  // config now managed exclusively via /config web page
     wm.setAPCallback([](WiFiManager*) { drawWifiPortal(); });
     wm.setTitle("Cat Control Panel");
+    wm.setClass("invert");  // dark-mode base for elements CONFIG_STYLE doesn't target (.msg, dt/dd, etc.)
+    wm.setCustomHeadElement(WM_CUSTOM_HEAD.c_str());
     wm.setCustomMenuHTML("<form action='/config' method='get'><button>Cat Control Panel</button></form><br/>");
-    const char* menu[] = {"wifi", "custom", "info", "sep", "update", "exit"};
-    wm.setMenu(menu, 6);
+    // "update" (WiFiManager's stock browser-upload OTA page) is intentionally left out
+    // of this menu — it's surfaced instead from /config/update, alongside the DIY-41
+    // auto-update controls. The route itself (server->on(R_update, ...)) is registered
+    // unconditionally by WiFiManager regardless of menu membership, so /update still works.
+    const char* menu[] = {"wifi", "custom", "info", "sep", "exit"};
+    wm.setMenu(menu, 5);
     wm.autoConnect("CYD-Clock");
     wm.startWebPortal();
     wm.server->on("/config",           HTTP_GET,  handleConfigHome);
