@@ -65,6 +65,9 @@ void ConfigManager::fromJson(JsonDocument& doc) {
     _config.equippedStuffy = doc["stuffyEquipped"] | _config.equippedStuffy;
     _config.seenStuffyCount       = doc["seenStuffies"] | _config.seenStuffyCount;
     _config.seenBlanketColorCount = doc["seenBlankets"]  | _config.seenBlanketColorCount;
+    _config.ownedRoomThemes    = doc["roomThemes"]       | _config.ownedRoomThemes;
+    _config.equippedRoomTheme  = doc["roomThemeEquipped"] | _config.equippedRoomTheme;
+    _config.seenRoomThemeCount = doc["seenRoomThemes"]    | _config.seenRoomThemeCount;
 }
 
 void ConfigManager::toJson(JsonDocument& doc) const {
@@ -90,6 +93,9 @@ void ConfigManager::toJson(JsonDocument& doc) const {
     doc["stuffyEquipped"]  = _config.equippedStuffy;
     doc["seenStuffies"]    = _config.seenStuffyCount;
     doc["seenBlankets"]    = _config.seenBlanketColorCount;
+    doc["roomThemes"]        = _config.ownedRoomThemes;
+    doc["roomThemeEquipped"] = _config.equippedRoomTheme;
+    doc["seenRoomThemes"]    = _config.seenRoomThemeCount;
 }
 
 bool ConfigManager::load() {
