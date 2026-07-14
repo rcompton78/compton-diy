@@ -3,7 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
   "tags": ["platform:esp32", "type:firmware"],
-  "implicitDependencies": ["weather-client"],
+  "implicitDependencies": ["weather-client", "ota-update-client"],
   "targets": {
     "build": {
       "executor": "nx:run-commands",
@@ -16,7 +16,8 @@
         "{projectRoot}/src/**",
         "{projectRoot}/include/**",
         "{projectRoot}/platformio.ini",
-        "{workspaceRoot}/libs/weather-client/src/**"
+        "{workspaceRoot}/libs/weather-client/src/**",
+        "{workspaceRoot}/libs/ota-update-client/src/**"
       ],
       "outputs": ["{projectRoot}/.pio/build/cyd", "{projectRoot}/.pio/build/freenove-s3"]
     },
@@ -31,7 +32,8 @@
         "{projectRoot}/src/**",
         "{projectRoot}/include/**",
         "{projectRoot}/platformio.ini",
-        "{workspaceRoot}/libs/weather-client/src/**"
+        "{workspaceRoot}/libs/weather-client/src/**",
+        "{workspaceRoot}/libs/ota-update-client/src/**"
       ],
       "outputs": ["{projectRoot}/.pio/build/cyd"]
     },
@@ -53,7 +55,8 @@
         "{projectRoot}/src/**",
         "{projectRoot}/include/**",
         "{projectRoot}/platformio.ini",
-        "{workspaceRoot}/libs/weather-client/src/**"
+        "{workspaceRoot}/libs/weather-client/src/**",
+        "{workspaceRoot}/libs/ota-update-client/src/**"
       ],
       "outputs": ["{projectRoot}/.pio/build/freenove-s3"]
     },

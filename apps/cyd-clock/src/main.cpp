@@ -6,9 +6,14 @@
 #include <NTPClient.h>
 #include <WiFiUdp.h>
 
+#include <WiFiClientSecure.h>
+#include <Update.h>
+#include <esp_ota_ops.h>
+
 #include "../include/Config.h"
 #include "ConfigManager.h"
 #include "WeatherClient.h"
+#include "OtaUpdateClient.h"
 #include "TimerWidget.h"
 #include "StopwatchWidget.h"
 #if defined(BOARD_FREENOVE_S3)
@@ -216,6 +221,7 @@ WiFiUDP       ntpUDP;
 NTPClient     ntpClient(ntpUDP, NTP_SERVER);
 ConfigManager configMgr;
 WeatherClient weather;
+OtaUpdateClient otaClient;
 TimerWidget   timerWidget;
 StopwatchWidget stopwatchWidget;
 WiFiManager   wm;
@@ -252,6 +258,9 @@ struct {
 // ── App state ─────────────────────────────────────────────────────────────────
 bool timerDonePrev          = false;
 unsigned long lastWeatherFetch = 0;
+unsigned long lastUpdateCheck  = 0;
+bool lastUpdateCheckFailed     = false;  // session-only, shown on /config/update, not persisted
+bool lastUpdateCheckSkipped    = false;  // session-only — check was skipped (a "dev" build), not persisted
 unsigned long lastTouchMs      = 0;
 unsigned long showIpUntilMs    = 0;
 bool asleep                    = false;  // set each loop before handleTouch(); read by handleTouch()
@@ -1482,6 +1491,7 @@ static const char CONFIG_HOME_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <a class="nav" href="/config/store">Store</a>
 <a class="nav" href="/config/dress">Dressing Room</a>
 <a class="nav" href="/config/backup">Backup</a>
+<a class="nav" href="/config/update">Firmware Update</a>
 </body></html>
 )html";
 
@@ -1655,6 +1665,32 @@ document.getElementById('importFile').addEventListener('change', function(e){
 </body></html>
 )html";
 
+static const char CONFIG_UPDATE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cat Control Panel · Firmware Update</title>
+<style>%%STYLE%%</style>
+</head><body>
+<a class="back" href="/config">&larr; Configuration</a>
+<h2>Firmware Update</h2>
+%%MSG%%
+
+<h3>Version</h3>
+<p>Running: <strong>%%CURRENT_VERSION%%</strong></p>
+<p>Last checked: %%LAST_CHECKED%%</p>
+
+<form method="POST" action="/save-config/update">
+<label><input type="checkbox" name="autoUpdate" %%AUTOUPDATE_CHECKED%%> Automatically check for and install updates</label>
+<button type="submit" style="width:100%;margin-top:8px">Save</button>
+</form>
+
+<form method="POST" action="/config/update/check" style="margin-top:12px">
+<button type="submit" style="width:100%">Check now</button>
+</form>
+</body></html>
+)html";
+
 static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
@@ -1761,6 +1797,11 @@ static bool parseHHMM(const String& s, int& outMinutes) {
     outMinutes = h * 60 + m;
     return true;
 }
+
+static void drawOtaProgress(size_t written, size_t total);
+static OtaCheckResult performUpdateCheckOnly();
+static void applyFoundUpdate(const OtaCheckResult& result);
+static void performUpdateCheck();
 
 static void handleConfigHome() {
     String page = String(FPSTR(CONFIG_HOME_HTML));
@@ -1973,6 +2014,65 @@ static void handleConfigBackupPost() {
     dirty.animal = true;  // name/points/owned/equipped items may have changed
     dirty.animalBg = true;  // restored backup may carry a different equipped room theme
     wm.server->sendHeader("Location", "/config/backup?saved=1");
+    wm.server->send(302, "text/plain", "");
+}
+
+static void handleConfigUpdateGet() {
+    String page = String(FPSTR(CONFIG_UPDATE_HTML));
+    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    page.replace("%%CURRENT_VERSION%%", htmlEscape(FIRMWARE_VERSION));
+    String lastChecked = "never";
+    if (configMgr.config().lastUpdateCheckEpoch > 0) {
+        uint32_t now = ntpClient.getEpochTime();
+        uint32_t ago = now > configMgr.config().lastUpdateCheckEpoch ? now - configMgr.config().lastUpdateCheckEpoch : 0;
+        lastChecked = htmlEscape(configMgr.config().lastUpdateCheckVersion) + " (" + String(ago / 60) + " min ago)";
+    }
+    page.replace("%%LAST_CHECKED%%", lastChecked);
+    page.replace("%%AUTOUPDATE_CHECKED%%", configMgr.config().autoUpdateEnabled ? "checked" : "");
+    String msg = "";
+    if (wm.server->hasArg("saved")) {
+        msg = "<div class='banner ok'>Saved.</div>";
+    } else if (wm.server->hasArg("checked")) {
+        // A found-and-applied update responds separately and reboots before reaching
+        // this page (see handleConfigUpdateCheckPost), so landing here after a check
+        // always means one of: skipped, failed, or already up to date.
+        if (lastUpdateCheckSkipped) msg = "<div class='banner ok'>Check skipped — this is a dev build with nothing to compare against.</div>";
+        else if (lastUpdateCheckFailed) msg = "<div class='banner err'>Check failed — see serial log.</div>";
+        else msg = "<div class='banner ok'>Already up to date.</div>";
+    }
+    page.replace("%%MSG%%", msg);
+    wm.server->send(200, "text/html", page);
+}
+
+static void handleConfigUpdatePost() {
+    configMgr.config().autoUpdateEnabled = wm.server->hasArg("autoUpdate");
+    configMgr.save();
+    wm.server->sendHeader("Location", "/config/update?saved=1");
+    wm.server->send(302, "text/plain", "");
+}
+
+static void handleConfigUpdateCheckPost() {
+    bool wasEnabled = configMgr.config().autoUpdateEnabled;
+    configMgr.config().autoUpdateEnabled = true;  // manual check always runs regardless of the toggle
+    OtaCheckResult result = performUpdateCheckOnly();
+    configMgr.config().autoUpdateEnabled = wasEnabled;
+    configMgr.save();
+
+    if (!lastUpdateCheckFailed && !lastUpdateCheckSkipped && result.updateAvailable) {
+        // Respond now, before applyFoundUpdate() blocks on the download+flash+reboot —
+        // otherwise the browser just sees a dropped connection instead of this message.
+        String page = "<!DOCTYPE html><html><head><meta charset='utf-8'>"
+            "<meta name='viewport' content='width=device-width,initial-scale=1'>"
+            "<style>" + String(FPSTR(CONFIG_STYLE)) + "</style></head><body>"
+            "<h2>Found " + htmlEscape(result.latestVersion) + "</h2>"
+            "<p>Installing now — the device will reboot when done. This page won't update further.</p>"
+            "</body></html>";
+        wm.server->send(200, "text/html", page);
+        applyFoundUpdate(result);  // reboots on success; only returns on failure
+        return;
+    }
+
+    wm.server->sendHeader("Location", "/config/update?checked=0");
     wm.server->send(302, "text/plain", "");
 }
 
@@ -2263,6 +2363,80 @@ static void drawWifiPortal() {
     tft.drawCentreString("192.168.4.1", CX, 210, 4);
 }
 
+static void drawOtaProgress(size_t written, size_t total) {
+    static int lastPct = -1;
+    int pct = total > 0 ? (int)(written * 100 / total) : 0;
+    if (pct == lastPct) return;
+    lastPct = pct;
+
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(C_DIM, TFT_BLACK);
+    tft.drawCentreString("Updating firmware", CX, 90, 2);
+    tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    char pctStr[8];
+    snprintf(pctStr, sizeof(pctStr), "%d%%", pct);
+    tft.drawCentreString(pctStr, CX, 130, 4);
+    tft.setTextColor(C_DIM, TFT_BLACK);
+    tft.drawCentreString("do not power off", CX, 200, 2);
+}
+
+// Check step only — shared by the periodic loop() check and the manual "check now"
+// button. Split out from the apply step so handleConfigUpdateCheckPost() can respond
+// to the browser with "found, installing" *before* blocking on the download below.
+static OtaCheckResult performUpdateCheckOnly() {
+    lastUpdateCheckFailed  = false;
+    lastUpdateCheckSkipped = false;
+    if (!configMgr.config().autoUpdateEnabled) return OtaCheckResult{};
+
+    OtaCheckResult result = otaClient.checkForUpdate(GITHUB_RELEASES_LATEST_URL, FIRMWARE_VERSION, OTA_ASSET_NAME);
+    if (result.skipped) {
+        lastUpdateCheckSkipped = true;
+        return result;
+    }
+    if (result.checkFailed) {
+        lastUpdateCheckFailed = true;
+        return result;  // stay silent on the main screen, retry next interval
+    }
+
+    configMgr.config().lastUpdateCheckVersion = result.latestVersion;
+    configMgr.config().lastUpdateCheckEpoch   = ntpClient.getEpochTime();
+    configMgr.save();
+    return result;
+}
+
+// Download + flash step — blocks (no async path without FreeRTOS task juggling);
+// drawOtaProgress() is what keeps that from looking frozen. Reboots on success, so
+// this only returns on failure.
+static void applyFoundUpdate(const OtaCheckResult& result) {
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(C_DIM, TFT_BLACK);
+    tft.drawCentreString("Update found", CX, 90, 2);
+    tft.setTextColor(TFT_CYAN, TFT_BLACK);
+    tft.drawCentreString(result.latestVersion.c_str(), CX, 130, 4);
+    delay(1200);  // let it be read before the progress screen takes over
+
+    drawOtaProgress(0, 1);
+    OtaApplyResult applyResult = otaClient.applyUpdate(result.downloadUrl, drawOtaProgress);
+    if (applyResult == OtaApplyResult::Success) {
+        tft.fillScreen(TFT_BLACK);
+        tft.setTextColor(TFT_CYAN, TFT_BLACK);
+        tft.drawCentreString("Rebooting...", CX, 130, 4);
+        delay(500);
+        ESP.restart();
+    }
+
+    // Flash failed or download failed — running firmware is untouched, retry next interval.
+    lastUpdateCheckFailed = true;
+    dirty.header = dirty.animal = dirty.picker = dirty.timerRow = true;  // screen was overwritten
+    dirty.animalBg = true;
+}
+
+static void performUpdateCheck() {
+    OtaCheckResult result = performUpdateCheckOnly();
+    if (lastUpdateCheckFailed || lastUpdateCheckSkipped || !result.updateAvailable) return;
+    applyFoundUpdate(result);
+}
+
 // ── WiFiManager ───────────────────────────────────────────────────────────────
 static void runWiFiManager(ConfigManager& cfg) {
     (void)cfg;  // config now managed exclusively via /config web page
@@ -2280,6 +2454,8 @@ static void runWiFiManager(ConfigManager& cfg) {
     wm.server->on("/config/dress",     HTTP_GET,  handleConfigDressGet);
     wm.server->on("/config/backup",        HTTP_GET,  handleConfigBackupGet);
     wm.server->on("/config/backup/export", HTTP_GET,  handleConfigBackupExportGet);
+    wm.server->on("/config/update",        HTTP_GET,  handleConfigUpdateGet);
+    wm.server->on("/config/update/check",  HTTP_POST, handleConfigUpdateCheckPost);
     wm.server->on("/save-config/cat",  HTTP_POST, handleConfigCatPost);
     wm.server->on("/save-config/city", HTTP_POST, handleConfigCityPost);
     wm.server->on("/save-config/store", HTTP_POST, handleConfigStorePost);
@@ -2287,6 +2463,7 @@ static void runWiFiManager(ConfigManager& cfg) {
     wm.server->on("/save-config/reset", HTTP_POST, handleConfigResetPost);
     wm.server->on("/save-config/dress", HTTP_POST, handleConfigDressPost);
     wm.server->on("/save-config/backup", HTTP_POST, handleConfigBackupPost);
+    wm.server->on("/save-config/update", HTTP_POST, handleConfigUpdatePost);
 }
 
 // ── Arduino ───────────────────────────────────────────────────────────────────
@@ -2324,6 +2501,14 @@ void setup() {
 
     weather.fetch(configMgr.config().latitude, configMgr.config().longitude);
     lastWeatherFetch = millis();
+    lastUpdateCheck  = millis();
+
+    // Confirms this boot is good before the *next* auto-update can overwrite the other
+    // OTA slot — see STATUS.md's DIY-41 notes on what this actually guarantees under
+    // PlatformIO's prebuilt Arduino core.
+    if (weather.data().valid) {
+        esp_ota_mark_app_valid_cancel_rollback();
+    }
 
     tft.fillScreen(TFT_BLACK);
 
@@ -2383,6 +2568,13 @@ void loop() {
         weather.fetch(configMgr.config().latitude, configMgr.config().longitude);
         lastWeatherFetch = now;
         dirty.header = true;
+    }
+
+    // Firmware update check — blocks the loop if it finds and applies an update
+    // (see performUpdateCheck()); otherwise a quick network round-trip at most.
+    if (now - lastUpdateCheck > UPDATE_CHECK_INTERVAL_MS) {
+        lastUpdateCheck = now;
+        performUpdateCheck();
     }
 
     // Timer tick + finished detection

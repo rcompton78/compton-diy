@@ -1,5 +1,11 @@
 #pragma once
 
+// Firmware version, injected via platformio.ini from RELEASE_VERSION
+// (scripts/pio.sh defaults it to "dev" outside the release workflow).
+#ifndef FIRMWARE_VERSION
+#define FIRMWARE_VERSION "dev"
+#endif
+
 // Display
 #define SCREEN_WIDTH  320
 #define SCREEN_HEIGHT 240
@@ -7,6 +13,9 @@
 #if defined(BOARD_FREENOVE_S3)
 
 #define TFT_BACKLIGHT_PIN 45
+
+// Release asset filename for this board, set by tools/esp-flasher/generate_release.py
+#define OTA_ASSET_NAME "cyd-clock-freenove-s3-ota.bin"
 
 // Touch (I2C) — FT6336U capacitive touch
 #define TOUCH_SDA 16
@@ -17,6 +26,9 @@
 #else
 
 #define TFT_BACKLIGHT_PIN 21
+
+// Release asset filename for this board, set by tools/esp-flasher/generate_release.py
+#define OTA_ASSET_NAME "cyd-clock-cyd-ota.bin"
 
 // Touch (HSPI) — XPT2046 resistive touch. TOUCH_CS is also passed as a
 // platformio.ini build flag so TFT_eSPI (included before this header) sees it.
@@ -42,3 +54,8 @@
 // NTP
 #define NTP_SERVER "pool.ntp.org"
 #define NTP_UPDATE_INTERVAL_MS (60 * 60 * 1000UL)  // 1 hour
+
+// Firmware auto-update — well under GitHub's 60 req/hr unauthenticated rate limit,
+// shared across all unauthenticated GitHub API traffic from this IP (~5.5KB/check)
+#define UPDATE_CHECK_INTERVAL_MS (60 * 60 * 1000UL)  // 1 hour
+#define GITHUB_RELEASES_LATEST_URL "https://api.github.com/repos/rcompton78/compton-diy/releases/latest"
