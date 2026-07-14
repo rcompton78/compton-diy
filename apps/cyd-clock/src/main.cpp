@@ -183,16 +183,19 @@ struct RoomTheme {
     uint32_t cost;
     uint16_t bgColor;                                   // representative solid color, for cheap text-background erasure
     void (*drawBackground)(int x, int y, int w, int h);  // repaints exactly this rect of the zone's backdrop
+    const char* webColor;  // CSS hex approximation of `bgColor`, brightened for legibility on the
+                            // config UI's dark page background; nullptr for themes whose backdrop
+                            // isn't a straight color (see DIY-42), so the label falls back to white
 };
 static constexpr RoomTheme ROOM_THEMES[] = {
     // Flat-color placeholders (DIY-38), picked to pair with the blanket palette. Moon /
     // fireplace themes with real art still land in a follow-up card.
-    {"midnight", "Midnight", STORE_COST_ROOM_THEME, 0x18CE, drawFlatThemeBackground},  // deep navy — pairs with Dusty Blue
-    {"twilight", "Twilight", STORE_COST_ROOM_THEME, 0x28C8, drawFlatThemeBackground},  // deep plum — pairs with Lavender
-    {"forest",   "Forest",   STORE_COST_ROOM_THEME, 0x1143, drawFlatThemeBackground},  // deep green — pairs with Apple Green
-    {"rosewood", "Rosewood", STORE_COST_ROOM_THEME, 0x30A4, drawFlatThemeBackground},  // deep wine — pairs with Blush Pink
-    {"amber",    "Amber",    STORE_COST_ROOM_THEME, 0x28E2, drawFlatThemeBackground},  // warm deep brown — pairs with Cream & Lemon Yellow
-    {"starry_night", "Starry Night", STORE_COST_STARRY_NIGHT, TFT_BLACK, drawStarryNightBackground},  // moon + stars on black
+    {"midnight", "Midnight", STORE_COST_ROOM_THEME, 0x18CE, drawFlatThemeBackground, "#5B7FBD"},  // deep navy — pairs with Dusty Blue
+    {"twilight", "Twilight", STORE_COST_ROOM_THEME, 0x28C8, drawFlatThemeBackground, "#9B72CF"},  // deep plum — pairs with Lavender
+    {"forest",   "Forest",   STORE_COST_ROOM_THEME, 0x1143, drawFlatThemeBackground, "#4CAF6D"},  // deep green — pairs with Apple Green
+    {"rosewood", "Rosewood", STORE_COST_ROOM_THEME, 0x30A4, drawFlatThemeBackground, "#C2687D"},  // deep wine — pairs with Blush Pink
+    {"amber",    "Amber",    STORE_COST_ROOM_THEME, 0x28E2, drawFlatThemeBackground, "#D9A441"},  // warm deep brown — pairs with Cream & Lemon Yellow
+    {"starry_night", "Starry Night", STORE_COST_STARRY_NIGHT, TFT_BLACK, drawStarryNightBackground, nullptr},  // moon + stars on black — not a straight color, label stays white
 };
 static constexpr int ROOM_THEME_COUNT = sizeof(ROOM_THEMES) / sizeof(ROOM_THEMES[0]);
 
@@ -1922,7 +1925,8 @@ static void handleConfigStoreGet() {
     String roomThemeItems = "";
     for (int i = 0; i < ROOM_THEME_COUNT; i++) {
         bool owned = configMgr.config().ownedRoomThemes & (1 << i);
-        roomThemeItems += "<div class='item'><span>" + String(ROOM_THEMES[i].label) + "</span>";
+        String themeColor = ROOM_THEMES[i].webColor ? String(ROOM_THEMES[i].webColor) : "#fff";
+        roomThemeItems += "<div class='item'><span style='color:" + themeColor + "'>" + String(ROOM_THEMES[i].label) + "</span>";
         roomThemeItems += storeItemAction(ROOM_THEMES[i].id, owned, ROOM_THEMES[i].cost, points);
         roomThemeItems += "</div>\n";
     }
@@ -2281,7 +2285,9 @@ static void handleConfigDressGet() {
             themeOptions += ROOM_THEMES[i].id;
             themeOptions += "'";
             if (i == equippedThemeIdx) themeOptions += " checked";
-            themeOptions += "> " + String(ROOM_THEMES[i].label) + "</label>";
+            String themeColor = ROOM_THEMES[i].webColor ? String(ROOM_THEMES[i].webColor) : "#fff";
+            themeOptions += "> <span style='color:" + themeColor + "'>"
+                          + String(ROOM_THEMES[i].label) + "</span></label>";
         }
     }
     page.replace("%%ROOM_THEME_OPTIONS%%", themeOptions);
