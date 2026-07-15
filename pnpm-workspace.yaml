@@ -1,3 +1,7 @@
 packages:
   - 'apps/*'
   - 'libs/*'
+  # Git submodules (vendored forks) keep their own independent dependency
+  # tree, installed via their own project's `install` NX target (see
+  # package.json's postinstall: `nx run-many -t install`).
+  - '!apps/espframe'
