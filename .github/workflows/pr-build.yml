@@ -22,6 +22,11 @@ jobs:
       - name: Install PlatformIO
         run: pip install platformio
 
+      - name: Install ESPHome
+        run: |
+          ESPHOME_VERSION="$(python3 -c "import json; print(json.load(open('apps/espframe/product/contract/project.json'))['esphome_version'])")"
+          pip install "esphome==$ESPHOME_VERSION"
+
       - uses: pnpm/action-setup@v4
         with:
           version: 10
