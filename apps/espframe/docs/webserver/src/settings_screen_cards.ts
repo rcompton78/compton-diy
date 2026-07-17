@@ -182,6 +182,27 @@
       })
     );
     clkBody.appendChild(f7);
+
+    var f8 = field("Size");
+    f8.appendChild(
+      selectFromOptions(["Small", "Medium", "Large"], S.clock_size, function (v) {
+        saveSetting("clock_size", v);
+      })
+    );
+    clkBody.appendChild(f8);
+
+    var f9 = field("Position");
+    f9.appendChild(
+      selectFromOptions(
+        ["Bottom Left", "Bottom Center", "Bottom Right", "Top Left", "Top Center", "Top Right"],
+        S.clock_position,
+        function (v) {
+          saveSetting("clock_position", v);
+        }
+      )
+    );
+    clkBody.appendChild(f9);
+
     clkBody.appendChild(ntpServersField());
     return makeCollapsibleCard("Clock", clkBody, true, clockBadge);
 

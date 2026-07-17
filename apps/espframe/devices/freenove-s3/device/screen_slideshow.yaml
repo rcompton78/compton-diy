@@ -284,6 +284,36 @@ lvgl:
                               text_color: 0xFFFFFF
                               text_font: noto_400_12_font
         - obj:
+            id: ip_address_overlay
+            align: TOP_MID
+            y: 10
+            hidden: true
+            width: SIZE_CONTENT
+            height: SIZE_CONTENT
+            bg_opa: 0%
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            clickable: false
+            widgets:
+              - label:
+                  id: ip_address_label_shadow
+                  x: 2
+                  y: 2
+                  text: ""
+                  text_align: center
+                  text_color: 0x000000
+                  text_opa: 20%
+                  text_font: noto_400_12_font
+              - label:
+                  id: ip_address_label
+                  x: 0
+                  y: 0
+                  text: ""
+                  text_align: center
+                  text_color: 0xFFFFFF
+                  text_font: noto_400_12_font
+        - obj:
             id: connection_failed_overlay
             align: CENTER
             width: ${display_width}
@@ -546,6 +576,7 @@ script:
           condition:
             lambda: 'return !id(touch_started_while_off);'
           then:
+            - script.execute: show_ip_overlay
             - lambda: |-
                 uint32_t now = millis();
                 if (id(last_short_tap_ms) != 0 && (now - id(last_short_tap_ms)) < 400) {
@@ -562,6 +593,24 @@ script:
     mode: single
     then:
       - script.stop: backlight_hold_timer
+
+  - id: show_ip_overlay
+    mode: restart
+    then:
+      - lambda: |-
+          std::string ip_text = "No IP";
+          auto ips = wifi::global_wifi_component->get_ip_addresses();
+          if (!ips.empty()) {
+            char ip_buf[esphome::network::IP_ADDRESS_BUFFER_SIZE];
+            ips[0].str_to(ip_buf);
+            ip_text = ip_buf;
+          }
+          lv_label_set_text(id(ip_address_label), ip_text.c_str());
+          lv_label_set_text(id(ip_address_label_shadow), ip_text.c_str());
+          lv_obj_clear_flag(id(ip_address_overlay), LV_OBJ_FLAG_HIDDEN);
+      - delay: 5s
+      - lambda: |-
+          lv_obj_add_flag(id(ip_address_overlay), LV_OBJ_FLAG_HIDDEN);
 
   - id: hide_connection_failed
     mode: single

@@ -15,7 +15,7 @@ struct ConfigurationField {
 inline constexpr unsigned int CONTRACT_VERSION = 2;
 inline constexpr unsigned int API_VERSION = 1;
 inline constexpr unsigned int SETTING_COUNT = 33;
-inline constexpr unsigned int CONFIGURATION_FIELD_COUNT = 47;
+inline constexpr unsigned int CONFIGURATION_FIELD_COUNT = 49;
 inline constexpr const char CAPABILITIES_PATH[] = "/espframe/api/v1/capabilities";
 inline constexpr const char CONFIGURATION_PATH[] = "/espframe/api/v1/configuration";
 inline constexpr const char CAPABILITIES_JSON[] = R"ESPFRAME_JSON({"contract_version":2,"api_version":1,"base_path":"/espframe/api/v1","capabilities_path":"/espframe/api/v1/capabilities","configuration_path":"/espframe/api/v1/configuration","update_mode":"atomic","configuration_available":true,"configuration_read":true,"configuration_write":true,"configuration_encoding":"application/x-www-form-urlencoded","configuration_parameter":"configuration","legacy_entity_api":true,"backup_versions":[1],"setting_count":33})ESPFRAME_JSON";
@@ -65,6 +65,8 @@ inline constexpr ConfigurationField CONFIGURATION_FIELDS[] = {
     {"tag_labels", "text", "Photos: Tag Labels", false},
     {"developer_features_enabled", "switch", "Developer: Features", false},
     {"show_clock", "switch", "Clock: Show", false},
+    {"clock_size", "select", "Clock: Size", false},
+    {"clock_position", "select", "Clock: Position", false},
     {"immich_url", "text", "Connection: Server URL", false},
     {"api_key", "text", "Connection: API Key", true},
 };

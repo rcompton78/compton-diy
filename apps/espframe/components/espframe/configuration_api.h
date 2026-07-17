@@ -74,15 +74,26 @@ class ConfigurationApiHandler final : public AsyncWebHandler {
   };
 
   void send_configuration_(AsyncWebServerRequest *request) const {
-    json::JsonBuilder builder;
-    JsonObject root = builder.root();
+    // Serializes straight into a heap-backed std::string rather than via
+    // json::JsonBuilder::serialize(), which embeds a 640-byte buffer on the
+    // caller's stack. The httpd task's stack (4KB, fixed by ESP-IDF) is
+    // already razor-thin, and this handler is one of several JSON response
+    // sites that run synchronously on it.
+#ifdef USE_PSRAM
+    json::SpiRamAllocator allocator;
+    JsonDocument document(&allocator);
+#else
+    JsonDocument document;
+#endif
+    JsonObject root = document.to<JsonObject>();
     root["api_version"] = contract::API_VERSION;
     JsonObject values = root["values"].to<JsonObject>();
     JsonArray unavailable = root["unavailable"].to<JsonArray>();
     for (const auto &field : contract::CONFIGURATION_FIELDS) {
       if (!this->write_field_value_(values, field)) unavailable.add(field.key);
     }
-    auto payload = builder.serialize();
+    std::string payload;
+    serializeJson(document, payload);
     request->send(200, "application/json", payload.c_str());
   }
 
@@ -129,13 +140,16 @@ class ConfigurationApiHandler final : public AsyncWebHandler {
   }
 
   static void send_error_(AsyncWebServerRequest *request, int status, const char *code, const char *field = nullptr) {
-    json::JsonBuilder builder;
-    JsonObject root = builder.root();
+    // See send_configuration_() above: avoid JsonBuilder::serialize()'s
+    // 640-byte stack buffer on the tight httpd task stack.
+    JsonDocument document;
+    JsonObject root = document.to<JsonObject>();
     root["api_version"] = contract::API_VERSION;
     root["status"] = "rejected";
     root["error"] = code;
     if (field != nullptr) root["field"] = field;
-    auto payload = builder.serialize();
+    std::string payload;
+    serializeJson(document, payload);
     request->send(status, "application/json", payload.c_str());
   }
 
@@ -291,12 +305,13 @@ class ConfigurationApiHandler final : public AsyncWebHandler {
       this->update_pending_.store(false);
     });
 
-    json::JsonBuilder builder;
-    JsonObject response = builder.root();
+    JsonDocument response_document;
+    JsonObject response = response_document.to<JsonObject>();
     response["api_version"] = contract::API_VERSION;
     response["status"] = "accepted";
     response["updated"] = updated;
-    auto payload = builder.serialize();
+    std::string payload;
+    serializeJson(response_document, payload);
     request->send(202, "application/json", payload.c_str());
   }
 

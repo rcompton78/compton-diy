@@ -115,6 +115,48 @@ select:
       sorting_group_id: sg_clock
     on_value:
       then:
+        # web_server runs on_value on its own small httpd task stack; hand
+        # off to the main loop task before the heavier display update below.
+        - delay: 10ms
+        - script.execute: update_clock_display
+
+  - platform: template
+    name: "Clock: Size"
+    id: clock_size_select
+    internal: true
+    options:
+      - "Small"
+      - "Medium"
+      - "Large"
+    initial_option: "Medium"
+    optimistic: true
+    restore_value: true
+    web_server:
+      sorting_group_id: sg_clock
+    on_value:
+      then:
+        - delay: 10ms
+        - script.execute: update_clock_display
+
+  - platform: template
+    name: "Clock: Position"
+    id: clock_position_select
+    internal: true
+    options:
+      - "Bottom Left"
+      - "Bottom Center"
+      - "Bottom Right"
+      - "Top Left"
+      - "Top Center"
+      - "Top Right"
+    initial_option: "Bottom Left"
+    optimistic: true
+    restore_value: true
+    web_server:
+      sorting_group_id: sg_clock
+    on_value:
+      then:
+        - delay: 10ms
         - script.execute: update_clock_display
 
   # Options list must match components/espframe/timezones.py (single source of truth).
@@ -315,7 +357,25 @@ script:
           }
           lv_label_set_text(id(time_label), buf);
           lv_label_set_text(id(time_label_shadow), buf);
-          lv_obj_align(id(clock_container), LV_ALIGN_BOTTOM_LEFT, 45, -20);
+
+          const lv_font_t *clock_font = id(${clock_font_medium_id})->get_lv_font();
+          std::string size_opt = id(clock_size_select).current_option();
+          if (size_opt == "Small") clock_font = id(${clock_font_small_id})->get_lv_font();
+          else if (size_opt == "Large") clock_font = id(${clock_font_large_id})->get_lv_font();
+          lv_obj_set_style_text_font(id(time_label), clock_font, 0);
+          lv_obj_set_style_text_font(id(time_label_shadow), clock_font, 0);
+
+          lv_align_t clock_align = LV_ALIGN_BOTTOM_LEFT;
+          int clock_x = 45;
+          int clock_y = -20;
+          std::string pos_opt = id(clock_position_select).current_option();
+          if (pos_opt == "Bottom Center") { clock_align = LV_ALIGN_BOTTOM_MID; clock_x = 0; clock_y = -20; }
+          else if (pos_opt == "Bottom Right") { clock_align = LV_ALIGN_BOTTOM_RIGHT; clock_x = -45; clock_y = -20; }
+          else if (pos_opt == "Top Left") { clock_align = LV_ALIGN_TOP_LEFT; clock_x = 45; clock_y = 20; }
+          else if (pos_opt == "Top Center") { clock_align = LV_ALIGN_TOP_MID; clock_x = 0; clock_y = 20; }
+          else if (pos_opt == "Top Right") { clock_align = LV_ALIGN_TOP_RIGHT; clock_x = -45; clock_y = 20; }
+          lv_obj_align(id(clock_container), clock_align, clock_x, clock_y);
+
           if (id(show_clock).state && id(espframe_core).slideshow().state().active_slot_displayed) {
             lv_obj_clear_flag(id(clock_container), LV_OBJ_FLAG_HIDDEN);
           } else {

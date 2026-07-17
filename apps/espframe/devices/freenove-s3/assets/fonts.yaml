@@ -18,14 +18,32 @@ substitutions:
     ΆΈΉΊΌΎΏΐΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩΪΫάέήίΰαβγδεζηθικλμνξοπρςστυφχψωϊϋόύώЁЂЃЄЅІЇЈЉЊЋЌЍЎЏАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюяёђѓєѕіїјљњћќѝўџҐґƠơƯưẠạẢảẤấẦầẨẩẪẫẬậẮắẰằẲẳẴẵẶặẸẹẺẻẼẽẾếỀềỂểỄễỆệỈỉỊịỌọỎỏỐốỒồỔổỖỗỘộỚớỜờỞởỠỡỢợỤụỦủỨứỪừỬửỮữỰựỲỳỴỵỶỷỸỹ
   arabic_location_glyphs: "؉،؍ؕ؛؟ءآأؤإئابةتثجحخدذرزسشصضطظعغـفقكلمنهوىيًٌٍَُِّْٕٖٓٔ٘٠١٢٣٤٥٦٧٨٩٪٫٬٭ٮٯٰٱٹٺٻټٽپٿڀځڃڄڅچڇڈډڊڌڍڏڑړڕږژڙښڡڤڦکڪګڭگڱڳڵںڻڼھہۆۇۈۋیۍێېے۔ەۛۯ۰۱۲۳۴۵۶۷۸۹۽۾ݣ‘’“”‹›⁏−◌⹁ﭖﭗﭘﭙﭺﭻﭼﭽﮊﮋﮎﮏﮐﮑﮒﮓﮔﮕﯼﯽﯾﯿ﴾﴿ﺁﺃﺄﺅﺆﺇﺈﺉﺊﺋﺌﺍﺎﺏﺐﺑﺒﺓﺔﺕﺖﺗﺘﺙﺚﺛﺜﺝﺞﺟﺠﺡﺢﺣﺤﺥﺦﺧﺨﺩﺪﺫﺬﺭﺮﺯﺰﺱﺲﺳﺴﺵﺶﺷﺸﺹﺺﺻﺼﺽﺾﺿﻀﻁﻂﻃﻄﻅﻆﻇﻈﻉﻊﻋﻌﻍﻎﻏﻐﻑﻒﻓﻔﻕﻖﻗﻘﻙﻚﻛﻜﻝﻞﻟﻠﻡﻢﻣﻤﻥﻦﻧﻨﻩﻪﻫﻬﻭﻮﻯﻰﻱﻲﻳﻴﻵﻶﻷﻸﻹﻺﻻﻼ"
   hebrew_location_glyphs: "ְֱֲֳִֵֶַָֹֺֻּֽֿ֑֖֛֢֣֤֥֦֧֪֚֭֮֒֓֔֕֗֘֙֜֝֞֟֠֡֨֩֫֬֯׀ׁׂ׃ׇׅׄאבגדהוזחטיךכלםמןנסעףפץצקרשתׯװױײ׳״"
+  # Device-independent clock font names, resolved per device. Referenced by
+  # id() from common/addon/time.yaml's update_clock_display script, which
+  # is shared across devices and can't hardcode a device-specific font size.
+  clock_font_small_id: noto_325_36_font
+  clock_font_medium_id: noto_325_54_font
+  clock_font_large_id: noto_325_64_font
 
 # -----------------------------------------------------------------------------
 # Clock (minimal glyph set for lower memory)
 # -----------------------------------------------------------------------------
 font:
   - file: "gfonts://Noto Sans@325"
+    id: noto_325_36_font
+    size: 36
+    bpp: 4
+    glyphs: " 0123456789:"
+
+  - file: "gfonts://Noto Sans@325"
     id: noto_325_54_font
     size: 54
+    bpp: 4
+    glyphs: " 0123456789:"
+
+  - file: "gfonts://Noto Sans@325"
+    id: noto_325_64_font
+    size: 64
     bpp: 4
     glyphs: " 0123456789:"
 

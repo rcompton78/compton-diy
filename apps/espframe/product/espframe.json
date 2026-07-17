@@ -181,6 +181,8 @@
         "show",
         "format",
         "timezone",
+        "size",
+        "position",
         "ntp_servers"
       ],
       "screen": [
@@ -235,6 +237,8 @@
         "show": "show_clock",
         "format": "clock_format",
         "timezone": "timezone",
+        "size": "clock_size",
+        "position": "clock_position",
         "ntp_servers": [
           "ntp_server_1",
           "ntp_server_2",
@@ -865,6 +869,18 @@
         "firmware_file": "common/addon/time.yaml",
         "boolFromState": true,
         "default": true
+      },
+      "clock_size": {
+        "entity": "select/Clock: Size",
+        "firmware_file": "common/addon/time.yaml",
+        "default": "Medium",
+        "fetch": true
+      },
+      "clock_position": {
+        "entity": "select/Clock: Position",
+        "firmware_file": "common/addon/time.yaml",
+        "default": "Bottom Left",
+        "fetch": true
       },
       "c6_current_firmware": {
         "entity": "text_sensor/ESP32-C6: Current Firmware",
