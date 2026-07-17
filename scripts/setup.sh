@@ -38,27 +38,60 @@ fi
 # above, since ESPHome pins its own compatible PlatformIO version internally)
 # if missing.
 #
-# NOTE: apps/espframe/product/contract/project.json pins esphome_version
-# 2026.6.4 for the fork's own Docker-based CI, but that version (and one of
-# its own pinned deps, aioesphomeapi==45.3.1) isn't published on PyPI yet, so
-# it can't be pip-installed. Installing latest instead for local dev — this
-# may drift from what CI actually builds until PyPI catches up, so re-verify
-# on hardware after flashing (this is what fixed the display-init bug).
+# ESPHome 2026.6.4 (the version pinned in
+# apps/espframe/product/contract/project.json) requires Python >=3.11, so it
+# won't resolve under a 3.10 interpreter — pip silently excludes it from the
+# candidate list rather than erroring, which looks identical to "this version
+# doesn't exist" unless you read pip's own "ignored versions" output closely.
 ESPFRAME_DIR="$(cd "$(dirname "$0")/.." && pwd)/apps/espframe"
 if [ -d "$ESPFRAME_DIR/product/contract" ]; then
+  ESPHOME_VERSION="$(python3 -c "import json; print(json.load(open('$ESPFRAME_DIR/product/contract/project.json'))['esphome_version'])")"
   ESPFRAME_VENV_DIR="$ESPFRAME_DIR/.venv"
   ESPFRAME_VENV_PYTHON="$ESPFRAME_VENV_DIR/bin/python"
 
+  ESPFRAME_PYTHON_BIN=""
+  for candidate in python3.13 python3.12 python3.11; do
+    if command -v "$candidate" &>/dev/null; then
+      ESPFRAME_PYTHON_BIN="$candidate"
+      break
+    fi
+  done
+
+  if [ -z "$ESPFRAME_PYTHON_BIN" ]; then
+    echo "No python3.11/3.12/3.13 found; ESPHome $ESPHOME_VERSION requires Python >=3.11."
+    if command -v apt-get &>/dev/null; then
+      # Ubuntu's default repos only carry this far back as an rc build
+      # (jammy/22.04) or not at all on older releases, so pull from deadsnakes.
+      # Local dev convenience only -- CI should use actions/setup-python
+      # instead, not this script (PPA + apt-get update is slow/network-flaky,
+      # and CI already provisions Python explicitly per workflow).
+      echo "Installing python3.12 from the deadsnakes PPA..."
+      sudo apt-get install -y software-properties-common
+      sudo add-apt-repository -y ppa:deadsnakes/ppa
+      sudo apt-get update
+      sudo apt-get install -y python3.12 python3.12-venv
+      ESPFRAME_PYTHON_BIN="python3.12"
+    elif command -v brew &>/dev/null; then
+      echo "Installing python@3.12 via Homebrew..."
+      brew install python@3.12
+      ESPFRAME_PYTHON_BIN="python3.12"
+    else
+      echo "ERROR: No supported package manager found (apt/brew) to install Python 3.12." >&2
+      echo "       Install python3.11+ manually, then re-run this script." >&2
+      exit 1
+    fi
+  fi
+
   if ! "$ESPFRAME_VENV_PYTHON" -m esphome version &>/dev/null 2>&1; then
-    echo "Creating virtualenv at apps/espframe/.venv and installing latest ESPHome..."
-    python3 -m venv "$ESPFRAME_VENV_DIR"
-    "$ESPFRAME_VENV_DIR/bin/pip" install --quiet esphome
+    echo "Creating virtualenv at apps/espframe/.venv ($ESPFRAME_PYTHON_BIN) and installing ESPHome $ESPHOME_VERSION..."
+    "$ESPFRAME_PYTHON_BIN" -m venv "$ESPFRAME_VENV_DIR"
+    "$ESPFRAME_VENV_DIR/bin/pip" install --quiet "esphome==$ESPHOME_VERSION"
     echo "ESPHome installed: $("$ESPFRAME_VENV_PYTHON" -m esphome version)"
   else
     echo "ESPHome already installed: $("$ESPFRAME_VENV_PYTHON" -m esphome version)"
   fi
 else
-  echo "Skipping ESPHome setup: apps/espframe submodule not initialized yet (run 'git submodule update --init')."
+  echo "Skipping ESPHome setup: apps/espframe not present."
 fi
 
 # Remind about dialout group (non-fatal)
