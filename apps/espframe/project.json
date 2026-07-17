@@ -42,6 +42,31 @@
         "command": "scripts/espframe-esphome.sh logs apps/espframe/builds/freenove-s3.factory.yaml --device /dev/ttyACM0",
         "cwd": "."
       }
+    },
+    "build-guition-esp32-p4-jc8012p4a1": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/espframe-esphome.sh compile apps/espframe/builds/guition-esp32-p4-jc8012p4a1.factory.yaml",
+        "cwd": "."
+      },
+      "dependsOn": ["generate"],
+      "cache": true,
+      "outputs": ["{projectRoot}/builds/.esphome/build/immich-frame-10inch"]
+    },
+    "flash-guition-esp32-p4-jc8012p4a1": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/espframe-esphome.sh upload apps/espframe/builds/guition-esp32-p4-jc8012p4a1.factory.yaml --device /dev/ttyUSB0",
+        "cwd": "."
+      },
+      "dependsOn": ["build-guition-esp32-p4-jc8012p4a1"]
+    },
+    "monitor-guition-esp32-p4-jc8012p4a1": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/espframe-esphome.sh logs apps/espframe/builds/guition-esp32-p4-jc8012p4a1.factory.yaml --device /dev/ttyUSB0",
+        "cwd": "."
+      }
     }
   }
 }
