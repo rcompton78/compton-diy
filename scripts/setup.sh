@@ -49,10 +49,8 @@ if [ -d "$ESPFRAME_DIR/product/contract" ]; then
   ESPFRAME_VENV_DIR="$ESPFRAME_DIR/.venv"
   ESPFRAME_VENV_PYTHON="$ESPFRAME_VENV_DIR/bin/python"
 
-  # Prefer 3.12 (matches CI's actions/setup-python pin) or newer; install it
-  # if missing rather than silently settling for an older interpreter someone
-  # happens to already have. 3.11 is allowed, but only as a fallback if we
-  # can't actually install 3.12 (no apt/brew available).
+  # Match CI's pin exactly (actions/setup-python, python-version: '3.12' in
+  # pr-build.yml/release.yml) -- no 3.11 fallback, install 3.12 or fail.
   ESPFRAME_PYTHON_BIN=""
   for candidate in python3.13 python3.12; do
     if command -v "$candidate" &>/dev/null; then
@@ -62,7 +60,7 @@ if [ -d "$ESPFRAME_DIR/product/contract" ]; then
   done
 
   if [ -z "$ESPFRAME_PYTHON_BIN" ]; then
-    echo "No python3.12/3.13 found; installing python3.12 (ESPHome $ESPHOME_VERSION requires Python >=3.11, and this matches CI's pin)."
+    echo "No python3.12/3.13 found; installing python3.12 to match CI's pin."
     if command -v apt-get &>/dev/null; then
       # Ubuntu's default repos only carry this far back as an rc build
       # (jammy/22.04) or not at all on older releases, so pull from deadsnakes.
@@ -79,13 +77,13 @@ if [ -d "$ESPFRAME_DIR/product/contract" ]; then
       echo "Installing python@3.12 via Homebrew..."
       brew install python@3.12
       ESPFRAME_PYTHON_BIN="python3.12"
-    elif command -v python3.11 &>/dev/null; then
-      echo "WARNING: couldn't install python3.12 (no apt/brew found); falling back to python3.11." >&2
-      ESPFRAME_PYTHON_BIN="python3.11"
     else
-      echo "ERROR: No supported package manager found (apt/brew) to install Python 3.12," >&2
-      echo "       and no python3.11 fallback available either." >&2
-      echo "       Install python3.11+ manually, then re-run this script." >&2
+      echo "ERROR: No supported package manager found (apt/brew) to install Python 3.12." >&2
+      echo "       Install python3.12 manually, then re-run this script." >&2
+      exit 1
+    fi
+    if ! command -v "$ESPFRAME_PYTHON_BIN" &>/dev/null; then
+      echo "ERROR: python3.12 installation did not succeed." >&2
       exit 1
     fi
   fi
