@@ -1,0 +1,82 @@
+# =============================================================================
+# SCREEN: WIFI SETUP
+# =============================================================================
+# Captive portal instructions shown when WiFi is disconnected.
+# =============================================================================
+
+lvgl:
+  pages:
+    - id: wifi_setup_page
+      bg_color: 0x000000
+      scrollable: false
+      pad_all: 0
+      widgets:
+        - obj:
+            width: ${display_width}
+            height: ${display_height}
+            bg_opa: 0%
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            clickable: true
+            on_press:
+              then:
+                - script.stop: setup_screen_dim
+                - script.execute: backlight_apply_brightness
+                - script.execute: setup_screen_dim
+            widgets:
+              - obj:
+                  align: center
+                  width: 700
+                  height: SIZE_CONTENT
+                  bg_opa: 0%
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  clickable: false
+                  layout:
+                    type: flex
+                    flex_flow: COLUMN
+                    flex_align_main: center
+                    flex_align_cross: center
+                    pad_row: 20
+                  widgets:
+                    - label:
+                        text_font: icon_font_setup
+                        text: $icon_wifi
+                        text_color: 0xFFFFFF
+                        text_align: center
+                    - label:
+                        text: "WiFi Setup"
+                        text_font: noto_400_46_font
+                        text_color: 0xFFFFFF
+                        width: 700
+                        text_align: center
+                    - label:
+                        id: wifi_setup_instructions
+                        text: "Connect to the WiFi hotspot\nto configure your network\n\nThen visit ${captive_portal_ip} in your browser"
+                        text_font: noto_400_30_font
+                        text_color: 0x888888
+                        width: 700
+                        text_align: center
+
+# =============================================================================
+# SETUP SCREEN DIM TIMER
+# =============================================================================
+# Dims the backlight after 120s on any static setup screen (WiFi setup, Immich
+# setup) to prevent burn-in. Touch on the page restores brightness.
+# =============================================================================
+
+script:
+  - id: setup_screen_dim
+    mode: restart
+    then:
+      - delay: 120s
+      - if:
+          condition:
+            lambda: 'return !id(backlight_paused) && !id(backlight_manual_off);'
+          then:
+            - light.turn_on:
+                id: backlight
+                brightness: 50%
+                transition_length: 2s

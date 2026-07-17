@@ -1,0 +1,359 @@
+"""ESPHome code-generation wrapper for the remote_image component.
+
+The Python side validates YAML, enables only the requested image decoders, and
+copies bundled C/C++ decoder libraries into ESPHome's build directory when they
+are needed. The C++ files do the runtime download and drawing work.
+"""
+
+import logging
+import os
+import shutil
+
+from esphome import automation
+import esphome.codegen as cg
+from esphome.components.const import CONF_BYTE_ORDER, CONF_REQUEST_HEADERS
+from esphome.components.http_request import CONF_HTTP_REQUEST_ID, HttpRequestComponent
+from esphome.components.image import (
+    CONF_INVERT_ALPHA,
+    CONF_TRANSPARENCY,
+    IMAGE_SCHEMA,
+    Image_,
+    get_image_type_enum,
+    get_transparency_enum,
+    validate_settings,
+)
+
+try:
+    from esphome.components.image import add_metadata as _add_image_metadata
+except ImportError:
+    _add_image_metadata = None
+
+import esphome.config_validation as cv
+from esphome.const import (
+    CONF_BUFFER_SIZE,
+    CONF_DITHER,
+    CONF_FILE,
+    CONF_FORMAT,
+    CONF_ID,
+    CONF_ON_ERROR,
+    CONF_RESIZE,
+    CONF_TRIGGER_ID,
+    CONF_TYPE,
+    CONF_URL,
+)
+from esphome.core import CORE, Lambda
+
+AUTO_LOAD = ["image"]
+DEPENDENCIES = ["display", "http_request"]
+CODEOWNERS = ["@guillempages", "@clydebarrow"]
+MULTI_CONF = True
+
+CONF_ON_DOWNLOAD_FINISHED = "on_download_finished"
+CONF_FILL = "fill"
+CONF_PLACEHOLDER = "placeholder"
+CONF_UPDATE = "update"
+CONF_FORMATS = "formats"
+CONF_HORIZONTAL_ALIGN = "horizontal_align"
+
+_LOGGER = logging.getLogger(__name__)
+
+remote_image_ns = cg.esphome_ns.namespace("remote_image")
+
+ImageFormat = remote_image_ns.enum("ImageFormat")
+HorizontalAlignment = remote_image_ns.enum("HorizontalAlignment")
+
+
+class Format:
+    """Small strategy object for enabling the decoder needed by each format."""
+
+    def __init__(self, image_type):
+        self.image_type = image_type
+
+    @property
+    def enum(self):
+        return getattr(ImageFormat, self.image_type)
+
+    def actions(self):
+        pass
+
+
+class BMPFormat(Format):
+    def __init__(self):
+        super().__init__("BMP")
+
+    def actions(self):
+        cg.add_define("USE_REMOTE_IMAGE_BMP_SUPPORT")
+
+
+class JPEGFormat(Format):
+    def __init__(self):
+        super().__init__("JPEG")
+
+    def actions(self):
+        cg.add_define("USE_REMOTE_IMAGE_JPEG_SUPPORT")
+        # Copy libjpeg-turbo as an IDF component into the build directory.
+        # Skip if dest already exists and CMakeLists.txt mtimes match (avoid
+        # redundant copies on incremental builds).
+        src_path = os.path.join(
+            os.path.dirname(__file__), "..", "libjpeg-turbo-esp32"
+        )
+        dest_path = str(
+            CORE.relative_build_path("components", "libjpeg-turbo-esp32")
+        )
+        src_cmake = os.path.join(src_path, "CMakeLists.txt")
+        dest_cmake = os.path.join(dest_path, "CMakeLists.txt")
+        needs_copy = not os.path.exists(dest_cmake) or (
+            os.path.getmtime(src_cmake) > os.path.getmtime(dest_cmake)
+        )
+        if needs_copy:
+            if os.path.exists(dest_path):
+                shutil.rmtree(dest_path)
+            shutil.copytree(src_path, dest_path)
+
+
+class PNGFormat(Format):
+    def __init__(self):
+        super().__init__("PNG")
+
+    def actions(self):
+        cg.add_define("USE_REMOTE_IMAGE_PNG_SUPPORT")
+        cg.add_library("pngle", "1.1.0")
+
+
+class WebPFormat(Format):
+    def __init__(self):
+        super().__init__("WEBP")
+
+    def actions(self):
+        cg.add_define("USE_REMOTE_IMAGE_WEBP_SUPPORT")
+        src_path = os.path.join(
+            os.path.dirname(__file__), "..", "libwebp-esp32"
+        )
+        dest_path = str(
+            CORE.relative_build_path("components", "libwebp-esp32")
+        )
+        src_cmake = os.path.join(src_path, "CMakeLists.txt")
+        dest_cmake = os.path.join(dest_path, "CMakeLists.txt")
+        needs_copy = not os.path.exists(dest_cmake) or (
+            os.path.getmtime(src_cmake) > os.path.getmtime(dest_cmake)
+        )
+        if needs_copy:
+            if os.path.exists(dest_path):
+                shutil.rmtree(dest_path)
+            shutil.copytree(src_path, dest_path)
+
+
+class AutoFormat(Format):
+    def __init__(self):
+        super().__init__("AUTO")
+
+    def actions(self):
+        # AUTO detection can discover any supported format at runtime, so compile
+        # all decoders into the firmware.
+        for fmt in (BMPFormat(), JPEGFormat(), PNGFormat(), WebPFormat()):
+            fmt.actions()
+
+
+IMAGE_FORMATS = {
+    x.image_type: x
+    for x in (
+        AutoFormat(),
+        BMPFormat(),
+        JPEGFormat(),
+        PNGFormat(),
+        WebPFormat(),
+    )
+}
+IMAGE_FORMATS.update({"JPG": IMAGE_FORMATS["JPEG"]})
+
+
+def _enable_format_actions(format_names):
+    enabled = set()
+    for name in format_names:
+        fmt = IMAGE_FORMATS[name]
+        if fmt.image_type in enabled:
+            continue
+        fmt.actions()
+        enabled.add(fmt.image_type)
+
+OnlineImage = remote_image_ns.class_("OnlineImage", cg.PollingComponent, Image_)
+
+# Actions
+SetUrlAction = remote_image_ns.class_(
+    "OnlineImageSetUrlAction", automation.Action, cg.Parented.template(OnlineImage)
+)
+ReleaseImageAction = remote_image_ns.class_(
+    "OnlineImageReleaseAction", automation.Action, cg.Parented.template(OnlineImage)
+)
+
+# Triggers
+DownloadFinishedTrigger = remote_image_ns.class_(
+    "DownloadFinishedTrigger", automation.Trigger.template()
+)
+DownloadErrorTrigger = remote_image_ns.class_(
+    "DownloadErrorTrigger", automation.Trigger.template()
+)
+
+
+def remove_options(*options):
+    return {
+        cv.Optional(option): cv.invalid(
+            f"{option} is an invalid option for remote_image"
+        )
+        for option in options
+    }
+
+
+ONLINE_IMAGE_SCHEMA = (
+    IMAGE_SCHEMA.extend(remove_options(CONF_FILE, CONF_INVERT_ALPHA, CONF_DITHER))
+    .extend(
+        {
+            cv.Required(CONF_ID): cv.declare_id(OnlineImage),
+            cv.GenerateID(CONF_HTTP_REQUEST_ID): cv.use_id(HttpRequestComponent),
+            # Online Image specific options
+            cv.Required(CONF_URL): cv.url,
+            cv.Optional(CONF_REQUEST_HEADERS): cv.All(
+                cv.Schema({cv.string: cv.templatable(cv.string)})
+            ),
+            cv.Optional(CONF_FORMAT, default="AUTO"): cv.one_of(*IMAGE_FORMATS, upper=True),
+            cv.Optional(CONF_FORMATS): cv.ensure_list(
+                cv.one_of(
+                    *[name for name in IMAGE_FORMATS if name != "AUTO"],
+                    upper=True,
+                )
+            ),
+            cv.Optional(CONF_PLACEHOLDER): cv.use_id(Image_),
+            cv.Optional(CONF_FILL, default=False): cv.boolean,
+            cv.Optional(CONF_HORIZONTAL_ALIGN, default="CENTER"): cv.one_of(
+                "CENTER", "START", "END", upper=True
+            ),
+            cv.Optional(CONF_BUFFER_SIZE, default=65536): cv.int_range(256, 524288),
+            cv.Optional(CONF_ON_DOWNLOAD_FINISHED): automation.validate_automation(
+                {
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(
+                        DownloadFinishedTrigger
+                    ),
+                }
+            ),
+            cv.Optional(CONF_ON_ERROR): automation.validate_automation(
+                {
+                    cv.GenerateID(CONF_TRIGGER_ID): cv.declare_id(DownloadErrorTrigger),
+                }
+            ),
+        }
+    )
+    .extend(cv.polling_component_schema("never"))
+)
+
+CONFIG_SCHEMA = cv.Schema(
+    cv.All(
+        ONLINE_IMAGE_SCHEMA,
+        cv.require_framework_version(
+            # esp8266 not supported yet; if enabled in the future, minimum version of 2.7.0 is needed
+            # esp8266_arduino=cv.Version(2, 7, 0),
+            esp32_arduino=cv.Version(0, 0, 0),
+            esp_idf=cv.Version(4, 0, 0),
+            rp2040_arduino=cv.Version(0, 0, 0),
+            host=cv.Version(0, 0, 0),
+        ),
+        validate_settings,
+    )
+)
+
+SET_URL_SCHEMA = cv.Schema(
+    {
+        cv.GenerateID(): cv.use_id(OnlineImage),
+        cv.Required(CONF_URL): cv.templatable(cv.url),
+        cv.Optional(CONF_UPDATE, default=True): cv.templatable(bool),
+    }
+)
+
+RELEASE_IMAGE_SCHEMA = automation.maybe_simple_id(
+    {
+        cv.GenerateID(): cv.use_id(OnlineImage),
+    }
+)
+
+
+@automation.register_action("remote_image.set_url", SetUrlAction, SET_URL_SCHEMA, synchronous=True)
+@automation.register_action(
+    "remote_image.release", ReleaseImageAction, RELEASE_IMAGE_SCHEMA, synchronous=True
+)
+async def remote_image_action_to_code(config, action_id, template_arg, args):
+    paren = await cg.get_variable(config[CONF_ID])
+    var = cg.new_Pvariable(action_id, template_arg, paren)
+
+    if CONF_URL in config:
+        template_ = await cg.templatable(config[CONF_URL], args, cg.std_string)
+        cg.add(var.set_url(template_))
+    if CONF_UPDATE in config:
+        template_ = await cg.templatable(config[CONF_UPDATE], args, bool)
+        cg.add(var.set_update(template_))
+    return var
+
+
+async def to_code(config):
+    # Convert the YAML configuration into a C++ OnlineImage instance and wire up
+    # ESPHome automations for download success/failure.
+    image_format = IMAGE_FORMATS[config[CONF_FORMAT]]
+    if config[CONF_FORMAT] == "AUTO" and CONF_FORMATS in config:
+        _enable_format_actions(config[CONF_FORMATS])
+    else:
+        image_format.actions()
+
+    url = config[CONF_URL]
+    width, height = config.get(CONF_RESIZE, (0, 0))
+    transparent = get_transparency_enum(config[CONF_TRANSPARENCY])
+
+    if _add_image_metadata is not None:
+        _add_image_metadata(
+            config[CONF_ID],
+            width,
+            height,
+            config[CONF_TYPE],
+            config[CONF_TRANSPARENCY],
+        )
+
+    var = cg.new_Pvariable(
+        config[CONF_ID],
+        url,
+        width,
+        height,
+        image_format.enum,
+        get_image_type_enum(config[CONF_TYPE]),
+        transparent,
+        config[CONF_BUFFER_SIZE],
+        config.get(CONF_BYTE_ORDER) != "LITTLE_ENDIAN",
+    )
+    await cg.register_component(var, config)
+    await cg.register_parented(var, config[CONF_HTTP_REQUEST_ID])
+
+    if config[CONF_FILL]:
+        cg.add(var.set_fill_mode(True))
+    cg.add(
+        var.set_horizontal_align(
+            getattr(
+                HorizontalAlignment,
+                f"HORIZONTAL_ALIGN_{config[CONF_HORIZONTAL_ALIGN]}",
+            )
+        )
+    )
+
+    for key, value in config.get(CONF_REQUEST_HEADERS, {}).items():
+        if isinstance(value, Lambda):
+            template_ = await cg.templatable(value, [], cg.std_string)
+            cg.add(var.add_request_header(key, template_))
+        else:
+            cg.add(var.add_request_header(key, value))
+
+    if placeholder_id := config.get(CONF_PLACEHOLDER):
+        placeholder = await cg.get_variable(placeholder_id)
+        cg.add(var.set_placeholder(placeholder))
+
+    for conf in config.get(CONF_ON_DOWNLOAD_FINISHED, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(trigger, [(bool, "cached")], conf)
+
+    for conf in config.get(CONF_ON_ERROR, []):
+        trigger = cg.new_Pvariable(conf[CONF_TRIGGER_ID], var)
+        await automation.build_automation(trigger, [], conf)

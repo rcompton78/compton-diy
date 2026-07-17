@@ -1,0 +1,22 @@
+# =============================================================================
+# LVGL BASE - Shared display config and styles
+# =============================================================================
+# Defines the LVGL top-level configuration shared by all screens.
+# Individual screens add their own pages via separate files.
+# =============================================================================
+
+lvgl:
+  # Full-frame buffer: at 240x320 RGB565 that's only 150KB, negligible
+  # against this board's 8MB PSRAM pool, so there's no reason to chunk it
+  # like the P4 does (6% -- necessary there since its screen is much bigger
+  # and a full buffer would actually cost real PSRAM).
+  buffer_size: 100%
+  # little_endian was copied from the P4 device's lvgl_base.yaml, but that
+  # device uses platform: mipi_dsi (a totally different display driver) --
+  # it was never actually valid for this device's SPI ili9xxx panel, which
+  # needs ESPHome's documented default for SPI TFT displays.
+  byte_order: big_endian
+  rotation: ${screen_rotation_0}
+  resume_on_input: true
+  displays:
+    - tft_display

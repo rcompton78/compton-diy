@@ -1,0 +1,80 @@
+# =============================================================================
+# CONNECTIVITY - WiFi, captive portal, HTTP client
+# =============================================================================
+# Handles network connectivity and navigates between screens based on
+# connection state using lvgl.page.show.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# SSL verification and HTTP client
+# -----------------------------------------------------------------------------
+substitutions:
+  # Set to "true" to enable SSL certificate verification.
+  # Default "false" allows self-signed certs common in home lab setups.
+  immich_verify_ssl: "false"
+
+# Enable IPv6 so dual-stack DNS names can use AAAA when IPv4 is unavailable.
+network:
+  enable_ipv6: true
+
+http_request:
+  id: http_req
+  timeout: 20s
+  verify_ssl: ${immich_verify_ssl}
+  buffer_size_rx: 4096
+  buffer_size_tx: 1024
+
+# -----------------------------------------------------------------------------
+# Captive portal and WiFi (connect / disconnect → page navigation)
+# -----------------------------------------------------------------------------
+captive_portal:
+
+script:
+  - id: show_wifi_setup_after_disconnect
+    mode: restart
+    then:
+      - delay: 20s
+      - if:
+          condition:
+            and:
+              - not:
+                  wifi.connected:
+              - lambda: 'return !id(boot_grace_period);'
+          then:
+            - lvgl.page.show: wifi_setup_page
+            - script.execute: setup_screen_dim
+
+wifi:
+  reboot_timeout: 0s
+  ap:
+    ssid: "${name}"
+  on_connect:
+    - script.stop: setup_screen_dim
+    - script.stop: show_wifi_setup_after_disconnect
+    - lambda: |-
+        lv_bar_set_value(id(loading_progress_bar), 100, LV_ANIM_OFF);
+        lv_label_set_text(id(loading_status_label), "Connected");
+    - delay: 800ms
+    - if:
+        condition:
+          lambda: 'return is_valid_http_url(id(immich_url).state) && !id(immich_api_key_text).state.empty();'
+        then:
+          - delay: 2s
+          - script.execute: immich_check_config_ready
+        else:
+          - lambda: |-
+              auto ips = wifi::global_wifi_component->get_ip_addresses();
+              if (!ips.empty()) {
+                char ip_buf[esphome::network::IP_ADDRESS_BUFFER_SIZE];
+                ips[0].str_to(ip_buf);
+                std::string url = "http://" + std::string(ip_buf);
+                lv_label_set_text(id(setup_ip_label), url.c_str());
+              }
+          - lvgl.page.show: immich_setup_page
+          - script.execute: setup_screen_dim
+  on_disconnect:
+    - if:
+        condition:
+          lambda: 'return !id(boot_grace_period);'
+        then:
+          - script.execute: show_wifi_setup_after_disconnect

@@ -1,0 +1,14 @@
+.DS_Store
+node_modules
+pnpm-lock.yaml
+docs/.vitepress/dist
+docs/.vitepress/cache
+.esphome/
+.venv/
+.platformio-core/
+**/dev.yaml
+!devices/guition-esp32-p4-jc8012p4a1/dev.yaml
+**/secrets.yaml
+__pycache__/
+*.pyc
+backups/

@@ -1,0 +1,14 @@
+# =============================================================================
+# LVGL BASE - Shared display config and styles
+# =============================================================================
+# Defines the LVGL top-level configuration shared by all screens.
+# Individual screens add their own pages via separate files.
+# =============================================================================
+
+lvgl:
+  buffer_size: 6%
+  byte_order: little_endian
+  rotation: ${screen_rotation_0}
+  resume_on_input: true
+  displays:
+    - tft_display

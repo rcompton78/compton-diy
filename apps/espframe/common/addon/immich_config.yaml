@@ -1,0 +1,180 @@
+# =============================================================================
+# IMMICH CONFIGURATION - Runtime-configurable Immich server settings
+# =============================================================================
+# Exposes Immich URL and API key as text entities in the web server UI.
+# Values persist across reboots via NVS flash. Configure via http://<device-ip>/
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Boot flag and URL normalization on boot
+# -----------------------------------------------------------------------------
+substitutions:
+  immich_base_url: ""
+  immich_api_key: ""
+
+globals:
+  - id: immich_fetch_started
+    type: bool
+    initial_value: 'false'
+
+esphome:
+  on_boot:
+    - priority: -300
+      then:
+        - lambda: |-
+            std::string url = normalize_immich_base_url(id(immich_url).state);
+            if (!url.empty() && is_valid_http_url(url) && url != id(immich_url).state) {
+              id(immich_url).publish_state(url);
+            } else if (!url.empty() && !is_valid_http_url(url)) {
+              ESP_LOGW("immich", "Stored Immich URL is invalid; expected valid http(s)://host[:port]");
+            }
+        # Some boots connect to WiFi before restored text settings are ready.
+        # Re-check once the startup screen grace period has passed so a saved
+        # Immich configuration always starts the first photo fetch.
+        - delay: 12s
+        - if:
+            condition:
+              wifi.connected:
+            then:
+              - script.execute: immich_check_config_ready
+
+# -----------------------------------------------------------------------------
+# Server URL and API key (persisted via NVS)
+# -----------------------------------------------------------------------------
+text:
+  - platform: template
+    name: "Connection: Server URL"
+    id: immich_url
+    internal: true
+    entity_category: config
+    optimistic: false
+    restore_value: true
+    initial_value: "${immich_base_url}"
+    min_length: 0
+    max_length: 255
+    mode: text
+    icon: "mdi:web"
+    web_server:
+      sorting_group_id: sg_connection
+    set_action:
+      - lambda: |-
+          if (x.empty()) return;
+          std::string url = normalize_immich_base_url(x);
+          if (!is_valid_http_url(url)) {
+            ESP_LOGW("immich", "Immich URL must be a valid http(s)://host[:port] URL");
+            return;
+          }
+          id(immich_url).publish_state(url);
+          global_preferences->sync();
+          ESP_LOGI("immich", "Immich URL configured: %s", url.c_str());
+      # Delay reconnect logic so settings are committed before any network crash path.
+      - delay: 15s
+      - script.execute: immich_connection_config_changed
+
+  - platform: template
+    name: "Connection: API Key"
+    id: immich_api_key_text
+    internal: true
+    entity_category: config
+    optimistic: false
+    restore_value: true
+    initial_value: "${immich_api_key}"
+    min_length: 0
+    max_length: 255
+    mode: password
+    icon: "mdi:key"
+    web_server:
+      sorting_group_id: sg_connection
+    set_action:
+      - lambda: |-
+          if (x.empty()) return;
+          id(immich_api_key_text).publish_state(x);
+          global_preferences->sync();
+          ESP_LOGI("immich", "Immich API key configured (%d chars)", x.length());
+      # Delay reconnect logic so settings are committed before any network crash path.
+      - delay: 15s
+      - script.execute: immich_connection_config_changed
+
+# -----------------------------------------------------------------------------
+# Display mode: Fill (crop-to-cover) vs Fit (letterbox, no cropping)
+# -----------------------------------------------------------------------------
+select:
+  - platform: template
+    name: "Photos: Display Mode"
+    id: photo_display_mode
+    internal: true
+    # ESPFRAME:SETTING_FIELDS display_mode START
+    options:
+      - "Fill"
+      - "Fit"
+    initial_option: "Fill"
+    optimistic: true
+    restore_value: true
+    # ESPFRAME:SETTING_FIELDS display_mode END
+    icon: "mdi:image-size-select-large"
+    web_server:
+      sorting_group_id: sg_photos
+
+# -----------------------------------------------------------------------------
+# When URL + key are set, show slideshow and start fetch if needed
+# -----------------------------------------------------------------------------
+script:
+  - id: immich_connection_config_changed
+    mode: restart
+    then:
+      - lambda: |-
+          id(immich_fetch_started) = false;
+          id(immich_request_state).reset();
+          id(espframe_core).slideshow().reset_state();
+          id(last_photo_displayed_ms) = 0;
+          lv_obj_add_flag(id(connection_failed_overlay), LV_OBJ_FLAG_HIDDEN);
+          ESP_LOGI("immich", "Connection settings changed; retrying Immich connection");
+      - script.execute: immich_check_config_ready
+
+  - id: immich_check_config_ready
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: 'return is_valid_http_url(id(immich_url).state) && !id(immich_api_key_text).state.empty();'
+          then:
+            - script.stop: setup_screen_dim
+            - lvgl.page.show: slideshow_page
+            - if:
+                condition:
+                  lambda: |-
+                    return !immich_source_has_required_ids(
+                      id(photo_source_select).current_option(),
+                      id(immich_album_ids).state,
+                      id(immich_person_ids).state,
+                      id(immich_tag_ids).state);
+                then:
+                  - logger.log:
+                      level: DEBUG
+                      tag: immich
+                      format: "Photo source is waiting for restored source IDs"
+                  - script.execute: immich_retry_config_ready
+                  - script.stop: immich_check_config_ready
+            - if:
+                condition:
+                  lambda: |-
+                    if (!id(immich_fetch_started)) return true;
+                    if (id(espframe_core).slideshow().state().active_slot_displayed) return false;
+                    return !any_slot_fetch_in_flight(id(espframe_core).slideshow().state().slot_flags);
+                then:
+                  - lambda: 'id(espframe_core).slideshow().state().target_slot = id(espframe_core).slideshow().state().active_slot;'
+                  - script.execute: immich_fetch_into_slot
+
+  - id: immich_retry_config_ready
+    mode: restart
+    then:
+      - delay: 2s
+      - script.execute: immich_check_config_ready
+
+button:
+  - platform: restart
+    id: reboot_screen_button
+    name: "Device: Reboot Screen"
+    icon: "mdi:restart"
+    web_server:
+      sorting_group_id: sg_device

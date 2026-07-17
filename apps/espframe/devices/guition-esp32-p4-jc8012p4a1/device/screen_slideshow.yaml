@@ -1,0 +1,749 @@
+# =============================================================================
+# SCREEN: IMMICH SLIDESHOW
+# =============================================================================
+# LVGL page layout, user settings, slideshow timer, and touch gesture handling.
+# Image ring buffer and display scripts are in immich_slideshow.yaml.
+# API fetch scripts are in immich_api.yaml.
+# =============================================================================
+
+substitutions:
+  immich_slide_interval: "15 seconds"
+  slideshow_check_interval: "2s"
+
+# =============================================================================
+# LVGL UI
+# =============================================================================
+
+lvgl:
+  pages:
+    - id: slideshow_page
+      bg_color: 0x000000
+      scrollable: false
+      widgets:
+        - image:
+            id: slideshow_img
+            align: CENTER
+            src: immich_img_0
+            scrollable: false
+            clickable: true
+            on_press:
+              then:
+                - script.execute: slideshow_on_press
+            on_short_click:
+              then:
+                - script.execute: slideshow_on_short_click
+            on_release:
+              then:
+                - script.execute: slideshow_on_release
+        - obj:
+            id: portrait_pair_container
+            align: CENTER
+            width: ${display_width}
+            height: ${display_height}
+            bg_color: 0x000000
+            bg_opa: 100%
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            hidden: true
+            clickable: true
+            on_press:
+              then:
+                - script.execute: slideshow_on_press
+            on_short_click:
+              then:
+                - script.execute: slideshow_on_short_click
+            on_release:
+              then:
+                - script.execute: slideshow_on_release
+            widgets:
+              - obj:
+                  align: LEFT_MID
+                  width: ${portrait_half_width}
+                  height: ${display_height}
+                  bg_opa: 0%
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  clickable: false
+                  widgets:
+                    - image:
+                        id: portrait_left_img
+                        src: immich_portrait_left
+                        align: CENTER
+                        scrollable: false
+                        clickable: false
+              - obj:
+                  align: RIGHT_MID
+                  width: ${portrait_half_width}
+                  height: ${display_height}
+                  bg_opa: 0%
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  clickable: false
+                  widgets:
+                    - image:
+                        id: portrait_right_img
+                        src: immich_portrait_right
+                        align: CENTER
+                        scrollable: false
+                        clickable: false
+              - obj:
+                  id: portrait_pair_divider
+                  align: CENTER
+                  width: 1
+                  height: ${display_height}
+                  bg_color: 0x000000
+                  bg_opa: 100%
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  clickable: false
+        - obj:
+            id: clock_container
+            align: BOTTOM_LEFT
+            x: 45
+            y: -20
+            hidden: true
+            width: SIZE_CONTENT
+            height: SIZE_CONTENT
+            bg_opa: 0%
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            widgets:
+              - label:
+                  id: time_label_shadow
+                  x: 2
+                  y: 2
+                  text: ""
+                  text_color: 0x000000
+                  text_opa: 20%
+                  text_font: noto_325_150_font
+              - label:
+                  id: time_label
+                  x: 0
+                  y: 0
+                  text: ""
+                  text_color: 0xFFFFFF
+                  text_font: noto_325_150_font
+              - label:
+                  id: portrait_metadata_location_label_shadow
+                  hidden: true
+                  x: 2
+                  y: 197
+                  width: ${portrait_metadata_width}
+                  text: ""
+                  long_mode: DOT
+                  text_align: left
+                  text_color: 0x000000
+                  text_opa: 20%
+                  text_font: noto_location_400_36_font
+              - label:
+                  id: portrait_metadata_location_label
+                  hidden: true
+                  x: 0
+                  y: 195
+                  width: ${portrait_metadata_width}
+                  text: ""
+                  long_mode: DOT
+                  text_align: left
+                  text_color: 0xFFFFFF
+                  text_font: noto_location_400_36_font
+              - label:
+                  id: portrait_metadata_date_label_shadow
+                  hidden: true
+                  x: 2
+                  y: 250
+                  width: ${portrait_metadata_width}
+                  text: ""
+                  text_align: left
+                  text_color: 0x000000
+                  text_opa: 20%
+                  text_font: noto_location_400_36_font
+              - label:
+                  id: portrait_metadata_date_label
+                  hidden: true
+                  x: 0
+                  y: 248
+                  width: ${portrait_metadata_width}
+                  text: ""
+                  text_align: left
+                  text_color: 0xFFFFFF
+                  text_font: noto_location_400_36_font
+        - obj:
+            id: info_overlay
+            align: BOTTOM_RIGHT
+            x: -45
+            y: -50
+            width: 1190
+            height: SIZE_CONTENT
+            bg_opa: 0%
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            clickable: false
+            layout:
+              type: flex
+              flex_flow: COLUMN
+              flex_align_main: START
+              flex_align_cross: END
+              pad_row: 0
+            widgets:
+              - obj:
+                  id: photo_metadata_overlay
+                  hidden: true
+                  width: 1190
+                  height: SIZE_CONTENT
+                  translate_y: 0
+                  bg_opa: 0%
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  clickable: false
+                  widgets:
+                    - obj:
+                        id: photo_metadata_shadow_row
+                        x: 2
+                        y: 2
+                        width: 1190
+                        height: SIZE_CONTENT
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        scrollable: false
+                        clickable: false
+                        layout:
+                          type: flex
+                          flex_flow: COLUMN
+                          flex_align_main: START
+                          flex_align_cross: END
+                          pad_row: 4
+                        widgets:
+                          - label:
+                              id: photo_metadata_location_label_shadow
+                              hidden: true
+                              width: 1190
+                              text: ""
+                              long_mode: DOT
+                              text_align: right
+                              text_color: 0x000000
+                              text_opa: 20%
+                              text_font: noto_location_400_36_font
+                          - label:
+                              id: photo_metadata_date_label_shadow
+                              hidden: true
+                              width: 1190
+                              text: ""
+                              text_align: right
+                              text_color: 0x000000
+                              text_opa: 20%
+                              text_font: noto_400_28_font
+                    - obj:
+                        id: photo_metadata_row
+                        x: 0
+                        y: 0
+                        width: 1190
+                        height: SIZE_CONTENT
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        scrollable: false
+                        clickable: false
+                        layout:
+                          type: flex
+                          flex_flow: COLUMN
+                          flex_align_main: START
+                          flex_align_cross: END
+                          pad_row: 4
+                        widgets:
+                          - label:
+                              id: photo_metadata_location_label
+                              hidden: true
+                              width: 1190
+                              text: ""
+                              long_mode: DOT
+                              text_align: right
+                              text_color: 0xFFFFFF
+                              text_font: noto_location_400_36_font
+                          - label:
+                              id: photo_metadata_date_label
+                              hidden: true
+                              width: 1190
+                              text: ""
+                              text_align: right
+                              text_color: 0xFFFFFF
+                              text_font: noto_400_28_font
+        - obj:
+            id: connection_failed_overlay
+            align: CENTER
+            width: ${display_width}
+            height: ${display_height}
+            radius: 0
+            bg_color: 0x000000
+            bg_opa: 100%
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            clickable: true
+            hidden: true
+            on_press:
+              then:
+                - script.stop: connection_failed_dim
+                - script.stop: connection_failed_shift
+                - lambda: 'lv_obj_align(id(connection_failed_content), LV_ALIGN_CENTER, 0, 0);'
+                - script.execute: backlight_apply_brightness
+                - script.execute: connection_failed_dim
+                - script.execute: connection_failed_shift
+            widgets:
+              - obj:
+                  id: connection_failed_content
+                  align: center
+                  width: 700
+                  height: SIZE_CONTENT
+                  bg_opa: 0%
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  layout:
+                    type: flex
+                    flex_flow: COLUMN
+                    flex_align_main: center
+                    flex_align_cross: center
+                    pad_row: 20
+                  widgets:
+                    - label:
+                        text_font: icon_font_setup
+                        text: $icon_cloud_off
+                        text_color: 0xFFFFFF
+                    - label:
+                        id: connection_failed_title
+                        text: "Unable to connect to Immich"
+                        text_font: noto_400_46_font
+                        text_color: 0xFFFFFF
+                        width: 700
+                        text_align: center
+                    - label:
+                        id: connection_failed_subtitle
+                        text: "Check your internet connection and\nthe health of your Immich server."
+                        width: 700
+                        text_font: noto_400_30_font
+                        text_color: 0x888888
+                        text_align: center
+        - obj:
+            id: photo_source_menu_overlay
+            align: CENTER
+            width: ${display_width}
+            height: ${display_height}
+            radius: 0
+            bg_color: 0x000000
+            bg_opa: 100%
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            clickable: true
+            hidden: true
+            widgets:
+              - label:
+                  id: photo_source_menu_close_label
+                  text: "X"
+                  align: TOP_RIGHT
+                  x: -32
+                  y: 24
+                  width: 80
+                  height: 80
+                  text_align: center
+                  text_color: 0xFFFFFF
+                  text_font: noto_400_46_font
+                  clickable: true
+                  on_click:
+                    then:
+                      - script.execute: close_photo_source_menu
+              - obj:
+                  align: CENTER
+                  width: 700
+                  height: SIZE_CONTENT
+                  bg_opa: 0%
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  layout:
+                    type: flex
+                    flex_flow: COLUMN
+                    flex_align_main: center
+                    flex_align_cross: center
+                    pad_row: 14
+                  widgets:
+                    - label:
+                        id: photo_source_menu_title
+                        text: "Photo Source"
+                        width: 640
+                        text_align: center
+                        text_color: 0xFFFFFF
+                        text_font: noto_400_46_font
+                    - label:
+                        id: photo_source_menu_message
+                        text: ""
+                        hidden: true
+                        width: 640
+                        text_align: center
+                        text_color: 0xFFD166
+                        text_font: noto_400_28_font
+                    - obj:
+                        id: photo_source_all_row
+                        width: 640
+                        height: 58
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        scrollable: false
+                        widgets:
+                          - label:
+                              id: photo_source_all_label
+                              text: "All Photos"
+                              align: CENTER
+                              width: 640
+                              text_align: center
+                              text_color: 0xFFFFFF
+                              text_font: noto_400_30_font
+                    - obj:
+                        id: photo_source_favorites_row
+                        width: 640
+                        height: 58
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        scrollable: false
+                        widgets:
+                          - label:
+                              id: photo_source_favorites_label
+                              text: "Favorites"
+                              align: CENTER
+                              width: 640
+                              text_align: center
+                              text_color: 0xFFFFFF
+                              text_font: noto_400_30_font
+                    - obj:
+                        id: photo_source_album_row
+                        width: 640
+                        height: 58
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        scrollable: false
+                        widgets:
+                          - label:
+                              id: photo_source_album_label
+                              text: "Album"
+                              align: CENTER
+                              width: 640
+                              text_align: center
+                              text_color: 0xFFFFFF
+                              text_font: noto_400_30_font
+                    - obj:
+                        id: photo_source_person_row
+                        width: 640
+                        height: 58
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        scrollable: false
+                        widgets:
+                          - label:
+                              id: photo_source_person_label
+                              text: "Person"
+                              align: CENTER
+                              width: 640
+                              text_align: center
+                              text_color: 0xFFFFFF
+                              text_font: noto_400_30_font
+                    - obj:
+                        id: photo_source_tag_row
+                        width: 640
+                        height: 58
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        scrollable: false
+                        widgets:
+                          - label:
+                              id: photo_source_tag_label
+                              text: "Tag"
+                              align: CENTER
+                              width: 640
+                              text_align: center
+                              text_color: 0xFFFFFF
+                              text_font: noto_400_30_font
+                    - obj:
+                        id: photo_source_memories_row
+                        width: 640
+                        height: 58
+                        bg_opa: 0%
+                        border_width: 0
+                        pad_all: 0
+                        scrollable: false
+                        widgets:
+                          - label:
+                              id: photo_source_memories_label
+                              text: "Memories"
+                              align: CENTER
+                              width: 640
+                              text_align: center
+                              text_color: 0xFFFFFF
+                              text_font: noto_400_30_font
+
+# =============================================================================
+# CONNECTION FAILED DIM TIMER
+# =============================================================================
+# Dims the backlight after 120s of showing the connection failed overlay to
+# prevent burn-in from the static message. Touch restores brightness.
+# =============================================================================
+
+script:
+  - id: slideshow_on_press
+    mode: single
+    then:
+      - lambda: |-
+          bool touch_woke_display = id(touch_started_while_off) &&
+            id(wake_touch_ms) != 0 && (millis() - id(wake_touch_ms)) < 1000;
+          id(touch_started_while_off) = touch_woke_display ||
+            id(backlight_paused) || id(screen_schedule_asleep) ||
+            id(screensaver_display_off_active) || !id(backlight).current_values.is_on();
+          if (id(touch_started_while_off)) id(backlight_wake).execute();
+          else id(backlight_hold_timer).execute();
+
+  - id: slideshow_on_short_click
+    mode: single
+    then:
+      - if:
+          condition:
+            lambda: 'return !id(touch_started_while_off);'
+          then:
+            - lambda: |-
+                uint32_t now = millis();
+                if (id(last_short_tap_ms) != 0 && (now - id(last_short_tap_ms)) < 400) {
+                  id(last_short_tap_ms) = 0;
+                  id(immich_advance_forward).execute();
+                } else {
+                  id(last_short_tap_ms) = now;
+                }
+      - lambda: |-
+          id(touch_started_while_off) = false;
+          id(wake_touch_ms) = 0;
+
+  - id: slideshow_on_release
+    mode: single
+    then:
+      - script.stop: backlight_hold_timer
+
+  - id: hide_connection_failed
+    mode: single
+    then:
+      - lambda: |-
+          if (!lv_obj_has_flag(id(connection_failed_overlay), LV_OBJ_FLAG_HIDDEN)) {
+            id(connection_failed_dim).stop();
+            id(connection_failed_shift).stop();
+            lv_obj_align(id(connection_failed_content), LV_ALIGN_CENTER, 0, 0);
+            id(backlight_apply_brightness).execute();
+          }
+          lv_obj_add_flag(id(connection_failed_overlay), LV_OBJ_FLAG_HIDDEN);
+          id(last_photo_displayed_ms) = millis();
+          id(immich_request_state).clear_failures();
+
+  - id: connection_failed_dim
+    mode: restart
+    then:
+      - delay: 120s
+      - if:
+          condition:
+            lambda: |-
+              return id(screen_schedule_asleep);
+          then:
+            - script.execute: backlight_force_display_off
+          else:
+            - if:
+                condition:
+                  lambda: 'return !id(backlight_paused);'
+                then:
+                  - light.turn_on:
+                      id: backlight
+                      brightness: 50%
+                      transition_length: 2s
+
+  - id: connection_failed_shift
+    mode: restart
+    then:
+      - while:
+          condition:
+            lambda: 'return !id(backlight_paused);'
+          then:
+            - delay: 30s
+            - lambda: |-
+                int x = ((int)(esp_random() % 61)) - 30;
+                int y = ((int)(esp_random() % 41)) - 20;
+                lv_obj_align(id(connection_failed_content), LV_ALIGN_CENTER, x, y);
+
+# =============================================================================
+# CACHED INTERVAL VALUES (avoid repeated string parsing every 2s)
+# =============================================================================
+
+globals:
+  - id: slideshow_interval_sec
+    type: uint32_t
+    initial_value: '15'
+  - id: connection_timeout_sec
+    type: uint32_t
+    initial_value: '600'
+
+# =============================================================================
+# USER-CONFIGURABLE SETTINGS
+# =============================================================================
+
+select:
+  - platform: template
+    name: "Photos: Slideshow Interval"
+    id: slideshow_interval
+    # ESPFRAME:SETTING_FIELDS interval START
+    options:
+      - "10 seconds"
+      - "15 seconds"
+      - "20 seconds"
+      - "30 seconds"
+      - "45 seconds"
+      - "1 minute"
+      - "2 minutes"
+      - "3 minutes"
+      - "5 minutes"
+      - "10 minutes"
+    initial_option: "${immich_slide_interval}"
+    optimistic: true
+    restore_value: true
+    # ESPFRAME:SETTING_FIELDS interval END
+    icon: "mdi:timer-outline"
+    on_value:
+      then:
+        - lambda: |-
+            id(slideshow_interval_sec) = parse_duration_option_seconds(x, 15, 10, 600);
+    web_server:
+      sorting_group_id: sg_photos
+
+  - platform: template
+    name: "Screen: Connection Timeout"
+    id: connection_timeout
+    # ESPFRAME:SETTING_FIELDS conn_timeout START
+    options:
+      - "30 seconds"
+      - "45 seconds"
+      - "1 minute"
+      - "2 minutes"
+      - "3 minutes"
+      - "5 minutes"
+      - "10 minutes"
+      - "15 minutes"
+      - "20 minutes"
+      - "30 minutes"
+    initial_option: "10 minutes"
+    optimistic: true
+    restore_value: true
+    # ESPFRAME:SETTING_FIELDS conn_timeout END
+    icon: "mdi:connection"
+    on_value:
+      then:
+        - lambda: |-
+            id(connection_timeout_sec) = parse_duration_option_seconds(x, 600, 30, 1800);
+    web_server:
+      sorting_group_id: sg_screen
+
+
+# =============================================================================
+# SLIDESHOW TIMER
+# =============================================================================
+
+interval:
+  - interval: ${slideshow_check_interval}
+    then:
+      - if:
+          condition:
+            lambda: |-
+              if (!id(immich_fetch_started)) return false;
+              if (id(backlight_paused)) return false;
+              if (id(photo_source_menu_open)) return false;
+              id(slideshow_interval_sec) = parse_duration_option_seconds(
+                id(slideshow_interval).current_option(), id(slideshow_interval_sec), 10, 600);
+              if (id(espframe_core).slideshow().state().active_slot_displayed) {
+                bool image_busy = id(immich_img_0).is_downloading() ||
+                                  id(immich_img_1).is_downloading() ||
+                                  id(immich_img_2).is_downloading() ||
+                                  id(immich_portrait_left).is_downloading() ||
+                                  id(immich_portrait_right).is_downloading() ||
+                                  id(immich_portrait_preload_left).is_downloading() ||
+                                  id(immich_portrait_preload_right).is_downloading();
+                if (any_slot_fetch_in_flight(id(espframe_core).slideshow().state().slot_flags) || image_busy ||
+                    id(espframe_core).slideshow().state().portrait.workflow_busy || id(espframe_core).slideshow().state().preload_noncritical_in_flight ||
+                    id(espframe_core).slideshow().state().noncritical_remote_updates_in_flight > 0) return false;
+              }
+              return (millis() - id(espframe_core).slideshow().state().last_advance_ms) >= (id(slideshow_interval_sec) * 1000);
+          then:
+            - script.execute: immich_advance_forward
+      - if:
+          condition:
+            lambda: |-
+              if (!id(immich_fetch_started)) return false;
+              if (id(backlight_paused)) return false;
+              if (id(photo_source_menu_open)) return false;
+              if (!id(espframe_core).slideshow().state().active_slot_displayed) return false;
+              bool any_inflight = any_slot_fetch_in_flight(id(espframe_core).slideshow().state().slot_flags);
+              if (any_inflight || id(espframe_core).slideshow().state().portrait.workflow_busy || id(espframe_core).slideshow().state().preload_noncritical_in_flight ||
+                  id(espframe_core).slideshow().state().noncritical_remote_updates_in_flight > 0) return false;
+              int next1 = (id(espframe_core).slideshow().state().active_slot + 1) % 3;
+              int next2 = (id(espframe_core).slideshow().state().active_slot + 2) % 3;
+              auto &n1 = get_slot(next1, id(espframe_core).slideshow().state().slot0, id(espframe_core).slideshow().state().slot1, id(espframe_core).slideshow().state().slot2);
+              auto &n2 = get_slot(next2, id(espframe_core).slideshow().state().slot0, id(espframe_core).slideshow().state().slot1, id(espframe_core).slideshow().state().slot2);
+              return !n1.ready || !n2.ready;
+          then:
+            - script.execute: immich_prefetch_chain
+      - if:
+          condition:
+            lambda: |-
+              if (id(backlight_paused)) return false;
+              if (id(photo_source_menu_open)) return false;
+              if (id(espframe_core).slideshow().state().active_slot_displayed) return false;
+              uint32_t failure_start_ms = id(immich_request_state).failure_window_started_ms;
+              if (failure_start_ms == 0) return false;
+              if (id(immich_request_state).consecutive_failures <= 0 &&
+                  id(immich_request_state).last_http_status == 0) return false;
+              id(connection_timeout_sec) = parse_duration_option_seconds(
+                id(connection_timeout).current_option(), id(connection_timeout_sec), 30, 1800);
+              bool image_busy = id(immich_img_0).is_downloading() ||
+                                id(immich_img_1).is_downloading() ||
+                                id(immich_img_2).is_downloading() ||
+                                id(immich_portrait_left).is_downloading() ||
+                                id(immich_portrait_right).is_downloading() ||
+                                id(immich_portrait_preload_left).is_downloading() ||
+                                id(immich_portrait_preload_right).is_downloading();
+              if (any_slot_fetch_in_flight(id(espframe_core).slideshow().state().slot_flags) || image_busy ||
+                  id(espframe_core).slideshow().state().portrait.workflow_busy || id(espframe_core).slideshow().state().preload_noncritical_in_flight ||
+                  id(espframe_core).slideshow().state().noncritical_remote_updates_in_flight > 0) return false;
+              return (millis() - failure_start_ms) >= (id(connection_timeout_sec) * 1000);
+          then:
+            - lambda: |-
+                if (lv_obj_has_flag(id(connection_failed_overlay), LV_OBJ_FLAG_HIDDEN)) {
+                  ESP_LOGE("immich", "No photo displayed for %s, showing connection failed screen", id(connection_timeout).current_option().c_str());
+                  if (id(immich_request_state).last_http_status == 401) {
+                    lv_label_set_text(id(connection_failed_title), "Invalid API Key");
+                    lv_label_set_text(id(connection_failed_subtitle), "Check your Immich API key in\nthe espframe settings.");
+                  } else {
+                    lv_label_set_text(id(connection_failed_title), "Unable to connect to Immich");
+                    lv_label_set_text(id(connection_failed_subtitle), "Check your internet connection and\nthe health of your Immich server.");
+                  }
+                }
+                lv_obj_clear_flag(id(connection_failed_overlay), LV_OBJ_FLAG_HIDDEN);
+                id(espframe_core).slideshow().state().download_retries = 0;
+            - script.execute: connection_failed_dim
+            - script.execute: connection_failed_shift
+            - lambda: |-
+                if (!id(espframe_core).slideshow().state().slot_flags.fetch_in_flight[id(espframe_core).slideshow().state().active_slot]) {
+                  id(espframe_core).slideshow().state().target_slot = id(espframe_core).slideshow().state().active_slot;
+                  id(immich_fetch_into_slot).execute();
+                }

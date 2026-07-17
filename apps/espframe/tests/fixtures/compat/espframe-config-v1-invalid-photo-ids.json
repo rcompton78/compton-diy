@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "photos": {
+    "album_ids": "not-an-album-uuid",
+    "person_ids": "not-a-person-uuid",
+    "tag_ids": "not-a-tag-uuid"
+  }
+}

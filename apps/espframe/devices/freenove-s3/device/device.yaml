@@ -1,0 +1,224 @@
+# =============================================================================
+# HARDWARE CONFIGURATION - Freenove ESP32-S3 CYD (2.8" ILI9341 + FT6336U)
+# =============================================================================
+# Base device config: ESP32-S3 (native WiFi/BT, no coprocessor needed), octal
+# PSRAM, display (SPI ILI9341), touch (FT6336U, I2C), backlight, I2C. Also
+# API, logger, web server, OTA, and espframe external components. Display is
+# 240x320 logical.
+#
+# Pin map mirrors the known-working `freenove-s3` PlatformIO env in the
+# compton-diy monorepo's cyd-clock app (apps/cyd-clock/platformio.ini and
+# include/Config.h), which runs the same physical board.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Build and log
+# -----------------------------------------------------------------------------
+substitutions:
+  espframe_component_url: "https://github.com/rcompton78/espframe"
+  espframe_component_ref: "add-freenove-s3-device"
+  log_level: "INFO"
+
+esp32:
+  variant: ESP32S3
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_HTTPD_MAX_REQ_HDR_LEN: "8192"
+      CONFIG_HTTPD_MAX_URI_LEN: "128"
+      CONFIG_ESP_TASK_WDT_TIMEOUT_S: "30"
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  platformio_options:
+    board_build.flash_mode: dio
+    build_flags:
+      - "-DCONFIG_COMPILER_OPTIMIZATION_PERF=y"
+      - "-DLV_USE_BIDI=1"
+      - "-DLV_USE_ARABIC_PERSIAN_CHARS=1"
+
+# -----------------------------------------------------------------------------
+# PSRAM (octal mode)
+# -----------------------------------------------------------------------------
+psram:
+  mode: octal
+  speed: 80MHz
+
+# -----------------------------------------------------------------------------
+# API, logger, JSON, web server, OTA, debug (reset reason for crash diagnosis)
+# -----------------------------------------------------------------------------
+api:
+  reboot_timeout: 0s
+
+logger:
+  level: ${log_level}
+  hardware_uart: USB_SERIAL_JTAG
+  logs:
+    component: WARN
+    remote_image: WARN
+    immich: INFO
+    warm: WARN
+    accent: WARN
+
+debug:
+  update_interval: 60s
+
+text_sensor:
+  - platform: debug
+    reset_reason:
+      id: reset_reason_sensor
+      name: "Reset Reason"
+      entity_category: diagnostic
+      on_value:
+        then:
+          - if:
+              condition:
+                lambda: 'return x.find("esphome.ota") != std::string::npos;'
+              then:
+                - script.execute: firmware_update_recover_display
+
+json:
+
+web_server:
+  port: 80
+  version: 3
+  include_internal: true
+  # Keep the control panel on the frame so setup and settings still work if
+  # GitHub Pages or the wider internet is unavailable.
+  js_url: ""
+  css_include: "../../../docs/public/webserver/style.css"
+  js_include: "../../../docs/public/webserver/app.js"
+  sorting_groups:
+    - id: sg_connection
+      name: "Connection"
+      sorting_weight: 10
+    - id: sg_photos
+      name: "Photos"
+      sorting_weight: 20
+    - id: sg_device
+      name: "Device"
+      sorting_weight: 25
+    - id: sg_screen
+      name: "Screen"
+      sorting_weight: 30
+    - id: sg_clock
+      name: "Clock"
+      sorting_weight: 35
+    - id: sg_firmware
+      name: "Firmware"
+      sorting_weight: 40
+    - id: sg_wifi
+      name: "WiFi"
+      sorting_weight: 45
+    - id: sg_developer
+      name: "Developer"
+      sorting_weight: 90
+
+ota:
+  - platform: esphome
+    on_begin:
+      then:
+        - lambda: |-
+            id(firmware_update_reboot_pending) = true;
+            global_preferences->sync();
+
+# -----------------------------------------------------------------------------
+# External components (espframe: remote_image, espframe)
+# -----------------------------------------------------------------------------
+external_components:
+  - source:
+      type: git
+      url: ${espframe_component_url}
+      ref: ${espframe_component_ref}
+      path: components
+    components: [remote_image, espframe]
+    refresh: 0s
+
+espframe:
+  id: espframe_core
+
+# -----------------------------------------------------------------------------
+# Backlight output, SPI (display), I2C (touch)
+# -----------------------------------------------------------------------------
+output:
+  - platform: ledc
+    id: backlight_output
+    pin: GPIO45
+
+spi:
+  id: spi_bus_display
+  clk_pin: GPIO12
+  mosi_pin: GPIO11
+  miso_pin: GPIO13
+
+i2c:
+  - id: i2c_bus_a
+    sda: GPIO16
+    scl: GPIO15
+    scan: true
+    frequency: 400kHz
+
+# -----------------------------------------------------------------------------
+# SPI display (ILI9341, 240x320, BGR order, inverted colors)
+# -----------------------------------------------------------------------------
+# This physical panel needs the alternate ILI9341 init sequence -- the same
+# one selected by TFT_eSPI's ILI9341_2_DRIVER in cyd-clock's freenove-s3 env
+# (platformio.ini), which differs from TFT_eSPI's (and ESPHome's built-in
+# ili9xxx "ILI9341" model's) standard init table in VCOM/power-control/gamma
+# values. Using the standard model here leaves the panel showing a blank
+# white screen (confirmed on-device), so model: CUSTOM replicates the
+# alternate sequence directly. See https://github.com/Bodmer/TFT_eSPI/issues/1172.
+display:
+  - platform: ili9xxx
+    model: CUSTOM
+    id: tft_display
+    spi_id: spi_bus_display
+    cs_pin: GPIO10
+    dc_pin: GPIO46
+    color_order: BGR
+    invert_colors: true
+    auto_clear_enabled: false
+    update_interval: never
+    transform:
+      mirror_x: true
+    dimensions:
+      width: 240
+      height: 320
+    init_sequence:
+      - [0xCF, 0x00, 0xC1, 0x30]
+      - [0xED, 0x64, 0x03, 0x12, 0x81]
+      - [0xE8, 0x85, 0x00, 0x78]
+      - [0xCB, 0x39, 0x2C, 0x00, 0x34, 0x02]
+      - [0xF7, 0x20]
+      - [0xEA, 0x00, 0x00]
+      - [0xC0, 0x10]                                                                       # PWCTR1
+      - [0xC1, 0x00]                                                                       # PWCTR2
+      - [0xC5, 0x30, 0x30]                                                                 # VMCTR1
+      - [0xC7, 0xB7]                                                                       # VMCTR2
+      - [0x3A, 0x55]                                                                       # PIXFMT (16bpp)
+      - [0x36, 0x08]                                                                       # MADCTL (BGR, no rotation)
+      - [0xB1, 0x00, 0x1A]                                                                 # FRMCTR1
+      - [0xB6, 0x08, 0x82, 0x27]                                                           # DFUNCTR
+      - [0xF2, 0x00]                                                                       # 3Gamma disable
+      - [0x26, 0x01]                                                                       # GAMMASET
+      - [0xE0, 0x0F, 0x2A, 0x28, 0x08, 0x0E, 0x08, 0x54, 0xA9, 0x43, 0x0A, 0x0F, 0x00, 0x00, 0x00, 0x00]  # GMCTRP1
+      - [0xE1, 0x00, 0x15, 0x17, 0x07, 0x11, 0x06, 0x2B, 0x56, 0x3C, 0x05, 0x10, 0x0F, 0x3F, 0x3F, 0x0F]  # GMCTRN1
+      - [0x2B, 0x00, 0x00, 0x01, 0x3F]                                                     # PASET (rows 0-319)
+      - [0x2A, 0x00, 0x00, 0x00, 0xEF]                                                     # CASET (cols 0-239)
+      - [0x11]                                                                             # SLPOUT
+      - [0x29]                                                                             # DISPON
+
+# -----------------------------------------------------------------------------
+# Touch (FT6336U, I2C, transform for orientation)
+# -----------------------------------------------------------------------------
+touchscreen:
+  - platform: ft63x6
+    id: tft_touch
+    display: tft_display
+    interrupt_pin: GPIO17
+    reset_pin: GPIO18
+    i2c_id: i2c_bus_a
+    on_touch:
+      - script.execute: backlight_wake

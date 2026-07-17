@@ -1,0 +1,8 @@
+{
+  "skip": [
+    {
+      "id": "guition-esp32-p4-jc8012p4a1",
+      "reason": "no hardware to test against yet"
+    }
+  ]
+}

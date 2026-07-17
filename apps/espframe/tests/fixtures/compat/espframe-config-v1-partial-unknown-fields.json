@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "connection": {
+    "immich_url": "https://photos.example.com",
+    "display_name": "Future field ignored by v1"
+  },
+  "photos": {
+    "source": "Favorites",
+    "display_mode": "Fit",
+    "future_mode": "Ignored"
+  },
+  "future_group": {
+    "enabled": true
+  }
+}

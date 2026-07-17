@@ -1,0 +1,181 @@
+#pragma once
+#include <vector>
+#include "esphome/core/color.h"
+
+namespace esphome {
+namespace remote_image {
+
+enum DecodeError : int {
+  DECODE_ERROR_INVALID_TYPE = -1,
+  DECODE_ERROR_UNSUPPORTED_FORMAT = -2,
+  DECODE_ERROR_OUT_OF_MEMORY = -3,
+};
+
+class OnlineImage;
+
+/**
+ * @brief Class to abstract decoding different image formats.
+ */
+class ImageDecoder {
+ public:
+  /**
+   * @brief Construct a new Image Decoder object
+   *
+   * @param image The image to decode the stream into.
+   */
+  ImageDecoder(OnlineImage *image) : image_(image) {}
+  virtual ~ImageDecoder() = default;
+
+  /**
+   * @brief Initialize the decoder.
+   *
+   * @param download_size The total number of bytes that need to be downloaded for the image.
+   * @return int          Returns 0 on success, a {@see DecodeError} value in case of an error.
+   */
+  virtual int prepare(size_t download_size) {
+    this->download_size_ = download_size;
+    return 0;
+  }
+
+  /**
+   * @brief Decode a part of the image. It will try reading from the buffer.
+   * There is no guarantee that the whole available buffer will be read/decoded;
+   * the method will return the amount of bytes actually decoded, so that the
+   * unread content can be moved to the beginning.
+   *
+   * @param buffer The buffer to read from.
+   * @param size   The maximum amount of bytes that can be read from the buffer.
+   * @return int   The amount of bytes read. It can be 0 if the buffer does not have enough content to meaningfully
+   *               decode anything, or negative in case of a decoding error.
+   */
+  virtual int decode(uint8_t *buffer, size_t size) = 0;
+
+  /**
+   * @brief Request the image to be resized once the actual dimensions are known.
+   * Called by the callback functions, to be able to access the parent Image class.
+   *
+   * @param width The image's width.
+   * @param height The image's height.
+   * @return true if the image was resized, false otherwise.
+   */
+  bool set_size(int width, int height);
+
+  /**
+   * @brief Fill a rectangle on the display_buffer using the defined color.
+   * Will check the given coordinates for out-of-bounds, and clip the rectangle accordingly.
+   * In case of binary displays, the color will be converted to binary as well.
+   * Called by the callback functions, to be able to access the parent Image class.
+   *
+   * @param x The left-most coordinate of the rectangle.
+   * @param y The top-most coordinate of the rectangle.
+   * @param w The width of the rectangle.
+   * @param h The height of the rectangle.
+   * @param color The fill color
+   */
+  void draw(int x, int y, int w, int h, const Color &color);
+
+  /**
+   * @brief Write a block of pre-formatted RGB565 pixel data directly into the image buffer.
+   * Uses memcpy for 1:1 scale (no per-pixel conversion overhead).
+   * Falls back to per-pixel copy when scaling is required.
+   *
+   * @param x Block x position in source image coordinates.
+   * @param y Block y position in source image coordinates.
+   * @param w Block width in pixels.
+   * @param h Block height in pixels.
+   * @param data Pointer to packed RGB565 pixel data (2 bytes per pixel, row-major).
+   */
+  void draw_rgb565_block(int x, int y, int w, int h, const uint8_t *data);
+
+  /**
+   * @brief Convert RGB888 source pixels to RGB565 and write only the sampled
+   * destination pixels. Combines color conversion with nearest-neighbor
+   * downscaling in a single pass, avoiding work on source pixels that would
+   * be discarded.
+   *
+   * @param src_y Source scanline index.
+   * @param src_w Source scanline width in pixels.
+   * @param rgb888 Pointer to RGB888 pixel data (3 bytes per pixel).
+   * @param big_endian Whether to store RGB565 in big-endian byte order.
+   */
+  void draw_rgb888_scaled(int src_y, int src_w, const uint8_t *rgb888, bool big_endian);
+
+  bool is_finished() const { return this->decoded_bytes_ == this->download_size_; }
+
+  /**
+   * @brief Fill skipped destination rows that occur when y_scale_ > 1.0
+   * (upscaling). Copies the row at src_row_y to all rows in [gap_start, gap_end).
+   */
+  void fill_row_gap(int gap_start, int gap_end, int src_row_y);
+
+ protected:
+  OnlineImage *image_;
+  // Initializing to 1, to ensure it is distinguishable from initial "decoded_bytes_".
+  // Will be overwritten anyway once the download size is known.
+  size_t download_size_ = 1;
+  size_t decoded_bytes_ = 0;
+  double x_scale_ = 1.0;
+  double y_scale_ = 1.0;
+  int x_offset_ = 0;
+  int y_offset_ = 0;
+  int scaled_width_ = 0;
+  int scaled_height_ = 0;
+  std::vector<int> src_x_lut_;
+};
+
+class DownloadBuffer {
+ public:
+  DownloadBuffer(size_t size);
+
+  virtual ~DownloadBuffer() { this->allocator_.deallocate(this->buffer_, this->size_); }
+
+  uint8_t *data(size_t offset = 0);
+
+  uint8_t *append();
+
+  size_t unread() const { return this->unread_; }
+  size_t size() const { return this->size_; }
+  size_t free_capacity();
+
+  size_t read(size_t len);
+  size_t write(size_t len);
+
+  void reset() {
+    this->start_ = 0;
+    this->unread_ = 0;
+  }
+
+  size_t resize(size_t size);
+  void shrink(size_t max_size);
+
+ protected:
+  void compact_();
+
+  RAMAllocator<uint8_t> allocator_{};
+  uint8_t *buffer_;
+  size_t size_;
+  /** Offset of the first unread byte inside buffer_. */
+  size_t start_{0};
+  /** Total number of downloaded bytes not yet read. */
+  size_t unread_;
+};
+
+inline void rgb888_row_to_rgb565(const uint8_t *rgb888, uint8_t *out, int width, bool big_endian) {
+  for (int x = 0; x < width; x++) {
+    uint8_t r = rgb888[x * 3 + 0];
+    uint8_t g = rgb888[x * 3 + 1];
+    uint8_t b = rgb888[x * 3 + 2];
+    uint16_t rgb565 = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+    if (big_endian) {
+      out[0] = rgb565 >> 8;
+      out[1] = rgb565 & 0xFF;
+    } else {
+      out[0] = rgb565 & 0xFF;
+      out[1] = rgb565 >> 8;
+    }
+    out += 2;
+  }
+}
+
+}  // namespace remote_image
+}  // namespace esphome

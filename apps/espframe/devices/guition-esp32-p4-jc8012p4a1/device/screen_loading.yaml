@@ -1,0 +1,127 @@
+# =============================================================================
+# SCREEN: LOADING
+# =============================================================================
+# Boot screen with progress bar. Must be the first page included in
+# packages.yaml so LVGL shows it at startup. on_boot advances the bar and
+# status text; after a grace period, if WiFi is not connected, switches to
+# wifi_setup_page.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Boot grace period (delay before showing WiFi setup on disconnect)
+# -----------------------------------------------------------------------------
+globals:
+  - id: boot_grace_period
+    type: bool
+    initial_value: 'true'
+
+script:
+  - id: finish_startup_screen
+    mode: restart
+    then:
+      - delay: 1s
+      - if:
+          condition:
+            lambda: 'return wifi::global_wifi_component->has_sta();'
+          then:
+            - lambda: |-
+                ESP_LOGI("startup", "Saved WiFi found; waiting for connection before leaving loading screen");
+                lv_bar_set_value(id(loading_progress_bar), 50, LV_ANIM_OFF);
+                lv_label_set_text(id(loading_status_label), "Connecting to WiFi");
+            - delay: 10s
+            - lambda: 'id(boot_grace_period) = false;'
+            - if:
+                condition:
+                  not:
+                    wifi.connected:
+                then:
+                  - lambda: 'ESP_LOGI("startup", "WiFi did not connect during startup; showing WiFi setup");'
+                  - lvgl.page.show: wifi_setup_page
+                  - script.execute: setup_screen_dim
+          else:
+            - lambda: |-
+                ESP_LOGI("startup", "No saved WiFi found; showing WiFi setup");
+                id(boot_grace_period) = false;
+            - lvgl.page.show: wifi_setup_page
+            - script.execute: setup_screen_dim
+
+# -----------------------------------------------------------------------------
+# Loading page: title, status label, progress bar
+# -----------------------------------------------------------------------------
+lvgl:
+  pages:
+    - id: loading_page
+      bg_color: 0x000000
+      scrollable: false
+      widgets:
+        - obj:
+            align: center
+            width: 700
+            height: SIZE_CONTENT
+            bg_opa: 0%
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            layout:
+              type: flex
+              flex_flow: COLUMN
+              flex_align_main: center
+              flex_align_cross: center
+              pad_row: 40
+            widgets:
+              - label:
+                  text: "Starting up"
+                  text_font: noto_400_46_font
+                  text_color: 0xFFFFFF
+                  width: 700
+                  text_align: center
+              - label:
+                  id: loading_status_label
+                  text: "Booting"
+                  text_font: noto_400_32_font
+                  text_color: 0x888888
+                  width: 700
+                  text_align: center
+              - bar:
+                  id: loading_progress_bar
+                  width: 75
+                  height: 4
+                  bg_color: 0x333333
+                  bg_opa: 100%
+                  radius: 3
+                  min_value: 0
+                  max_value: 100
+                  value: 0
+                  indicator:
+                    bg_color: 0xFFFFFF
+                    radius: 3
+    - id: screen_off_page
+      bg_color: 0x000000
+      scrollable: false
+
+# -----------------------------------------------------------------------------
+# Boot sequence: progress steps, backlight on, then show WiFi setup if not connected
+# -----------------------------------------------------------------------------
+esphome:
+  on_boot:
+    - priority: -100
+      then:
+        - lambda: |-
+            lv_bar_set_value(id(loading_progress_bar), 25, LV_ANIM_OFF);
+            lv_label_set_text(id(loading_status_label), "Initializing display");
+        - delay: 100ms
+        - if:
+            condition:
+              lambda: |-
+                return !id(backlight_manual_off) &&
+                       !id(screen_schedule_asleep);
+            then:
+              - light.turn_on:
+                  id: backlight
+                  brightness: 90%
+                  transition_length: 500ms
+        - lambda: |-
+            std::string name = App.get_name();
+            std::string wifi_text = "Connect to the WiFi hotspot\n'" + name + "'\nto configure your network\n\nThen visit ${captive_portal_ip} in your browser";
+            lv_label_set_text(id(wifi_setup_instructions), wifi_text.c_str());
+        - script.execute: finish_startup_screen

@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "screen": {
+    "schedule_wake_timeout": "not-a-number",
+    "rotation": "360"
+  },
+  "clock": {
+    "ntp_servers": [
+      "0.pool.ntp.org"
+    ]
+  }
+}

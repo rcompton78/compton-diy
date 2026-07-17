@@ -1,0 +1,372 @@
+# =============================================================================
+# IMMICH FILTER - Photo source selection and filtering
+# =============================================================================
+# Controls which photos the frame displays: all photos, favorites only,
+# specific albums, or specific people. Values persist across reboots via NVS.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Photo source (All / Favorites / Album / Person / Tag / Memories)
+# -----------------------------------------------------------------------------
+select:
+  - platform: template
+    name: "Photos: Source"
+    id: photo_source_select
+    # ESPFRAME:SETTING_FIELDS photo_source START
+    options:
+      - "All Photos"
+      - "Favorites"
+      - "Album"
+      - "Person"
+      - "Tag"
+      - "Memories"
+    initial_option: "All Photos"
+    optimistic: true
+    restore_value: true
+    # ESPFRAME:SETTING_FIELDS photo_source END
+    icon: "mdi:image-filter-frames"
+    web_server:
+      sorting_group_id: sg_photos
+    on_value:
+      then:
+        - lambda: 'ESP_LOGI("immich", "Photo source: %s", x.c_str());'
+        - script.execute: auto_apply_photo_source
+
+  - platform: template
+    name: "Photos: Date Filter Mode"
+    id: immich_date_filter_mode
+    internal: true
+    # ESPFRAME:SETTING_FIELDS date_filter_mode START
+    options:
+      - "Fixed Range"
+      - "Relative Range"
+    initial_option: "Fixed Range"
+    optimistic: true
+    restore_value: true
+    # ESPFRAME:SETTING_FIELDS date_filter_mode END
+    icon: "mdi:calendar-filter"
+    on_value:
+      then:
+        - lambda: 'ESP_LOGI("immich", "Date filter mode: %s", x.c_str());'
+        - script.execute: auto_apply_photo_source
+
+  - platform: template
+    name: "Photos: Orientation"
+    id: photo_orientation_filter
+    internal: true
+    # ESPFRAME:SETTING_FIELDS photo_orientation START
+    options:
+      - "Any"
+      - "Portrait Only"
+      - "Landscape Only"
+    initial_option: "Any"
+    optimistic: true
+    restore_value: true
+    # ESPFRAME:SETTING_FIELDS photo_orientation END
+    icon: "mdi:phone-rotate-portrait"
+    web_server:
+      sorting_group_id: sg_photos
+    on_value:
+      then:
+        - lambda: 'ESP_LOGI("immich", "Photo orientation: %s", x.c_str());'
+        - script.execute: auto_apply_photo_source
+
+  - platform: template
+    name: "Photos: Album Order"
+    id: immich_album_order
+    internal: true
+    # ESPFRAME:SETTING_FIELDS album_order START
+    options:
+      - "Random albums"
+      - "Album list order"
+    initial_option: "Random albums"
+    optimistic: true
+    restore_value: true
+    # ESPFRAME:SETTING_FIELDS album_order END
+    icon: "mdi:sort"
+    web_server:
+      sorting_group_id: sg_photos
+    on_value:
+      then:
+        - lambda: 'ESP_LOGI("immich", "Album order: %s", x.c_str());'
+        - script.execute: auto_apply_photo_source
+
+  - platform: template
+    name: "Photos: Relative Unit"
+    id: immich_relative_unit
+    internal: true
+    # ESPFRAME:SETTING_FIELDS relative_unit START
+    options:
+      - "Months"
+      - "Years"
+    initial_option: "Years"
+    optimistic: true
+    restore_value: true
+    # ESPFRAME:SETTING_FIELDS relative_unit END
+    icon: "mdi:calendar-range"
+    on_value:
+      then:
+        - lambda: 'ESP_LOGI("immich", "Relative date unit: %s", x.c_str());'
+        - script.execute: auto_apply_photo_source
+
+# -----------------------------------------------------------------------------
+# Relative date range amount (used when date filter mode is Relative Range)
+# -----------------------------------------------------------------------------
+number:
+  - platform: template
+    name: "Photos: Relative Amount"
+    id: immich_relative_amount
+    internal: true
+    # ESPFRAME:SETTING_FIELDS relative_amount START
+    min_value: 1
+    max_value: 120
+    step: 1
+    initial_value: 1
+    optimistic: true
+    restore_value: true
+    # ESPFRAME:SETTING_FIELDS relative_amount END
+    icon: "mdi:counter"
+    on_value:
+      then:
+        - lambda: |-
+            ESP_LOGI("immich", "Relative date amount: %.0f", x);
+        - script.execute: auto_apply_photo_source
+
+# -----------------------------------------------------------------------------
+# Date filter enable switch
+# -----------------------------------------------------------------------------
+switch:
+  - platform: template
+    name: "Photos: Date Filter"
+    id: immich_date_filter_enabled
+    internal: true
+    optimistic: true
+    # ESPFRAME:SETTING_FIELDS date_filter_enabled START
+    restore_mode: RESTORE_DEFAULT_OFF
+    # ESPFRAME:SETTING_FIELDS date_filter_enabled END
+    icon: "mdi:calendar-check"
+    on_turn_on:
+      then:
+        - lambda: 'ESP_LOGI("immich", "Date filter enabled");'
+        - script.execute: auto_apply_photo_source
+    on_turn_off:
+      then:
+        - lambda: 'ESP_LOGI("immich", "Date filter disabled");'
+        - script.execute: auto_apply_photo_source
+
+# -----------------------------------------------------------------------------
+# Date range filter (optional, YYYY-MM-DD; empty = no bound)
+# -----------------------------------------------------------------------------
+text:
+  - platform: template
+    name: "Photos: Date From"
+    id: immich_date_from
+    internal: true
+    # ESPFRAME:SETTING_FIELDS date_from START
+    optimistic: false
+    restore_value: true
+    min_length: 0
+    max_length: 10
+    mode: text
+    # ESPFRAME:SETTING_FIELDS date_from END
+    icon: "mdi:calendar-start"
+    set_action:
+      - lambda: |-
+          id(immich_date_from).publish_state(x);
+          ESP_LOGI("immich", "Date From configured: %s", x.c_str());
+      - script.execute: auto_apply_photo_source
+
+  - platform: template
+    name: "Photos: Date To"
+    id: immich_date_to
+    internal: true
+    # ESPFRAME:SETTING_FIELDS date_to START
+    optimistic: false
+    restore_value: true
+    min_length: 0
+    max_length: 10
+    mode: text
+    # ESPFRAME:SETTING_FIELDS date_to END
+    icon: "mdi:calendar-end"
+    set_action:
+      - lambda: |-
+          id(immich_date_to).publish_state(x);
+          ESP_LOGI("immich", "Date To configured: %s", x.c_str());
+      - script.execute: auto_apply_photo_source
+
+# -----------------------------------------------------------------------------
+# Album IDs, Person IDs, and Tag IDs
+# -----------------------------------------------------------------------------
+  - platform: template
+    name: "Photos: Album IDs"
+    id: immich_album_ids
+    internal: true
+    optimistic: false
+    restore_value: true
+    min_length: 0
+    max_length: 255
+    mode: text
+    icon: "mdi:folder-image"
+    web_server:
+      sorting_group_id: sg_photos
+    set_action:
+      - lambda: |-
+          std::string v = decode_url_commas(x);
+          id(immich_album_ids).publish_state(v);
+          global_preferences->sync();
+          ESP_LOGI("immich", "Album IDs configured (%d chars)", v.length());
+      - script.execute: auto_apply_photo_source
+
+  - platform: template
+    name: "Photos: Album Labels"
+    id: immich_album_labels
+    internal: true
+    optimistic: false
+    restore_value: true
+    min_length: 0
+    max_length: 255
+    mode: text
+    icon: "mdi:folder-text"
+    web_server:
+      sorting_group_id: sg_photos
+    set_action:
+      - lambda: |-
+          id(immich_album_labels).publish_state(x);
+          global_preferences->sync();
+          ESP_LOGI("immich", "Album labels configured (%d chars)", x.length());
+
+  - platform: template
+    name: "Photos: Person IDs"
+    id: immich_person_ids
+    internal: true
+    optimistic: false
+    restore_value: true
+    min_length: 0
+    max_length: 255
+    mode: text
+    icon: "mdi:account-group"
+    web_server:
+      sorting_group_id: sg_photos
+    set_action:
+      - lambda: |-
+          std::string v = decode_url_commas(x);
+          id(immich_person_ids).publish_state(v);
+          global_preferences->sync();
+          ESP_LOGI("immich", "Person IDs configured (%d chars)", v.length());
+      - script.execute: auto_apply_photo_source
+
+  - platform: template
+    name: "Photos: Person Labels"
+    id: immich_person_labels
+    internal: true
+    optimistic: false
+    restore_value: true
+    min_length: 0
+    max_length: 255
+    mode: text
+    icon: "mdi:account-edit"
+    web_server:
+      sorting_group_id: sg_photos
+    set_action:
+      - lambda: |-
+          id(immich_person_labels).publish_state(x);
+          global_preferences->sync();
+          ESP_LOGI("immich", "Person labels configured (%d chars)", x.length());
+
+  - platform: template
+    name: "Photos: Tag IDs"
+    id: immich_tag_ids
+    internal: true
+    optimistic: false
+    restore_value: true
+    min_length: 0
+    max_length: 255
+    mode: text
+    icon: "mdi:tag-multiple"
+    web_server:
+      sorting_group_id: sg_photos
+    set_action:
+      - lambda: |-
+          std::string v = decode_url_commas(x);
+          id(immich_tag_ids).publish_state(v);
+          global_preferences->sync();
+          ESP_LOGI("immich", "Tag IDs configured (%d chars)", v.length());
+      - script.execute: auto_apply_photo_source
+
+  - platform: template
+    name: "Photos: Tag Labels"
+    id: immich_tag_labels
+    internal: true
+    optimistic: false
+    restore_value: true
+    min_length: 0
+    max_length: 255
+    mode: text
+    icon: "mdi:tag-text"
+    web_server:
+      sorting_group_id: sg_photos
+    set_action:
+      - lambda: |-
+          id(immich_tag_labels).publish_state(x);
+          global_preferences->sync();
+          ESP_LOGI("immich", "Tag labels configured (%d chars)", x.length());
+
+# -----------------------------------------------------------------------------
+# Manual apply and auto-apply (flush slots and refetch)
+# -----------------------------------------------------------------------------
+button:
+  - platform: template
+    name: "Apply Photo Source"
+    id: apply_photo_source
+    internal: true
+    icon: "mdi:check-circle"
+    web_server:
+      sorting_group_id: sg_photos
+    on_press:
+      - script.stop: auto_apply_photo_source
+      - lambda: 'ESP_LOGI("immich", "Photo source applied — flushing all slots");'
+      - script.execute: flush_slots_and_refetch
+
+# -----------------------------------------------------------------------------
+# Delayed auto-apply after source/album/person/tag change
+# -----------------------------------------------------------------------------
+script:
+  - id: flush_slots_and_refetch
+    mode: single
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return !immich_source_has_required_ids(
+                id(photo_source_select).current_option(),
+                id(immich_album_ids).state,
+                id(immich_person_ids).state,
+                id(immich_tag_ids).state);
+          then:
+            - logger.log:
+                level: DEBUG
+                tag: immich
+                format: "Photo source apply deferred until source IDs are restored"
+            - script.execute: immich_retry_config_ready
+            - script.stop: flush_slots_and_refetch
+      - lambda: |-
+          id(espframe_core).slideshow().state().slot0.ready = false;
+          id(espframe_core).slideshow().state().slot1.ready = false;
+          id(espframe_core).slideshow().state().slot2.ready = false;
+          id(espframe_core).slideshow().state().portrait_preload_slot = -1;
+          id(espframe_core).slideshow().state().portrait_preload_left_ready = false;
+          id(espframe_core).slideshow().state().portrait_preload_right_ready = false;
+          if (id(espframe_core).slideshow().state().preload_noncritical_in_flight) {
+            id(espframe_core).slideshow().state().preload_noncritical_in_flight = false;
+            if (id(espframe_core).slideshow().state().noncritical_remote_updates_in_flight > 0) id(espframe_core).slideshow().state().noncritical_remote_updates_in_flight--;
+          }
+          id(espframe_core).slideshow().state().active_slot_displayed = false;
+          id(espframe_core).slideshow().state().target_slot = id(espframe_core).slideshow().state().active_slot;
+      - script.execute: immich_fetch_into_slot
+
+  - id: auto_apply_photo_source
+    mode: restart
+    then:
+      - delay: 1s
+      - lambda: 'ESP_LOGI("immich", "Photo source auto-applied — flushing all slots");'
+      - script.execute: flush_slots_and_refetch

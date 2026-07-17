@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "connection": {
+    "immich_url": "http://192.168.1.30:2283"
+  },
+  "photos": {
+    "source": "Favorites",
+    "display_mode": "Fit"
+  },
+  "screen": {
+    "brightness_day": 80,
+    "rotation": "180"
+  }
+}
