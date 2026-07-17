@@ -1,0 +1,6 @@
+{
+  "version": 1,
+  "firmware_updates": {
+    "manifest_url": "ftp://firmware.example.com/manifest.json"
+  }
+}

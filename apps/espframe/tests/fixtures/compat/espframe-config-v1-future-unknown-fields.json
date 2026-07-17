@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "connection": {
+    "immich_url": "https://photos.example.com",
+    "server_label": "Future display name"
+  },
+  "photos": {
+    "source": "Favorites",
+    "future_smart_album": "Recently added"
+  },
+  "future_group": {
+    "enabled": true,
+    "value": "ignored by version 1 import"
+  }
+}

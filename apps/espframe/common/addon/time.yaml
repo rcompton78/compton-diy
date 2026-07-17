@@ -1,0 +1,352 @@
+# =============================================================================
+# TIME & CLOCK - Timezone, format, and on-screen clock
+# =============================================================================
+# SNTP time sync plus user-configurable timezone (long list with GMT labels)
+# and 12/24 hour format. The on-screen clock is updated on sync and every
+# 60 seconds; timezone changes also trigger sunrise/sunset recalculation for
+# backlight schedule. The "Clock: Show" switch controls visibility of the
+# clock overlay.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Default NTP servers (can be overridden by substitutions or the web UI)
+# -----------------------------------------------------------------------------
+substitutions:
+  ntp_server_1: "0.pool.ntp.org"
+  ntp_server_2: "1.pool.ntp.org"
+  ntp_server_3: "2.pool.ntp.org"
+
+esphome:
+  on_boot:
+    - priority: -200
+      then:
+        - script.execute: apply_ntp_servers
+
+# -----------------------------------------------------------------------------
+# Clock format (12/24h) and timezone selection
+# -----------------------------------------------------------------------------
+text:
+  - platform: template
+    name: "Clock: NTP Server 1"
+    id: ntp_server_1_text
+    internal: true
+    entity_category: config
+    optimistic: false
+    restore_value: true
+    initial_value: "${ntp_server_1}"
+    min_length: 0
+    max_length: 253
+    mode: text
+    icon: "mdi:server-network"
+    web_server:
+      sorting_group_id: sg_clock
+    set_action:
+      - lambda: |-
+          std::string server = espframe_trim_ntp_server(x);
+          if (!espframe_is_valid_ntp_server(server)) {
+            ESP_LOGW("sntp", "Invalid NTP server: %s", x.c_str());
+            return;
+          }
+          id(ntp_server_1_text).publish_state(server);
+      - script.execute: apply_ntp_servers
+
+  - platform: template
+    name: "Clock: NTP Server 2"
+    id: ntp_server_2_text
+    internal: true
+    entity_category: config
+    optimistic: false
+    restore_value: true
+    initial_value: "${ntp_server_2}"
+    min_length: 0
+    max_length: 253
+    mode: text
+    icon: "mdi:server-network"
+    web_server:
+      sorting_group_id: sg_clock
+    set_action:
+      - lambda: |-
+          std::string server = espframe_trim_ntp_server(x);
+          if (!espframe_is_valid_ntp_server(server)) {
+            ESP_LOGW("sntp", "Invalid NTP server: %s", x.c_str());
+            return;
+          }
+          id(ntp_server_2_text).publish_state(server);
+      - script.execute: apply_ntp_servers
+
+  - platform: template
+    name: "Clock: NTP Server 3"
+    id: ntp_server_3_text
+    internal: true
+    entity_category: config
+    optimistic: false
+    restore_value: true
+    initial_value: "${ntp_server_3}"
+    min_length: 0
+    max_length: 253
+    mode: text
+    icon: "mdi:server-network"
+    web_server:
+      sorting_group_id: sg_clock
+    set_action:
+      - lambda: |-
+          std::string server = espframe_trim_ntp_server(x);
+          if (!espframe_is_valid_ntp_server(server)) {
+            ESP_LOGW("sntp", "Invalid NTP server: %s", x.c_str());
+            return;
+          }
+          id(ntp_server_3_text).publish_state(server);
+      - script.execute: apply_ntp_servers
+
+select:
+  - platform: template
+    name: "Clock: Format"
+    id: clock_format_select
+    internal: true
+    # ESPFRAME:SETTING_FIELDS clock_format START
+    options:
+      - "24 Hour"
+      - "12 Hour"
+    initial_option: "24 Hour"
+    optimistic: true
+    restore_value: true
+    # ESPFRAME:SETTING_FIELDS clock_format END
+    web_server:
+      sorting_group_id: sg_clock
+    on_value:
+      then:
+        - script.execute: update_clock_display
+
+  # Options list must match components/espframe/timezones.py (single source of truth).
+  # Run: python -c "from components.espframe.timezones import generate_yaml_options; print('\n'.join(f'      - \"{o}\"' for o in generate_yaml_options()))"
+  - platform: template
+    name: "Clock: Timezone"
+    id: timezone_select
+    internal: true
+    entity_category: config
+    options:
+      - "Pacific/Midway (GMT-11)"
+      - "Pacific/Pago_Pago (GMT-11)"
+      - "Pacific/Honolulu (GMT-10)"
+      - "America/Adak (GMT-10)"
+      - "America/Anchorage (GMT-9)"
+      - "America/Juneau (GMT-9)"
+      - "America/Los_Angeles (GMT-8)"
+      - "America/Vancouver (GMT-8)"
+      - "America/Tijuana (GMT-8)"
+      - "America/Denver (GMT-7)"
+      - "America/Phoenix (GMT-7)"
+      - "America/Edmonton (GMT-7)"
+      - "America/Boise (GMT-7)"
+      - "America/Chicago (GMT-6)"
+      - "America/Mexico_City (GMT-6)"
+      - "America/Winnipeg (GMT-6)"
+      - "America/Guatemala (GMT-6)"
+      - "America/Costa_Rica (GMT-6)"
+      - "America/New_York (GMT-5)"
+      - "America/Toronto (GMT-5)"
+      - "America/Detroit (GMT-5)"
+      - "America/Havana (GMT-5)"
+      - "America/Bogota (GMT-5)"
+      - "America/Lima (GMT-5)"
+      - "America/Jamaica (GMT-5)"
+      - "America/Panama (GMT-5)"
+      - "America/Halifax (GMT-4)"
+      - "America/Caracas (GMT-4)"
+      - "America/Santiago (GMT-4)"
+      - "America/La_Paz (GMT-4)"
+      - "America/Manaus (GMT-4)"
+      - "America/Barbados (GMT-4)"
+      - "America/Puerto_Rico (GMT-4)"
+      - "America/Santo_Domingo (GMT-4)"
+      - "America/St_Johns (GMT-3:30)"
+      - "America/Sao_Paulo (GMT-3)"
+      - "America/Argentina/Buenos_Aires (GMT-3)"
+      - "America/Montevideo (GMT-3)"
+      - "America/Paramaribo (GMT-3)"
+      - "Atlantic/South_Georgia (GMT-2)"
+      - "Atlantic/Azores (GMT-1)"
+      - "Atlantic/Cape_Verde (GMT-1)"
+      - "UTC (GMT+0)"
+      - "Europe/London (GMT+0)"
+      - "Europe/Dublin (GMT+0)"
+      - "Europe/Lisbon (GMT+0)"
+      - "Africa/Casablanca (GMT+1)"
+      - "Africa/Accra (GMT+0)"
+      - "Atlantic/Reykjavik (GMT+0)"
+      - "Europe/Paris (GMT+1)"
+      - "Europe/Berlin (GMT+1)"
+      - "Europe/Rome (GMT+1)"
+      - "Europe/Madrid (GMT+1)"
+      - "Europe/Amsterdam (GMT+1)"
+      - "Europe/Brussels (GMT+1)"
+      - "Europe/Vienna (GMT+1)"
+      - "Europe/Zurich (GMT+1)"
+      - "Europe/Stockholm (GMT+1)"
+      - "Europe/Oslo (GMT+1)"
+      - "Europe/Copenhagen (GMT+1)"
+      - "Europe/Warsaw (GMT+1)"
+      - "Europe/Prague (GMT+1)"
+      - "Europe/Budapest (GMT+1)"
+      - "Europe/Belgrade (GMT+1)"
+      - "Africa/Lagos (GMT+1)"
+      - "Africa/Tunis (GMT+1)"
+      - "Africa/Cairo (GMT+2)"
+      - "Europe/Athens (GMT+2)"
+      - "Europe/Bucharest (GMT+2)"
+      - "Europe/Helsinki (GMT+2)"
+      - "Europe/Kyiv (GMT+2)"
+      - "Europe/Istanbul (GMT+3)"
+      - "Africa/Johannesburg (GMT+2)"
+      - "Africa/Nairobi (GMT+3)"
+      - "Asia/Jerusalem (GMT+2)"
+      - "Asia/Amman (GMT+3)"
+      - "Asia/Beirut (GMT+2)"
+      - "Europe/Moscow (GMT+3)"
+      - "Asia/Baghdad (GMT+3)"
+      - "Asia/Riyadh (GMT+3)"
+      - "Asia/Kuwait (GMT+3)"
+      - "Asia/Qatar (GMT+3)"
+      - "Africa/Addis_Ababa (GMT+3)"
+      - "Asia/Tehran (GMT+3:30)"
+      - "Asia/Dubai (GMT+4)"
+      - "Asia/Muscat (GMT+4)"
+      - "Asia/Baku (GMT+4)"
+      - "Asia/Tbilisi (GMT+4)"
+      - "Indian/Mauritius (GMT+4)"
+      - "Asia/Kabul (GMT+4:30)"
+      - "Asia/Karachi (GMT+5)"
+      - "Asia/Tashkent (GMT+5)"
+      - "Asia/Yekaterinburg (GMT+5)"
+      - "Asia/Kolkata (GMT+5:30)"
+      - "Asia/Colombo (GMT+5:30)"
+      - "Asia/Kathmandu (GMT+5:45)"
+      - "Asia/Dhaka (GMT+6)"
+      - "Asia/Almaty (GMT+5)"
+      - "Asia/Rangoon (GMT+6:30)"
+      - "Asia/Bangkok (GMT+7)"
+      - "Asia/Jakarta (GMT+7)"
+      - "Asia/Ho_Chi_Minh (GMT+7)"
+      - "Asia/Singapore (GMT+8)"
+      - "Asia/Kuala_Lumpur (GMT+8)"
+      - "Asia/Shanghai (GMT+8)"
+      - "Asia/Hong_Kong (GMT+8)"
+      - "Asia/Taipei (GMT+8)"
+      - "Asia/Manila (GMT+8)"
+      - "Australia/Perth (GMT+8)"
+      - "Asia/Tokyo (GMT+9)"
+      - "Asia/Seoul (GMT+9)"
+      - "Asia/Pyongyang (GMT+9)"
+      - "Australia/Adelaide (GMT+9:30)"
+      - "Australia/Darwin (GMT+9:30)"
+      - "Australia/Sydney (GMT+10)"
+      - "Australia/Melbourne (GMT+10)"
+      - "Australia/Brisbane (GMT+10)"
+      - "Australia/Hobart (GMT+10)"
+      - "Pacific/Guam (GMT+10)"
+      - "Pacific/Port_Moresby (GMT+10)"
+      - "Asia/Vladivostok (GMT+10)"
+      - "Pacific/Noumea (GMT+11)"
+      - "Pacific/Norfolk (GMT+11)"
+      - "Asia/Magadan (GMT+11)"
+      - "Pacific/Auckland (GMT+12)"
+      - "Pacific/Fiji (GMT+12)"
+      - "Pacific/Chatham (GMT+12:45)"
+      - "Pacific/Tongatapu (GMT+13)"
+      - "Pacific/Apia (GMT+13)"
+      - "Pacific/Kiritimati (GMT+14)"
+    initial_option: "Europe/London (GMT+0)"
+    optimistic: true
+    restore_value: true
+    on_value:
+      then:
+        - lambda: |-
+            auto tz_id = x.substr(0, x.find(" ("));
+            const char* posix = lookup_tz_posix(tz_id);
+            if (posix) {
+              id(sntp_time).set_timezone(posix);
+            }
+        - script.execute: update_clock_display
+        - script.execute: backlight_recalc_sunrise_sunset
+        - script.execute: screen_schedule_check
+
+# -----------------------------------------------------------------------------
+# Clock visibility and display update script
+# -----------------------------------------------------------------------------
+switch:
+  - platform: template
+    name: "Clock: Show"
+    id: show_clock
+    internal: true
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    icon: "mdi:clock-outline"
+    web_server:
+      sorting_group_id: sg_clock
+
+# -----------------------------------------------------------------------------
+# Refresh clock label from current time; show/hide based on switch
+# -----------------------------------------------------------------------------
+script:
+  - id: apply_ntp_servers
+    mode: restart
+    then:
+      - lambda: |-
+          espframe_apply_sntp_servers(
+            id(ntp_server_1_text).state,
+            id(ntp_server_2_text).state,
+            id(ntp_server_3_text).state
+          );
+
+  - id: update_clock_display
+    mode: single
+    then:
+      - lambda: |-
+          auto now = id(sntp_time).now();
+          if (!now.is_valid()) return;
+          int hour = now.hour;
+          char buf[6];
+          if (id(clock_format_select).current_option() == "12 Hour") {
+            hour = hour % 12;
+            if (hour == 0) hour = 12;
+            snprintf(buf, sizeof(buf), "%d:%02d", hour, now.minute);
+          } else {
+            snprintf(buf, sizeof(buf), "%02d:%02d", hour, now.minute);
+          }
+          lv_label_set_text(id(time_label), buf);
+          lv_label_set_text(id(time_label_shadow), buf);
+          lv_obj_align(id(clock_container), LV_ALIGN_BOTTOM_LEFT, 45, -20);
+          if (id(show_clock).state && id(espframe_core).slideshow().state().active_slot_displayed) {
+            lv_obj_clear_flag(id(clock_container), LV_OBJ_FLAG_HIDDEN);
+          } else {
+            lv_obj_add_flag(id(clock_container), LV_OBJ_FLAG_HIDDEN);
+          }
+
+# -----------------------------------------------------------------------------
+# SNTP time source; sync triggers clock and schedule updates
+# -----------------------------------------------------------------------------
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: "Europe/London"
+    servers:
+      - "${ntp_server_1}"
+      - "${ntp_server_2}"
+      - "${ntp_server_3}"
+    on_time_sync:
+      then:
+        - script.execute: update_clock_display
+        - script.execute: update_photo_metadata_display
+        - script.execute: backlight_recalc_sunrise_sunset
+        - script.execute: screen_schedule_check
+
+# -----------------------------------------------------------------------------
+# Unified 60-second periodic interval for clock, backlight, and warm tones
+# -----------------------------------------------------------------------------
+interval:
+  - interval: 60s
+    then:
+      - script.execute: update_clock_display
+      - script.execute: update_photo_metadata_display
+      - script.execute: backlight_periodic_check
+      - script.execute: warm_tone_periodic_check

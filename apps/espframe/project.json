@@ -1,0 +1,47 @@
+{
+  "name": "espframe",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "targets": {
+    "install": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm install --ignore-workspace",
+        "cwd": "apps/espframe"
+      }
+    },
+    "generate": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "pnpm run generate",
+        "cwd": "apps/espframe"
+      },
+      "dependsOn": ["install"]
+    },
+    "build-freenove-s3": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/espframe-esphome.sh compile apps/espframe/builds/freenove-s3.factory.yaml",
+        "cwd": "."
+      },
+      "dependsOn": ["generate"],
+      "cache": true,
+      "outputs": ["{projectRoot}/builds/.esphome/build/immich-frame-freenove-s3"]
+    },
+    "flash-freenove-s3": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/espframe-esphome.sh upload apps/espframe/builds/freenove-s3.factory.yaml --device /dev/ttyACM0",
+        "cwd": "."
+      },
+      "dependsOn": ["build-freenove-s3"]
+    },
+    "monitor-freenove-s3": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/espframe-esphome.sh logs apps/espframe/builds/freenove-s3.factory.yaml --device /dev/ttyACM0",
+        "cwd": "."
+      }
+    }
+  }
+}

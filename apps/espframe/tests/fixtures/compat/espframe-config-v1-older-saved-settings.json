@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "connection": {
+    "immich_url": "http://192.168.1.30:2283"
+  },
+  "photos": {
+    "source": "Favorites"
+  },
+  "clock": {
+    "timezone": "Europe/London (GMT+0)"
+  }
+}

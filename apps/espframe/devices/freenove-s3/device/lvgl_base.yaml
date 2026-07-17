@@ -1,0 +1,16 @@
+# =============================================================================
+# LVGL BASE - Shared display config and styles
+# =============================================================================
+# Defines the LVGL top-level configuration shared by all screens.
+# Individual screens add their own pages via separate files.
+# =============================================================================
+
+lvgl:
+  # TODO: untuned starting guess (P4 uses 6% against a much larger PSRAM pool
+  # and a much bigger screen). Verify against actual free heap during bring-up.
+  buffer_size: 25%
+  byte_order: little_endian
+  rotation: ${screen_rotation_0}
+  resume_on_input: true
+  displays:
+    - tft_display

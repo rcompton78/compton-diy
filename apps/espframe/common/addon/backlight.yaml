@@ -1,0 +1,121 @@
+# =============================================================================
+# BACKLIGHT - Display brightness and hard display-off control
+# =============================================================================
+# Single monochromatic light entity driving the panel backlight output.
+# Used by the backlight schedule and manual brightness controls. The schedule
+# can also force a display-off state by cutting the physical backlight while
+# keeping LVGL and the panel pipeline alive for reliable wake.
+# =============================================================================
+
+globals:
+  - id: screen_schedule_asleep
+    type: bool
+    restore_value: true
+    initial_value: 'false'
+  - id: backlight_manual_off
+    type: bool
+    restore_value: true
+    initial_value: 'false'
+  - id: manual_wake_ms
+    type: uint32_t
+    initial_value: '0'
+  - id: screensaver_display_off_active
+    type: bool
+    initial_value: 'false'
+
+light:
+  - platform: monochromatic
+    id: backlight
+    output: backlight_output
+    name: "Screen: Backlight"
+    default_transition_length: 500ms
+    restore_mode: RESTORE_DEFAULT_ON
+    web_server:
+      sorting_group_id: sg_screen
+    on_turn_on:
+      then:
+        - if:
+            condition:
+              lambda: |-
+                return id(screen_schedule_asleep);
+            then:
+              - script.execute: backlight_force_display_off
+            else:
+              - if:
+                  condition:
+                    lambda: |-
+                      return id(backlight_paused) ||
+                             id(screensaver_display_off_active) ||
+                             id(backlight_manual_off);
+                  then:
+                    - script.execute: backlight_wake
+    on_turn_off:
+      then:
+        - if:
+            condition:
+              lambda: |-
+                return !id(backlight_paused) &&
+                       !id(screen_schedule_asleep) &&
+                       !id(screensaver_display_off_active) &&
+                       !id(backlight_manual_off);
+            then:
+              - script.execute: screen_schedule_manual_sleep
+
+button:
+  - platform: template
+    name: "Screen: Sleep"
+    icon: "mdi:power-sleep"
+    web_server:
+      sorting_group_id: sg_screen
+    on_press:
+      - script.execute: screen_schedule_manual_sleep
+
+  - platform: template
+    name: "Screen: Wake"
+    icon: "mdi:power"
+    web_server:
+      sorting_group_id: sg_screen
+    on_press:
+      - script.execute: backlight_wake
+
+script:
+  - id: backlight_force_display_off
+    mode: restart
+    then:
+      - if:
+          condition:
+            light.is_on: backlight
+          then:
+            - light.turn_off:
+                id: backlight
+                transition_length: 0ms
+      - output.turn_off: backlight_output
+      - lambda: 'id(backlight_output).turn_off();'
+
+  - id: backlight_schedule_display_off
+    mode: restart
+    then:
+      - script.execute: backlight_force_display_off
+
+  - id: screen_schedule_manual_sleep
+    mode: restart
+    then:
+      - script.stop: backlight_hold_timer
+      - script.stop: screen_schedule_wake_timeout_check
+      - globals.set:
+          id: backlight_paused
+          value: 'true'
+      - globals.set:
+          id: screensaver_display_off_active
+          value: 'true'
+      - globals.set:
+          id: screen_schedule_asleep
+          value: 'false'
+      - globals.set:
+          id: backlight_manual_off
+          value: 'true'
+      - globals.set:
+          id: manual_wake_ms
+          value: '0'
+      - lambda: 'global_preferences->sync();'
+      - script.execute: backlight_schedule_display_off

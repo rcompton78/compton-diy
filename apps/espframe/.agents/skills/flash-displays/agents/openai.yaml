@@ -1,0 +1,4 @@
+interface:
+  display_name: "Flash Display"
+  short_description: "Flash the 10-inch Espframe."
+  default_prompt: "Use $flash-displays to flash the 10-inch Espframe display over its default IP address or USB."

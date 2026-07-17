@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "clock": {
+    "show": true,
+    "format": "24 Hour",
+    "timezone": "Europe/London (GMT+0)",
+    "ntp_servers": [
+      "0.pool.ntp.org",
+      "1.pool.ntp.org",
+      "2.pool.ntp.org"
+    ]
+  }
+}

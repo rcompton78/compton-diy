@@ -1,0 +1,6 @@
+{
+  "version": 0,
+  "connection": {
+    "immich_url": "https://unsupported.photos.example.com"
+  }
+}

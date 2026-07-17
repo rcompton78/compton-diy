@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+"""Fast tests for package metadata contract helpers."""
+
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+
+from product_contract.package_metadata import (  # noqa: E402
+    PACKAGE_SCRIPT_COMMANDS,
+    PACKAGE_SCRIPT_STEPS,
+    check_package_script_commands,
+    check_package_script_steps,
+    script_includes_step,
+    web_smoke_scenario_names,
+)
+from script_test_discovery import run_discovered_tests  # noqa: E402
+
+
+def expected_package_scripts() -> dict[str, object]:
+    return {
+        script_name: expected_command
+        for script_name, expected_command, _expected_label in PACKAGE_SCRIPT_COMMANDS
+    }
+
+
+def expected_composite_scripts() -> dict[str, object]:
+    return {
+        script_name: " && ".join(expected_steps)
+        for script_name, expected_steps in PACKAGE_SCRIPT_STEPS
+    }
+
+
+def test_script_includes_step_matches_whole_steps() -> None:
+    script = " npm run test:web-smoke-cli && npm run test:web-smoke && npm run docs:build "
+    assert script_includes_step(script, "npm run test:web-smoke-cli") is True
+    assert script_includes_step(script, "npm run test:web-smoke") is True
+    assert script_includes_step(script, "npm run docs:build") is True
+    assert script_includes_step("npm run test:web-smoke-cli", "npm run test:web-smoke") is False
+    assert script_includes_step(script, "npm run missing") is False
+
+
+def test_check_package_script_commands_accepts_expected_commands() -> None:
+    errors: list[str] = []
+
+    check_package_script_commands(expected_package_scripts(), errors)
+
+    assert errors == []
+
+
+def test_check_package_script_commands_rejects_release_script_drift() -> None:
+    errors: list[str] = []
+    scripts = expected_package_scripts()
+    scripts["check:firmware-release"] = "python3 scripts/wrong_release.py"
+    scripts["check:release-changelog"] = "python3 scripts/wrong_changelog.py"
+
+    check_package_script_commands(scripts, errors)
+
+    assert errors == [
+        "package.json check:firmware-release must run scripts/check_firmware_release.py",
+        "package.json check:release-changelog must run scripts/check_release_changelog.py",
+    ]
+
+
+def test_check_package_script_steps_accepts_expected_steps() -> None:
+    errors: list[str] = []
+
+    check_package_script_steps(expected_composite_scripts(), errors)
+
+    assert errors == []
+
+
+def test_check_package_script_steps_rejects_missing_release_and_pr_steps() -> None:
+    errors: list[str] = []
+    scripts = expected_composite_scripts()
+    scripts["check:release"] = "npm run check:pr && npm run check:firmware-release"
+    scripts["check:pr"] = str(scripts["check:pr"]).replace(" && npm run docs:build", "")
+
+    check_package_script_steps(scripts, errors)
+
+    assert errors == [
+        "package.json check:pr must include docs:build",
+        "package.json check:release must include check:release-changelog",
+    ]
+
+
+def test_web_smoke_scenario_names_reads_registered_scenarios() -> None:
+    errors: list[str] = []
+    smoke_test = """
+const unrelated = [{ name: "outside" }];
+const scenarios = [
+  { name: "wizard", configured: false },
+  { name: "settings-mobile", configured: true },
+];
+"""
+    assert web_smoke_scenario_names(smoke_test, errors) == {"wizard", "settings-mobile"}
+    assert errors == []
+
+
+def test_web_smoke_scenario_names_reports_missing_registry() -> None:
+    errors: list[str] = []
+    assert web_smoke_scenario_names("const scenarios = [];", errors) == set()
+    assert errors == ["tests/web_smoke_tests.js must define const scenarios = [...]"]
+
+
+def test_web_smoke_scenario_names_reports_duplicates() -> None:
+    errors: list[str] = []
+    smoke_test = """
+const scenarios = [
+  { name: "wizard" },
+  { name: "wizard" },
+];
+"""
+    assert web_smoke_scenario_names(smoke_test, errors) == {"wizard"}
+    assert errors == ["tests/web_smoke_tests.js scenarios must not contain duplicate names"]
+
+
+def main() -> int:
+    run_discovered_tests(globals())
+    print("package contract tests passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

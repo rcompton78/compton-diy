@@ -1,4 +1,0 @@
-[submodule "apps/espframe"]
-	path = apps/espframe
-	url = https://github.com/rcompton78/espframe.git
-	branch = add-freenove-s3-device

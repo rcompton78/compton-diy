@@ -1,0 +1,205 @@
+# =============================================================================
+# WARM TONES - Sun-based display color temperature
+# =============================================================================
+# Shifts displayed photos toward warm tones (reduced blue, slight red boost)
+# as sunset approaches, mimicking the golden hour effect. Uses the existing
+# sunrise/sunset globals from backlight_schedule.yaml.
+#
+# The warmth curve ramps linearly over 60 minutes before sunset, stays full
+# warm through the night, then ramps back to neutral over 60 minutes after sunrise.
+# The tint is applied directly to the RGB565 image buffer after
+# accent color extraction, using precomputed lookup tables for speed.
+#
+# The "Turn on until sunrise" switch forces full warmth immediately and
+# auto-disables after sunrise the next morning.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Last applied warmth (for retint skip) and retint flag
+# -----------------------------------------------------------------------------
+globals:
+  - id: warm_tone_last_w
+    type: float
+    initial_value: '0.0f'
+  - id: warm_tone_retint
+    type: bool
+    initial_value: 'false'
+
+# -----------------------------------------------------------------------------
+# Switches: base tone (display blue correction), night tone (sun-based), override (warm until sunrise)
+# -----------------------------------------------------------------------------
+switch:
+  # Base tone: correct display blue cast (manual warm tint)
+  - platform: template
+    name: "Screen: Tone Adjustment"
+    id: base_tone_enabled
+    internal: true
+    optimistic: true
+    # ESPFRAME:SETTING_FIELDS base_tone_enabled START
+    restore_mode: RESTORE_DEFAULT_OFF
+    # ESPFRAME:SETTING_FIELDS base_tone_enabled END
+    icon: "mdi:palette"
+    web_server:
+      sorting_group_id: sg_screen
+    on_turn_on:
+      then:
+        - lambda: 'id(warm_tone_retint) = true;'
+        - script.execute: apply_warm_tones
+    on_turn_off:
+      then:
+        - lambda: 'id(warm_tone_retint) = true;'
+        - script.execute: apply_warm_tones
+
+  # Night tone: sun-based ramp (sunset → sunrise) when enabled
+  - platform: template
+    name: "Screen: Night Tone Adjustment"
+    id: warm_tones_enabled
+    internal: true
+    optimistic: true
+    # ESPFRAME:SETTING_FIELDS warm_tones_enabled START
+    restore_mode: RESTORE_DEFAULT_OFF
+    # ESPFRAME:SETTING_FIELDS warm_tones_enabled END
+    icon: "mdi:weather-sunset"
+    web_server:
+      sorting_group_id: sg_screen
+
+  # Override: force full warmth now; auto-off after next sunrise (interval below)
+  - platform: template
+    name: "Screen: Warm Tone Override"
+    id: warm_tone_override
+    internal: true
+    optimistic: true
+    # ESPFRAME:SETTING_FIELDS warm_tone_override START
+    restore_mode: RESTORE_DEFAULT_OFF
+    # ESPFRAME:SETTING_FIELDS warm_tone_override END
+    icon: "mdi:weather-night"
+    web_server:
+      sorting_group_id: sg_screen
+    on_turn_on:
+      then:
+        - lambda: 'id(warm_tone_retint) = true;'
+        - script.execute: apply_warm_tones
+    on_turn_off:
+      then:
+        - lambda: 'id(warm_tone_retint) = true;'
+        - script.execute: apply_warm_tones
+
+# -----------------------------------------------------------------------------
+# Numbers: base tone strength (0–100%), night warmth intensity (10–100%)
+# -----------------------------------------------------------------------------
+number:
+  # Base tone strength (0–100%); used only when "Tone Adjustment" is on
+  - platform: template
+    name: "Screen: Display Tone"
+    id: base_tone
+    internal: true
+    # ESPFRAME:SETTING_FIELDS base_tone START
+    min_value: 0
+    max_value: 100
+    step: 5
+    initial_value: 0
+    optimistic: true
+    restore_value: true
+    # ESPFRAME:SETTING_FIELDS base_tone END
+    unit_of_measurement: "%"
+    icon: "mdi:thermometer"
+    web_server:
+      sorting_group_id: sg_screen
+    on_value:
+      then:
+        - lambda: 'id(warm_tone_retint) = true;'
+        - script.execute: apply_warm_tones
+
+  # Night/override warmth strength (10–100%); scales the sun-based or override amount
+  - platform: template
+    name: "Screen: Warm Tone Intensity"
+    id: warm_tone_intensity
+    internal: true
+    # ESPFRAME:SETTING_FIELDS warm_tone_intensity START
+    min_value: 10
+    max_value: 100
+    step: 5
+    initial_value: 50
+    optimistic: true
+    restore_value: true
+    # ESPFRAME:SETTING_FIELDS warm_tone_intensity END
+    unit_of_measurement: "%"
+    icon: "mdi:palette"
+    web_server:
+      sorting_group_id: sg_screen
+
+# -----------------------------------------------------------------------------
+# Apply warmth to current image buffer (LUT-based RGB565 tint; portrait pair or single slot)
+# -----------------------------------------------------------------------------
+script:
+  - id: apply_warm_tones
+    mode: restart
+    then:
+      - lambda: |-
+          bool retint = id(warm_tone_retint);
+          id(warm_tone_retint) = false;
+
+          float base_w = id(base_tone_enabled).state ? (id(base_tone).state / 100.0f) : 0.0f;
+
+          float night_w = 0.0f;
+          if (id(warm_tone_override).state) {
+            night_w = id(warm_tone_intensity).state / 100.0f;
+          } else if (id(warm_tones_enabled).state && id(sunrise_sunset_valid)) {
+            auto now = id(sntp_time).now();
+            if (!now.is_valid() && base_w < 0.01f) return;
+            if (now.is_valid()) {
+              float warmth = calc_sun_warmth(
+                minutes_since_midnight(now.hour, now.minute),
+                minutes_since_midnight(id(sunrise_hour), id(sunrise_minute)),
+                minutes_since_midnight(id(sunset_hour), id(sunset_minute)),
+                WARM_TONE_LEAD_MINUTES);
+              night_w = warmth * (id(warm_tone_intensity).state / 100.0f);
+            }
+          }
+
+          float w = base_w + night_w;
+          float last_w = retint ? id(warm_tone_last_w) : 0.0f;
+          if (fabsf(w - last_w) < 0.01f) return;
+
+          int last_c = std::min((int)(last_w * 100.0f + 0.5f), 100);
+          int w_c = std::min((int)(w * 100.0f + 0.5f), 100);
+          ESP_LOGI("warm", "Warmth=%d.%02d->%d.%02d (intensity=%d%%)",
+                   last_c / 100, last_c % 100, w_c / 100, w_c % 100, (int)id(warm_tone_intensity).state);
+
+          WarmToneLuts luts;
+          build_warm_tone_luts(last_w, w, luts);
+
+          if (id(espframe_core).slideshow().state().portrait.is_pair) {
+            if (id(espframe_core).slideshow().state().portrait.using_preload) {
+              tint_image_buffer(id(immich_portrait_preload_left), luts);
+              tint_image_buffer(id(immich_portrait_preload_right), luts);
+            } else {
+              tint_image_buffer(id(immich_portrait_left), luts);
+              tint_image_buffer(id(immich_portrait_right), luts);
+            }
+            lv_obj_invalidate(id(portrait_pair_container));
+          } else {
+            esphome::image::Image *imgs[] = { id(immich_img_0), id(immich_img_1), id(immich_img_2) };
+            tint_image_buffer(imgs[id(espframe_core).slideshow().state().active_slot], luts);
+            lv_obj_invalidate(id(slideshow_img));
+          }
+
+          id(warm_tone_last_w) = w;
+
+  # ---------------------------------------------------------------------------
+  # Override auto-off check (called from the unified 60s interval)
+  # ---------------------------------------------------------------------------
+  - id: warm_tone_periodic_check
+    mode: single
+    then:
+      - lambda: |-
+          if (!id(warm_tone_override).state) return;
+          if (!id(sunrise_sunset_valid)) return;
+          auto now = id(sntp_time).now();
+          if (!now.is_valid()) return;
+          if (is_daytime(now.hour, now.minute,
+                         id(sunrise_hour), id(sunrise_minute),
+                         id(sunset_hour), id(sunset_minute))) {
+            ESP_LOGI("warm", "Override auto-off: sunrise passed");
+            id(warm_tone_override).turn_off();
+          }

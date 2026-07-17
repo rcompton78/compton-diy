@@ -1,0 +1,17 @@
+# Freenove ESP32-S3 CYD Immich Frame
+substitutions:
+  name: "immich-frame-freenove-s3"
+  friendly_name: "Immich Frame Freenove S3"
+
+# Wifi Setup
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+# Packages
+packages:
+  espframe:
+    url: https://github.com/rcompton78/espframe
+    files: [devices/freenove-s3/packages.yaml]
+    ref: add-freenove-s3-device
+    refresh: 1s

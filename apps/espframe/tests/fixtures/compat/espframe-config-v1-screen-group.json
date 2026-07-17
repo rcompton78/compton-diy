@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "screen": {
+    "brightness_day": 90,
+    "brightness_night": 60,
+    "schedule_enabled": true,
+    "schedule_on_hour": 7,
+    "schedule_off_hour": 22,
+    "schedule_wake_timeout": 120,
+    "base_tone_enabled": true,
+    "base_tone": 35,
+    "warm_tones_enabled": true,
+    "warm_tone_intensity": 45,
+    "warm_tone_override": false,
+    "rotation": "180"
+  }
+}

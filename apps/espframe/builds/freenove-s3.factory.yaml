@@ -1,0 +1,30 @@
+# =============================================================================
+# FACTORY FIRMWARE - Freenove ESP32-S3 CYD
+# =============================================================================
+# Secrets-free config for the ESPHome web installer. Boots into AP mode
+# for WiFi setup via captive portal.
+#
+# Compiled by CI (see .github/workflows/release.yml) — not used locally.
+# For local development, see devices/freenove-s3/esphome.yaml.
+# =============================================================================
+
+substitutions:
+  name: "immich-frame-freenove-s3"
+  friendly_name: "Immich Frame Freenove S3"
+  firmware_version: "0.0.0"
+
+packages:
+  espframe: !include ../devices/freenove-s3/packages.yaml
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [remote_image, espframe]
+
+web_server:
+  port: 80
+  version: 3
+  js_url: ""
+  css_include: "../docs/public/webserver/style.css"
+  js_include: "../docs/public/webserver/app.js"

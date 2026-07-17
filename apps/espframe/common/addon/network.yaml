@@ -1,0 +1,54 @@
+# =============================================================================
+# NETWORK - Status and diagnostics
+# =============================================================================
+# Exposes connectivity and WiFi state to Home Assistant and the device
+# webserver: online status, WiFi signal (dB and percent strength), and
+# current IP address. All entities are diagnostic so they do not clutter
+# the main UI unless needed.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Connectivity and WiFi sensors
+# -----------------------------------------------------------------------------
+binary_sensor:
+  - platform: status
+    name: "Network: Online"
+    id: ink_ha_connected
+    icon: mdi:check-network
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: sg_wifi
+
+sensor:
+  - platform: wifi_signal
+    name: "Network: WiFi Signal dB"
+    id: wifi_signal_db
+    internal: true
+    update_interval: 60s
+    entity_category: diagnostic
+    icon: mdi:wifi
+    web_server:
+      sorting_group_id: sg_wifi
+
+  - platform: copy
+    source_id: wifi_signal_db
+    name: "Network: WiFi Strength"
+    filters:
+      - lambda: return min(max(2 * (x + 100.0), 0.0), 100.0);
+    unit_of_measurement: "%"
+    icon: mdi:wifi
+    entity_category: diagnostic
+    web_server:
+      sorting_group_id: sg_wifi
+
+# -----------------------------------------------------------------------------
+# WiFi info (IP address)
+# -----------------------------------------------------------------------------
+text_sensor:
+  - platform: wifi_info
+    ip_address:
+      name: "Network: IP Address"
+      icon: mdi:ip-network
+      entity_category: diagnostic
+      web_server:
+        sorting_group_id: sg_wifi

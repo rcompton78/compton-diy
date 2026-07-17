@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "connection": {
+    "immich_url": "https://photos.example.com",
+    "api_key": "fixture-read-only-api-key"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "frequency": {
+    "interval": "30 seconds",
+    "conn_timeout": "5 minutes"
+  }
+}

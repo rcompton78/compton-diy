@@ -1,0 +1,74 @@
+# =============================================================================
+# FONTS - Clock, UI, and slideshow text
+# =============================================================================
+# Noto Sans at multiple sizes, scaled down for the 240x320 display (the
+# guition-esp32-p4-jc8012p4a1 device uses much larger sizes for its 1280x800
+# canvas). The clock font uses a minimal glyph set for digits; other sizes
+# include broader glyphs for setup screens and text. Location metadata uses
+# broad Noto glyph coverage for Immich place names. Middle East scripts use
+# script-specific Noto extras so the main location font can keep its existing
+# European coverage.
+# =============================================================================
+
+substitutions:
+  latin_extended_glyphs: >-
+    !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~
+    ¡¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿĀāĂăĄąĆćĈĉĊċČčĎďĐđĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĦħĨĩĪīĬĭĮįİıĲĳĴĵĶķĸĹĺĻļĽľĿŀŁłŃńŅņŇňŉŊŋŌōŎŏŐőŒœŔŕŖŗŘřŚśŜŝŞşŠšŢţŤťŦŧŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽž—–‐…·µ©®™«»°•€£¥¢ªº†
+  greek_cyrillic_vietnamese_glyphs: >-
+    ΆΈΉΊΌΎΏΐΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩΪΫάέήίΰαβγδεζηθικλμνξοπρςστυφχψωϊϋόύώЁЂЃЄЅІЇЈЉЊЋЌЍЎЏАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюяёђѓєѕіїјљњћќѝўџҐґƠơƯưẠạẢảẤấẦầẨẩẪẫẬậẮắẰằẲẳẴẵẶặẸẹẺẻẼẽẾếỀềỂểỄễỆệỈỉỊịỌọỎỏỐốỒồỔổỖỗỘộỚớỜờỞởỠỡỢợỤụỦủỨứỪừỬửỮữỰựỲỳỴỵỶỷỸỹ
+  arabic_location_glyphs: "؉،؍ؕ؛؟ءآأؤإئابةتثجحخدذرزسشصضطظعغـفقكلمنهوىيًٌٍَُِّْٕٖٓٔ٘٠١٢٣٤٥٦٧٨٩٪٫٬٭ٮٯٰٱٹٺٻټٽپٿڀځڃڄڅچڇڈډڊڌڍڏڑړڕږژڙښڡڤڦکڪګڭگڱڳڵںڻڼھہۆۇۈۋیۍێېے۔ەۛۯ۰۱۲۳۴۵۶۷۸۹۽۾ݣ‘’“”‹›⁏−◌⹁ﭖﭗﭘﭙﭺﭻﭼﭽﮊﮋﮎﮏﮐﮑﮒﮓﮔﮕﯼﯽﯾﯿ﴾﴿ﺁﺃﺄﺅﺆﺇﺈﺉﺊﺋﺌﺍﺎﺏﺐﺑﺒﺓﺔﺕﺖﺗﺘﺙﺚﺛﺜﺝﺞﺟﺠﺡﺢﺣﺤﺥﺦﺧﺨﺩﺪﺫﺬﺭﺮﺯﺰﺱﺲﺳﺴﺵﺶﺷﺸﺹﺺﺻﺼﺽﺾﺿﻀﻁﻂﻃﻄﻅﻆﻇﻈﻉﻊﻋﻌﻍﻎﻏﻐﻑﻒﻓﻔﻕﻖﻗﻘﻙﻚﻛﻜﻝﻞﻟﻠﻡﻢﻣﻤﻥﻦﻧﻨﻩﻪﻫﻬﻭﻮﻯﻰﻱﻲﻳﻴﻵﻶﻷﻸﻹﻺﻻﻼ"
+  hebrew_location_glyphs: "ְֱֲֳִֵֶַָֹֺֻּֽֿ֑֖֛֢֣֤֥֦֧֪֚֭֮֒֓֔֕֗֘֙֜֝֞֟֠֡֨֩֫֬֯׀ׁׂ׃ׇׅׄאבגדהוזחטיךכלםמןנסעףפץצקרשתׯװױײ׳״"
+
+# -----------------------------------------------------------------------------
+# Clock (minimal glyph set for lower memory)
+# -----------------------------------------------------------------------------
+font:
+  - file: "gfonts://Noto Sans@325"
+    id: noto_325_54_font
+    size: 54
+    bpp: 4
+    glyphs: " 0123456789:"
+
+# -----------------------------------------------------------------------------
+# UI and setup text (full Latin + extended glyphs)
+# -----------------------------------------------------------------------------
+  - file: "gfonts://Noto Sans@400"
+    id: noto_400_20_font
+    size: 20
+    bpp: 4
+    glyphs: "${latin_extended_glyphs}"
+
+  - file: "gfonts://Noto Sans@400"
+    id: noto_400_16_font
+    size: 16
+    bpp: 4
+    glyphs: "${latin_extended_glyphs}"
+
+  - file: "gfonts://Noto Sans@400"
+    id: noto_400_13_font
+    size: 13
+    bpp: 4
+    glyphs: "${latin_extended_glyphs}"
+
+  - file: "gfonts://Noto Sans@400"
+    id: noto_400_12_font
+    size: 12
+    bpp: 4
+    glyphs: "${latin_extended_glyphs}${greek_cyrillic_vietnamese_glyphs}"
+
+  - file: "gfonts://Noto Sans@400"
+    id: noto_location_400_13_font
+    size: 13
+    bpp: 4
+    glyphsets:
+      - GF_Latin_Core
+      - GF_Latin_Beyond
+      - GF_Latin_Vietnamese
+      - GF_Greek_Core
+      - GF_Cyrillic_Plus
+    glyphs: "${latin_extended_glyphs}${greek_cyrillic_vietnamese_glyphs}"
+    extras:
+      - file: "gfonts://Noto Sans Arabic@400"
+        glyphs: "${arabic_location_glyphs}"
+      - file: "gfonts://Noto Sans Hebrew@400"
+        glyphs: "${hebrew_location_glyphs}"
