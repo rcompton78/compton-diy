@@ -65,6 +65,12 @@ result. The NX `flash-*` targets are safe (they `dependsOn` the matching
 - `pnpm nx run espframe:generate` — runs `pnpm run generate` (regenerates
   `packages.yaml` from `product/contract/devices.json`; does NOT touch
   hand-authored files like screens/fonts/icons).
+- `pnpm nx run espframe:build` — builds every device with a
+  `builds/<id>.factory.yaml`, skipping any id listed in `devices.json`'s
+  `skip` array (currently just `guition-esp32-p4-jc8012p4a1`, since there's
+  no P4 hardware to test against yet). Devices are discovered from the
+  `builds/` directory, so adding a new device needs no changes to
+  `scripts/espframe-build-devices.sh` itself.
 - `pnpm nx run espframe:build-freenove-s3` / `flash-freenove-s3` /
   `monitor-freenove-s3` — native ESPHome compile/upload/logs for the
   Freenove S3, cached by NX. Assumes `/dev/ttyACM0`.
@@ -141,18 +147,38 @@ result. The NX `flash-*` targets are safe (they `dependsOn` the matching
     `espframe:build-freenove-s3` all build clean against their now-isolated
     caches.
 
+- **End-to-end hardware verification: WiFi setup, Immich setup, and
+  slideshow all confirmed working** on real freenove-s3 hardware, including
+  the Album/Person/Tag metadata search path (not just Random/Memories).
+- **Clock crash fixed**: setting `Clock: Position`/`Clock: Size` to
+  anything but the default crashed and rebooted the device. Root cause: a
+  stack overflow in ESP-IDF's `httpd` task — espframe's custom
+  `components/espframe/configuration_api.h` (`/espframe/api/v1/configuration`
+  REST API) used `json::JsonBuilder::serialize()` in three response-building
+  call sites, each of which embeds a 640-byte buffer on the caller's stack
+  via NRVO. That's fine for stock ESPHome's `web_server`, which only budgets
+  the httpd task's stack (4352 bytes, hardcoded in ESPHome's
+  `web_server_idf.cpp`) for a single such use — but espframe's growing
+  `CONFIGURATION_FIELDS` list (now including Clock Size/Position) tipped an
+  already-marginal stack budget into a reliable crash. Fixed by serializing
+  into a heap-backed `std::string` instead, bypassing the stack-buffer
+  pattern entirely, at all three call sites.
+- **Immich API key docs fixed**: `/api/search/statistics` (used by the
+  Album/Person/Tag photo sources) needs the `asset.statistics` permission,
+  which was missing from the recommended list in `docs/api-key.md` — caused
+  a 403 for anyone using those sources with a key created from that guide.
+
 ## What's NOT done yet
 
-1. **End-to-end verification on real hardware** — WiFi setup, Immich setup,
-   slideshow (photo rendering, not just the setup screens), touch,
-   backlight, all the way through, now that the grey-screen bug is fixed.
-   Only the WiFi setup screen has been confirmed rendering correctly so far.
-2. **Verify actual runtime PSRAM/heap usage** once the full flow is
-   exercised (not just idle at the WiFi setup screen).
-3. **Update the fork's README/docs** to note the new supported board.
-4. **CI/release integration decision (still open, not decided)** — see
-   below.
-5. Eventually: open a PR from `diy-44-espframe-nx-submodule` into
+1. **Verify actual runtime PSRAM/heap usage** during the full slideshow
+   flow (not just idle at the WiFi setup screen).
+2. **Update the fork's README/docs** to note the new supported board.
+3. **CI/release integration decision (still open, not decided)** — see
+   below. Note `espframe:build` (added this session) is a local/manual
+   multi-device build convenience only — it doesn't touch this repo's
+   `release.yml` or `dist/` web flasher, so it doesn't resolve this
+   question either way.
+4. Eventually: open a PR from `diy-44-espframe-nx-submodule` into
    `compton-diy` master, and mark Jira DIY-44 done.
 
 ## Open question — CI/release integration (not decided)
@@ -162,8 +188,9 @@ monorepo: `release.yml` already runs `nx run-many -t build,build-fs,release`
 on every push to `master`, gated by `nx show projects --affected
 --withTarget release`, publishing into this repo's own `dist/` web flasher
 and GitHub Releases. **espframe doesn't participate in that at all** —
-`project.json` has no `build`/`release` target, so `nx run-many` silently
-skips it.
+`project.json` now has a `build` target (added this session, for local
+multi-device convenience), but no `release` target, so `nx run-many -t
+release` still silently skips it.
 
 espframe is architecturally different: it already has its **own**,
 fully self-hosted release pipeline in the fork — `compile.yml` (PR
