@@ -18,6 +18,13 @@
       },
       "dependsOn": ["install"]
     },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/espframe-build-devices.sh",
+        "cwd": "."
+      }
+    },
     "build-freenove-s3": {
       "executor": "nx:run-commands",
       "options": {
