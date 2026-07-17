@@ -17,7 +17,7 @@
 substitutions:
   espframe_component_url: "https://github.com/rcompton78/espframe"
   espframe_component_ref: "add-freenove-s3-device"
-  log_level: "INFO"
+  log_level: "VERY_VERBOSE"
 
 esp32:
   variant: ESP32S3
@@ -56,7 +56,7 @@ logger:
   level: ${log_level}
   hardware_uart: USB_SERIAL_JTAG
   logs:
-    component: WARN
+    component: VERY_VERBOSE
     remote_image: WARN
     immich: INFO
     warm: WARN
