@@ -17,6 +17,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
           persist-credentials: false
 
       - name: Compute version
@@ -29,9 +30,13 @@ jobs:
         env:
           EVENT_BEFORE: ${{ github.event.before }}
         run: |
-          BASE="$EVENT_BEFORE"
-          if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE" 2>/dev/null; then
-            BASE=$(git rev-parse HEAD~1)
+          if git rev-parse -q --verify refs/tags/last-release >/dev/null; then
+            BASE=$(git rev-parse refs/tags/last-release)
+          else
+            BASE="$EVENT_BEFORE"
+            if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "$BASE" 2>/dev/null; then
+              BASE=$(git rev-parse HEAD~1)
+            fi
           fi
           echo "sha=$BASE" >> "$GITHUB_OUTPUT"
 
@@ -120,6 +125,17 @@ jobs:
             "${ASSETS[@]}" \
             --title "Firmware $RELEASE_VERSION" \
             --notes "Automated build from $COMMIT_SHA. Changed: $(echo "$AFFECTED_PROJECTS" | paste -sd, -). Upload the *-ota.bin matching your device via its config portal's Update page."
+
+      - name: Advance last-release tag
+        if: steps.affected.outputs.projects != ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh api "repos/${{ github.repository }}/git/refs/tags/last-release" >/dev/null 2>&1; then
+            gh api -X PATCH "repos/${{ github.repository }}/git/refs/tags/last-release" -f sha="${{ github.sha }}" -F force=true
+          else
+            gh api -X POST "repos/${{ github.repository }}/git/refs" -f ref="refs/tags/last-release" -f sha="${{ github.sha }}"
+          fi
 
   deploy-pages:
     needs: build-and-release
