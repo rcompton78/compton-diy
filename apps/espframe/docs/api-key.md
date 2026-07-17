@@ -13,6 +13,7 @@ Espframe needs a read-only API key; it never modifies or uploads. **Account Sett
 |---|---|
 | `asset.read` | Search for random photos and read metadata (date, location, EXIF) |
 | `asset.view` | Download photo thumbnails for display |
+| `asset.statistics` | Count matching photos when using Album, Person, or Tag sources |
 | `person.read` | Show people's names on the photo overlay |
 | `album.read` | Album names a photo belongs to |
 | `tag.read` | Tags assigned to photos |
