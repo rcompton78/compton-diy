@@ -2220,7 +2220,9 @@ static void handleConfigStoreGet() {
     }
     page.replace("%%CAT_COLOR_ITEMS%%", catColorItems);
     String msg = "";
-    if (wm.server->hasArg("cheat")) {
+    if (wm.server->hasArg("welcome")) {
+        msg = "<div class='banner ok'>Welcome! Here's 70 points to get started.</div>";
+    } else if (wm.server->hasArg("cheat")) {
         msg = "<div class='banner ok'>+50 points!</div>";
     } else if (wm.server->hasArg("reset")) {
         msg = "<div class='banner ok'>Everything has been reset.</div>";
