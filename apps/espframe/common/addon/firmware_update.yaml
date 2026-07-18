@@ -14,7 +14,7 @@
 
 substitutions:
   firmware_version: "dev"
-  firmware_manifest_url: "https://jtenniswood.github.io/espframe/firmware/manifest.json"
+  firmware_manifest_url: "https://rcompton78.github.io/compton-diy/espframe/manifest.json"
 
 esphome:
   project:
