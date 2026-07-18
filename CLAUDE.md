@@ -64,11 +64,15 @@ Select the board-specific implementation (e.g. touch/display driver backend) at 
 
 ### Release workflow
 
-`.github/workflows/release.yml` runs on every push to `master`. A project's `release` target (see `apps/cyd-clock/project.json`) wraps `tools/esp-flasher/generate_release.py` with one `--build <env>:<chip>` flag per supported board, producing a merged `.bin`, an OTA `.bin`, and an ESP Web Tools manifest entry per board under `dist/<project>/`.
+`.github/workflows/release.yml` runs on every push to `master`. A project's `release` target (see `apps/cyd-clock/project.json`) wraps `tools/esp-flasher/generate_release.py`, producing a merged `.bin`, an OTA `.bin`, and an ESP Web Tools manifest entry per board under `dist/<project>/`. Two modes, one per board flag each:
+- `--build <env>:<chip>` — PlatformIO boards (e.g. cyd-clock). The script itself merges bootloader+partitions+app via `esptool merge_bin`.
+- `--esphome <env>:<chip>:<esphome_name>` — ESPHome boards (e.g. espframe). ESPHome's own build already produces a merged `firmware.factory.bin` and an app-only `firmware.bin`, so the script just copies them out of `builds/.esphome/build/<esphome_name>/.pioenvs/<esphome_name>/` instead of re-merging.
+
+Both modes write the same output shape, so a project can mix them if it ever needs to.
 
 - **Pages deploy always rebuilds every project** (`nx run-many -t build,build-fs,release`) so the web flasher index at `dist/index.html` stays complete regardless of what changed in a given push — Pages replaces the whole site on each deploy, so an affected-only build would drop unaffected projects' flashers from the live site.
-- **GitHub Release creation is gated on `nx affected`** — only projects with a `release` target that actually changed since the prior commit on `master` (via `nx show projects --affected --withTarget release`) get their `.bin`s attached to the new release. A push that doesn't touch any firmware project's sources skips creating a release entirely.
-- When adding a new board to an existing project, add its `--build <env>:<chip>` flag and matching `dependsOn` entry to that project's `release` target.
+- **GitHub Release creation is gated on `nx affected`**, diffed against a `last-release` git tag (not `event.before`/the prior commit) — only projects with a `release` target that changed since the last commit that *actually* produced a release get their `.bin`s attached to the new one. The tag only advances after a successful "Create GitHub release" step, so a CI failure mid-build can't silently narrow the next run's diff window and drop changes from the release. A push that doesn't touch any firmware project's sources since then skips creating a release entirely.
+- When adding a new board to an existing project, add its `--build <env>:<chip>` or `--esphome <env>:<chip>:<esphome_name>` flag and matching `dependsOn` entry to that project's `release` target.
 
 ## NX Guidelines
 

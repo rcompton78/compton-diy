@@ -175,11 +175,20 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--project-dir", required=True)
     parser.add_argument("--name",        required=True, help="Human-readable app name")
-    parser.add_argument("--build",       required=True, action="append",
+    parser.add_argument("--build",       action="append", default=[],
                         metavar="ENV:CHIP",
-                        help="Board variant, e.g. c3:ESP32-C3. Repeat for multiple.")
+                        help="PlatformIO board variant, e.g. c3:ESP32-C3. Repeat for multiple.")
+    parser.add_argument("--esphome",     action="append", default=[],
+                        metavar="ENV:CHIP:ESPHOME_NAME",
+                        help="ESPHome device variant, e.g. freenove-s3:ESP32-S3:immich-frame-freenove-s3. "
+                             "ESPHome already merges bootloader+partitions+app, so unlike --build this just "
+                             "copies builds/.esphome/build/ESPHOME_NAME/.pioenvs/ESPHOME_NAME/firmware{.factory,}.bin. "
+                             "Repeat for multiple.")
     parser.add_argument("--version",     default="dev")
     args = parser.parse_args()
+
+    if not args.build and not args.esphome:
+        parser.error("at least one --build or --esphome variant is required")
 
     project_dir = os.path.join(REPO_ROOT, args.project_dir)
     app_slug    = os.path.basename(args.project_dir)
@@ -194,10 +203,21 @@ def main():
         env_name, chip = b.split(":", 1)
         variants.append({"env": env_name, "chip": chip})
 
-    # Merge firmware for each variant
+    # Parse --esphome env:CHIP:esphome_name triples
+    esphome_variants = []
+    for e in args.esphome:
+        parts = e.split(":")
+        if len(parts) != 3:
+            parser.error(f"--esphome must be in ENV:CHIP:ESPHOME_NAME format, got: {e}")
+        env_name, chip, esphome_name = parts
+        esphome_variants.append({"env": env_name, "chip": chip, "esphome_name": esphome_name})
+
+    multi_variant = (len(variants) + len(esphome_variants)) > 1
+
+    # Merge firmware for each PlatformIO variant
     builds_for_manifest = []
     for v in variants:
-        suffix   = f"-{v['env']}" if len(variants) > 1 else ""
+        suffix   = f"-{v['env']}" if multi_variant else ""
         bin_name = f"{app_slug}{suffix}.bin"
         print(f"==> Merging {v['env']} ({v['chip']})")
         merge_firmware(project_dir, v["env"], v["chip"],
@@ -210,6 +230,26 @@ def main():
         ota_src = os.path.join(project_dir, ".pio", "build", v["env"], "firmware.bin")
         shutil.copy(ota_src, os.path.join(dist_dir, ota_bin_name))
 
+    # Copy already-merged firmware for each ESPHome variant
+    for v in esphome_variants:
+        suffix   = f"-{v['env']}" if multi_variant else ""
+        bin_name = f"{app_slug}{suffix}.bin"
+        pioenvs_dir = os.path.join(project_dir, "builds", ".esphome", "build",
+                                    v["esphome_name"], ".pioenvs", v["esphome_name"])
+        factory_src = os.path.join(pioenvs_dir, "firmware.factory.bin")
+        ota_src     = os.path.join(pioenvs_dir, "firmware.bin")
+        if not os.path.exists(factory_src):
+            raise RuntimeError(
+                f"ESPHome factory binary not found: {factory_src} "
+                f"(run the espframe build-{v['env']} target first)"
+            )
+        print(f"==> Copying ESPHome build for {v['env']} ({v['chip']})")
+        shutil.copy(factory_src, os.path.join(dist_dir, bin_name))
+        builds_for_manifest.append({"chipFamily": v["chip"], "bin": bin_name})
+
+        ota_bin_name = f"{app_slug}{suffix}-ota.bin"
+        shutil.copy(ota_src, os.path.join(dist_dir, ota_bin_name))
+
     print("==> Generating manifest")
     generate_manifest(args.name, args.version, builds_for_manifest,
                       os.path.join(dist_dir, "manifest.json"))
@@ -218,7 +258,7 @@ def main():
     copy_flasher_html(args.name, app_slug, args.version,
                       os.path.join(dist_dir, "index.html"))
 
-    print(f"==> Done — dist/{app_slug}/ ({len(variants)} variant(s))")
+    print(f"==> Done — dist/{app_slug}/ ({len(variants) + len(esphome_variants)} variant(s))")
 
 
 if __name__ == "__main__":
