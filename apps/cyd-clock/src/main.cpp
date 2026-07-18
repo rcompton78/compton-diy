@@ -71,6 +71,8 @@ static constexpr uint32_t STORE_COST_PENGUIN  = 150;
 static constexpr uint32_t STORE_COST_BLANKET  = 40;  // per blanket color
 static constexpr uint32_t STORE_COST_ROOM_THEME = 40;  // per flat-color room theme, matches blanket pricing
 static constexpr uint32_t STORE_COST_STARRY_NIGHT = 200;  // premium: has real art (moon + stars), not just a flat fill
+static constexpr uint32_t STORE_COST_CAT_COLOR_SOLID   = 100;  // black, grey — flat recolor
+static constexpr uint32_t STORE_COST_CAT_COLOR_PATTERN = 200;  // tabby, calico — real stripe/patch art
 
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
@@ -121,6 +123,55 @@ static constexpr BlanketColor BLANKET_COLORS[] = {
     {"tangerine",    "Tangerine",    0xFD2A, 0xD3E5, "#FFA552"},  // warm orange blanket, burnt-orange fold trim
 };
 static constexpr int BLANKET_COLOR_COUNT = sizeof(BLANKET_COLORS) / sizeof(BLANKET_COLORS[0]);
+
+// Pattern accent colors for the two patterned cat colors below — kept as named constants
+// since both the catalog and the pattern-drawing functions reference them.
+static constexpr uint16_t C_TABBY_BASE   = 0xD46A;  // warm tan/orange base fur
+static constexpr uint16_t C_TABBY_STRIPE = 0x7A23;  // dark brown stripes
+static constexpr uint16_t C_CALICO_ORANGE = C_FISH;  // ginger patches — reuses the treat-button orange
+static constexpr uint16_t C_CALICO_BLACK  = 0x1082;  // black patches — same tone as the solid "black" cat, for the same C_DARK contrast reason
+
+// Tabby/calico pattern art, layered on top of the base fill. Split into a head pass
+// (called after the head fill, before eyes/nose/whiskers/mouth so those still paint
+// cleanly on top of any overlap) and a body pass (called after body/paws/tail, so
+// patches sit on the finished silhouette). First-pass geometry — expect to tune after
+// seeing it on real hardware. Forward-declared here (like the stuffy draw functions
+// below) so CAT_COLORS[] can reference them directly; defined later alongside drawCat(),
+// since they need `tft`, declared further down.
+static void drawTabbyHeadPattern(int cx, int cy);
+static void drawTabbyBodyPattern(int cx, int cy);
+static void drawCalicoHeadPattern(int cx, int cy);
+static void drawCalicoBodyPattern(int cx, int cy);
+
+// Cat color catalog — same purchase/equip model as blanket colors. White (C_CAT) is the
+// default and always available, so it's not itself a catalog entry: an unowned/unequipped
+// state (equippedCatColorIndex() == -1) simply falls back to C_CAT rather than needing a
+// "free" bit. `id` is the stable identifier used in store/dressing-room form posts and
+// persisted config; never reorder/reuse indices for a different color, since ownership is
+// stored as a bitmask keyed by array index. `drawHeadPattern`/`drawBodyPattern` are nullptr
+// for flat colors; tabby/calico layer real stripe/patch art on top of `fill` via drawCat().
+struct CatColor {
+    const char* id;
+    const char* label;
+    uint16_t fill;
+    const char* webColor;  // CSS hex approximation of `fill`, for coloring its label in the config UI
+    bool cuteEyes;  // smaller eyes with a higher pupil-to-sclera ratio, instead of the default wide-eyed look
+    uint32_t cost;
+    void (*drawHeadPattern)(int cx, int cy);
+    void (*drawBodyPattern)(int cx, int cy);
+};
+static constexpr CatColor CAT_COLORS[] = {
+    // Not literal 0x0000 — C_DARK (whiskers/mouth/closed-eye lines) is a charcoal
+    // 0x2945, which would nearly vanish against pure black. This dark grey keeps those
+    // details visible while still reading as "black cat".
+    // webColor is #fff, not the near-black fill above — that's for the store/dressing-room
+    // label text, which would be nearly invisible against the page's own dark background.
+    {"black",  "Black",  0x1082, "#ffffff", false, STORE_COST_CAT_COLOR_SOLID,   nullptr, nullptr},
+    {"grey",   "Grey",   0x8410, "#808080", true,  STORE_COST_CAT_COLOR_SOLID,   nullptr, nullptr},
+    {"tabby",  "Tabby",  C_TABBY_BASE, "#c89050", false, STORE_COST_CAT_COLOR_PATTERN, drawTabbyHeadPattern,  drawTabbyBodyPattern},
+    {"calico", "Calico", TFT_WHITE,    "#ffffff", false, STORE_COST_CAT_COLOR_PATTERN, drawCalicoHeadPattern, drawCalicoBodyPattern},
+};
+static constexpr int CAT_COLOR_COUNT = sizeof(CAT_COLORS) / sizeof(CAT_COLORS[0]);
 
 // Forward declarations: each stuffy's sleep-scene art, defined further below alongside
 // drawSleepingCat(). Declared here so the STUFFIES[] catalog can reference them directly —
@@ -276,22 +327,80 @@ unsigned long forceThirstDeadlineMs = 0; // test-only: armed via /config, 0 = no
 
 struct { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick, hungerLines, zzzFx, animalBg; } dirty = {true, true, true, true, false, false, false, false, false, true};
 bool pointsFlashOn = false;  // toggled every ~500ms while hasNewStoreItems(); read by drawPoints()
+bool saleFlashOn = false;    // toggled every ~500ms while the black cat flash sale is active; read by drawSaleFlash()
 
+
+// Forward declarations: resolves the cat's current equipped color index, its body/fill
+// color (the equipped store color if owned, else white/C_CAT), and whether it uses the
+// smaller "cute" eye style — all defined below alongside equippedBlanketIndex(). Declared
+// here so drawEyes()/drawCat() can call them directly, since they're defined before the
+// resolvers they depend on.
+static int equippedCatColorIndex();
+static uint16_t catBodyColor();
+static bool catHasCuteEyes();
+
+// Tabby/calico pattern art bodies (declared earlier alongside CAT_COLORS[]). Head pass
+// runs after the head fill but before eyes/nose/whiskers/mouth, so those still paint
+// cleanly on top of any overlap; body pass runs after body/paws/tail, so patches sit on
+// the finished silhouette. First-pass geometry — expect to tune after real hardware.
+static void drawTabbyHeadPattern(int cx, int cy) {
+    // Cheek stripes only — no forehead "M" mark
+    tft.drawLine(cx - 38, cy - 55, cx - 30, cy - 50, C_TABBY_STRIPE);
+    tft.drawLine(cx + 38, cy - 55, cx + 30, cy - 50, C_TABBY_STRIPE);
+}
+static void drawTabbyBodyPattern(int cx, int cy) {
+    // Body bands
+    tft.fillRect(cx - 22, cy + 12, 44, 4, C_TABBY_STRIPE);
+    tft.fillRect(cx - 22, cy + 26, 44, 4, C_TABBY_STRIPE);
+    // Tail rings
+    tft.fillRect(cx + 26, cy + 22, 12, 3, C_TABBY_STRIPE);
+    tft.fillRect(cx + 26, cy + 36, 12, 3, C_TABBY_STRIPE);
+}
+static void drawCalicoHeadPattern(int cx, int cy) {
+    tft.fillCircle(cx + 28, cy - 50, 12, C_CALICO_ORANGE);
+    tft.fillCircle(cx - 26, cy - 30, 10, C_CALICO_BLACK);
+}
+static void drawCalicoBodyPattern(int cx, int cy) {
+    tft.fillCircle(cx - 15, cy + 20, 12, C_CALICO_ORANGE);
+    tft.fillCircle(cx + 12, cy + 35, 10, C_CALICO_BLACK);
+}
+
+// Draws just the eye shapes (sclera/pupil/glint, or a closed dash) into an already
+// head-colored rect. Shared by drawEyes() (blink-only partial redraw) and drawCat()
+// (full redraw) so the two can never drift out of sync. `cute` selects the grey cat's
+// smaller eyes with a higher pupil-to-sclera ratio; the default/black look is unchanged.
+static void drawEyeShapes(int cx, int cy, bool eyeOpen, bool cute) {
+    if (!cute) {
+        if (eyeOpen) {
+            tft.fillCircle(cx - 15, cy - 37, 11, TFT_WHITE);
+            tft.fillCircle(cx + 15, cy - 37, 11, TFT_WHITE);
+            tft.fillCircle(cx - 14, cy - 37,  5, TFT_BLACK);
+            tft.fillCircle(cx + 16, cy - 37,  5, TFT_BLACK);
+            tft.fillRect(cx - 19, cy - 43, 4, 4, TFT_WHITE);
+            tft.fillRect(cx + 12, cy - 43, 4, 4, TFT_WHITE);
+        } else {
+            tft.fillRoundRect(cx - 24, cy - 41, 20, 7, 3, C_DARK);
+            tft.fillRoundRect(cx +  4, cy - 41, 20, 7, 3, C_DARK);
+        }
+        return;
+    }
+    if (eyeOpen) {
+        tft.fillCircle(cx - 13, cy - 36, 7, TFT_WHITE);
+        tft.fillCircle(cx + 13, cy - 36, 7, TFT_WHITE);
+        tft.fillCircle(cx - 12, cy - 36, 4, TFT_BLACK);
+        tft.fillCircle(cx + 14, cy - 36, 4, TFT_BLACK);
+        tft.fillRect(cx - 15, cy - 40, 3, 3, TFT_WHITE);
+        tft.fillRect(cx + 11, cy - 40, 3, 3, TFT_WHITE);
+    } else {
+        tft.fillRoundRect(cx - 21, cy - 39, 16, 6, 3, C_DARK);
+        tft.fillRoundRect(cx +  5, cy - 39, 16, 6, 3, C_DARK);
+    }
+}
 
 // ── Cat drawing ───────────────────────────────────────────────────────────────
 static void drawEyes(int cx, int cy, bool eyeOpen) {
-    tft.fillRect(cx - 28, cy - 50, 56, 26, C_CAT);  // restore head colour before drawing eyes
-    if (eyeOpen) {
-        tft.fillCircle(cx - 15, cy - 37, 11, TFT_WHITE);
-        tft.fillCircle(cx + 15, cy - 37, 11, TFT_WHITE);
-        tft.fillCircle(cx - 14, cy - 37,  5, TFT_BLACK);
-        tft.fillCircle(cx + 16, cy - 37,  5, TFT_BLACK);
-        tft.fillRect(cx - 19, cy - 43, 4, 4, TFT_WHITE);
-        tft.fillRect(cx + 12, cy - 43, 4, 4, TFT_WHITE);
-    } else {
-        tft.fillRoundRect(cx - 24, cy - 41, 20, 7, 3, C_DARK);
-        tft.fillRoundRect(cx +  4, cy - 41, 20, 7, 3, C_DARK);
-    }
+    tft.fillRect(cx - 28, cy - 50, 56, 26, catBodyColor());  // restore head colour before drawing eyes
+    drawEyeShapes(cx, cy, eyeOpen, catHasCuteEyes());
 }
 
 // Forward declaration: paints exactly the given rect of the animal zone using whichever room
@@ -305,30 +414,25 @@ static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom b
     bool queasy  = (health == CatHealth::Sick) && !happy;
     bool thirsty = (thirst == CatThirst::Thirsty);
     bool sad     = (status == CatStatus::Hungry || boredom == CatBoredom::VeryBored || thirsty) && !happy && !queasy;
+    uint16_t col = catBodyColor();
+    int colorIdx = equippedCatColorIndex();
 
     zoneFillRect(cx - 50, cy - 88, 100, 146);
 
     // Ears
-    tft.fillTriangle(cx - 16, cy - 86, cx - 32, cy - 62, cx -  2, cy - 62, C_CAT);
-    tft.fillTriangle(cx + 16, cy - 86, cx + 32, cy - 62, cx +  2, cy - 62, C_CAT);
+    tft.fillTriangle(cx - 16, cy - 86, cx - 32, cy - 62, cx -  2, cy - 62, col);
+    tft.fillTriangle(cx + 16, cy - 86, cx + 32, cy - 62, cx +  2, cy - 62, col);
     tft.fillTriangle(cx - 16, cy - 80, cx - 28, cy - 64, cx -  5, cy - 64, C_PINK);
     tft.fillTriangle(cx + 16, cy - 80, cx + 28, cy - 64, cx +  5, cy - 64, C_PINK);
 
-    // Head (always white — hunger only affects body)
-    tft.fillRoundRect(cx - 44, cy - 64, 88, 66, 20, C_CAT);
+    // Head (always the equipped cat color — hunger only affects body)
+    tft.fillRoundRect(cx - 44, cy - 64, 88, 66, 20, col);
+    if (colorIdx >= 0 && CAT_COLORS[colorIdx].drawHeadPattern) {
+        CAT_COLORS[colorIdx].drawHeadPattern(cx, cy);
+    }
 
     // Eyes
-    if (eyeOpen) {
-        tft.fillCircle(cx - 15, cy - 37, 11, TFT_WHITE);
-        tft.fillCircle(cx + 15, cy - 37, 11, TFT_WHITE);
-        tft.fillCircle(cx - 14, cy - 37,  5, TFT_BLACK);
-        tft.fillCircle(cx + 16, cy - 37,  5, TFT_BLACK);
-        tft.fillRect(cx - 19, cy - 43, 4, 4, TFT_WHITE);
-        tft.fillRect(cx + 12, cy - 43, 4, 4, TFT_WHITE);
-    } else {
-        tft.fillRoundRect(cx - 24, cy - 41, 20, 7, 3, C_DARK);
-        tft.fillRoundRect(cx +  4, cy - 41, 20, 7, 3, C_DARK);
-    }
+    drawEyeShapes(cx, cy, eyeOpen, catHasCuteEyes());
 
     // Nose
     tft.fillTriangle(cx, cy - 22, cx - 4, cy - 15, cx + 4, cy - 15, C_PINK);
@@ -376,19 +480,23 @@ static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom b
     }
 
     // Body
-    tft.fillRoundRect(cx - 30, cy + 2, 60, 54, 15, C_CAT);
+    tft.fillRoundRect(cx - 30, cy + 2, 60, 54, 15, col);
 
     // Paws
-    tft.fillRoundRect(cx - 32, cy + 42, 24, 14, 7, C_CAT);
-    tft.fillRoundRect(cx +  8, cy + 42, 24, 14, 7, C_CAT);
+    tft.fillRoundRect(cx - 32, cy + 42, 24, 14, 7, col);
+    tft.fillRoundRect(cx +  8, cy + 42, 24, 14, 7, col);
     for (int d = -4; d <= 4; d += 4) {
         tft.drawLine(cx - 20 + d, cy + 52, cx - 20 + d, cy + 56, C_DARK);
         tft.drawLine(cx + 20 + d, cy + 52, cx + 20 + d, cy + 56, C_DARK);
     }
 
     // Tail (right side)
-    tft.fillRoundRect(cx + 26, cy + 18, 12, 36, 6, C_CAT);
-    tft.fillRoundRect(cx + 14, cy + 50, 28, 10, 5, C_CAT);
+    tft.fillRoundRect(cx + 26, cy + 18, 12, 36, 6, col);
+    tft.fillRoundRect(cx + 14, cy + 50, 28, 10, 5, col);
+
+    if (colorIdx >= 0 && CAT_COLORS[colorIdx].drawBodyPattern) {
+        CAT_COLORS[colorIdx].drawBodyPattern(cx, cy);
+    }
 }
 
 // Calm, static "asleep" scene for the sleep-window peek: reuses drawCat() with a
@@ -437,6 +545,34 @@ static int equippedRoomThemeIndex() {
     return -1;
 }
 
+// Same resolution logic as equippedBlanketIndex(), for the cat color catalog.
+static int equippedCatColorIndex() {
+    uint8_t owned = configMgr.config().ownedCatColors;
+    if (owned == 0) return -1;
+    uint8_t eq = configMgr.config().equippedCatColor;
+    if (eq == EQUIP_NONE) return -1;  // user explicitly unequipped
+    if (eq < CAT_COLOR_COUNT && (owned & (1 << eq))) return eq;
+    for (int i = 0; i < CAT_COLOR_COUNT; i++) {
+        if (owned & (1 << i)) return i;
+    }
+    return -1;
+}
+
+// Resolves the cat's current body/fill color — the equipped catalog color if owned, else
+// C_CAT (white), the always-available default. Read wherever the cat sprite is drawn or
+// erased, so purchasing/equipping a new color repaints correctly everywhere at once.
+static uint16_t catBodyColor() {
+    int idx = equippedCatColorIndex();
+    return idx >= 0 ? CAT_COLORS[idx].fill : C_CAT;
+}
+
+// Whether the equipped cat color uses the smaller "cute" eye style — false (the
+// default/big-eyed look) for white and any color that doesn't opt in.
+static bool catHasCuteEyes() {
+    int idx = equippedCatColorIndex();
+    return idx >= 0 && CAT_COLORS[idx].cuteEyes;
+}
+
 // Returns the equipped room theme's representative solid color, or TFT_BLACK if none
 // equipped — used for cheap operations like text glyph background erasure, where invoking
 // a full themed repaint isn't practical (TFT_eSPI's font renderer only accepts a solid
@@ -470,13 +606,14 @@ static void zoneFillRect(int x, int y, int w, int h) {
     else tft.fillRect(x, y, w, h, TFT_BLACK);
 }
 
-// True whenever the store catalog has grown (a new stuffy, blanket color, or room theme
-// shipped in a firmware update) since the last time the user opened the store page —
-// cleared by handleConfigStoreGet(), which stamps the current catalog sizes as "seen".
+// True whenever the store catalog has grown (a new stuffy, blanket color, room theme, or
+// cat color shipped in a firmware update) since the last time the user opened the store
+// page — cleared by handleConfigStoreGet(), which stamps the current catalog sizes as "seen".
 static bool hasNewStoreItems() {
     return STUFFY_COUNT > configMgr.config().seenStuffyCount ||
            BLANKET_COLOR_COUNT > configMgr.config().seenBlanketColorCount ||
-           ROOM_THEME_COUNT > configMgr.config().seenRoomThemeCount;
+           ROOM_THEME_COUNT > configMgr.config().seenRoomThemeCount ||
+           CAT_COLOR_COUNT > configMgr.config().seenCatColorCount;
 }
 
 // Shared ear/head/snout/eyes/nose art reused by both teddy variants below.
@@ -618,7 +755,7 @@ static void drawPenguinFull(int cx, int cy, uint16_t accentColor) {
 // the outer corners than drawEyes()'s blink-style dash, so the cat reads as actually
 // asleep rather than mid-blink.
 static void drawSleepyEyes(int cx, int cy) {
-    tft.fillRect(cx - 28, cy - 50, 56, 26, C_CAT);  // restore head colour before drawing eyes
+    tft.fillRect(cx - 28, cy - 50, 56, 26, catBodyColor());  // restore head colour before drawing eyes
     tft.fillRoundRect(cx - 24, cy - 39, 20, 3, 1, C_DARK);
     tft.fillRoundRect(cx +  4, cy - 39, 20, 3, 1, C_DARK);
     tft.drawLine(cx - 24, cy - 39, cx - 27, cy - 42, C_DARK);  // outer curl, left eye
@@ -726,7 +863,7 @@ static void clearSparkles(int cx, int cy) {
 static void drawHungerLines(int cx, int cy, bool show) {
     // Three short horizontal lines on the tummy — manga hunger growl effect
     int bx = cx - 12, by = cy + 18;
-    uint16_t col = show ? C_RUMBLE : C_CAT;  // erase with body colour to avoid flicker
+    uint16_t col = show ? C_RUMBLE : catBodyColor();  // erase with body colour to avoid flicker
     tft.drawFastHLine(bx,      by,      14, col);
     tft.drawFastHLine(bx +  2, by +  8, 10, col);
     tft.drawFastHLine(bx,      by + 16, 14, col);
@@ -871,6 +1008,22 @@ static void drawPoints() {
     tft.drawString(ptsBuf, 234 - ptsWidth, ANIMAL_Y + 4, 2);
 }
 
+// Forward declaration: true during the black cat flash sale window, defined below
+// alongside isInSleepWindow(). Declared here so drawSaleFlash() can call it directly.
+static bool isBlackCatSaleActive();
+
+// "SALE" banner just below the points balance, flashing red/yellow while the black cat
+// flash sale is active. Same clear-rect x-start as drawPoints() (past the ear boundary).
+static void drawSaleFlash() {
+    zoneFillRect(155, ANIMAL_Y + 20, 85, 16);
+    if (!isBlackCatSaleActive()) return;
+    const char* label = "SALE!";
+    uint16_t color = saleFlashOn ? TFT_RED : TFT_YELLOW;
+    tft.setTextColor(color, zoneBgColor());
+    int w = tft.textWidth(label, 2);
+    tft.drawString(label, 234 - w, ANIMAL_Y + 22, 2);
+}
+
 static void drawAnimal() {
     if (dirty.animalBg) {
         zoneFillRect(0, ANIMAL_Y, 240, ANIMAL_H);
@@ -902,6 +1055,7 @@ static void drawAnimal() {
     // Points balance — drawn after drawCat()/drawSleepingCat() since both repaint their own
     // clear rect internally and would otherwise wipe this out.
     drawPoints();
+    drawSaleFlash();
 
     // Boredom "Zz" overlay — sits outside the main clear rect, so always redraw/erase
     // here regardless of tier; cat.napping already encodes whether it should show
@@ -1196,7 +1350,7 @@ static void updateCatAnim() {
     if (cat.mood == CatMood::Happy && now - cat.since > 3000) {
         cat.mood = CatMood::Idle; changed = true;
     }
-    if (cat.mood == CatMood::Celebrate && now - cat.since > 6000) {
+    if (cat.mood == CatMood::Celebrate && now - cat.since > 3000) {
         cat.mood = CatMood::Idle; changed = true;
     }
 
@@ -1404,6 +1558,22 @@ static bool isInSleepWindow(int nowMinutes) {
     if (bed == wake) return false;               // degenerate: treat as "sleep disabled"
     if (bed < wake) return nowMinutes >= bed && nowMinutes < wake;   // same-day window
     return nowMinutes >= bed || nowMinutes < wake;                   // wraps midnight
+}
+
+// ── Black cat flash sale (3pm-10pm device local time) ──────────────────────────
+static constexpr int BLACK_CAT_SALE_START_MIN = 15 * 60;  // 3pm
+static constexpr int BLACK_CAT_SALE_END_MIN   = 22 * 60;  // 10pm
+static constexpr uint32_t BLACK_CAT_SALE_PRICE = 50;  // half off STORE_COST_CAT_COLOR_SOLID
+
+// Self-contained (fetches its own local time) so it can be called from the store HTTP
+// handlers as well as loop(), not just places that already have nowMinutes in scope.
+static bool isBlackCatSaleActive() {
+    time_t epoch = ntpClient.getEpochTime();
+    time_t utcCheck = epoch - (time_t)configMgr.config().utcOffsetSeconds;
+    if (utcCheck <= 1000000000) return false;  // not NTP-synced yet — sanity check, matches loop()'s
+    struct tm* t = localtime(&epoch);
+    int nowMinutes = t->tm_hour * 60 + t->tm_min;
+    return nowMinutes >= BLACK_CAT_SALE_START_MIN && nowMinutes < BLACK_CAT_SALE_END_MIN;
 }
 
 struct SleepPos { int x, y; };
@@ -1722,6 +1892,9 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 %%MSG%%
 <div class="balance">Points: <strong>%%POINTS%%</strong></div>
 
+<h3>Cat Colors</h3>
+%%CAT_COLOR_ITEMS%%
+
 <h3>Stuffies (night only)</h3>
 %%STUFFY_ITEMS%%
 
@@ -1771,6 +1944,9 @@ static const char CONFIG_DRESS_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h2>Dressing Room</h2>
 %%MSG%%
 <form method="POST" action="/save-config/dress">
+
+<h3>Cat Colors</h3>
+%%CAT_COLOR_OPTIONS%%
 
 <h3>Stuffies (night only)</h3>
 %%STUFFY_OPTIONS%%
@@ -1900,6 +2076,7 @@ static void handleConfigStoreGet() {
         configMgr.config().seenStuffyCount       = (uint8_t)STUFFY_COUNT;
         configMgr.config().seenBlanketColorCount = (uint8_t)BLANKET_COLOR_COUNT;
         configMgr.config().seenRoomThemeCount    = (uint8_t)ROOM_THEME_COUNT;
+        configMgr.config().seenCatColorCount     = (uint8_t)CAT_COLOR_COUNT;
         configMgr.save();
     }
     String page = String(FPSTR(CONFIG_STORE_HTML));
@@ -1931,6 +2108,18 @@ static void handleConfigStoreGet() {
         roomThemeItems += "</div>\n";
     }
     page.replace("%%ROOM_THEME_ITEMS%%", roomThemeItems);
+    String catColorItems = "";
+    bool blackCatOnSale = isBlackCatSaleActive();
+    for (int i = 0; i < CAT_COLOR_COUNT; i++) {
+        bool owned = configMgr.config().ownedCatColors & (1 << i);
+        bool onSale = blackCatOnSale && strcmp(CAT_COLORS[i].id, "black") == 0;
+        uint32_t itemCost = onSale ? BLACK_CAT_SALE_PRICE : CAT_COLORS[i].cost;
+        catColorItems += "<div class='item'><span style='color:" + String(CAT_COLORS[i].webColor) + "'>Cat - " + String(CAT_COLORS[i].label) + "</span>";
+        if (onSale) catColorItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        catColorItems += storeItemAction(CAT_COLORS[i].id, owned, itemCost, points);
+        catColorItems += "</div>\n";
+    }
+    page.replace("%%CAT_COLOR_ITEMS%%", catColorItems);
     String msg = "";
     if (wm.server->hasArg("cheat")) {
         msg = "<div class='banner ok'>+50 points!</div>";
@@ -2160,7 +2349,7 @@ static void handleConfigStorePost() {
     String item = wm.server->arg("item");
     uint32_t cost;
     bool alreadyOwned;
-    int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1;
+    int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1, catColorIdx = -1;
     for (int i = 0; i < STUFFY_COUNT; i++) {
         if (item == STUFFIES[i].id) { stuffyIdx = i; break; }
     }
@@ -2178,12 +2367,21 @@ static void handleConfigStorePost() {
             for (int i = 0; i < ROOM_THEME_COUNT; i++) {
                 if (item == ROOM_THEMES[i].id) { roomThemeIdx = i; break; }
             }
-            if (roomThemeIdx < 0) {
-                wm.server->send(400, "text/plain", "Unknown item");
-                return;
+            if (roomThemeIdx >= 0) {
+                cost = ROOM_THEMES[roomThemeIdx].cost;
+                alreadyOwned = configMgr.config().ownedRoomThemes & (1 << roomThemeIdx);
+            } else {
+                for (int i = 0; i < CAT_COLOR_COUNT; i++) {
+                    if (item == CAT_COLORS[i].id) { catColorIdx = i; break; }
+                }
+                if (catColorIdx < 0) {
+                    wm.server->send(400, "text/plain", "Unknown item");
+                    return;
+                }
+                cost = (strcmp(CAT_COLORS[catColorIdx].id, "black") == 0 && isBlackCatSaleActive())
+                    ? BLACK_CAT_SALE_PRICE : CAT_COLORS[catColorIdx].cost;
+                alreadyOwned = configMgr.config().ownedCatColors & (1 << catColorIdx);
             }
-            cost = ROOM_THEMES[roomThemeIdx].cost;
-            alreadyOwned = configMgr.config().ownedRoomThemes & (1 << roomThemeIdx);
         }
     }
 
@@ -2205,6 +2403,9 @@ static void handleConfigStorePost() {
     } else if (roomThemeIdx >= 0) {
         configMgr.config().ownedRoomThemes |= (1 << roomThemeIdx);
         configMgr.config().equippedRoomTheme = roomThemeIdx;  // newly bought theme becomes equipped
+    } else if (catColorIdx >= 0) {
+        configMgr.config().ownedCatColors |= (1 << catColorIdx);
+        configMgr.config().equippedCatColor = catColorIdx;  // newly bought color becomes equipped
     } else {
         configMgr.config().ownedStuffies |= (1 << stuffyIdx);
         configMgr.config().equippedStuffy = stuffyIdx;  // newly bought stuffy becomes equipped
@@ -2214,6 +2415,7 @@ static void handleConfigStorePost() {
         configMgr.config().points += cost;
         if (blanketIdx >= 0) configMgr.config().ownedBlanketColors &= ~(1 << blanketIdx);
         else if (roomThemeIdx >= 0) configMgr.config().ownedRoomThemes &= ~(1 << roomThemeIdx);
+        else if (catColorIdx >= 0) configMgr.config().ownedCatColors &= ~(1 << catColorIdx);
         else configMgr.config().ownedStuffies &= ~(1 << stuffyIdx);
         wm.server->sendHeader("Location", "/config/store?err=save");
         wm.server->send(302, "text/plain", "");
@@ -2292,6 +2494,23 @@ static void handleConfigDressGet() {
     }
     page.replace("%%ROOM_THEME_OPTIONS%%", themeOptions);
 
+    uint8_t ownedCatColors = configMgr.config().ownedCatColors;
+    int equippedCatColorIdx = equippedCatColorIndex();
+    String catColorOptions = "";
+    catColorOptions += "<label class='pick'><input type='radio' name='catColor' value='none'";
+    if (equippedCatColorIdx < 0) catColorOptions += " checked";
+    catColorOptions += "> White (default)</label>";
+    for (int i = 0; i < CAT_COLOR_COUNT; i++) {
+        if (!(ownedCatColors & (1 << i))) continue;
+        catColorOptions += "<label class='pick'><input type='radio' name='catColor' value='";
+        catColorOptions += CAT_COLORS[i].id;
+        catColorOptions += "'";
+        if (i == equippedCatColorIdx) catColorOptions += " checked";
+        catColorOptions += "> <span style='color:" + String(CAT_COLORS[i].webColor) + "'>"
+                          + String(CAT_COLORS[i].label) + "</span></label>";
+    }
+    page.replace("%%CAT_COLOR_OPTIONS%%", catColorOptions);
+
     String msg = "";
     if (wm.server->hasArg("saved"))
         msg = "<div class='banner ok'>Saved.</div>";
@@ -2350,6 +2569,23 @@ static void handleConfigDressPost() {
             return;
         }
         configMgr.config().equippedRoomTheme = idx;
+        changed = true;
+    }
+
+    String catColorId = wm.server->arg("catColor");
+    if (catColorId == "none") {
+        configMgr.config().equippedCatColor = EQUIP_NONE;  // falls back to white, catBodyColor()
+        changed = true;
+    } else if (catColorId.length() > 0) {
+        int idx = -1;
+        for (int i = 0; i < CAT_COLOR_COUNT; i++) {
+            if (catColorId == CAT_COLORS[i].id) { idx = i; break; }
+        }
+        if (idx < 0 || !(configMgr.config().ownedCatColors & (1 << idx))) {
+            wm.server->send(400, "text/plain", "Invalid selection");
+            return;
+        }
+        configMgr.config().equippedCatColor = idx;
         changed = true;
     }
 
@@ -2657,6 +2893,24 @@ void loop() {
             drawPoints();
         }
         wasNew = isNew;
+    }
+
+    // Sale flash — while the black cat flash sale is active, toggle the "SALE!" banner's
+    // color every 500ms; repaint once more with the flash off the moment the sale window
+    // ends so it doesn't linger.
+    {
+        static unsigned long lastSaleFlash = 0;
+        static bool wasSaleActive = false;
+        bool saleActive = isBlackCatSaleActive();
+        if (saleActive && now - lastSaleFlash >= 500) {
+            lastSaleFlash = now;
+            saleFlashOn = !saleFlashOn;
+            drawSaleFlash();
+        } else if (!saleActive && wasSaleActive) {
+            saleFlashOn = false;
+            drawSaleFlash();
+        }
+        wasSaleActive = saleActive;
     }
 
     // Timer row refresh while running

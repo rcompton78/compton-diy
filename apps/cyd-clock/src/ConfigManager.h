@@ -28,6 +28,9 @@ struct AppConfig {
     uint8_t ownedRoomThemes    = 0;  // Store purchase: bitmask, bit N = owns room theme N
     uint8_t equippedRoomTheme  = 0;  // Dressing room: index of the room theme to display
     uint8_t seenRoomThemeCount = 0;  // Highest ROOM_THEME_COUNT the store page has shown the user
+    uint8_t ownedCatColors     = 0;  // Store purchase: bitmask, bit N = owns cat color N (white is free, not in this catalog)
+    uint8_t equippedCatColor   = 0;  // Dressing room: index of the cat color to display
+    uint8_t seenCatColorCount  = 0;  // Highest CAT_COLOR_COUNT the store page has shown the user
     bool autoUpdateEnabled = true;         // Whether periodic firmware update checks run at all
     String lastUpdateCheckVersion;         // Latest release tag seen at the last check; empty = never checked
     uint32_t lastUpdateCheckEpoch = 0;     // Unix epoch of last check; 0 = never checked

@@ -68,6 +68,9 @@ void ConfigManager::fromJson(JsonDocument& doc) {
     _config.ownedRoomThemes    = doc["roomThemes"]       | _config.ownedRoomThemes;
     _config.equippedRoomTheme  = doc["roomThemeEquipped"] | _config.equippedRoomTheme;
     _config.seenRoomThemeCount = doc["seenRoomThemes"]    | _config.seenRoomThemeCount;
+    _config.ownedCatColors    = doc["catColors"]         | _config.ownedCatColors;
+    _config.equippedCatColor  = doc["catColorEquipped"]  | _config.equippedCatColor;
+    _config.seenCatColorCount = doc["seenCatColors"]     | _config.seenCatColorCount;
     _config.autoUpdateEnabled     = doc["autoUpdate"]   | _config.autoUpdateEnabled;
     _config.lastUpdateCheckVersion = doc["lastCheckVer"] | _config.lastUpdateCheckVersion;
     _config.lastUpdateCheckEpoch   = doc["lastCheckAt"]  | _config.lastUpdateCheckEpoch;
@@ -99,6 +102,9 @@ void ConfigManager::toJson(JsonDocument& doc) const {
     doc["roomThemes"]        = _config.ownedRoomThemes;
     doc["roomThemeEquipped"] = _config.equippedRoomTheme;
     doc["seenRoomThemes"]    = _config.seenRoomThemeCount;
+    doc["catColors"]        = _config.ownedCatColors;
+    doc["catColorEquipped"] = _config.equippedCatColor;
+    doc["seenCatColors"]    = _config.seenCatColorCount;
     doc["autoUpdate"]   = _config.autoUpdateEnabled;
     doc["lastCheckVer"] = _config.lastUpdateCheckVersion;
     doc["lastCheckAt"]  = _config.lastUpdateCheckEpoch;
