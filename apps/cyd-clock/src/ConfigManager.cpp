@@ -71,6 +71,12 @@ void ConfigManager::fromJson(JsonDocument& doc) {
     _config.ownedCatColors    = doc["catColors"]         | _config.ownedCatColors;
     _config.equippedCatColor  = doc["catColorEquipped"]  | _config.equippedCatColor;
     _config.seenCatColorCount = doc["seenCatColors"]     | _config.seenCatColorCount;
+    // Migration default is `true`, not the struct's `false`: a config file that predates this
+    // field means the device was already set up before the wizard existed, so it shouldn't be
+    // forced back through onboarding. Only a device with no config file at all (fresh install /
+    // factory reset) keeps the struct default of `false` and sees the wizard, since fromJson()
+    // never runs for it.
+    _config.setupComplete = doc["setupComplete"] | true;
     _config.autoUpdateEnabled     = doc["autoUpdate"]   | _config.autoUpdateEnabled;
     _config.lastUpdateCheckVersion = doc["lastCheckVer"] | _config.lastUpdateCheckVersion;
     _config.lastUpdateCheckEpoch   = doc["lastCheckAt"]  | _config.lastUpdateCheckEpoch;
@@ -105,6 +111,7 @@ void ConfigManager::toJson(JsonDocument& doc) const {
     doc["catColors"]        = _config.ownedCatColors;
     doc["catColorEquipped"] = _config.equippedCatColor;
     doc["seenCatColors"]    = _config.seenCatColorCount;
+    doc["setupComplete"]    = _config.setupComplete;
     doc["autoUpdate"]   = _config.autoUpdateEnabled;
     doc["lastCheckVer"] = _config.lastUpdateCheckVersion;
     doc["lastCheckAt"]  = _config.lastUpdateCheckEpoch;

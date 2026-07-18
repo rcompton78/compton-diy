@@ -322,6 +322,7 @@ bool asleep                    = false;  // set each loop before handleTouch(); 
 unsigned long peekUntilMs      = 0;      // 0 = not peeking; mirrors the showIpUntilMs idiom
 bool peekingAsleep             = false;  // true while touch-peeking during the sleep window — freezes cat state, draws the sleeping scene
 bool sleepScreenActive         = false;  // true once the black sleep screen has been painted this session
+bool setupPromptActive         = false;  // true once the first-run "complete setup at <ip>" screen has been painted this session
 unsigned long forceSickDeadlineMs = 0;   // test-only: armed via /config, 0 = not armed, not persisted
 unsigned long forceThirstDeadlineMs = 0; // test-only: armed via /config, 0 = not armed, not persisted
 
@@ -1680,6 +1681,35 @@ static const char CONFIG_HOME_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 </body></html>
 )html";
 
+static const char CONFIG_SETUP_HTML[] PROGMEM = R"html(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cat Control Panel · Setup</title>
+<style>%%STYLE%%</style>
+</head><body>
+<h2>Welcome!</h2>
+%%MSG%%
+<form method="POST" action="/save-config/setup">
+
+<div id="step1">
+<h3>Pick your cat's color</h3>
+%%COLOR_OPTIONS%%
+<button type="button" style="width:100%;margin-top:8px"
+  onclick="document.getElementById('step1').style.display='none';document.getElementById('step2').style.display='block'">Next</button>
+</div>
+
+<div id="step2" style="display:none">
+<h3>Name your cat</h3>
+<label>Name</label>
+<input name="name" id="name" maxlength="16" placeholder="Biscuit">
+<button type="submit" style="width:100%;margin-top:8px">Finish &amp; go to the store</button>
+</div>
+
+</form>
+</body></html>
+)html";
+
 static const char CONFIG_CAT_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
@@ -1999,9 +2029,78 @@ static void applyFoundUpdate(const OtaCheckResult& result);
 static void performUpdateCheck();
 
 static void handleConfigHome() {
+    if (!configMgr.config().setupComplete) {
+        wm.server->sendHeader("Location", "/setup");
+        wm.server->send(302, "text/plain", "");
+        return;
+    }
     String page = String(FPSTR(CONFIG_HOME_HTML));
     page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
     wm.server->send(200, "text/html", page);
+}
+
+// First-run setup wizard: reached via the on-device "complete setup at <ip>" screen (see
+// drawSetupPrompt()) once Wi-Fi is connected but configMgr.config().setupComplete is still
+// false. Only offers the free-tier solid colors (STORE_COST_CAT_COLOR_SOLID) — tabby/calico
+// stay store-only purchases, same as the "maybe" colors DIY-48's card described.
+static void handleSetupGet() {
+    String page = String(FPSTR(CONFIG_SETUP_HTML));
+    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+
+    String colorOptions = "<label class='pick'><input type='radio' name='catColor' value='none' checked> "
+                           "<span>White (default)</span></label>";
+    for (int i = 0; i < CAT_COLOR_COUNT; i++) {
+        if (CAT_COLORS[i].cost != STORE_COST_CAT_COLOR_SOLID) continue;
+        colorOptions += "<label class='pick'><input type='radio' name='catColor' value='";
+        colorOptions += CAT_COLORS[i].id;
+        colorOptions += "'> <span style='color:" + String(CAT_COLORS[i].webColor) + "'>"
+                       + String(CAT_COLORS[i].label) + "</span></label>";
+    }
+    page.replace("%%COLOR_OPTIONS%%", colorOptions);
+
+    String msg = "";
+    if (wm.server->hasArg("err")) msg = "<div class='banner err'>Please enter a name (max 16 characters).</div>";
+    page.replace("%%MSG%%", msg);
+    wm.server->send(200, "text/html", page);
+}
+
+static void handleSetupPost() {
+    String color = wm.server->arg("catColor");
+    String name = wm.server->arg("name");
+    name.trim();
+    if (name.length() == 0) name = "Biscuit";
+    bool nameOk = name.length() <= 16;
+    for (size_t i = 0; nameOk && i < name.length(); ++i) {
+        if ((unsigned char)name[i] < 0x20 || (unsigned char)name[i] == 0x7F) nameOk = false;
+    }
+    if (!nameOk) {
+        wm.server->sendHeader("Location", "/setup?err=name");
+        wm.server->send(302, "text/plain", "");
+        return;
+    }
+
+    configMgr.config().catName = name;
+    configMgr.config().points  = 70;
+    if (color == "none") {
+        configMgr.config().equippedCatColor = EQUIP_NONE;
+    } else {
+        int idx = -1;
+        for (int i = 0; i < CAT_COLOR_COUNT; i++) {
+            if (color == CAT_COLORS[i].id && CAT_COLORS[i].cost == STORE_COST_CAT_COLOR_SOLID) { idx = i; break; }
+        }
+        if (idx >= 0) {
+            configMgr.config().ownedCatColors  |= (1 << idx);
+            configMgr.config().equippedCatColor = (uint8_t)idx;
+        } else {
+            configMgr.config().equippedCatColor = EQUIP_NONE;
+        }
+    }
+    configMgr.config().setupComplete = true;
+    configMgr.save();
+
+    dirty.header = dirty.animal = dirty.animalBg = dirty.picker = dirty.timerRow = true;
+    wm.server->sendHeader("Location", "/config/store?welcome=1");
+    wm.server->send(302, "text/plain", "");
 }
 
 static void handleConfigCatGet() {
@@ -2621,6 +2720,16 @@ static void drawWifiPortal() {
     tft.drawCentreString("192.168.4.1", CX, 210, 4);
 }
 
+static void drawSetupPrompt() {
+    tft.fillScreen(TFT_BLACK);
+    tft.setTextColor(TFT_WHITE, TFT_BLACK);
+    tft.drawCentreString("Almost there!", CX, 70, 2);
+    tft.setTextColor(C_DIM, TFT_BLACK);
+    tft.drawCentreString("Complete setup at:", CX, 110, 2);
+    tft.setTextColor(TFT_GREEN, TFT_BLACK);
+    tft.drawCentreString(WiFi.localIP().toString().c_str(), CX, 150, 4);
+}
+
 static void drawOtaProgress(size_t written, size_t total) {
     static int lastPct = -1;
     int pct = total > 0 ? (int)(written * 100 / total) : 0;
@@ -2712,6 +2821,7 @@ static void runWiFiManager(ConfigManager& cfg) {
     wm.autoConnect("CYD-Clock");
     wm.startWebPortal();
     wm.server->on("/config",           HTTP_GET,  handleConfigHome);
+    wm.server->on("/setup",            HTTP_GET,  handleSetupGet);
     wm.server->on("/config/cat",       HTTP_GET,  handleConfigCatGet);
     wm.server->on("/config/city",      HTTP_GET,  handleConfigCityGet);
     wm.server->on("/config/store",     HTTP_GET,  handleConfigStoreGet);
@@ -2720,6 +2830,7 @@ static void runWiFiManager(ConfigManager& cfg) {
     wm.server->on("/config/backup/export", HTTP_GET,  handleConfigBackupExportGet);
     wm.server->on("/config/update",        HTTP_GET,  handleConfigUpdateGet);
     wm.server->on("/config/update/check",  HTTP_POST, handleConfigUpdateCheckPost);
+    wm.server->on("/save-config/setup", HTTP_POST, handleSetupPost);
     wm.server->on("/save-config/cat",  HTTP_POST, handleConfigCatPost);
     wm.server->on("/save-config/city", HTTP_POST, handleConfigCityPost);
     wm.server->on("/save-config/store", HTTP_POST, handleConfigStorePost);
@@ -2819,6 +2930,23 @@ void loop() {
             dirty.header = dirty.animal = dirty.picker = dirty.timerRow = true;  // clean full repaint on wake/peek
             dirty.animalBg = true;  // fillScreen just wiped the zone's backdrop too
         }
+    }
+
+    // First-run setup: hold on the "complete setup at <ip>" screen until the wizard (cat
+    // color + name) has been finished — mirrors the sleepScreenActive pattern above, painting
+    // once per transition rather than every loop iteration.
+    if (!configMgr.config().setupComplete) {
+        if (!setupPromptActive) {
+            drawSetupPrompt();
+            setupPromptActive = true;
+        }
+        delay(50);
+        return;
+    }
+    if (setupPromptActive) {
+        setupPromptActive = false;
+        tft.fillScreen(TFT_BLACK);
+        dirty.header = dirty.animal = dirty.animalBg = dirty.picker = dirty.timerRow = true;
     }
 
     // IP display expiry
