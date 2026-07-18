@@ -1561,7 +1561,7 @@ static bool isInSleepWindow(int nowMinutes) {
 }
 
 // ── Black cat flash sale (3pm-10pm device local time) ──────────────────────────
-static constexpr int BLACK_CAT_SALE_START_MIN = 11 * 60;  // TESTING: 11am (revert to 15*60 / 3pm before shipping)
+static constexpr int BLACK_CAT_SALE_START_MIN = 15 * 60;  // 3pm
 static constexpr int BLACK_CAT_SALE_END_MIN   = 22 * 60;  // 10pm
 static constexpr uint32_t BLACK_CAT_SALE_PRICE = 50;  // half off STORE_COST_CAT_COLOR_SOLID
 
