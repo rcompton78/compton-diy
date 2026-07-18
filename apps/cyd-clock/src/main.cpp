@@ -71,6 +71,7 @@ static constexpr uint32_t STORE_COST_PENGUIN  = 150;
 static constexpr uint32_t STORE_COST_BLANKET  = 40;  // per blanket color
 static constexpr uint32_t STORE_COST_ROOM_THEME = 40;  // per flat-color room theme, matches blanket pricing
 static constexpr uint32_t STORE_COST_STARRY_NIGHT = 200;  // premium: has real art (moon + stars), not just a flat fill
+static constexpr uint32_t STORE_COST_CAT_COLOR = 40;  // per cat color, matches blanket pricing
 
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
@@ -121,6 +122,27 @@ static constexpr BlanketColor BLANKET_COLORS[] = {
     {"tangerine",    "Tangerine",    0xFD2A, 0xD3E5, "#FFA552"},  // warm orange blanket, burnt-orange fold trim
 };
 static constexpr int BLANKET_COLOR_COUNT = sizeof(BLANKET_COLORS) / sizeof(BLANKET_COLORS[0]);
+
+// Cat color catalog — same purchase/equip model as blanket colors. White (C_CAT) is the
+// default and always available, so it's not itself a catalog entry: an unowned/unequipped
+// state (equippedCatColorIndex() == -1) simply falls back to C_CAT rather than needing a
+// "free" bit. `id` is the stable identifier used in store/dressing-room form posts and
+// persisted config; never reorder/reuse indices for a different color, since ownership is
+// stored as a bitmask keyed by array index.
+struct CatColor {
+    const char* id;
+    const char* label;
+    uint16_t fill;
+    const char* webColor;  // CSS hex approximation of `fill`, for coloring its label in the config UI
+};
+static constexpr CatColor CAT_COLORS[] = {
+    // Not literal 0x0000 — C_DARK (whiskers/mouth/closed-eye lines) is a charcoal
+    // 0x2945, which would nearly vanish against pure black. This dark grey keeps those
+    // details visible while still reading as "black cat".
+    {"black", "Black", 0x1082, "#202020"},
+    {"grey",  "Grey",  0x8410, "#808080"},
+};
+static constexpr int CAT_COLOR_COUNT = sizeof(CAT_COLORS) / sizeof(CAT_COLORS[0]);
 
 // Forward declarations: each stuffy's sleep-scene art, defined further below alongside
 // drawSleepingCat(). Declared here so the STUFFIES[] catalog can reference them directly —
@@ -278,9 +300,15 @@ struct { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick,
 bool pointsFlashOn = false;  // toggled every ~500ms while hasNewStoreItems(); read by drawPoints()
 
 
+// Forward declaration: resolves the cat's current body/fill color (the equipped store
+// color if owned, else white/C_CAT), defined below alongside equippedBlanketIndex().
+// Declared here so drawEyes()/drawCat() can call it directly, since they're defined
+// before the resolver they depend on.
+static uint16_t catBodyColor();
+
 // ── Cat drawing ───────────────────────────────────────────────────────────────
 static void drawEyes(int cx, int cy, bool eyeOpen) {
-    tft.fillRect(cx - 28, cy - 50, 56, 26, C_CAT);  // restore head colour before drawing eyes
+    tft.fillRect(cx - 28, cy - 50, 56, 26, catBodyColor());  // restore head colour before drawing eyes
     if (eyeOpen) {
         tft.fillCircle(cx - 15, cy - 37, 11, TFT_WHITE);
         tft.fillCircle(cx + 15, cy - 37, 11, TFT_WHITE);
@@ -305,17 +333,18 @@ static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom b
     bool queasy  = (health == CatHealth::Sick) && !happy;
     bool thirsty = (thirst == CatThirst::Thirsty);
     bool sad     = (status == CatStatus::Hungry || boredom == CatBoredom::VeryBored || thirsty) && !happy && !queasy;
+    uint16_t col = catBodyColor();
 
     zoneFillRect(cx - 50, cy - 88, 100, 146);
 
     // Ears
-    tft.fillTriangle(cx - 16, cy - 86, cx - 32, cy - 62, cx -  2, cy - 62, C_CAT);
-    tft.fillTriangle(cx + 16, cy - 86, cx + 32, cy - 62, cx +  2, cy - 62, C_CAT);
+    tft.fillTriangle(cx - 16, cy - 86, cx - 32, cy - 62, cx -  2, cy - 62, col);
+    tft.fillTriangle(cx + 16, cy - 86, cx + 32, cy - 62, cx +  2, cy - 62, col);
     tft.fillTriangle(cx - 16, cy - 80, cx - 28, cy - 64, cx -  5, cy - 64, C_PINK);
     tft.fillTriangle(cx + 16, cy - 80, cx + 28, cy - 64, cx +  5, cy - 64, C_PINK);
 
-    // Head (always white — hunger only affects body)
-    tft.fillRoundRect(cx - 44, cy - 64, 88, 66, 20, C_CAT);
+    // Head (always the equipped cat color — hunger only affects body)
+    tft.fillRoundRect(cx - 44, cy - 64, 88, 66, 20, col);
 
     // Eyes
     if (eyeOpen) {
@@ -376,19 +405,19 @@ static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom b
     }
 
     // Body
-    tft.fillRoundRect(cx - 30, cy + 2, 60, 54, 15, C_CAT);
+    tft.fillRoundRect(cx - 30, cy + 2, 60, 54, 15, col);
 
     // Paws
-    tft.fillRoundRect(cx - 32, cy + 42, 24, 14, 7, C_CAT);
-    tft.fillRoundRect(cx +  8, cy + 42, 24, 14, 7, C_CAT);
+    tft.fillRoundRect(cx - 32, cy + 42, 24, 14, 7, col);
+    tft.fillRoundRect(cx +  8, cy + 42, 24, 14, 7, col);
     for (int d = -4; d <= 4; d += 4) {
         tft.drawLine(cx - 20 + d, cy + 52, cx - 20 + d, cy + 56, C_DARK);
         tft.drawLine(cx + 20 + d, cy + 52, cx + 20 + d, cy + 56, C_DARK);
     }
 
     // Tail (right side)
-    tft.fillRoundRect(cx + 26, cy + 18, 12, 36, 6, C_CAT);
-    tft.fillRoundRect(cx + 14, cy + 50, 28, 10, 5, C_CAT);
+    tft.fillRoundRect(cx + 26, cy + 18, 12, 36, 6, col);
+    tft.fillRoundRect(cx + 14, cy + 50, 28, 10, 5, col);
 }
 
 // Calm, static "asleep" scene for the sleep-window peek: reuses drawCat() with a
@@ -437,6 +466,27 @@ static int equippedRoomThemeIndex() {
     return -1;
 }
 
+// Same resolution logic as equippedBlanketIndex(), for the cat color catalog.
+static int equippedCatColorIndex() {
+    uint8_t owned = configMgr.config().ownedCatColors;
+    if (owned == 0) return -1;
+    uint8_t eq = configMgr.config().equippedCatColor;
+    if (eq == EQUIP_NONE) return -1;  // user explicitly unequipped
+    if (eq < CAT_COLOR_COUNT && (owned & (1 << eq))) return eq;
+    for (int i = 0; i < CAT_COLOR_COUNT; i++) {
+        if (owned & (1 << i)) return i;
+    }
+    return -1;
+}
+
+// Resolves the cat's current body/fill color — the equipped catalog color if owned, else
+// C_CAT (white), the always-available default. Read wherever the cat sprite is drawn or
+// erased, so purchasing/equipping a new color repaints correctly everywhere at once.
+static uint16_t catBodyColor() {
+    int idx = equippedCatColorIndex();
+    return idx >= 0 ? CAT_COLORS[idx].fill : C_CAT;
+}
+
 // Returns the equipped room theme's representative solid color, or TFT_BLACK if none
 // equipped — used for cheap operations like text glyph background erasure, where invoking
 // a full themed repaint isn't practical (TFT_eSPI's font renderer only accepts a solid
@@ -470,13 +520,14 @@ static void zoneFillRect(int x, int y, int w, int h) {
     else tft.fillRect(x, y, w, h, TFT_BLACK);
 }
 
-// True whenever the store catalog has grown (a new stuffy, blanket color, or room theme
-// shipped in a firmware update) since the last time the user opened the store page —
-// cleared by handleConfigStoreGet(), which stamps the current catalog sizes as "seen".
+// True whenever the store catalog has grown (a new stuffy, blanket color, room theme, or
+// cat color shipped in a firmware update) since the last time the user opened the store
+// page — cleared by handleConfigStoreGet(), which stamps the current catalog sizes as "seen".
 static bool hasNewStoreItems() {
     return STUFFY_COUNT > configMgr.config().seenStuffyCount ||
            BLANKET_COLOR_COUNT > configMgr.config().seenBlanketColorCount ||
-           ROOM_THEME_COUNT > configMgr.config().seenRoomThemeCount;
+           ROOM_THEME_COUNT > configMgr.config().seenRoomThemeCount ||
+           CAT_COLOR_COUNT > configMgr.config().seenCatColorCount;
 }
 
 // Shared ear/head/snout/eyes/nose art reused by both teddy variants below.
@@ -618,7 +669,7 @@ static void drawPenguinFull(int cx, int cy, uint16_t accentColor) {
 // the outer corners than drawEyes()'s blink-style dash, so the cat reads as actually
 // asleep rather than mid-blink.
 static void drawSleepyEyes(int cx, int cy) {
-    tft.fillRect(cx - 28, cy - 50, 56, 26, C_CAT);  // restore head colour before drawing eyes
+    tft.fillRect(cx - 28, cy - 50, 56, 26, catBodyColor());  // restore head colour before drawing eyes
     tft.fillRoundRect(cx - 24, cy - 39, 20, 3, 1, C_DARK);
     tft.fillRoundRect(cx +  4, cy - 39, 20, 3, 1, C_DARK);
     tft.drawLine(cx - 24, cy - 39, cx - 27, cy - 42, C_DARK);  // outer curl, left eye
@@ -726,7 +777,7 @@ static void clearSparkles(int cx, int cy) {
 static void drawHungerLines(int cx, int cy, bool show) {
     // Three short horizontal lines on the tummy — manga hunger growl effect
     int bx = cx - 12, by = cy + 18;
-    uint16_t col = show ? C_RUMBLE : C_CAT;  // erase with body colour to avoid flicker
+    uint16_t col = show ? C_RUMBLE : catBodyColor();  // erase with body colour to avoid flicker
     tft.drawFastHLine(bx,      by,      14, col);
     tft.drawFastHLine(bx +  2, by +  8, 10, col);
     tft.drawFastHLine(bx,      by + 16, 14, col);
@@ -1731,6 +1782,9 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h3>Room Themes</h3>
 %%ROOM_THEME_ITEMS%%
 
+<h3>Cat Colors</h3>
+%%CAT_COLOR_ITEMS%%
+
 <form id="cheatForm" method="POST" action="/save-config/cheat" style="display:none;margin-top:12px">
 <button type="submit">+50 points</button>
 </form>
@@ -1780,6 +1834,9 @@ static const char CONFIG_DRESS_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 
 <h3>Room Themes</h3>
 %%ROOM_THEME_OPTIONS%%
+
+<h3>Cat Colors</h3>
+%%CAT_COLOR_OPTIONS%%
 
 <button type="submit" style="width:100%;margin-top:8px">Save</button>
 </form>
@@ -1900,6 +1957,7 @@ static void handleConfigStoreGet() {
         configMgr.config().seenStuffyCount       = (uint8_t)STUFFY_COUNT;
         configMgr.config().seenBlanketColorCount = (uint8_t)BLANKET_COLOR_COUNT;
         configMgr.config().seenRoomThemeCount    = (uint8_t)ROOM_THEME_COUNT;
+        configMgr.config().seenCatColorCount     = (uint8_t)CAT_COLOR_COUNT;
         configMgr.save();
     }
     String page = String(FPSTR(CONFIG_STORE_HTML));
@@ -1931,6 +1989,14 @@ static void handleConfigStoreGet() {
         roomThemeItems += "</div>\n";
     }
     page.replace("%%ROOM_THEME_ITEMS%%", roomThemeItems);
+    String catColorItems = "";
+    for (int i = 0; i < CAT_COLOR_COUNT; i++) {
+        bool owned = configMgr.config().ownedCatColors & (1 << i);
+        catColorItems += "<div class='item'><span style='color:" + String(CAT_COLORS[i].webColor) + "'>Cat - " + String(CAT_COLORS[i].label) + "</span>";
+        catColorItems += storeItemAction(CAT_COLORS[i].id, owned, STORE_COST_CAT_COLOR, points);
+        catColorItems += "</div>\n";
+    }
+    page.replace("%%CAT_COLOR_ITEMS%%", catColorItems);
     String msg = "";
     if (wm.server->hasArg("cheat")) {
         msg = "<div class='banner ok'>+50 points!</div>";
@@ -2160,7 +2226,7 @@ static void handleConfigStorePost() {
     String item = wm.server->arg("item");
     uint32_t cost;
     bool alreadyOwned;
-    int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1;
+    int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1, catColorIdx = -1;
     for (int i = 0; i < STUFFY_COUNT; i++) {
         if (item == STUFFIES[i].id) { stuffyIdx = i; break; }
     }
@@ -2178,12 +2244,20 @@ static void handleConfigStorePost() {
             for (int i = 0; i < ROOM_THEME_COUNT; i++) {
                 if (item == ROOM_THEMES[i].id) { roomThemeIdx = i; break; }
             }
-            if (roomThemeIdx < 0) {
-                wm.server->send(400, "text/plain", "Unknown item");
-                return;
+            if (roomThemeIdx >= 0) {
+                cost = ROOM_THEMES[roomThemeIdx].cost;
+                alreadyOwned = configMgr.config().ownedRoomThemes & (1 << roomThemeIdx);
+            } else {
+                for (int i = 0; i < CAT_COLOR_COUNT; i++) {
+                    if (item == CAT_COLORS[i].id) { catColorIdx = i; break; }
+                }
+                if (catColorIdx < 0) {
+                    wm.server->send(400, "text/plain", "Unknown item");
+                    return;
+                }
+                cost = STORE_COST_CAT_COLOR;
+                alreadyOwned = configMgr.config().ownedCatColors & (1 << catColorIdx);
             }
-            cost = ROOM_THEMES[roomThemeIdx].cost;
-            alreadyOwned = configMgr.config().ownedRoomThemes & (1 << roomThemeIdx);
         }
     }
 
@@ -2205,6 +2279,9 @@ static void handleConfigStorePost() {
     } else if (roomThemeIdx >= 0) {
         configMgr.config().ownedRoomThemes |= (1 << roomThemeIdx);
         configMgr.config().equippedRoomTheme = roomThemeIdx;  // newly bought theme becomes equipped
+    } else if (catColorIdx >= 0) {
+        configMgr.config().ownedCatColors |= (1 << catColorIdx);
+        configMgr.config().equippedCatColor = catColorIdx;  // newly bought color becomes equipped
     } else {
         configMgr.config().ownedStuffies |= (1 << stuffyIdx);
         configMgr.config().equippedStuffy = stuffyIdx;  // newly bought stuffy becomes equipped
@@ -2214,6 +2291,7 @@ static void handleConfigStorePost() {
         configMgr.config().points += cost;
         if (blanketIdx >= 0) configMgr.config().ownedBlanketColors &= ~(1 << blanketIdx);
         else if (roomThemeIdx >= 0) configMgr.config().ownedRoomThemes &= ~(1 << roomThemeIdx);
+        else if (catColorIdx >= 0) configMgr.config().ownedCatColors &= ~(1 << catColorIdx);
         else configMgr.config().ownedStuffies &= ~(1 << stuffyIdx);
         wm.server->sendHeader("Location", "/config/store?err=save");
         wm.server->send(302, "text/plain", "");
@@ -2292,6 +2370,23 @@ static void handleConfigDressGet() {
     }
     page.replace("%%ROOM_THEME_OPTIONS%%", themeOptions);
 
+    uint8_t ownedCatColors = configMgr.config().ownedCatColors;
+    int equippedCatColorIdx = equippedCatColorIndex();
+    String catColorOptions = "";
+    catColorOptions += "<label class='pick'><input type='radio' name='catColor' value='none'";
+    if (equippedCatColorIdx < 0) catColorOptions += " checked";
+    catColorOptions += "> White (default)</label>";
+    for (int i = 0; i < CAT_COLOR_COUNT; i++) {
+        if (!(ownedCatColors & (1 << i))) continue;
+        catColorOptions += "<label class='pick'><input type='radio' name='catColor' value='";
+        catColorOptions += CAT_COLORS[i].id;
+        catColorOptions += "'";
+        if (i == equippedCatColorIdx) catColorOptions += " checked";
+        catColorOptions += "> <span style='color:" + String(CAT_COLORS[i].webColor) + "'>"
+                          + String(CAT_COLORS[i].label) + "</span></label>";
+    }
+    page.replace("%%CAT_COLOR_OPTIONS%%", catColorOptions);
+
     String msg = "";
     if (wm.server->hasArg("saved"))
         msg = "<div class='banner ok'>Saved.</div>";
@@ -2350,6 +2445,23 @@ static void handleConfigDressPost() {
             return;
         }
         configMgr.config().equippedRoomTheme = idx;
+        changed = true;
+    }
+
+    String catColorId = wm.server->arg("catColor");
+    if (catColorId == "none") {
+        configMgr.config().equippedCatColor = EQUIP_NONE;  // falls back to white, catBodyColor()
+        changed = true;
+    } else if (catColorId.length() > 0) {
+        int idx = -1;
+        for (int i = 0; i < CAT_COLOR_COUNT; i++) {
+            if (catColorId == CAT_COLORS[i].id) { idx = i; break; }
+        }
+        if (idx < 0 || !(configMgr.config().ownedCatColors & (1 << idx))) {
+            wm.server->send(400, "text/plain", "Invalid selection");
+            return;
+        }
+        configMgr.config().equippedCatColor = idx;
         changed = true;
     }
 
