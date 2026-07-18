@@ -74,6 +74,14 @@
         "command": "scripts/espframe-esphome.sh logs apps/espframe/builds/guition-esp32-p4-jc8012p4a1.factory.yaml --device /dev/ttyUSB0",
         "cwd": "."
       }
+    },
+    "release": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "python3 tools/esp-flasher/generate_release.py --project-dir apps/espframe --name \"espframe\" --esphome freenove-s3:ESP32-S3:immich-frame-freenove-s3 --version ${RELEASE_VERSION:-dev}",
+        "cwd": "."
+      },
+      "dependsOn": ["build-freenove-s3"]
     }
   }
 }

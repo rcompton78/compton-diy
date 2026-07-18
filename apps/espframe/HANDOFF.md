@@ -181,39 +181,44 @@ result. The NX `flash-*` targets are safe (they `dependsOn` the matching
 4. Eventually: open a PR from `diy-44-espframe-nx-submodule` into
    `compton-diy` master, and mark Jira DIY-44 done.
 
-## Open question — CI/release integration (not decided)
+## CI/release integration (DIY-45, decided: fully integrate)
 
-cyd-clock and bambu-status-bar are native PlatformIO projects in this
-monorepo: `release.yml` already runs `nx run-many -t build,build-fs,release`
-on every push to `master`, gated by `nx show projects --affected
---withTarget release`, publishing into this repo's own `dist/` web flasher
-and GitHub Releases. **espframe doesn't participate in that at all** —
-`project.json` now has a `build` target (added this session, for local
-multi-device convenience), but no `release` target, so `nx run-many -t
-release` still silently skips it.
+espframe now has a `release` NX target (`apps/espframe/project.json`),
+so it participates in this repo's own `release.yml` exactly like
+cyd-clock/bambu-status-bar: `nx run-many -t release` picks it up
+automatically (confirmed via `nx show projects --withTarget release`),
+gated the same way by `nx show projects --affected --withTarget release`,
+publishing into this repo's own `dist/espframe/` web flasher and GitHub
+Releases.
 
-espframe is architecturally different: it already has its **own**,
-fully self-hosted release pipeline in the fork — `compile.yml` (PR
-validation via `workflow_dispatch`) and `release.yml` (GitHub Releases),
-both fully data-driven off `product/contract/devices.json`, plus its own
-GitHub Pages web flasher (`rcompton78.github.io/espframe`, separate from
-this repo's `dist/index.html`). Both workflows already provision Python via
-`actions/setup-python@v5` pinned to `3.12` directly — confirmed neither
-calls `scripts/setup.sh`, and that separation should stay (a PPA + `apt-get
-update` is too slow/network-flaky for CI; local dev convenience only).
+`tools/esp-flasher/generate_release.py` gained a second mode for this:
+`--esphome ENV:CHIP:ESPHOME_NAME` (alongside the original PlatformIO
+`--build ENV:CHIP`). Unlike PlatformIO, ESPHome's own build already merges
+bootloader+partitions+app into `firmware.factory.bin` and produces a
+plain app-only `firmware.bin`, so this mode just copies those two files out
+of `builds/.esphome/build/<esphome_name>/.pioenvs/<esphome_name>/` instead
+of running `esptool merge_bin` — same output shape (`<slug>.bin`,
+`<slug>-ota.bin`, `manifest.json`, `index.html`) either way. Only
+freenove-s3 is wired in; the P4 build stays out until it's un-skipped in
+`devices.json`.
 
-Two options were on the table, **not yet decided**:
-1. **Keep it a separate product** (leaning towards this) — espframe's
-   builds/releases stay entirely in the fork's own CI + Pages site; this
-   repo's `release.yml` just pins the submodule commit like a dependency
-   bump, maybe with a lightweight PR compile-sanity-check.
-2. **Fully integrate** — add `build`/`release` NX targets so espframe's
-   binaries also land in this repo's own `dist/`/GitHub Releases alongside
-   cyd-clock/bambu-status-bar. This needs a new release script — `tools/
-   esp-flasher/generate_release.py` is deeply PlatformIO-specific and
-   doesn't apply to ESPHome's compile-then-copy output.
+**Cleanup done alongside this:** the fork's own vendored
+`.github/workflows/{release,compile,docs}.yml` were deleted — they were
+already dead code in this monorepo (GitHub Actions only discovers
+workflows in the repo-root `.github/workflows/`, never nested ones), left
+over from when espframe was its own standalone repo/submodule with real CI.
 
-Come back to this once end-to-end hardware verification is done.
+**Known breakage from that deletion, not yet fixed:** `apps/espframe`'s own
+inherited `npm run check:pr` / `npm run check:product` quality gates
+(`scripts/check_product_contract.py` → `scripts/product_contract/
+{workflows,build_outputs,public_site}.py`) validate the exact contents of
+those three workflow files against `product/contract/*.json` and will now
+fail. That contract-check code is large (~90KB in `workflows.py` alone)
+and tightly coupled — untangling just the workflow-related checks without
+touching the rest of `check_product_contract.py`'s import graph is its own
+task, deliberately deferred rather than rushed. Nothing in this repo's
+actual CI depends on `check:pr`/`check:product`, so this is inert until
+someone runs those npm scripts locally.
 
 ## Jira
 
