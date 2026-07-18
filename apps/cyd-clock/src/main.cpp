@@ -343,10 +343,7 @@ static bool catHasCuteEyes();
 // cleanly on top of any overlap; body pass runs after body/paws/tail, so patches sit on
 // the finished silhouette. First-pass geometry — expect to tune after real hardware.
 static void drawTabbyHeadPattern(int cx, int cy) {
-    // Forehead "M" mark
-    tft.drawLine(cx - 10, cy - 58, cx - 4, cy - 50, C_TABBY_STRIPE);
-    tft.drawLine(cx + 10, cy - 58, cx + 4, cy - 50, C_TABBY_STRIPE);
-    // Cheek stripes
+    // Cheek stripes only — no forehead "M" mark
     tft.drawLine(cx - 38, cy - 55, cx - 30, cy - 50, C_TABBY_STRIPE);
     tft.drawLine(cx + 38, cy - 55, cx + 30, cy - 50, C_TABBY_STRIPE);
 }
