@@ -5,30 +5,15 @@
 #include <ArduinoJson.h>
 #include <string.h>
 
-// Root CAs for api.github.com (USERTrust ECC, via Sectigo) and the release-asset
-// redirect target objects.githubusercontent.com (ISRG Root X1, via Let's Encrypt).
-// Pinned at the root rather than the leaf/intermediate — those rotate every ~90
-// days to a few years and would silently break this feature; these roots are
-// long-lived (valid to 2035/2038) and part of every standard trust store. If
-// GitHub ever moves to a different issuing CA, checks will start failing closed
-// (checkFailed, retried next interval) rather than falling back to no verification.
+// Root CA for *.github.io (GitHub Pages, serving both the manifest and the OTA
+// binary itself — ISRG Root X1, via Let's Encrypt; confirmed against the live
+// cert chain, not assumed). Pinned at the root rather than the leaf/intermediate
+// — those rotate every ~90 days to a few years and would silently break this
+// feature; this root is long-lived (valid to 2035) and part of every standard
+// trust store. If GitHub Pages ever moves to a different issuing CA, checks will
+// start failing closed (checkFailed, retried next interval) rather than falling
+// back to no verification.
 static const char* GITHUB_TRUST_ANCHORS =
-"-----BEGIN CERTIFICATE-----\n"
-"MIICjzCCAhWgAwIBAgIQXIuZxVqUxdJxVt7NiYDMJjAKBggqhkjOPQQDAzCBiDEL\n"
-"MAkGA1UEBhMCVVMxEzARBgNVBAgTCk5ldyBKZXJzZXkxFDASBgNVBAcTC0plcnNl\n"
-"eSBDaXR5MR4wHAYDVQQKExVUaGUgVVNFUlRSVVNUIE5ldHdvcmsxLjAsBgNVBAMT\n"
-"JVVTRVJUcnVzdCBFQ0MgQ2VydGlmaWNhdGlvbiBBdXRob3JpdHkwHhcNMTAwMjAx\n"
-"MDAwMDAwWhcNMzgwMTE4MjM1OTU5WjCBiDELMAkGA1UEBhMCVVMxEzARBgNVBAgT\n"
-"Ck5ldyBKZXJzZXkxFDASBgNVBAcTC0plcnNleSBDaXR5MR4wHAYDVQQKExVUaGUg\n"
-"VVNFUlRSVVNUIE5ldHdvcmsxLjAsBgNVBAMTJVVTRVJUcnVzdCBFQ0MgQ2VydGlm\n"
-"aWNhdGlvbiBBdXRob3JpdHkwdjAQBgcqhkjOPQIBBgUrgQQAIgNiAAQarFRaqflo\n"
-"I+d61SRvU8Za2EurxtW20eZzca7dnNYMYf3boIkDuAUU7FfO7l0/4iGzzvfUinng\n"
-"o4N+LZfQYcTxmdwlkWOrfzCjtHDix6EznPO/LlxTsV+zfTJ/ijTjeXmjQjBAMB0G\n"
-"A1UdDgQWBBQ64QmG1M8ZwpZ2dEl23OA1xmNjmjAOBgNVHQ8BAf8EBAMCAQYwDwYD\n"
-"VR0TAQH/BAUwAwEB/zAKBggqhkjOPQQDAwNoADBlAjA2Z6EWCNzklwBBHU6+4WMB\n"
-"zzuqQhFkoJ2UOQIReVx7Hfpkue4WQrO/isIJxOzksU0CMQDpKmFHjFJKS04YcPbW\n"
-"RNZu9YO6bVi9JNlWSOrvxKJGgYhqOkbRqZtNyWHa0V1Xahg=\n"
-"-----END CERTIFICATE-----\n"
 "-----BEGIN CERTIFICATE-----\n"
 "MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw\n"
 "TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh\n"
@@ -61,7 +46,7 @@ static const char* GITHUB_TRUST_ANCHORS =
 "emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=\n"
 "-----END CERTIFICATE-----\n";
 
-OtaCheckResult OtaUpdateClient::checkForUpdate(const char* releasesUrl, const char* currentVersion, const char* assetName) {
+OtaCheckResult OtaUpdateClient::checkForUpdate(const char* manifestUrl, const char* currentVersion, const char* assetName) {
     OtaCheckResult result;
 
     // "dev" builds have nothing to compare against and shouldn't self-update.
@@ -73,10 +58,7 @@ OtaCheckResult OtaUpdateClient::checkForUpdate(const char* releasesUrl, const ch
     WiFiClientSecure client;
     client.setCACert(GITHUB_TRUST_ANCHORS);
     HTTPClient http;
-    http.begin(client, releasesUrl);
-    // GitHub's API rejects requests with no User-Agent.
-    http.addHeader("User-Agent", "cyd-clock-ota");
-    http.addHeader("Accept", "application/vnd.github+json");
+    http.begin(client, manifestUrl);
     http.setTimeout(10000);
 
     int code = http.GET();
@@ -86,12 +68,10 @@ OtaCheckResult OtaUpdateClient::checkForUpdate(const char* releasesUrl, const ch
         return result;
     }
 
-    // The releases/latest payload (release notes body, all assets' metadata)
-    // can be tens of KB — filter down to just the fields we need to bound heap use.
+    // Filter down to just the fields we need to bound heap use.
     JsonDocument filter;
-    filter["tag_name"] = true;
-    filter["assets"][0]["name"] = true;
-    filter["assets"][0]["browser_download_url"] = true;
+    filter["version"] = true;
+    filter["builds"][0]["ota"]["path"] = true;
 
     JsonDocument doc;
     DeserializationError err = deserializeJson(doc, http.getStream(), DeserializationOption::Filter(filter));
@@ -101,31 +81,41 @@ OtaCheckResult OtaUpdateClient::checkForUpdate(const char* releasesUrl, const ch
         return result;
     }
 
-    String tag = doc["tag_name"] | "";
-    if (tag.isEmpty()) {
+    String version = doc["version"] | "";
+    if (version.isEmpty()) {
         result.checkFailed = true;
         return result;
     }
-    result.latestVersion = tag;
+    result.latestVersion = version;
 
-    for (JsonObject asset : doc["assets"].as<JsonArray>()) {
-        const char* name = asset["name"] | "";
-        if (strcmp(name, assetName) == 0) {
-            result.downloadUrl = asset["browser_download_url"] | "";
+    // This app's manifest always reflects its own latest build (regenerated on
+    // every push regardless of what else changed), so every build entry here
+    // belongs to this app — just find the one for this board.
+    String otaPath;
+    for (JsonObject build : doc["builds"].as<JsonArray>()) {
+        const char* path = build["ota"]["path"] | "";
+        if (strcmp(path, assetName) == 0) {
+            otaPath = path;
             break;
         }
     }
 
-    if (result.downloadUrl.isEmpty()) {
-        // Tag exists but no matching asset — treat as a check failure rather
-        // than silently reporting "no update available".
+    if (otaPath.isEmpty()) {
+        // Manifest fetched fine but no matching board entry — treat as a check
+        // failure rather than silently reporting "no update available".
         result.checkFailed = true;
         return result;
     }
 
+    // otaPath is relative to the manifest's own directory (both published
+    // together under dist/<app>/ by tools/esp-flasher/generate_release.py).
+    String base = manifestUrl;
+    int lastSlash = base.lastIndexOf('/');
+    result.downloadUrl = base.substring(0, lastSlash + 1) + otaPath;
+
     // Versions are monotonically increasing "YYYY.MM.DD-<run>" strings, so
     // "different from what's running" already means "newer" — no need to parse.
-    result.updateAvailable = (tag != currentVersion);
+    result.updateAvailable = (version != currentVersion);
     return result;
 }
 
@@ -133,7 +123,8 @@ OtaApplyResult OtaUpdateClient::applyUpdate(const String& downloadUrl, void (*on
     WiFiClientSecure client;
     client.setCACert(GITHUB_TRUST_ANCHORS);
     HTTPClient http;
-    // Release asset URLs redirect from api.github.com to objects.githubusercontent.com.
+    // GitHub Pages doesn't normally redirect, but following forces us to handle
+    // it correctly if that ever changes rather than failing silently.
     http.setFollowRedirects(HTTPC_FORCE_FOLLOW_REDIRECTS);
     http.begin(client, downloadUrl);
     http.setTimeout(20000);

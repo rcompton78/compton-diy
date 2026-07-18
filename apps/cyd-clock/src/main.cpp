@@ -2410,7 +2410,7 @@ static OtaCheckResult performUpdateCheckOnly() {
     lastUpdateCheckSkipped = false;
     if (!configMgr.config().autoUpdateEnabled) return OtaCheckResult{};
 
-    OtaCheckResult result = otaClient.checkForUpdate(GITHUB_RELEASES_LATEST_URL, FIRMWARE_VERSION, OTA_ASSET_NAME);
+    OtaCheckResult result = otaClient.checkForUpdate(OTA_MANIFEST_URL, FIRMWARE_VERSION, OTA_ASSET_NAME);
     if (result.skipped) {
         lastUpdateCheckSkipped = true;
         return result;
