@@ -327,6 +327,7 @@ unsigned long forceThirstDeadlineMs = 0; // test-only: armed via /config, 0 = no
 
 struct { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick, hungerLines, zzzFx, animalBg; } dirty = {true, true, true, true, false, false, false, false, false, true};
 bool pointsFlashOn = false;  // toggled every ~500ms while hasNewStoreItems(); read by drawPoints()
+bool saleFlashOn = false;    // toggled every ~500ms while the black cat flash sale is active; read by drawSaleFlash()
 
 
 // Forward declarations: resolves the cat's current equipped color index, its body/fill
@@ -1007,6 +1008,22 @@ static void drawPoints() {
     tft.drawString(ptsBuf, 234 - ptsWidth, ANIMAL_Y + 4, 2);
 }
 
+// Forward declaration: true during the black cat flash sale window, defined below
+// alongside isInSleepWindow(). Declared here so drawSaleFlash() can call it directly.
+static bool isBlackCatSaleActive();
+
+// "SALE" banner just below the points balance, flashing red/yellow while the black cat
+// flash sale is active. Same clear-rect x-start as drawPoints() (past the ear boundary).
+static void drawSaleFlash() {
+    zoneFillRect(155, ANIMAL_Y + 20, 85, 16);
+    if (!isBlackCatSaleActive()) return;
+    const char* label = "SALE!";
+    uint16_t color = saleFlashOn ? TFT_RED : TFT_YELLOW;
+    tft.setTextColor(color, zoneBgColor());
+    int w = tft.textWidth(label, 2);
+    tft.drawString(label, 234 - w, ANIMAL_Y + 22, 2);
+}
+
 static void drawAnimal() {
     if (dirty.animalBg) {
         zoneFillRect(0, ANIMAL_Y, 240, ANIMAL_H);
@@ -1038,6 +1055,7 @@ static void drawAnimal() {
     // Points balance — drawn after drawCat()/drawSleepingCat() since both repaint their own
     // clear rect internally and would otherwise wipe this out.
     drawPoints();
+    drawSaleFlash();
 
     // Boredom "Zz" overlay — sits outside the main clear rect, so always redraw/erase
     // here regardless of tier; cat.napping already encodes whether it should show
@@ -1540,6 +1558,22 @@ static bool isInSleepWindow(int nowMinutes) {
     if (bed == wake) return false;               // degenerate: treat as "sleep disabled"
     if (bed < wake) return nowMinutes >= bed && nowMinutes < wake;   // same-day window
     return nowMinutes >= bed || nowMinutes < wake;                   // wraps midnight
+}
+
+// ── Black cat flash sale (3pm-10pm device local time) ──────────────────────────
+static constexpr int BLACK_CAT_SALE_START_MIN = 11 * 60;  // TESTING: 11am (revert to 15*60 / 3pm before shipping)
+static constexpr int BLACK_CAT_SALE_END_MIN   = 22 * 60;  // 10pm
+static constexpr uint32_t BLACK_CAT_SALE_PRICE = 50;  // half off STORE_COST_CAT_COLOR_SOLID
+
+// Self-contained (fetches its own local time) so it can be called from the store HTTP
+// handlers as well as loop(), not just places that already have nowMinutes in scope.
+static bool isBlackCatSaleActive() {
+    time_t epoch = ntpClient.getEpochTime();
+    time_t utcCheck = epoch - (time_t)configMgr.config().utcOffsetSeconds;
+    if (utcCheck <= 1000000000) return false;  // not NTP-synced yet — sanity check, matches loop()'s
+    struct tm* t = localtime(&epoch);
+    int nowMinutes = t->tm_hour * 60 + t->tm_min;
+    return nowMinutes >= BLACK_CAT_SALE_START_MIN && nowMinutes < BLACK_CAT_SALE_END_MIN;
 }
 
 struct SleepPos { int x, y; };
@@ -2075,10 +2109,14 @@ static void handleConfigStoreGet() {
     }
     page.replace("%%ROOM_THEME_ITEMS%%", roomThemeItems);
     String catColorItems = "";
+    bool blackCatOnSale = isBlackCatSaleActive();
     for (int i = 0; i < CAT_COLOR_COUNT; i++) {
         bool owned = configMgr.config().ownedCatColors & (1 << i);
+        bool onSale = blackCatOnSale && strcmp(CAT_COLORS[i].id, "black") == 0;
+        uint32_t itemCost = onSale ? BLACK_CAT_SALE_PRICE : CAT_COLORS[i].cost;
         catColorItems += "<div class='item'><span style='color:" + String(CAT_COLORS[i].webColor) + "'>Cat - " + String(CAT_COLORS[i].label) + "</span>";
-        catColorItems += storeItemAction(CAT_COLORS[i].id, owned, CAT_COLORS[i].cost, points);
+        if (onSale) catColorItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        catColorItems += storeItemAction(CAT_COLORS[i].id, owned, itemCost, points);
         catColorItems += "</div>\n";
     }
     page.replace("%%CAT_COLOR_ITEMS%%", catColorItems);
@@ -2340,7 +2378,8 @@ static void handleConfigStorePost() {
                     wm.server->send(400, "text/plain", "Unknown item");
                     return;
                 }
-                cost = CAT_COLORS[catColorIdx].cost;
+                cost = (strcmp(CAT_COLORS[catColorIdx].id, "black") == 0 && isBlackCatSaleActive())
+                    ? BLACK_CAT_SALE_PRICE : CAT_COLORS[catColorIdx].cost;
                 alreadyOwned = configMgr.config().ownedCatColors & (1 << catColorIdx);
             }
         }
@@ -2854,6 +2893,24 @@ void loop() {
             drawPoints();
         }
         wasNew = isNew;
+    }
+
+    // Sale flash — while the black cat flash sale is active, toggle the "SALE!" banner's
+    // color every 500ms; repaint once more with the flash off the moment the sale window
+    // ends so it doesn't linger.
+    {
+        static unsigned long lastSaleFlash = 0;
+        static bool wasSaleActive = false;
+        bool saleActive = isBlackCatSaleActive();
+        if (saleActive && now - lastSaleFlash >= 500) {
+            lastSaleFlash = now;
+            saleFlashOn = !saleFlashOn;
+            drawSaleFlash();
+        } else if (!saleActive && wasSaleActive) {
+            saleFlashOn = false;
+            drawSaleFlash();
+        }
+        wasSaleActive = saleActive;
     }
 
     // Timer row refresh while running
