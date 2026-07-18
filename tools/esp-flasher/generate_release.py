@@ -30,6 +30,7 @@ Output:
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import shutil
@@ -145,13 +146,22 @@ def generate_manifest(app_name, version, builds, output_path):
         "builds": [
             {
                 "chipFamily": b["chipFamily"],
-                "parts": [{"path": b["bin"], "offset": 0}]
+                "parts": [{"path": b["bin"], "offset": 0}],
+                "ota": {"path": b["ota_bin"], "md5": b["ota_md5"]}
             }
             for b in builds
         ]
     }
     with open(output_path, "w") as f:
         json.dump(manifest, f, indent=2)
+
+
+def md5sum(path):
+    h = hashlib.md5()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 
@@ -217,22 +227,32 @@ def main():
     # Merge firmware for each PlatformIO variant
     builds_for_manifest = []
     for v in variants:
+        # A single --build variant is a real, permanent category here (a
+        # single-board app, per this script's own docstring) — no env suffix.
         suffix   = f"-{v['env']}" if multi_variant else ""
         bin_name = f"{app_slug}{suffix}.bin"
         print(f"==> Merging {v['env']} ({v['chip']})")
         merge_firmware(project_dir, v["env"], v["chip"],
                        os.path.join(dist_dir, bin_name))
-        builds_for_manifest.append({"chipFamily": v["chip"], "bin": bin_name})
 
         # Raw (unmerged) app image — needed for OTA uploads, which flash only
         # the app partition and choke on a bootloader+partition-table image.
         ota_bin_name = f"{app_slug}{suffix}-ota.bin"
         ota_src = os.path.join(project_dir, ".pio", "build", v["env"], "firmware.bin")
-        shutil.copy(ota_src, os.path.join(dist_dir, ota_bin_name))
+        ota_dest = os.path.join(dist_dir, ota_bin_name)
+        shutil.copy(ota_src, ota_dest)
+        builds_for_manifest.append({
+            "chipFamily": v["chip"], "bin": bin_name,
+            "ota_bin": ota_bin_name, "ota_md5": md5sum(ota_dest),
+        })
 
-    # Copy already-merged firmware for each ESPHome variant
+    # Copy already-merged firmware for each ESPHome variant. Unlike --build,
+    # always suffix by device env even with only one variant wired in today —
+    # ESPHome apps are expected to grow more devices (see espframe's skipped
+    # P4), and an unsuffixed name would silently start meaning something
+    # different the moment a second device gets added.
     for v in esphome_variants:
-        suffix   = f"-{v['env']}" if multi_variant else ""
+        suffix   = f"-{v['env']}"
         bin_name = f"{app_slug}{suffix}.bin"
         pioenvs_dir = os.path.join(project_dir, "builds", ".esphome", "build",
                                     v["esphome_name"], ".pioenvs", v["esphome_name"])
@@ -245,10 +265,14 @@ def main():
             )
         print(f"==> Copying ESPHome build for {v['env']} ({v['chip']})")
         shutil.copy(factory_src, os.path.join(dist_dir, bin_name))
-        builds_for_manifest.append({"chipFamily": v["chip"], "bin": bin_name})
 
         ota_bin_name = f"{app_slug}{suffix}-ota.bin"
-        shutil.copy(ota_src, os.path.join(dist_dir, ota_bin_name))
+        ota_dest = os.path.join(dist_dir, ota_bin_name)
+        shutil.copy(ota_src, ota_dest)
+        builds_for_manifest.append({
+            "chipFamily": v["chip"], "bin": bin_name,
+            "ota_bin": ota_bin_name, "ota_md5": md5sum(ota_dest),
+        })
 
     print("==> Generating manifest")
     generate_manifest(args.name, args.version, builds_for_manifest,

@@ -55,7 +55,9 @@
 #define NTP_SERVER "pool.ntp.org"
 #define NTP_UPDATE_INTERVAL_MS (60 * 60 * 1000UL)  // 1 hour
 
-// Firmware auto-update — well under GitHub's 60 req/hr unauthenticated rate limit,
-// shared across all unauthenticated GitHub API traffic from this IP (~5.5KB/check)
+// Firmware auto-update. Polls this app's own manifest.json on GitHub Pages
+// (regenerated fresh on every push regardless of what else changed) rather
+// than the GitHub Releases API, so a release that only touched another app in
+// this monorepo can't make this check fail — see libs/ota-update-client.
 #define UPDATE_CHECK_INTERVAL_MS (60 * 60 * 1000UL)  // 1 hour
-#define GITHUB_RELEASES_LATEST_URL "https://api.github.com/repos/rcompton78/compton-diy/releases/latest"
+#define OTA_MANIFEST_URL "https://rcompton78.github.io/compton-diy/cyd-clock/manifest.json"
