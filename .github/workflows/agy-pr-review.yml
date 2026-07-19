@@ -30,8 +30,7 @@ jobs:
         with:
           api-key: ${{ secrets.GEMINI_API_KEY }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          model: gemini-3.5-flash
           mode: review
           prompt: /antigravity-review
           trust-workspace: 'true'
-          sandbox-profile: 'true'
+          sandbox-profile: 'false'
