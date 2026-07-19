@@ -63,6 +63,15 @@ static constexpr uint32_t POINTS_PLAY  = 3;
 static constexpr uint32_t POINTS_WATER = 3;
 static constexpr uint32_t POINTS_MEDS  = 8;
 
+// Gamification: lifetime XP / level system, layered on top of spendable `points`.
+// XP is awarded 1:1 with points from the same 4 care actions and the store cheat; it
+// never decreases. Level requires a gently-increasing amount of XP each step (not flat,
+// not exponential): level L->L+1 costs LEVEL_XP_BASE + LEVEL_XP_STEP*(L-1) XP.
+static constexpr uint32_t LEVEL_XP_BASE = 20;
+static constexpr uint32_t LEVEL_XP_STEP = 10;
+static constexpr uint32_t MILESTONE_LEVEL_INTERVAL = 5;   // bonus every 5 levels
+static constexpr uint32_t MILESTONE_BONUS_POINTS   = 25;  // spendable points granted at each milestone
+
 // Gamification: store item costs
 static constexpr uint32_t STORE_COST_TEDDY    = 60;
 static constexpr uint32_t STORE_COST_BUNNY    = 60;
@@ -329,6 +338,20 @@ unsigned long forceThirstDeadlineMs = 0; // test-only: armed via /config, 0 = no
 struct { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick, hungerLines, zzzFx, animalBg; } dirty = {true, true, true, true, false, false, false, false, false, true};
 bool pointsFlashOn = false;  // toggled every ~500ms while hasNewStoreItems(); read by drawPoints()
 bool saleFlashOn = false;    // toggled every ~500ms while the black cat flash sale is active; read by drawSaleFlash()
+
+// Level-up fireworks: a full-screen takeover (distinct from the small in-zone Celebrate
+// animation) that plays once when awardXp() crosses a level boundary, with the milestone
+// bonus (if any) flashing on top. Mirrors the sleepScreenActive/setupPromptActive pattern
+// of owning the screen directly rather than going through the zone-scoped dirty flags.
+struct {
+    bool active            = false;
+    unsigned long since     = 0;  // millis() when triggered
+    unsigned long lastFrame = 0;  // millis() of last frame advance
+    uint8_t frame           = 0;  // advances every FIREWORKS_FRAME_MS, drives burst radius/color
+    uint32_t bonusPoints    = 0;  // milestone bonus earned this level-up, 0 if none
+} fireworks;
+static constexpr unsigned long FIREWORKS_DURATION_MS = 2500;
+static constexpr unsigned long FIREWORKS_FRAME_MS    = 150;
 
 
 // Forward declarations: resolves the cat's current equipped color index, its body/fill
@@ -872,9 +895,10 @@ static void drawHungerLines(int cx, int cy, bool show) {
 
 static void drawBoredomZzz(int cx, int cy, bool show) {
     // "Zz" cloud, entirely outside the head/ears — one to the right, two cascading
-    // up-and-out to the left.
+    // up-and-out to the left. The right-side one sits low, below the level/points/sale
+    // badge column (which now runs from ANIMAL_Y to ANIMAL_Y+70ish), so they never collide.
     static const int8_t dx[] = { 70, -70, -70 };
-    static const int8_t dy[] = {-40, -40, -60 };
+    static const int8_t dy[] = { -3, -40, -60 };
     for (int i = 0; i < 3; i++) {
         int x = cx + dx[i], y = cy + dy[i];
         zoneFillRect(x - 2, y - 10, 22, 14);
@@ -994,35 +1018,143 @@ static void drawHeader() {
     }
 }
 
-// Points balance — top-right of the cat's head, just under the header's weather text.
-// Own clear rect since this sits to the right of the cat's bounding box, outside
-// drawAnimal()'s clear rect — starts past x=152 so it doesn't clip the cat's right ear
-// (drawCat()'s ear triangle reaches up to roughly x=152, y=65). Flashes between yellow and
-// cyan while hasNewStoreItems() is true, as a hint to check the store for something new.
+// Cumulative XP required to reach `level` (level 1 = 0 XP). Gentle arithmetic-increment
+// curve: each level costs LEVEL_XP_STEP more XP than the last, starting from
+// LEVEL_XP_BASE — not flat, not exponential. Closed form of the arithmetic series.
+static uint32_t xpForLevel(uint32_t level) {
+    if (level <= 1) return 0;
+    uint32_t n = level - 1;
+    return n * (2 * LEVEL_XP_BASE + (n - 1) * LEVEL_XP_STEP) / 2;
+}
+
+// Highest level reachable with `xp` total lifetime XP.
+static uint32_t levelForXp(uint32_t xp) {
+    uint32_t level = 1;
+    while (xpForLevel(level + 1) <= xp) level++;
+    return level;
+}
+
+static uint32_t xpToNextLevel(uint32_t xp) {
+    return xpForLevel(levelForXp(xp) + 1) - xp;
+}
+
+// Defined near loop() below, alongside updateFireworksAnim() — forward-declared here so
+// awardXp() (further down) can kick it off on a level-up, mirroring isBlackCatSaleActive()'s
+// forward-declaration for drawSaleFlash() just below.
+static void triggerFireworks(uint32_t bonusPoints);
+
+// Right-hand badge column x-start: past x=164 so it doesn't clip the cat's head
+// (drawCat()'s head is a fillRoundRect(cx-44, cy-64, 88, 66, ...), reaching x=164 at
+// its right edge — the ear triangles alone only reach x=152, but the head box behind
+// them is wider and is what actually gets clipped if the column starts too far left),
+// plus a couple more px so it also clears the whisker line tips (reach x=166).
+static constexpr int BADGE_COL_X = 168;
+static constexpr int BADGE_COL_W = 240 - BADGE_COL_X;
+
+// Level badge — a small "medal" with the level number centered inside, rather than
+// plain "Lv N" text, for a friendlier achievement-badge look. Sits at the top of the
+// right-hand column, just under the header's weather text. Right-aligned to the same
+// x=234 edge points/sale's text hugs, rather than centered in the column — the column's
+// width only exists to give points/sale's variable-width text room to grow leftward, and
+// centering the fixed-size medal within it made the medal look off (shifted left of
+// where the eye expects it, under the text above/below it).
+static constexpr int LEVEL_MEDAL_R = 13;                    // outer rim radius
+static constexpr int LEVEL_MEDAL_CX = 234 - LEVEL_MEDAL_R;  // right edge lands on 234, matching drawPoints()/drawSaleFlash()
+static constexpr int LEVEL_MEDAL_CY = ANIMAL_Y + LEVEL_MEDAL_R + 3;
+static constexpr int LEVEL_BADGE_H  = LEVEL_MEDAL_R * 2 + 8;  // clear-rect height, own slot at the column's top
+
+// Medal color cycles through the rainbow every MILESTONE_LEVEL_INTERVAL levels (a new
+// color each tier: 1-5 red, 6-10 orange, ... ), then settles on gold once the rainbow is
+// exhausted and stays gold until more colors are added here.
+static constexpr uint16_t MEDAL_RAINBOW[] = {
+    TFT_RED, 0xFD20 /*orange*/, TFT_YELLOW, TFT_GREEN, TFT_BLUE, 0x4810 /*indigo*/, 0x780F /*violet*/,
+};
+static constexpr int MEDAL_RAINBOW_N = sizeof(MEDAL_RAINBOW) / sizeof(MEDAL_RAINBOW[0]);
+static constexpr uint16_t MEDAL_GOLD = 0xFEA0;
+
+// Web-page equivalents of MEDAL_RAINBOW/MEDAL_GOLD above, same order/tiers, so the
+// /config/badges page's medal matches the on-device one's color. Kept as a separate
+// array (CSS hex, not RGB565) rather than converting at request time — simpler than a
+// bit-twiddling RGB565->RGB888 conversion for a handful of fixed colors.
+static const char* const MEDAL_RAINBOW_WEB[] = {
+    "#ff3b30", "#ff9500", "#ffcc00", "#34c759", "#0a5fff", "#4b0082", "#8e44ad",
+};
+static constexpr const char* MEDAL_GOLD_WEB = "#ffd700";
+
+// Medal color tier for a given level — shared by drawLevelBadge() (device) and
+// medalColorHexForLevel() (web), so both change color at the same moment. Uses `level`
+// directly (not level-1): the color changes exactly ON the milestone level itself
+// (5, 10, 15, ...), coinciding with the milestone-bonus fireworks, rather than one level
+// later — levels 1-4 are tier 0, level 5 (the first milestone) jumps straight to tier 1,
+// levels 5-9 stay tier 1, level 10 jumps to tier 2, and so on.
+static uint32_t medalTierForLevel(uint32_t level) {
+    return level / MILESTONE_LEVEL_INTERVAL;
+}
+
+// Same tier logic as drawLevelBadge(), for the /config/badges page's medal.
+static const char* medalColorHexForLevel(uint32_t level) {
+    uint32_t tier = medalTierForLevel(level);
+    return (tier < (uint32_t)MEDAL_RAINBOW_N) ? MEDAL_RAINBOW_WEB[tier] : MEDAL_GOLD_WEB;
+}
+
+// Darkens an RGB565 color by ~25%, for the medal's bevel face relative to its rim —
+// works for any hue, not just gold, since the rainbow tiers all reuse this.
+static uint16_t darkenRgb565(uint16_t c) {
+    uint8_t r = (c >> 11) & 0x1F, g = (c >> 5) & 0x3F, b = c & 0x1F;
+    r = (uint8_t)(r * 3 / 4);
+    g = (uint8_t)(g * 3 / 4);
+    b = (uint8_t)(b * 3 / 4);
+    return (uint16_t)((r << 11) | (g << 5) | b);
+}
+
+static void drawLevelBadge() {
+    zoneFillRect(BADGE_COL_X, ANIMAL_Y, BADGE_COL_W, LEVEL_BADGE_H);
+    uint32_t level = levelForXp(configMgr.config().totalXp);
+    uint32_t tier = medalTierForLevel(level);
+    uint16_t tierColor = (tier < (uint32_t)MEDAL_RAINBOW_N) ? MEDAL_RAINBOW[tier] : MEDAL_GOLD;
+    uint16_t rim  = tierColor;
+    uint16_t face = darkenRgb565(tierColor);
+    tft.fillCircle(LEVEL_MEDAL_CX, LEVEL_MEDAL_CY, LEVEL_MEDAL_R, rim);
+    tft.fillCircle(LEVEL_MEDAL_CX, LEVEL_MEDAL_CY, LEVEL_MEDAL_R - 3, face);
+    char lvlBuf[8];
+    snprintf(lvlBuf, sizeof(lvlBuf), "%lu", (unsigned long)level);
+    tft.setTextColor(TFT_BLACK, face);
+    // MC_DATUM (middle-center) lets TFT_eSPI center the digits itself, both horizontally
+    // and vertically, using the font's own metrics — reset to the default TL_DATUM
+    // (top-left) afterward since every other draw* function in this file assumes it.
+    tft.setTextDatum(MC_DATUM);
+    tft.drawString(lvlBuf, LEVEL_MEDAL_CX, LEVEL_MEDAL_CY, 2);
+    tft.setTextDatum(TL_DATUM);
+}
+
+// Points balance — stacked below the level medal in the same right-hand column. Flashes
+// between yellow and cyan while hasNewStoreItems() is true, as a hint to check the store
+// for something new.
 static void drawPoints() {
     char ptsBuf[16];
     snprintf(ptsBuf, sizeof(ptsBuf), "%lu pts", (unsigned long)configMgr.config().points);
-    zoneFillRect(155, ANIMAL_Y, 85, 20);
+    zoneFillRect(BADGE_COL_X, ANIMAL_Y + LEVEL_BADGE_H, BADGE_COL_W, 20);
     uint16_t color = (hasNewStoreItems() && pointsFlashOn) ? C_NEW_ITEM : TFT_YELLOW;
     tft.setTextColor(color, zoneBgColor());
     int ptsWidth = tft.textWidth(ptsBuf, 2);
-    tft.drawString(ptsBuf, 234 - ptsWidth, ANIMAL_Y + 4, 2);
+    tft.drawString(ptsBuf, 234 - ptsWidth, ANIMAL_Y + LEVEL_BADGE_H + 4, 2);
 }
 
 // Forward declaration: true during the black cat flash sale window, defined below
 // alongside isInSleepWindow(). Declared here so drawSaleFlash() can call it directly.
 static bool isBlackCatSaleActive();
 
-// "SALE" banner just below the points balance, flashing red/yellow while the black cat
-// flash sale is active. Same clear-rect x-start as drawPoints() (past the ear boundary).
+// "SALE" banner at the bottom of the column, below the points balance, flashing
+// red/yellow while the black cat flash sale is active. Same clear-rect x-start as the
+// other two badges (past the head's right edge).
 static void drawSaleFlash() {
-    zoneFillRect(155, ANIMAL_Y + 20, 85, 16);
+    zoneFillRect(BADGE_COL_X, ANIMAL_Y + LEVEL_BADGE_H + 20, BADGE_COL_W, 16);
     if (!isBlackCatSaleActive()) return;
     const char* label = "SALE!";
     uint16_t color = saleFlashOn ? TFT_RED : TFT_YELLOW;
     tft.setTextColor(color, zoneBgColor());
     int w = tft.textWidth(label, 2);
-    tft.drawString(label, 234 - w, ANIMAL_Y + 22, 2);
+    tft.drawString(label, 234 - w, ANIMAL_Y + LEVEL_BADGE_H + 22, 2);
 }
 
 static void drawAnimal() {
@@ -1053,8 +1185,9 @@ static void drawAnimal() {
         }
     }
 
-    // Points balance — drawn after drawCat()/drawSleepingCat() since both repaint their own
-    // clear rect internally and would otherwise wipe this out.
+    // Right-hand badge column (level/points/sale) — drawn after drawCat()/drawSleepingCat()
+    // since both repaint their own clear rect internally and would otherwise wipe this out.
+    drawLevelBadge();
     drawPoints();
     drawSaleFlash();
 
@@ -1188,6 +1321,35 @@ static void drawTimerRow() {
     }
 }
 
+// Awards XP 1:1 alongside points. XP is a separate, monotonically-increasing lifetime
+// counter — never spent, never reduced by store purchases. Also grants a one-time bonus
+// to the spendable points balance for every MILESTONE_LEVEL_INTERVAL level crossed by
+// this single award (a big cheat grant can cross more than one milestone at once), and
+// kicks off the level-up fireworks animation, passing along the total bonus points earned
+// this award so it can flash alongside it. Does not call configMgr.save() itself — callers
+// already save after their own mutation.
+static void awardXp(uint32_t amount) {
+    if (amount == 0) return;
+    uint32_t oldLevel = levelForXp(configMgr.config().totalXp);
+    configMgr.config().totalXp += amount;
+    uint32_t newLevel = levelForXp(configMgr.config().totalXp);
+    uint32_t bonusEarned = 0;
+    for (uint32_t lvl = oldLevel + 1; lvl <= newLevel; lvl++) {
+        if (lvl % MILESTONE_LEVEL_INTERVAL == 0) bonusEarned += MILESTONE_BONUS_POINTS;
+    }
+    if (bonusEarned > 0) configMgr.config().points += bonusEarned;
+    if (newLevel > oldLevel) {
+        // Skip the routine small in-zone Celebrate animation (bob + sparkles) for this
+        // touch — the care-action handler that called us (if any) already set cat.mood
+        // to Celebrate just before this; overriding it back to Idle here means the cat
+        // will simply be resting once the fireworks takeover ends, instead of playing a
+        // second, smaller celebration on top of/after the big one.
+        cat.mood = CatMood::Idle;
+        dirty.animal = true;  // redraw the level badge
+        triggerFireworks(bonusEarned);
+    }
+}
+
 // Persists a care action's timestamp as UTC and, if the action addressed a genuine
 // need, awards points — sharing one NTP/epoch/save sequence across treat/play/meds/water.
 static void persistCareAction(uint32_t& lastEpochField, bool wasNeeded, uint32_t pointsAwarded) {
@@ -1197,6 +1359,7 @@ static void persistCareAction(uint32_t& lastEpochField, bool wasNeeded, uint32_t
         lastEpochField = (uint32_t)utc;
         if (wasNeeded) {
             configMgr.config().points += pointsAwarded;
+            awardXp(pointsAwarded);
             dirty.animal = true;
         }
         configMgr.save();
@@ -1577,6 +1740,74 @@ static bool isBlackCatSaleActive() {
     return nowMinutes >= BLACK_CAT_SALE_START_MIN && nowMinutes < BLACK_CAT_SALE_END_MIN;
 }
 
+// Level-up fireworks — a full-screen takeover distinct from the small in-zone Celebrate
+// animation (drawSparkles()/CatMood::Celebrate), reserved for the rarer, bigger moment of
+// actually leveling up. Modeled on updateSleepScreen()'s full fillScreen() ownership below:
+// this owns the whole 240x320 screen directly for FIREWORKS_DURATION_MS rather than going
+// through the zone-scoped dirty flags, then hands the screen back via a forced full repaint.
+struct FireworksBurst { int cx, cy; };
+static constexpr FireworksBurst FIREWORKS_BURSTS[] = {
+    { 60, 100}, {180, 130}, {120, 220},
+};
+static constexpr int FIREWORKS_BURST_N = 3;
+
+static void triggerFireworks(uint32_t bonusPoints) {
+    fireworks.active      = true;
+    fireworks.since       = millis();
+    fireworks.lastFrame   = 0;
+    fireworks.frame       = 0;
+    fireworks.bonusPoints = bonusPoints;
+    tft.fillScreen(TFT_BLACK);
+}
+
+// Called every loop() iteration while fireworks.active; advances/draws a frame at most
+// every FIREWORKS_FRAME_MS, and ends the takeover (forcing a full UI repaint) once
+// FIREWORKS_DURATION_MS has elapsed. Takes its own fresh millis() reading rather than a
+// timestamp from the caller — loop() captures `now` once at the top of the iteration,
+// before handleTouch() runs, but triggerFireworks() (called from inside handleTouch(),
+// via awardXp()) stamps fireworks.since with a *later* millis() value than that. Using
+// the caller's stale `now` here made `now - fireworks.since` underflow (unsigned
+// arithmetic) into a huge value on the very first check, ending the animation
+// immediately after just the initial fillScreen() — the "one flash, no celebration" bug.
+static void updateFireworksAnim() {
+    unsigned long now = millis();
+    if (now - fireworks.since > FIREWORKS_DURATION_MS) {
+        fireworks.active = false;
+        // Full clear + force every zone to repaint, same recovery used when the sleep
+        // screen / setup prompt takeover ends.
+        tft.fillScreen(TFT_BLACK);
+        dirty.header = dirty.animal = dirty.picker = dirty.timerRow = true;
+        dirty.animalBg = true;
+        return;
+    }
+    if (now - fireworks.lastFrame < FIREWORKS_FRAME_MS) return;
+    fireworks.lastFrame = now;
+    fireworks.frame++;
+
+    tft.fillScreen(TFT_BLACK);  // redraw-over-black each tick — same cost as sparkle erase/redraw, at screen scale
+    static const uint16_t burstColors[] = {TFT_YELLOW, TFT_CYAN, 0xFD20, TFT_GREEN, TFT_MAGENTA, TFT_RED};
+    for (int b = 0; b < FIREWORKS_BURST_N; b++) {
+        int cx = FIREWORKS_BURSTS[b].cx, cy = FIREWORKS_BURSTS[b].cy;
+        uint16_t color = burstColors[(fireworks.frame + b * 2) % 6];
+        int radius = 6 + ((fireworks.frame + b * 3) % 8) * 6;  // grows and cycles per burst
+        tft.fillCircle(cx, cy, 3, color);
+        for (int i = 0; i < 8; i++) {
+            float angle = (i * 45.0f) * PI / 180.0f;
+            int ex = cx + (int)(radius * cosf(angle));
+            int ey = cy + (int)(radius * sinf(angle));
+            tft.drawLine(cx, cy, ex, ey, color);
+        }
+    }
+
+    if (fireworks.bonusPoints > 0 && (fireworks.frame % 2 == 0)) {
+        char buf[24];
+        snprintf(buf, sizeof(buf), "+%lu pts!", (unsigned long)fireworks.bonusPoints);
+        uint16_t color = (fireworks.frame % 4 == 0) ? TFT_YELLOW : TFT_WHITE;
+        tft.setTextColor(color, TFT_BLACK);
+        tft.drawCentreString(buf, CX, 150, 4);
+    }
+}
+
 struct SleepPos { int x, y; };
 static constexpr SleepPos SLEEP_CLOCK_POS[] = {
     { 20,  60}, {100,  60}, { 20, 160}, {100, 160}, { 20, 250}, {100, 250},
@@ -1651,6 +1882,8 @@ button:hover{background:#005ec4}
 .err{background:#631}
 .pick{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:1rem;color:#ddd}
 .pick input{display:inline-block;width:auto;margin:0}
+.medal{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:1.6rem;font-weight:bold;color:#000;margin:0 auto 14px;box-shadow:inset 0 0 0 5px rgba(0,0,0,.25)}
 )css";
 
 // WiFiManager's own generated pages (root menu, wifi scan/connect, info, exit, the
@@ -1695,8 +1928,28 @@ static const char CONFIG_HOME_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <a class="nav" href="/config/city">City (weather &amp; timezone)</a>
 <a class="nav" href="/config/store">Store</a>
 <a class="nav" href="/config/dress">Dressing Room</a>
+<a class="nav" href="/config/badges">Badges</a>
 <a class="nav" href="/config/backup">Backup</a>
 <a class="nav" href="/config/update">Firmware Update</a>
+</body></html>
+)html";
+
+static const char CONFIG_BADGES_HTML[] PROGMEM = R"html(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cat Control Panel &middot; Badges</title>
+<style>%%STYLE%%</style>
+</head><body>
+<a class="back" href="/config">&larr; Configuration</a>
+<h2>Badges</h2>
+<div class="medal" style="background:%%MEDALCOLOR%%">%%LEVEL%%</div>
+<p>Lifetime XP: <strong>%%XP%%</strong><br>
+XP to next level: <strong>%%XPTONEXT%%</strong></p>
+<p class="dim">This is lifetime experience, separate from your spendable Points balance
+&mdash; visit the Store to see and spend Points.</p>
+<p>Bonus: +%%BONUS%% points every %%INTERVAL%% levels.<br>
+Milestones reached: <strong>%%MILESTONES%%</strong></p>
 </body></html>
 )html";
 
@@ -2376,6 +2629,21 @@ static void handleConfigStoreGet() {
     wm.server->send(200, "text/html", page);
 }
 
+static void handleConfigBadgesGet() {
+    uint32_t xp = configMgr.config().totalXp;
+    uint32_t level = levelForXp(xp);
+    String page = String(FPSTR(CONFIG_BADGES_HTML));
+    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    page.replace("%%LEVEL%%", String(level));
+    page.replace("%%MEDALCOLOR%%", String(medalColorHexForLevel(level)));
+    page.replace("%%XP%%", String(xp));
+    page.replace("%%XPTONEXT%%", String(xpToNextLevel(xp)));
+    page.replace("%%MILESTONES%%", String(level / MILESTONE_LEVEL_INTERVAL));
+    page.replace("%%BONUS%%", String(MILESTONE_BONUS_POINTS));
+    page.replace("%%INTERVAL%%", String(MILESTONE_LEVEL_INTERVAL));
+    wm.server->send(200, "text/html", page);
+}
+
 // Easter egg: grants an arbitrary number of points, reached only via the hidden field
 // revealed by tapping the store heading 7 times in a row (see CONFIG_STORE_HTML's inline
 // script). Non-positive or unreasonably large amounts are silently ignored rather than
@@ -2384,6 +2652,7 @@ static void handleConfigStoreCheatPost() {
     long amount = wm.server->arg("amount").toInt();
     if (amount > 0 && amount <= 1000000) {
         configMgr.config().points += (uint32_t)amount;
+        awardXp((uint32_t)amount);
         configMgr.save();
     }
     wm.server->sendHeader("Location", "/config/store?cheat=1");
@@ -2979,6 +3248,7 @@ static void runWiFiManager(ConfigManager& cfg) {
     wm.server->on("/config/city",      HTTP_GET,  handleConfigCityGet);
     wm.server->on("/config/store",     HTTP_GET,  handleConfigStoreGet);
     wm.server->on("/config/dress",     HTTP_GET,  handleConfigDressGet);
+    wm.server->on("/config/badges",    HTTP_GET,  handleConfigBadgesGet);
     wm.server->on("/config/backup",        HTTP_GET,  handleConfigBackupGet);
     wm.server->on("/config/backup/export", HTTP_GET,  handleConfigBackupExportGet);
     wm.server->on("/config/update",        HTTP_GET,  handleConfigUpdateGet);
@@ -3064,6 +3334,22 @@ void loop() {
         handleTouch();  // may start a peek if `asleep` was true
 
         bool sleepingNow = inSleepWindow && peekUntilMs == 0;  // re-check post-touch
+
+        // Level-up fireworks — a full-screen takeover, so it fully owns the loop iteration
+        // while active and skips the sleep screen / setup prompt / normal dirty-flag redraw
+        // below. If the sleep window kicks in mid-animation, just cancel silently rather than
+        // fighting for the screen — the level/bonus points were already recorded by awardXp(),
+        // only the celebratory animation is skipped; nothing else is lost.
+        if (fireworks.active) {
+            if (sleepingNow) {
+                fireworks.active = false;
+            } else {
+                updateFireworksAnim();
+                delay(50);
+                return;
+            }
+        }
+
         bool wasPeekingAsleep = peekingAsleep;
         peekingAsleep = inSleepWindow && peekUntilMs > 0;       // re-check post-touch, mirrors sleepingNow
         // Force a clean repaint on any peekingAsleep transition — covers the sleep
