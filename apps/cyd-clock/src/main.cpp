@@ -1703,10 +1703,83 @@ static const char CONFIG_SETUP_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h3>Name your cat</h3>
 <label>Name</label>
 <input name="name" id="name" maxlength="16" placeholder="Biscuit">
+<button type="button" style="width:100%;margin-top:8px"
+  onclick="document.getElementById('step2').style.display='none';document.getElementById('step3').style.display='block'">Next</button>
+</div>
+
+<div id="step3" style="display:none">
+<h3>Weather location</h3>
+<label>City search</label>
+<div class="row">
+<input id="wcs" placeholder="e.g. Paris, Toronto…" oninput="deb('w',this.value)">
+<button type="button" onclick="search('w')">Search</button>
+</div>
+<div id="wres" class="drop"></div>
+<label>Latitude</label>
+<input name="lat" id="lat" value="%%LAT%%">
+<label>Longitude</label>
+<input name="lon" id="lon" value="%%LON%%">
+
+<h3>Timezone (for clock)</h3>
+<label>City search</label>
+<div class="row">
+<input id="tcs" placeholder="e.g. London, New York…" oninput="deb('t',this.value)">
+<button type="button" onclick="search('t')">Search</button>
+</div>
+<div id="tres" class="drop"></div>
+<label>UTC Offset (seconds)</label>
+<input name="utc" id="utc" type="number" value="%%UTC%%">
+
 <button type="submit" style="width:100%;margin-top:8px">Finish &amp; go to the store</button>
 </div>
 
 </form>
+<script>
+const tm={};
+function deb(k,v){clearTimeout(tm[k]);if(v.length>1)tm[k]=setTimeout(()=>search(k),500)}
+async function search(k){
+  const q=document.getElementById(k+'cs').value.trim();
+  if(!q)return;
+  const el=document.getElementById(k+'res');
+  el.style.display='block';el.innerHTML='<div class="city">Searching…</div>';
+  try{
+    const r=await fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(q)+'&count=8&language=en&format=json');
+    const d=await r.json();
+    if(!d.results||!d.results.length){el.innerHTML='<div class="city">No results</div>';return;}
+    el.innerHTML='';
+    d.results.forEach(c=>{
+      const div=document.createElement('div');
+      div.className='city';div.tabIndex=0;
+      const b=document.createElement('strong');b.textContent=c.name;div.appendChild(b);
+      if(c.admin1){div.appendChild(document.createTextNode(', '+c.admin1));}
+      const sm=document.createElement('small');sm.textContent=' '+c.country;div.appendChild(sm);
+      const fn=()=>pick(k,c.latitude,c.longitude,c.timezone||'');
+      div.addEventListener('click',fn);
+      div.addEventListener('keydown',e=>{if(e.key==='Enter')fn();});
+      el.appendChild(div);
+    });
+  }catch(e){el.innerHTML='<div class="city">Network error</div>';}
+}
+function utcFromTz(tz){
+  try{
+    const p=new Intl.DateTimeFormat('en',{timeZone:tz,timeZoneName:'longOffset'}).formatToParts(new Date());
+    const s=p.find(x=>x.type==='timeZoneName').value;
+    const m=s.match(/GMT([+-]?)(\d{2}):(\d{2})/);
+    return m?(m[1]==='-'?-1:1)*(+m[2]*3600+ +m[3]*60):null;
+  }catch(e){return null;}
+}
+function pick(k,lat,lon,tz){
+  document.getElementById(k+'res').style.display='none';
+  document.getElementById(k+'cs').value='';
+  if(k==='w'){
+    document.getElementById('lat').value=lat;
+    document.getElementById('lon').value=lon;
+  } else {
+    const off=utcFromTz(tz);
+    if(off!==null)document.getElementById('utc').value=off;
+  }
+}
+</script>
 </body></html>
 )html";
 
@@ -2057,9 +2130,16 @@ static void handleSetupGet() {
                        + String(CAT_COLORS[i].label) + "</span></label>";
     }
     page.replace("%%COLOR_OPTIONS%%", colorOptions);
+    page.replace("%%LAT%%", String(configMgr.config().latitude,  4));
+    page.replace("%%LON%%", String(configMgr.config().longitude, 4));
+    page.replace("%%UTC%%", String(configMgr.config().utcOffsetSeconds));
 
     String msg = "";
-    if (wm.server->hasArg("err")) msg = "<div class='banner err'>Please enter a name (max 16 characters).</div>";
+    if (wm.server->hasArg("err")) {
+        String err = wm.server->arg("err");
+        if (err == "city") msg = "<div class='banner err'>Please check your City/Timezone values.</div>";
+        else msg = "<div class='banner err'>Please enter a name (max 16 characters).</div>";
+    }
     page.replace("%%MSG%%", msg);
     wm.server->send(200, "text/html", page);
 }
@@ -2075,6 +2155,15 @@ static void handleSetupPost() {
     }
     if (!nameOk) {
         wm.server->sendHeader("Location", "/setup?err=name");
+        wm.server->send(302, "text/plain", "");
+        return;
+    }
+
+    float lat = wm.server->arg("lat").toFloat();
+    float lon = wm.server->arg("lon").toFloat();
+    int   utc = wm.server->arg("utc").toInt();
+    if (lat < -90.0f || lat > 90.0f || lon < -180.0f || lon > 180.0f || utc < -50400 || utc > 50400) {
+        wm.server->sendHeader("Location", "/setup?err=city");
         wm.server->send(302, "text/plain", "");
         return;
     }
@@ -2095,11 +2184,29 @@ static void handleSetupPost() {
             configMgr.config().equippedCatColor = EQUIP_NONE;
         }
     }
+    configMgr.config().latitude         = lat;
+    configMgr.config().longitude        = lon;
+    configMgr.config().utcOffsetSeconds = utc;
     configMgr.config().setupComplete = true;
     configMgr.save();
 
+    // Same side effects handleConfigCityPost() applies when latitude/longitude/utc change.
+    ntpClient.setTimeOffset(utc);
+    lastWeatherFetch = millis() - WEATHER_UPDATE_INTERVAL_MS - 1;
     dirty.header = dirty.animal = dirty.animalBg = dirty.picker = dirty.timerRow = true;
     wm.server->sendHeader("Location", "/config/store?welcome=1");
+    wm.server->send(302, "text/plain", "");
+}
+
+// Only registered (see runWiFiManager()) when setupComplete is still false at boot, so
+// first-time visitors land straight in the wizard instead of WiFiManager's stock root
+// menu — no "Cat Control Panel" click required. If setup finishes during this same boot
+// session, "/" stays intercepted until the next reboot (WiFiManager's own root handler,
+// registered afterward, never gets a chance to match — see the registration comment
+// below), so redirect to /config in that case rather than looping back into the wizard.
+static void handleRootDuringSetup() {
+    const char* target = configMgr.config().setupComplete ? "/config" : "/setup";
+    wm.server->sendHeader("Location", target);
     wm.server->send(302, "text/plain", "");
 }
 
@@ -2820,6 +2927,16 @@ static void runWiFiManager(ConfigManager& cfg) {
     // unconditionally by WiFiManager regardless of menu membership, so /update still works.
     const char* menu[] = {"wifi", "custom", "info", "sep", "exit"};
     wm.setMenu(menu, 5);
+    // First-run only: claim "/" before WiFiManager registers its own root handler.
+    // setWebServerCallback() fires right after WiFiManager (re)creates its webserver
+    // object, before any of its own server->on() calls (see WiFiManager::setupHTTPServer())
+    // — and WM_WebServer matches handlers in registration order, stopping at the first
+    // match. Registering here wins that race, so first-time visitors land straight in the
+    // wizard instead of WiFiManager's stock menu. Left unregistered once setup is already
+    // complete, so already-configured devices keep the normal root menu untouched.
+    if (!configMgr.config().setupComplete) {
+        wm.setWebServerCallback([]() { wm.server->on("/", HTTP_GET, handleRootDuringSetup); });
+    }
     wm.autoConnect("CYD-Clock");
     wm.startWebPortal();
     wm.server->on("/config",           HTTP_GET,  handleConfigHome);
