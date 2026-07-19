@@ -34,7 +34,7 @@ jobs:
         with:
           gemini_api_key: ${{ secrets.GEMINI_API_KEY }}
           gemini_cli_version: 0.51.0
-          gemini_model: gemini-2.5-flash
+          gemini_model: gemini-2.5-pro
           gemini_debug: 'true'
           upload_artifacts: 'true'
           github_pr_number: ${{ github.event.pull_request.number }}
