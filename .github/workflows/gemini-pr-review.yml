@@ -73,6 +73,6 @@ jobs:
                 }
               },
               "tools": {
-                "core": []
+                "core": ["activate_skill", "update_topic"]
               }
             }
