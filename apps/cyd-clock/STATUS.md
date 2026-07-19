@@ -152,6 +152,38 @@ etc., see `apps/cyd-clock/STORE_IDEAS.md`).
 "cheap" conclusion above held even with six themes including one with real art.
 `freenove-s3`: 30.9% (1,031,553 / 3,342,336 B).
 
+### Update (DIY-51, 2026-07-18) — Lifetime XP / level badges
+
+Added a second, non-spendable progression counter (`totalXp`) on top of the existing
+`points` economy — awarded 1:1 alongside points from the same 4 care actions and the
+store cheat, driving a derived level via a gentle increasing curve (`xpForLevel()`/
+`levelForXp()`, level `L`→`L+1` costs `20 + 10*(L-1)` XP). Every 5th level grants a bonus
+to spendable points and plays a full-screen fireworks takeover on the physical device
+(`triggerFireworks()`/`updateFireworksAnim()`, modeled on the sleep-screen's full-screen
+ownership pattern) — this preempts the routine small in-zone Celebrate animation for that
+touch rather than layering on top of it. The on-device dashboard shows the level as a
+small color-coded medal (`drawLevelBadge()`) stacked above the points/sale-flash column;
+its color advances through a fixed rainbow sequence every milestone (5 levels) and locks
+to gold once the sequence is exhausted — the same tier logic (`medalTierForLevel()`) is
+shared with the `/config/badges` web page so the two never drift out of sync. Both boards
+build clean; **the milestone/fireworks decisions and the exact medal look went through
+several rounds of on-device visual iteration** (badge column ordering, clipping past the
+cat's head bounding box — not just its ear triangles as an earlier comment assumed,
+stale-timestamp bug in the fireworks duration check, off-by-one in the color-tier
+boundary) — see PR history for the specifics if similar TFT layout work comes up again.
+
+`cyd` flash: 94.0% (1,232,417 / 1,310,720 B). This card's own cost is small — 93.5%
+(1,225,389 B) measured on `master` immediately before this branch, so DIY-51 itself only
+added ~7KB (0.5 points), not the jump the number suggests. The 81.7% figure two entries up
+(DIY-38, 2026-07-13) is stale and no longer a useful baseline: DIY-47/48/50/52 landed
+between then and now without a recorded flash entry and consumed nearly all of the
+headroom DIY-40 bought back. `cyd` is now genuinely close to full — worth a flash-usage
+pass (candidates from the DIY-39 entry above still apply) before the next `cyd`-side
+feature, not just watching it. DIY-53 (test harness/emulator investigation) also flagged
+flash-constrained iteration as
+a pain point independent of this. `freenove-s3`: 35.6% (1,188,817 / 3,342,336 B), still
+comfortable.
+
 ## Auto-Update Investigation (DIY-41, 2026-07-14)
 
 Looked into whether the device can detect and install a new firmware release on its
