@@ -1,0 +1,37 @@
+name: Antigravity PR Review
+
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: agy-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # Fork PRs don't get repo secrets, but skip explicitly rather than
+    # letting the step fail on a missing key.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run Antigravity review
+        uses: rsamborski/run-agy-sdk@90e944e2f0d1bfcc392c954cd937f7d3b36d1441
+        with:
+          api-key: ${{ secrets.GEMINI_API_KEY }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          model: gemini-3.5-flash
+          mode: review
+          prompt: /antigravity-review
+          trust-workspace: 'true'
+          sandbox-profile: 'true'
