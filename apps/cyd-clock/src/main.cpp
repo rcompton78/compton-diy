@@ -1969,6 +1969,13 @@ document.getElementById('importFile').addEventListener('change', function(e){
 });
 </script>
 
+<h3>Danger Zone</h3>
+<p>Wipes cat name/schedule, city/timezone, and all store/points state back to defaults. This cannot be undone.</p>
+<form method="POST" action="/save-config/reset">
+<input type="text" name="confirm" placeholder="type reset to confirm">
+<button type="submit" style="width:100%;margin-top:8px">Reset Everything</button>
+</form>
+
 </body></html>
 )html";
 
@@ -2011,6 +2018,12 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 </head><body>
 <a class="back" href="/config">&larr; Configuration</a>
 <h2 id="storeTitle">Store</h2>
+<form id="cheatForm" method="POST" action="/save-config/cheat" style="display:none;margin-top:8px">
+<div class="row">
+<input type="number" name="amount" placeholder="points to add">
+<button type="submit">Add</button>
+</div>
+</form>
 %%MSG%%
 <div class="balance">Points: <strong>%%POINTS%%</strong></div>
 
@@ -2026,25 +2039,17 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h3>Room Themes</h3>
 %%ROOM_THEME_ITEMS%%
 
-<form id="cheatForm" method="POST" action="/save-config/cheat" style="display:none;margin-top:12px">
-<button type="submit">+50 points</button>
-</form>
-<form id="resetForm" method="POST" action="/save-config/reset" style="display:none;margin-top:12px">
-<input type="text" name="confirm" placeholder="type reset to confirm">
-<button type="submit" style="width:100%;margin-top:8px">Reset Everything</button>
-</form>
 <script>
 // Easter egg: tap the "Store" heading 7 times in a row (no other tap in between)
-// to reveal a cheat button that grants 50 points, and a reset-everything form.
+// to reveal a text field + button that grants that many points.
 (function(){
     var taps = 0;
     var title = document.getElementById('storeTitle');
     var cheat = document.getElementById('cheatForm');
-    var reset = document.getElementById('resetForm');
     document.addEventListener('click', function(e){
         if (e.target === title) {
             taps++;
-            if (taps >= 7) { cheat.style.display = 'block'; reset.style.display = 'block'; }
+            if (taps >= 7) { cheat.style.display = 'block'; }
         } else {
             taps = 0;
         }
@@ -2358,9 +2363,7 @@ static void handleConfigStoreGet() {
     if (wm.server->hasArg("welcome")) {
         msg = "<div class='banner ok'>Welcome! Here's 70 points to get started.</div>";
     } else if (wm.server->hasArg("cheat")) {
-        msg = "<div class='banner ok'>+50 points!</div>";
-    } else if (wm.server->hasArg("reset")) {
-        msg = "<div class='banner ok'>Everything has been reset.</div>";
+        msg = "<div class='banner ok'>Points added!</div>";
     } else if (wm.server->hasArg("saved")) {
         msg = "<div class='banner ok'>Purchase complete.</div>";
     } else if (wm.server->hasArg("err")) {
@@ -2368,35 +2371,37 @@ static void handleConfigStoreGet() {
         if (err == "funds") msg = "<div class='banner err'>Not enough points.</div>";
         else if (err == "owned") msg = "<div class='banner err'>You already own that item.</div>";
         else if (err == "save") msg = "<div class='banner err'>Purchase failed to save — please try again.</div>";
-        else if (err == "resetConfirm") msg = "<div class='banner err'>Type \"reset\" exactly to confirm.</div>";
-        else if (err == "resetSave") msg = "<div class='banner err'>Reset failed to save — please try again.</div>";
     }
     page.replace("%%MSG%%", msg);
     wm.server->send(200, "text/html", page);
 }
 
-// Easter egg: grants 50 points, reached only via the hidden cheat button revealed by
-// tapping the store heading 7 times in a row (see CONFIG_STORE_HTML's inline script).
+// Easter egg: grants an arbitrary number of points, reached only via the hidden field
+// revealed by tapping the store heading 7 times in a row (see CONFIG_STORE_HTML's inline
+// script). Non-positive or unreasonably large amounts are silently ignored rather than
+// erroring — this is a debug cheat, not a validated form.
 static void handleConfigStoreCheatPost() {
-    configMgr.config().points += 50;
-    configMgr.save();
+    long amount = wm.server->arg("amount").toInt();
+    if (amount > 0 && amount <= 1000000) {
+        configMgr.config().points += (uint32_t)amount;
+        configMgr.save();
+    }
     wm.server->sendHeader("Location", "/config/store?cheat=1");
     wm.server->send(302, "text/plain", "");
 }
 
-// Easter egg: wipes the entire config — cat name/schedule, city/timezone, and all
-// gamification state — back to AppConfig's defaults, reached only via the hidden reset
-// form revealed alongside the cheat button (see CONFIG_STORE_HTML's inline script).
-// Requires typing "reset" to guard against an accidental tap/submit.
+// Wipes the entire config — cat name/schedule, city/timezone, and all gamification
+// state — back to AppConfig's defaults. Lives in the Backup page's "Danger Zone" (see
+// CONFIG_BACKUP_HTML). Requires typing "reset" to guard against an accidental submit.
 static void handleConfigResetPost() {
     if (wm.server->arg("confirm") != "reset") {
-        wm.server->sendHeader("Location", "/config/store?err=resetConfirm");
+        wm.server->sendHeader("Location", "/config/backup?err=resetConfirm");
         wm.server->send(302, "text/plain", "");
         return;
     }
     configMgr.resetToDefaults();
     if (!configMgr.save()) {
-        wm.server->sendHeader("Location", "/config/store?err=resetSave");
+        wm.server->sendHeader("Location", "/config/backup?err=resetSave");
         wm.server->send(302, "text/plain", "");
         return;
     }
@@ -2407,7 +2412,7 @@ static void handleConfigResetPost() {
     dirty.header = true;
     dirty.animal = true;
     dirty.animalBg = true;  // reset clears any equipped room theme back to default
-    wm.server->sendHeader("Location", "/config/store?reset=1");
+    wm.server->sendHeader("Location", "/config/backup?reset=1");
     wm.server->send(302, "text/plain", "");
 }
 
@@ -2418,11 +2423,15 @@ static void handleConfigBackupGet() {
     String msg = "";
     if (wm.server->hasArg("saved")) {
         msg = "<div class='banner ok'>Backup restored.</div>";
+    } else if (wm.server->hasArg("reset")) {
+        msg = "<div class='banner ok'>Everything has been reset.</div>";
     } else if (wm.server->hasArg("err")) {
         String err = wm.server->arg("err");
         if (err == "empty") msg = "<div class='banner err'>Paste or choose a backup file first.</div>";
         else if (err == "parse") msg = "<div class='banner err'>That doesn't look like a valid backup file.</div>";
         else if (err == "save") msg = "<div class='banner err'>Restore failed to save — please try again.</div>";
+        else if (err == "resetConfirm") msg = "<div class='banner err'>Type \"reset\" exactly to confirm.</div>";
+        else if (err == "resetSave") msg = "<div class='banner err'>Reset failed to save — please try again.</div>";
     }
     page.replace("%%MSG%%", msg);
     wm.server->send(200, "text/html", page);
