@@ -172,10 +172,15 @@ cat's head bounding box — not just its ear triangles as an earlier comment ass
 stale-timestamp bug in the fireworks duration check, off-by-one in the color-tier
 boundary) — see PR history for the specifics if similar TFT layout work comes up again.
 
-`cyd` flash: 94.0% (1,232,417 / 1,310,720 B), up from 81.7% post-DIY-38 — the largest
-single-card jump recorded in this file, and back into the same tight-headroom territory
-DIY-40 previously bought back. Worth watching before adding more `cyd`-side features;
-DIY-53 (test harness/emulator investigation) also flagged flash-constrained iteration as
+`cyd` flash: 94.0% (1,232,417 / 1,310,720 B). This card's own cost is small — 93.5%
+(1,225,389 B) measured on `master` immediately before this branch, so DIY-51 itself only
+added ~7KB (0.5 points), not the jump the number suggests. The 81.7% figure two entries up
+(DIY-38, 2026-07-13) is stale and no longer a useful baseline: DIY-47/48/50/52 landed
+between then and now without a recorded flash entry and consumed nearly all of the
+headroom DIY-40 bought back. `cyd` is now genuinely close to full — worth a flash-usage
+pass (candidates from the DIY-39 entry above still apply) before the next `cyd`-side
+feature, not just watching it. DIY-53 (test harness/emulator investigation) also flagged
+flash-constrained iteration as
 a pain point independent of this. `freenove-s3`: 35.6% (1,188,817 / 3,342,336 B), still
 comfortable.
 
