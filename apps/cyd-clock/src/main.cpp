@@ -1663,6 +1663,25 @@ button:hover{background:#005ec4}
 // temporary String's c_str() here would leave it pointing at freed memory.
 static const String WM_CUSTOM_HEAD = "<style>" + String(FPSTR(CONFIG_STYLE)) + "</style>";
 
+// Served at "/" once setup is complete — see handleRootPage()'s comment for why this
+// exists instead of falling back to WiFiManager's own root menu. Mirrors the `menu[]`
+// array passed to wm.setMenu() in runWiFiManager() (wifi/info/exit), plus a link into the
+// Cat Control Panel itself.
+static const char ROOT_MENU_HTML[] PROGMEM = R"html(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cat Control Panel</title>
+<style>%%STYLE%%</style>
+</head><body>
+<h2>Cat Control Panel</h2>
+<a class="nav" href="/config">Cat Control Panel</a>
+<a class="nav" href="/wifi">Configure WiFi</a>
+<a class="nav" href="/info">Info</a>
+<a class="nav" href="/exit">Exit</a>
+</body></html>
+)html";
+
 static const char CONFIG_HOME_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
@@ -1950,6 +1969,13 @@ document.getElementById('importFile').addEventListener('change', function(e){
 });
 </script>
 
+<h3>Danger Zone</h3>
+<p>Wipes cat name/schedule, city/timezone, and all store/points state back to defaults. This cannot be undone.</p>
+<form method="POST" action="/save-config/reset">
+<input type="text" name="confirm" placeholder="type reset to confirm">
+<button type="submit" style="width:100%;margin-top:8px">Reset Everything</button>
+</form>
+
 </body></html>
 )html";
 
@@ -1992,6 +2018,12 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 </head><body>
 <a class="back" href="/config">&larr; Configuration</a>
 <h2 id="storeTitle">Store</h2>
+<form id="cheatForm" method="POST" action="/save-config/cheat" style="display:none;margin-top:8px">
+<div class="row">
+<input type="number" name="amount" placeholder="points to add">
+<button type="submit">Add</button>
+</div>
+</form>
 %%MSG%%
 <div class="balance">Points: <strong>%%POINTS%%</strong></div>
 
@@ -2007,25 +2039,17 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h3>Room Themes</h3>
 %%ROOM_THEME_ITEMS%%
 
-<form id="cheatForm" method="POST" action="/save-config/cheat" style="display:none;margin-top:12px">
-<button type="submit">+50 points</button>
-</form>
-<form id="resetForm" method="POST" action="/save-config/reset" style="display:none;margin-top:12px">
-<input type="text" name="confirm" placeholder="type reset to confirm">
-<button type="submit" style="width:100%;margin-top:8px">Reset Everything</button>
-</form>
 <script>
 // Easter egg: tap the "Store" heading 7 times in a row (no other tap in between)
-// to reveal a cheat button that grants 50 points, and a reset-everything form.
+// to reveal a text field + button that grants that many points.
 (function(){
     var taps = 0;
     var title = document.getElementById('storeTitle');
     var cheat = document.getElementById('cheatForm');
-    var reset = document.getElementById('resetForm');
     document.addEventListener('click', function(e){
         if (e.target === title) {
             taps++;
-            if (taps >= 7) { cheat.style.display = 'block'; reset.style.display = 'block'; }
+            if (taps >= 7) { cheat.style.display = 'block'; }
         } else {
             taps = 0;
         }
@@ -2198,16 +2222,25 @@ static void handleSetupPost() {
     wm.server->send(302, "text/plain", "");
 }
 
-// Only registered (see runWiFiManager()) when setupComplete is still false at boot, so
-// first-time visitors land straight in the wizard instead of WiFiManager's stock root
-// menu — no "Cat Control Panel" click required. If setup finishes during this same boot
-// session, "/" stays intercepted until the next reboot (WiFiManager's own root handler,
-// registered afterward, never gets a chance to match — see the registration comment
-// below), so redirect to /config in that case rather than looping back into the wizard.
-static void handleRootDuringSetup() {
-    const char* target = configMgr.config().setupComplete ? "/config" : "/setup";
-    wm.server->sendHeader("Location", target);
-    wm.server->send(302, "text/plain", "");
+// Registered unconditionally (see runWiFiManager()) so "/" always resolves to something,
+// regardless of setup state at any point in the device's lifetime — WiFiManager registers
+// its own "/" handler too, but WM_WebServer matches handlers in registration order and
+// stops at the first match, and this one is registered before any of WiFiManager's own
+// server->on() calls (see the registration comment in runWiFiManager()), so it always wins
+// and WiFiManager's own root handler never actually runs. Sends first-time visitors
+// straight into the wizard; once setup is complete, renders a minimal menu covering the
+// same links WiFiManager's own root menu would (wifi/info/exit, per the `menu[]` array
+// below), since handleRoot() on the WiFiManager instance itself is protected and can't be
+// called directly to fall back to it.
+static void handleRootPage() {
+    if (!configMgr.config().setupComplete) {
+        wm.server->sendHeader("Location", "/setup");
+        wm.server->send(302, "text/plain", "");
+        return;
+    }
+    String page = String(FPSTR(ROOT_MENU_HTML));
+    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    wm.server->send(200, "text/html", page);
 }
 
 static void handleConfigCatGet() {
@@ -2330,9 +2363,7 @@ static void handleConfigStoreGet() {
     if (wm.server->hasArg("welcome")) {
         msg = "<div class='banner ok'>Welcome! Here's 70 points to get started.</div>";
     } else if (wm.server->hasArg("cheat")) {
-        msg = "<div class='banner ok'>+50 points!</div>";
-    } else if (wm.server->hasArg("reset")) {
-        msg = "<div class='banner ok'>Everything has been reset.</div>";
+        msg = "<div class='banner ok'>Points added!</div>";
     } else if (wm.server->hasArg("saved")) {
         msg = "<div class='banner ok'>Purchase complete.</div>";
     } else if (wm.server->hasArg("err")) {
@@ -2340,35 +2371,37 @@ static void handleConfigStoreGet() {
         if (err == "funds") msg = "<div class='banner err'>Not enough points.</div>";
         else if (err == "owned") msg = "<div class='banner err'>You already own that item.</div>";
         else if (err == "save") msg = "<div class='banner err'>Purchase failed to save — please try again.</div>";
-        else if (err == "resetConfirm") msg = "<div class='banner err'>Type \"reset\" exactly to confirm.</div>";
-        else if (err == "resetSave") msg = "<div class='banner err'>Reset failed to save — please try again.</div>";
     }
     page.replace("%%MSG%%", msg);
     wm.server->send(200, "text/html", page);
 }
 
-// Easter egg: grants 50 points, reached only via the hidden cheat button revealed by
-// tapping the store heading 7 times in a row (see CONFIG_STORE_HTML's inline script).
+// Easter egg: grants an arbitrary number of points, reached only via the hidden field
+// revealed by tapping the store heading 7 times in a row (see CONFIG_STORE_HTML's inline
+// script). Non-positive or unreasonably large amounts are silently ignored rather than
+// erroring — this is a debug cheat, not a validated form.
 static void handleConfigStoreCheatPost() {
-    configMgr.config().points += 50;
-    configMgr.save();
+    long amount = wm.server->arg("amount").toInt();
+    if (amount > 0 && amount <= 1000000) {
+        configMgr.config().points += (uint32_t)amount;
+        configMgr.save();
+    }
     wm.server->sendHeader("Location", "/config/store?cheat=1");
     wm.server->send(302, "text/plain", "");
 }
 
-// Easter egg: wipes the entire config — cat name/schedule, city/timezone, and all
-// gamification state — back to AppConfig's defaults, reached only via the hidden reset
-// form revealed alongside the cheat button (see CONFIG_STORE_HTML's inline script).
-// Requires typing "reset" to guard against an accidental tap/submit.
+// Wipes the entire config — cat name/schedule, city/timezone, and all gamification
+// state — back to AppConfig's defaults. Lives in the Backup page's "Danger Zone" (see
+// CONFIG_BACKUP_HTML). Requires typing "reset" to guard against an accidental submit.
 static void handleConfigResetPost() {
     if (wm.server->arg("confirm") != "reset") {
-        wm.server->sendHeader("Location", "/config/store?err=resetConfirm");
+        wm.server->sendHeader("Location", "/config/backup?err=resetConfirm");
         wm.server->send(302, "text/plain", "");
         return;
     }
     configMgr.resetToDefaults();
     if (!configMgr.save()) {
-        wm.server->sendHeader("Location", "/config/store?err=resetSave");
+        wm.server->sendHeader("Location", "/config/backup?err=resetSave");
         wm.server->send(302, "text/plain", "");
         return;
     }
@@ -2379,7 +2412,7 @@ static void handleConfigResetPost() {
     dirty.header = true;
     dirty.animal = true;
     dirty.animalBg = true;  // reset clears any equipped room theme back to default
-    wm.server->sendHeader("Location", "/config/store?reset=1");
+    wm.server->sendHeader("Location", "/config/backup?reset=1");
     wm.server->send(302, "text/plain", "");
 }
 
@@ -2390,11 +2423,15 @@ static void handleConfigBackupGet() {
     String msg = "";
     if (wm.server->hasArg("saved")) {
         msg = "<div class='banner ok'>Backup restored.</div>";
+    } else if (wm.server->hasArg("reset")) {
+        msg = "<div class='banner ok'>Everything has been reset.</div>";
     } else if (wm.server->hasArg("err")) {
         String err = wm.server->arg("err");
         if (err == "empty") msg = "<div class='banner err'>Paste or choose a backup file first.</div>";
         else if (err == "parse") msg = "<div class='banner err'>That doesn't look like a valid backup file.</div>";
         else if (err == "save") msg = "<div class='banner err'>Restore failed to save — please try again.</div>";
+        else if (err == "resetConfirm") msg = "<div class='banner err'>Type \"reset\" exactly to confirm.</div>";
+        else if (err == "resetSave") msg = "<div class='banner err'>Reset failed to save — please try again.</div>";
     }
     page.replace("%%MSG%%", msg);
     wm.server->send(200, "text/html", page);
@@ -2927,16 +2964,13 @@ static void runWiFiManager(ConfigManager& cfg) {
     // unconditionally by WiFiManager regardless of menu membership, so /update still works.
     const char* menu[] = {"wifi", "custom", "info", "sep", "exit"};
     wm.setMenu(menu, 5);
-    // First-run only: claim "/" before WiFiManager registers its own root handler.
-    // setWebServerCallback() fires right after WiFiManager (re)creates its webserver
-    // object, before any of its own server->on() calls (see WiFiManager::setupHTTPServer())
-    // — and WM_WebServer matches handlers in registration order, stopping at the first
-    // match. Registering here wins that race, so first-time visitors land straight in the
-    // wizard instead of WiFiManager's stock menu. Left unregistered once setup is already
-    // complete, so already-configured devices keep the normal root menu untouched.
-    if (!configMgr.config().setupComplete) {
-        wm.setWebServerCallback([]() { wm.server->on("/", HTTP_GET, handleRootDuringSetup); });
-    }
+    // Claim "/" before WiFiManager registers its own root handler. setWebServerCallback()
+    // fires right after WiFiManager (re)creates its webserver object, before any of its own
+    // server->on() calls (see WiFiManager::setupHTTPServer()) — and WM_WebServer matches
+    // handlers in registration order, stopping at the first match. Registering here wins
+    // that race on every boot (see handleRootPage()'s comment for why this is
+    // unconditional, not just while setup is incomplete).
+    wm.setWebServerCallback([]() { wm.server->on("/", HTTP_GET, handleRootPage); });
     wm.autoConnect("CYD-Clock");
     wm.startWebPortal();
     wm.server->on("/config",           HTTP_GET,  handleConfigHome);
