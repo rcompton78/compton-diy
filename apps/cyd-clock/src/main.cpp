@@ -1663,6 +1663,25 @@ button:hover{background:#005ec4}
 // temporary String's c_str() here would leave it pointing at freed memory.
 static const String WM_CUSTOM_HEAD = "<style>" + String(FPSTR(CONFIG_STYLE)) + "</style>";
 
+// Served at "/" once setup is complete — see handleRootPage()'s comment for why this
+// exists instead of falling back to WiFiManager's own root menu. Mirrors the `menu[]`
+// array passed to wm.setMenu() in runWiFiManager() (wifi/info/exit), plus a link into the
+// Cat Control Panel itself.
+static const char ROOT_MENU_HTML[] PROGMEM = R"html(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cat Control Panel</title>
+<style>%%STYLE%%</style>
+</head><body>
+<h2>Cat Control Panel</h2>
+<a class="nav" href="/config">Cat Control Panel</a>
+<a class="nav" href="/wifi">Configure WiFi</a>
+<a class="nav" href="/info">Info</a>
+<a class="nav" href="/exit">Exit</a>
+</body></html>
+)html";
+
 static const char CONFIG_HOME_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
@@ -2198,16 +2217,25 @@ static void handleSetupPost() {
     wm.server->send(302, "text/plain", "");
 }
 
-// Only registered (see runWiFiManager()) when setupComplete is still false at boot, so
-// first-time visitors land straight in the wizard instead of WiFiManager's stock root
-// menu — no "Cat Control Panel" click required. If setup finishes during this same boot
-// session, "/" stays intercepted until the next reboot (WiFiManager's own root handler,
-// registered afterward, never gets a chance to match — see the registration comment
-// below), so redirect to /config in that case rather than looping back into the wizard.
-static void handleRootDuringSetup() {
-    const char* target = configMgr.config().setupComplete ? "/config" : "/setup";
-    wm.server->sendHeader("Location", target);
-    wm.server->send(302, "text/plain", "");
+// Registered unconditionally (see runWiFiManager()) so "/" always resolves to something,
+// regardless of setup state at any point in the device's lifetime — WiFiManager registers
+// its own "/" handler too, but WM_WebServer matches handlers in registration order and
+// stops at the first match, and this one is registered before any of WiFiManager's own
+// server->on() calls (see the registration comment in runWiFiManager()), so it always wins
+// and WiFiManager's own root handler never actually runs. Sends first-time visitors
+// straight into the wizard; once setup is complete, renders a minimal menu covering the
+// same links WiFiManager's own root menu would (wifi/info/exit, per the `menu[]` array
+// below), since handleRoot() on the WiFiManager instance itself is protected and can't be
+// called directly to fall back to it.
+static void handleRootPage() {
+    if (!configMgr.config().setupComplete) {
+        wm.server->sendHeader("Location", "/setup");
+        wm.server->send(302, "text/plain", "");
+        return;
+    }
+    String page = String(FPSTR(ROOT_MENU_HTML));
+    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    wm.server->send(200, "text/html", page);
 }
 
 static void handleConfigCatGet() {
@@ -2927,16 +2955,13 @@ static void runWiFiManager(ConfigManager& cfg) {
     // unconditionally by WiFiManager regardless of menu membership, so /update still works.
     const char* menu[] = {"wifi", "custom", "info", "sep", "exit"};
     wm.setMenu(menu, 5);
-    // First-run only: claim "/" before WiFiManager registers its own root handler.
-    // setWebServerCallback() fires right after WiFiManager (re)creates its webserver
-    // object, before any of its own server->on() calls (see WiFiManager::setupHTTPServer())
-    // — and WM_WebServer matches handlers in registration order, stopping at the first
-    // match. Registering here wins that race, so first-time visitors land straight in the
-    // wizard instead of WiFiManager's stock menu. Left unregistered once setup is already
-    // complete, so already-configured devices keep the normal root menu untouched.
-    if (!configMgr.config().setupComplete) {
-        wm.setWebServerCallback([]() { wm.server->on("/", HTTP_GET, handleRootDuringSetup); });
-    }
+    // Claim "/" before WiFiManager registers its own root handler. setWebServerCallback()
+    // fires right after WiFiManager (re)creates its webserver object, before any of its own
+    // server->on() calls (see WiFiManager::setupHTTPServer()) — and WM_WebServer matches
+    // handlers in registration order, stopping at the first match. Registering here wins
+    // that race on every boot (see handleRootPage()'s comment for why this is
+    // unconditional, not just while setup is incomplete).
+    wm.setWebServerCallback([]() { wm.server->on("/", HTTP_GET, handleRootPage); });
     wm.autoConnect("CYD-Clock");
     wm.startWebPortal();
     wm.server->on("/config",           HTTP_GET,  handleConfigHome);
