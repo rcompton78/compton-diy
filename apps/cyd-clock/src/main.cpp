@@ -1953,6 +1953,7 @@ static const char CONFIG_BADGES_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 </head><body>
 <a class="back" href="/config">&larr; Configuration</a>
 <h2>Badges</h2>
+%%MSG%%
 <div class="medal" style="background:%%MEDALCOLOR%%">%%LEVEL%%</div>
 <p>Lifetime XP: <strong>%%XP%%</strong><br>
 XP to next level: <strong>%%XPTONEXT%%</strong></p>
@@ -1960,6 +1961,15 @@ XP to next level: <strong>%%XPTONEXT%%</strong></p>
 &mdash; visit the Store to see and spend Points.</p>
 <p>Bonus: +%%BONUS%% points every %%INTERVAL%% levels.<br>
 Milestones reached: <strong>%%MILESTONES%%</strong></p>
+
+<h3>Danger Zone</h3>
+<p>Resets your lifetime XP and level back to 0/1. This does not affect your spendable
+Points balance or anything you've already bought in the Store. This cannot be undone.</p>
+<form method="POST" action="/save-config/badges-reset">
+<input type="text" name="confirm" placeholder="type reset to confirm">
+<button type="submit" style="width:100%;margin-top:8px">Reset Badge Progress</button>
+</form>
+
 </body></html>
 )html";
 
@@ -2656,6 +2666,15 @@ static void handleConfigBadgesGet() {
     uint32_t level = levelForXp(xp);
     String page = String(FPSTR(CONFIG_BADGES_HTML));
     page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    String msg = "";
+    if (wm.server->hasArg("reset")) {
+        msg = "<div class='banner ok'>Badge progress has been reset.</div>";
+    } else if (wm.server->hasArg("err")) {
+        String err = wm.server->arg("err");
+        if (err == "resetConfirm") msg = "<div class='banner err'>Type \"reset\" exactly to confirm.</div>";
+        else if (err == "resetSave") msg = "<div class='banner err'>Reset failed to save — please try again.</div>";
+    }
+    page.replace("%%MSG%%", msg);
     page.replace("%%LEVEL%%", String(level));
     page.replace("%%MEDALCOLOR%%", String(medalColorHexForLevel(level)));
     page.replace("%%XP%%", String(xp));
@@ -2664,6 +2683,28 @@ static void handleConfigBadgesGet() {
     page.replace("%%BONUS%%", String(MILESTONE_BONUS_POINTS));
     page.replace("%%INTERVAL%%", String(MILESTONE_LEVEL_INTERVAL));
     sendHtmlPage(page);
+}
+
+// Zeros lifetime XP (and therefore the derived level, back to 1) without touching the
+// separate spendable Points balance or anything already bought in the Store — this only
+// rewinds badge/medal progress. Lives in the Badges page's own "Danger Zone". Requires
+// typing "reset" to guard against an accidental submit, same pattern as
+// handleConfigResetPost().
+static void handleConfigBadgesResetPost() {
+    if (wm.server->arg("confirm") != "reset") {
+        wm.server->sendHeader("Location", "/config/badges?err=resetConfirm");
+        wm.server->send(302, "text/plain", "");
+        return;
+    }
+    configMgr.config().totalXp = 0;
+    if (!configMgr.save()) {
+        wm.server->sendHeader("Location", "/config/badges?err=resetSave");
+        wm.server->send(302, "text/plain", "");
+        return;
+    }
+    dirty.animal = true;  // redraw the on-device medal at level 1
+    wm.server->sendHeader("Location", "/config/badges?reset=1");
+    wm.server->send(302, "text/plain", "");
 }
 
 // Easter egg: grants an arbitrary number of points, reached only via the hidden field
@@ -3281,6 +3322,7 @@ static void runWiFiManager(ConfigManager& cfg) {
     wm.server->on("/save-config/store", HTTP_POST, handleConfigStorePost);
     wm.server->on("/save-config/cheat", HTTP_POST, handleConfigStoreCheatPost);
     wm.server->on("/save-config/reset", HTTP_POST, handleConfigResetPost);
+    wm.server->on("/save-config/badges-reset", HTTP_POST, handleConfigBadgesResetPost);
     wm.server->on("/save-config/dress", HTTP_POST, handleConfigDressPost);
     wm.server->on("/save-config/backup", HTTP_POST, handleConfigBackupPost);
     wm.server->on("/save-config/update", HTTP_POST, handleConfigUpdatePost);
