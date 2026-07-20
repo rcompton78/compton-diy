@@ -77,6 +77,7 @@ static constexpr uint32_t STORE_COST_TEDDY    = 60;
 static constexpr uint32_t STORE_COST_BUNNY    = 60;
 static constexpr uint32_t STORE_COST_SQUIRREL = 150;
 static constexpr uint32_t STORE_COST_PENGUIN  = 150;
+static constexpr uint32_t STORE_COST_UNICORN  = 150;
 static constexpr uint32_t STORE_COST_BLANKET  = 40;  // per blanket color
 static constexpr uint32_t STORE_COST_ROOM_THEME = 40;  // per flat-color room theme, matches blanket pricing
 static constexpr uint32_t STORE_COST_STARRY_NIGHT = 200;  // premium: has real art (moon + stars), not just a flat fill
@@ -110,6 +111,8 @@ static constexpr uint16_t C_BUNNY    = 0xC618;  // grey bunny peeking out beside
 static constexpr uint16_t C_SQUIRREL = 0xCA25;  // red squirrel peeking out beside the head (rust orange)
 static constexpr uint16_t C_PENGUIN      = 0x0000;  // penguin peeking out beside the head (black)
 static constexpr uint16_t C_PENGUIN_BEAK = 0xFD20;  // penguin beak/feet (orange)
+static constexpr uint16_t C_UNICORN      = TFT_WHITE;  // unicorn peeking out beside the head (white)
+static constexpr uint16_t C_UNICORN_HORN = 0xFC18;  // unicorn horn (pink), matches C_PINK
 
 // Blanket color catalog — each color is purchased separately in the store and can be
 // equipped independently in the dressing room. `id` is the stable identifier used in
@@ -194,6 +197,8 @@ static void drawSquirrelPeeking(int cx, int cy, uint16_t accentColor);
 static void drawSquirrelFull(int cx, int cy, uint16_t accentColor);
 static void drawPenguinPeeking(int cx, int cy, uint16_t accentColor);
 static void drawPenguinFull(int cx, int cy, uint16_t accentColor);
+static void drawUnicornPeeking(int cx, int cy, uint16_t accentColor);
+static void drawUnicornFull(int cx, int cy, uint16_t accentColor);
 
 // Stuffy catalog — same purchase/equip model as blanket colors, so more stuffies can be
 // added later without changing the store/dressing-room plumbing. `id` is the stable
@@ -215,6 +220,7 @@ static constexpr Stuffy STUFFIES[] = {
     {"bunny",    "Grey Bunny",   STORE_COST_BUNNY,    drawBunnyPeeking,    drawBunnyFull},
     {"squirrel", "Red Squirrel", STORE_COST_SQUIRREL, drawSquirrelPeeking, drawSquirrelFull},
     {"penguin",  "Penguin",      STORE_COST_PENGUIN,  drawPenguinPeeking,  drawPenguinFull},
+    {"unicorn",  "White Unicorn", STORE_COST_UNICORN, drawUnicornPeeking,  drawUnicornFull},
 };
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
 
@@ -773,6 +779,42 @@ static void drawPenguinFull(int cx, int cy, uint16_t accentColor) {
     tft.fillTriangle(bx + 9, by + 15, bx + 11, by + 23, bx + 6, by + 24, C_PENGUIN);  // right flipper
     tft.fillTriangle(bx - 6, by + 33, bx - 9, by + 37, bx - 2, by + 37, C_PENGUIN_BEAK);  // left foot
     tft.fillTriangle(bx + 6, by + 33, bx + 9, by + 37, bx + 2, by + 37, C_PENGUIN_BEAK);  // right foot
+}
+
+// Shared ear/horn/head/snout/eyes/nose art reused by both unicorn variants below — same
+// layout as drawTeddyHead() but with a pink horn between the ears, the unicorn's
+// distinguishing feature. Horn is centered in x so it never overlaps the ears on either
+// side, so draw order relative to them doesn't matter.
+static void drawUnicornHead(int bx, int by, uint16_t snoutColor) {
+    tft.fillCircle(bx - 6, by - 9, 4, C_UNICORN);   // left ear
+    tft.fillCircle(bx + 6, by - 9, 4, C_UNICORN);   // right ear
+    tft.fillCircle(bx,     by,     8, C_UNICORN);   // head
+    tft.fillTriangle(bx - 2, by - 6, bx + 2, by - 6, bx, by - 18, C_UNICORN_HORN);  // horn
+    tft.fillCircle(bx,     by + 3, 3, snoutColor);  // snout
+    tft.fillCircle(bx - 3, by - 2, 1, C_DARK);   // left eye
+    tft.fillCircle(bx + 3, by - 2, 1, C_DARK);   // right eye
+    tft.fillCircle(bx,     by + 1, 1, C_DARK);   // nose
+}
+
+// White unicorn peeking out beside the head, tucked into the blanket's top edge —
+// only reads correctly when the blanket is also owned to tuck behind.
+static void drawUnicornPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 40, by = cy - 6;
+    drawUnicornHead(bx, by, accentColor);
+}
+
+// Full-body white unicorn sitting beside the cat — used when the unicorn is owned without
+// the blanket, since there's no blanket edge to tuck a lone head behind. Tail matches the
+// horn's pink rather than the white body, so the silhouette still reads as distinct from
+// the plain white body/belly patch.
+static void drawUnicornFull(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 38, by = cy - 8;
+    drawUnicornHead(bx, by, accentColor);
+    tft.fillRoundRect(bx - 8, by + 7, 16, 24, 8, C_UNICORN);  // body
+    tft.fillCircle(bx, by + 17, 4, accentColor);              // belly patch
+    tft.fillCircle(bx - 5, by + 31, 4, C_UNICORN);            // left foot
+    tft.fillCircle(bx + 5, by + 31, 4, C_UNICORN);            // right foot
+    tft.fillCircle(bx, by + 33, 3, C_UNICORN_HORN);           // pink tail
 }
 
 // Deeply-closed, sleepy eyes for the sleep-window peek — thinner and gently curled at
