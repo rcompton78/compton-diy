@@ -32,6 +32,9 @@ struct AppConfig {
     uint8_t equippedCatColor   = 0;  // Dressing room: index of the cat color to display
     uint8_t seenCatColorCount  = 0;  // Highest CAT_COLOR_COUNT the store page has shown the user
     uint32_t totalXp   = 0;          // Lifetime XP; only ever increases, separate from spendable `points`
+    uint32_t highestMilestoneLevel = 0;  // Highest level whose milestone bonus points have already
+                                          // been paid out; not reset by the badges-page XP reset, so a
+                                          // user can't re-farm the same bonus by resetting and re-leveling
     bool setupComplete = false;      // First-run wizard (cat color + name) finished; see ConfigManager::fromJson()
                                       // for why this defaults to false here but migrates existing devices to true
     bool autoUpdateEnabled = true;         // Whether periodic firmware update checks run at all
