@@ -72,6 +72,7 @@ void ConfigManager::fromJson(JsonDocument& doc) {
     _config.equippedCatColor  = doc["catColorEquipped"]  | _config.equippedCatColor;
     _config.seenCatColorCount = doc["seenCatColors"]     | _config.seenCatColorCount;
     _config.totalXp   = doc["xp"] | _config.totalXp;
+    _config.highestMilestoneLevel = doc["milestoneLevel"] | _config.highestMilestoneLevel;
     // Migration default is `true`, not the struct's `false`: a config file that predates this
     // field means the device was already set up before the wizard existed, so it shouldn't be
     // forced back through onboarding. Only a device with no config file at all (fresh install /
@@ -113,6 +114,7 @@ void ConfigManager::toJson(JsonDocument& doc) const {
     doc["catColorEquipped"] = _config.equippedCatColor;
     doc["seenCatColors"]    = _config.seenCatColorCount;
     doc["xp"] = _config.totalXp;
+    doc["milestoneLevel"] = _config.highestMilestoneLevel;
     doc["setupComplete"]    = _config.setupComplete;
     doc["autoUpdate"]   = _config.autoUpdateEnabled;
     doc["lastCheckVer"] = _config.lastUpdateCheckVersion;

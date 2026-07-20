@@ -1324,10 +1324,12 @@ static void drawTimerRow() {
 // Awards XP 1:1 alongside points. XP is a separate, monotonically-increasing lifetime
 // counter — never spent, never reduced by store purchases. Also grants a one-time bonus
 // to the spendable points balance for every MILESTONE_LEVEL_INTERVAL level crossed by
-// this single award (a big cheat grant can cross more than one milestone at once), and
-// kicks off the level-up fireworks animation, passing along the total bonus points earned
-// this award so it can flash alongside it. Does not call configMgr.save() itself — callers
-// already save after their own mutation.
+// this single award (a big cheat grant can cross more than one milestone at once) that
+// hasn't already paid out a bonus before — tracked via highestMilestoneLevel, so resetting
+// totalXp back to 0 (see handleConfigBadgesResetPost()) and re-leveling can't re-farm the
+// same bonus. Kicks off the level-up fireworks animation, passing along the total bonus
+// points earned this award so it can flash alongside it. Does not call configMgr.save()
+// itself — callers already save after their own mutation.
 static void awardXp(uint32_t amount) {
     if (amount == 0) return;
     uint32_t oldLevel = levelForXp(configMgr.config().totalXp);
@@ -1335,7 +1337,10 @@ static void awardXp(uint32_t amount) {
     uint32_t newLevel = levelForXp(configMgr.config().totalXp);
     uint32_t bonusEarned = 0;
     for (uint32_t lvl = oldLevel + 1; lvl <= newLevel; lvl++) {
-        if (lvl % MILESTONE_LEVEL_INTERVAL == 0) bonusEarned += MILESTONE_BONUS_POINTS;
+        if (lvl % MILESTONE_LEVEL_INTERVAL == 0 && lvl > configMgr.config().highestMilestoneLevel) {
+            bonusEarned += MILESTONE_BONUS_POINTS;
+            configMgr.config().highestMilestoneLevel = lvl;
+        }
     }
     if (bonusEarned > 0) configMgr.config().points += bonusEarned;
     if (newLevel > oldLevel) {
@@ -2689,7 +2694,9 @@ static void handleConfigBadgesGet() {
 // separate spendable Points balance or anything already bought in the Store — this only
 // rewinds badge/medal progress. Lives in the Badges page's own "Danger Zone". Requires
 // typing "reset" to guard against an accidental submit, same pattern as
-// handleConfigResetPost().
+// handleConfigResetPost(). Deliberately does NOT reset highestMilestoneLevel — otherwise
+// re-leveling after this reset would re-pay milestone bonus points already earned, an
+// unlimited points farm via repeated resets (see awardXp()).
 static void handleConfigBadgesResetPost() {
     if (wm.server->arg("confirm") != "reset") {
         wm.server->sendHeader("Location", "/config/badges?err=resetConfirm");
