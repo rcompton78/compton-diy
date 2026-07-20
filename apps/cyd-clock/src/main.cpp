@@ -184,6 +184,7 @@ static constexpr CatColor CAT_COLORS[] = {
     {"calico", "Calico", TFT_WHITE,    "#ffffff", false, STORE_COST_CAT_COLOR_PATTERN, drawCalicoHeadPattern, drawCalicoBodyPattern},
 };
 static constexpr int CAT_COLOR_COUNT = sizeof(CAT_COLORS) / sizeof(CAT_COLORS[0]);
+static_assert(CAT_COLOR_COUNT <= CAT_NAME_SLOTS, "increase ConfigManager's CAT_NAME_SLOTS to fit CAT_COLORS");
 
 // Forward declarations: each stuffy's sleep-scene art, defined further below alongside
 // drawSleepingCat(). Declared here so the STUFFIES[] catalog can reference them directly —
@@ -588,6 +589,32 @@ static int equippedCatColorIndex() {
         if (owned & (1 << i)) return i;
     }
     return -1;
+}
+
+// Per-cat-color name lookup/assignment, keyed the same way as equippedCatColorIndex()
+// (idx == -1 means the white default cat). Falls back to catNameDefault for any color
+// that hasn't been individually named yet — covers both a freshly-bought color and a
+// pre-migration device where only the single legacy name existed.
+static String getCatName(int idx) {
+    const String& n = (idx < 0) ? configMgr.config().catNameWhite : configMgr.config().catNames[idx];
+    return n.length() ? n : configMgr.config().catNameDefault;
+}
+static void setCatName(int idx, const String& name) {
+    if (idx < 0) configMgr.config().catNameWhite = name;
+    else configMgr.config().catNames[idx] = name;
+}
+
+// Trims, defaults an empty name to "Biscuit", and rejects names over 16 characters or
+// containing control characters. Shared by the setup wizard and the dressing room so
+// every per-cat-color name gets the same validation.
+static bool sanitizeCatName(String& name) {
+    name.trim();
+    if (name.length() == 0) name = "Biscuit";
+    if (name.length() > 16) return false;
+    for (size_t i = 0; i < name.length(); ++i) {
+        if ((unsigned char)name[i] < 0x20 || (unsigned char)name[i] == 0x7F) return false;
+    }
+    return true;
 }
 
 // Resolves the cat's current body/fill color — the equipped catalog color if owned, else
@@ -1246,7 +1273,7 @@ static void drawAnimal() {
     zoneFillRect(PLAY_X + PLAY_W, ANIMAL_Y + ANIMAL_H - 27,
                  TREAT_X - (PLAY_X + PLAY_W) - 2, 27);
     tft.setTextColor(C_DIM, zoneBgColor());
-    tft.drawCentreString(configMgr.config().catName.c_str(), CX, ANIMAL_Y + ANIMAL_H - 22, 2);
+    tft.drawCentreString(getCatName(equippedCatColorIndex()).c_str(), CX, ANIMAL_Y + ANIMAL_H - 22, 2);
 
     if (!peekingAsleep) {
         drawTreatBtn();
@@ -2136,10 +2163,6 @@ static const char CONFIG_CAT_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 %%MSG%%
 <form method="POST" action="/save-config/cat">
 
-<h3>Cat name</h3>
-<label>Name</label>
-<input name="name" id="name" maxlength="16" value="%%NAME%%">
-
 <h3>Cat hunger</h3>
 <label>Minutes until hungry</label>
 <input name="hunger" id="hunger" type="number" min="1" max="1440" value="%%HUNGER%%">
@@ -2501,13 +2524,7 @@ static void handleSetupGet() {
 static void handleSetupPost() {
     String color = wm.server->arg("catColor");
     String name = wm.server->arg("name");
-    name.trim();
-    if (name.length() == 0) name = "Biscuit";
-    bool nameOk = name.length() <= 16;
-    for (size_t i = 0; nameOk && i < name.length(); ++i) {
-        if ((unsigned char)name[i] < 0x20 || (unsigned char)name[i] == 0x7F) nameOk = false;
-    }
-    if (!nameOk) {
+    if (!sanitizeCatName(name)) {
         wm.server->sendHeader("Location", "/setup?err=name");
         wm.server->send(302, "text/plain", "");
         return;
@@ -2522,8 +2539,8 @@ static void handleSetupPost() {
         return;
     }
 
-    configMgr.config().catName = name;
     configMgr.config().points  = 70;
+    int nameIdx = -1;  // -1 = white
     if (color == "none") {
         configMgr.config().equippedCatColor = EQUIP_NONE;
     } else {
@@ -2534,10 +2551,15 @@ static void handleSetupPost() {
         if (idx >= 0) {
             configMgr.config().ownedCatColors  |= (1 << idx);
             configMgr.config().equippedCatColor = (uint8_t)idx;
+            nameIdx = idx;
         } else {
             configMgr.config().equippedCatColor = EQUIP_NONE;
         }
     }
+    // "The first name given" — becomes the fallback for every other color owned now or
+    // bought later, until each is individually renamed (see getCatName()/DIY-56).
+    configMgr.config().catNameDefault = name;
+    setCatName(nameIdx, name);
     configMgr.config().latitude         = lat;
     configMgr.config().longitude        = lon;
     configMgr.config().utcOffsetSeconds = utc;
@@ -2606,7 +2628,6 @@ static void handleConfigCatGet() {
     }
     page.replace("%%SLEEPBED%%",  minutesToHHMM(configMgr.config().sleepBedMinutes));
     page.replace("%%SLEEPWAKE%%", minutesToHHMM(configMgr.config().sleepWakeMinutes));
-    page.replace("%%NAME%%", htmlEscape(configMgr.config().catName));
     String msg = "";
     if (wm.server->hasArg("saved"))
         msg = "<div class='banner ok'>Settings saved.</div>";
@@ -2922,19 +2943,12 @@ static void handleConfigCatPost() {
     int   sleepBed = 0, sleepWake = 0;
     bool  sleepBedOk  = parseHHMM(wm.server->arg("sleepBed"),  sleepBed);
     bool  sleepWakeOk = parseHHMM(wm.server->arg("sleepWake"), sleepWake);
-    String name = wm.server->arg("name");
-    name.trim();
-    if (name.length() == 0) name = "Biscuit";
-    bool nameOk = name.length() <= 16;
-    for (size_t i = 0; nameOk && i < name.length(); ++i) {
-        if ((unsigned char)name[i] < 0x20 || (unsigned char)name[i] == 0x7F) nameOk = false;
-    }
     if (hunger < 1 || hunger > 1440 || boredom < 1 || boredom > 1440
         || sickCooldown < 1 || sickCooldown > 168
         || forceSickMinutes < 0 || forceSickMinutes > 1440
         || thirstForceMinutes < 1 || thirstForceMinutes > 1440
         || forceThirstMinutes < 0 || forceThirstMinutes > 1440
-        || !sleepBedOk || !sleepWakeOk || !nameOk) {
+        || !sleepBedOk || !sleepWakeOk) {
         wm.server->send(400, "text/plain", "Invalid values");
         return;
     }
@@ -2946,7 +2960,6 @@ static void handleConfigCatPost() {
     if (forceThirstMinutes > 0) forceThirstDeadlineMs = millis() + (unsigned long)forceThirstMinutes * 60000UL;
     configMgr.config().sleepBedMinutes  = sleepBed;
     configMgr.config().sleepWakeMinutes = sleepWake;
-    configMgr.config().catName          = name;
     configMgr.save();
     dirty.animal = true;
     wm.server->sendHeader("Location", "/config/cat?saved=1");
@@ -3127,6 +3140,7 @@ static void handleConfigDressGet() {
     catColorOptions += "<label class='pick'><input type='radio' name='catColor' value='none'";
     if (equippedCatColorIdx < 0) catColorOptions += " checked";
     catColorOptions += "> White</label>";
+    catColorOptions += "<input name='name_white' maxlength='16' value='" + htmlEscape(getCatName(-1)) + "'>";
     for (int i = 0; i < CAT_COLOR_COUNT; i++) {
         if (!(ownedCatColors & (1 << i))) continue;
         catColorOptions += "<label class='pick'><input type='radio' name='catColor' value='";
@@ -3135,6 +3149,8 @@ static void handleConfigDressGet() {
         if (i == equippedCatColorIdx) catColorOptions += " checked";
         catColorOptions += "> <span style='color:" + String(CAT_COLORS[i].webColor) + "'>"
                           + String(CAT_COLORS[i].label) + "</span></label>";
+        catColorOptions += "<input name='name_" + String(CAT_COLORS[i].id) + "' maxlength='16' value='"
+                          + htmlEscape(getCatName(i)) + "'>";
     }
     page.replace("%%CAT_COLOR_OPTIONS%%", catColorOptions);
 
@@ -3213,6 +3229,31 @@ static void handleConfigDressPost() {
             return;
         }
         configMgr.config().equippedCatColor = idx;
+        changed = true;
+    }
+
+    // Rename any owned cat (including white) — one optional field per color, submitted
+    // alongside its radio button. Absent fields (e.g. a plain equip-only submission from
+    // an older cached page) are left untouched rather than clobbered with an empty name.
+    if (wm.server->hasArg("name_white")) {
+        String n = wm.server->arg("name_white");
+        if (!sanitizeCatName(n)) {
+            wm.server->send(400, "text/plain", "Invalid name");
+            return;
+        }
+        setCatName(-1, n);
+        changed = true;
+    }
+    for (int i = 0; i < CAT_COLOR_COUNT; i++) {
+        if (!(configMgr.config().ownedCatColors & (1 << i))) continue;
+        String argName = "name_" + String(CAT_COLORS[i].id);
+        if (!wm.server->hasArg(argName)) continue;
+        String n = wm.server->arg(argName);
+        if (!sanitizeCatName(n)) {
+            wm.server->send(400, "text/plain", "Invalid name");
+            return;
+        }
+        setCatName(i, n);
         changed = true;
     }
 
