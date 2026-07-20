@@ -3349,15 +3349,19 @@ static void runWiFiManager(ConfigManager& cfg) {
     // wm.autoConnect() returns. The callback fires right after WiFiManager (re)creates its
     // webserver object, before any of its own server->on() calls (see
     // WiFiManager::setupHTTPServer()) — including the (re)creation that happens inside
-    // autoConnect()'s blocking startConfigPortal() when there are no saved credentials. If
-    // registration happened after autoConnect() instead, none of these routes — /setup
-    // included — would exist while a first-time user is connected to the AP and the portal
-    // is still blocking, since autoConnect() doesn't return until the portal exits.
-    // WM_WebServer also matches handlers in registration order and stops at the first match,
-    // so "/" being registered first here wins over WiFiManager's own root handler (see
-    // handleRootPage()'s comment for why that's unconditional, not just while setup is
-    // incomplete).
+    // autoConnect()'s blocking startConfigPortal() when there are no saved credentials.
+    // getConfigPortalActive() is true only during that AP-mode phase (no WiFi yet) — skip
+    // registration there so WiFiManager's own stock pages (SSID/password entry) run
+    // untouched at 192.168.4.1, exactly as drawWifiPortal() tells the user to expect. Once
+    // WiFi connects, autoConnect() returns and the app's explicit wm.startWebPortal() call
+    // fires this same callback again with getConfigPortalActive() now false — that's when
+    // "/" (and everything else, including the /setup wizard drawSetupPrompt() points users
+    // at via their real LAN IP) actually gets wired up. WM_WebServer matches handlers in
+    // registration order and stops at the first match, so "/" being registered first here
+    // wins over WiFiManager's own root handler once we do register it (see
+    // handleRootPage()'s comment for why that's unconditional from that point on).
     wm.setWebServerCallback([]() {
+        if (wm.getConfigPortalActive()) return;  // still choosing WiFi — leave WM's own pages alone
         wm.server->on("/",                     HTTP_GET,  handleRootPage);
         wm.server->on("/config",               HTTP_GET,  handleConfigHome);
         wm.server->on("/setup",                HTTP_GET,  handleSetupGet);
