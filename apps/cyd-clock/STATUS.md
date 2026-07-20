@@ -414,6 +414,49 @@ but is a meaningfully bigger lift (key management, a CI signing step) and
 was treated as out of scope for this card. Flagging it here as a known,
 accepted gap rather than silently omitting it.
 
+## Black Cat Flash Sale Fix (DIY-54, 2026-07-19)
+
+The black cat flash sale (DIY-48) was reported stuck showing well past its
+3pm-10pm window. Investigation ruled out both an obvious suspects: NTP resync
+(confirmed `ntpClient.update()` retries every ~60s and never gets stuck — see
+Jira comment) and `isBlackCatSaleActive()`'s own time math (correct and
+recomputed fresh on every call, no cached/stale boolean anywhere).
+
+**Actual root cause**: every `/config/*` page — including `/config/store`,
+where the sale badge and discounted price live — was served via
+`wm.server->send(200, "text/html", page)` with no `Cache-Control` header. The
+server always computes fresh state per request, but nothing told the browser
+not to cache the response. A tab opened during the sale window kept showing
+that cached snapshot indefinitely unless hard-refreshed. This explained every
+symptom: the sale correctly appeared when first loaded (a real request), a
+freshly-flashed second device correctly showed no sale (never-cached URL),
+and the original device "never turned off" (same tab, never re-fetched).
+
+Fixed by adding `sendHtmlPage()` — wraps `wm.server->send(200, "text/html",
+...)` with `Cache-Control: no-store` — and routing all 11 dynamic page
+handlers through it instead of calling `wm.server->send()` directly. This
+also fixes staleness for every other config page (points balance, owned
+items, etc.), not just the sale badge.
+
+Verified live: temporarily narrowed the sale window to a 1-minute range
+(10:24-10:25pm) on the `freenove-s3` test board, confirmed the store page
+correctly stopped showing the sale on the next load after the window closed
+(previously it would have stayed stuck), then reverted before merging.
+
+**Also landed on this card**:
+- The sale itself was redefined as a one-time absolute date/time window
+  (`BLACK_CAT_SALE_START`/`END`, `YYYYMMDDHHMM` as `int64_t` — a 32-bit
+  `long` overflows at this value) instead of a recurring daily 3pm-10pm
+  check, so it can't silently turn back on every day forever.
+- White was added to the Store's cat-color list (always "Owned", since it's
+  the free default equipped via `EQUIP_NONE` rather than a `CAT_COLORS[]`
+  entry) — previously it was chooseable from the setup wizard and Dress page
+  but looked absent from the Store, which was inconsistent now that reset
+  routes back through the same wizard-driven color choice as first-run setup.
+  The "(default)" suffix was also dropped from all three white-cat labels
+  (wizard, Store, Dress) since it's just a normal pick now, not a fallback
+  that needs calling out as special.
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`

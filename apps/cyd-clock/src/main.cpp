@@ -1724,9 +1724,15 @@ static bool isInSleepWindow(int nowMinutes) {
     return nowMinutes >= bed || nowMinutes < wake;                   // wraps midnight
 }
 
-// ── Black cat flash sale (3pm-10pm device local time) ──────────────────────────
-static constexpr int BLACK_CAT_SALE_START_MIN = 15 * 60;  // 3pm
-static constexpr int BLACK_CAT_SALE_END_MIN   = 22 * 60;  // 10pm
+// ── Black cat flash sale (2026-07-18 3pm – 2026-07-20 7am device local time) ───────
+// A one-time promo window, not a recurring daily discount — DIY-54 found the previous
+// daily-recurring version (a bare 3pm-10pm time-of-day check with no date bound) had no
+// way to actually end: every day it silently turned back on at 3pm forever. Expressed as
+// a single absolute start/end instant instead, so it runs once and stays off afterward.
+// YYYYMMDDHHMM, compared as a plain int64 — needs 64 bits since a value like
+// 202607181500 overflows a 32-bit long on this platform.
+static constexpr int64_t BLACK_CAT_SALE_START = 202607181500LL;  // 2026-07-18 15:00
+static constexpr int64_t BLACK_CAT_SALE_END   = 202607200700LL;  // 2026-07-20 07:00
 static constexpr uint32_t BLACK_CAT_SALE_PRICE = 50;  // half off STORE_COST_CAT_COLOR_SOLID
 
 // Self-contained (fetches its own local time) so it can be called from the store HTTP
@@ -1736,8 +1742,12 @@ static bool isBlackCatSaleActive() {
     time_t utcCheck = epoch - (time_t)configMgr.config().utcOffsetSeconds;
     if (utcCheck <= 1000000000) return false;  // not NTP-synced yet — sanity check, matches loop()'s
     struct tm* t = localtime(&epoch);
-    int nowMinutes = t->tm_hour * 60 + t->tm_min;
-    return nowMinutes >= BLACK_CAT_SALE_START_MIN && nowMinutes < BLACK_CAT_SALE_END_MIN;
+    int64_t now = (int64_t)(t->tm_year + 1900) * 100000000LL
+                + (int64_t)(t->tm_mon + 1)     * 1000000LL
+                + (int64_t)t->tm_mday          * 10000LL
+                + (int64_t)t->tm_hour          * 100LL
+                + (int64_t)t->tm_min;
+    return now >= BLACK_CAT_SALE_START && now < BLACK_CAT_SALE_END;
 }
 
 // Level-up fireworks — a full-screen takeover distinct from the small in-zone Celebrate
@@ -2378,6 +2388,15 @@ static OtaCheckResult performUpdateCheckOnly();
 static void applyFoundUpdate(const OtaCheckResult& result);
 static void performUpdateCheck();
 
+// Every config/store page renders live device state (points, owned items, flash-sale
+// status, ...) fresh per request — but without an explicit no-store, a browser is free to
+// serve a stale cached copy indefinitely instead of re-fetching (e.g. a tab left open
+// during the black cat sale would keep showing the SALE badge long after it actually ended).
+static void sendHtmlPage(const String& page) {
+    wm.server->sendHeader("Cache-Control", "no-store");
+    wm.server->send(200, "text/html", page);
+}
+
 static void handleConfigHome() {
     if (!configMgr.config().setupComplete) {
         wm.server->sendHeader("Location", "/setup");
@@ -2386,7 +2405,7 @@ static void handleConfigHome() {
     }
     String page = String(FPSTR(CONFIG_HOME_HTML));
     page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
-    wm.server->send(200, "text/html", page);
+    sendHtmlPage(page);
 }
 
 // First-run setup wizard: reached via the on-device "complete setup at <ip>" screen (see
@@ -2398,7 +2417,7 @@ static void handleSetupGet() {
     page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
 
     String colorOptions = "<label class='pick'><input type='radio' name='catColor' value='none' checked> "
-                           "<span>White (default)</span></label>";
+                           "<span>White</span></label>";
     for (int i = 0; i < CAT_COLOR_COUNT; i++) {
         if (CAT_COLORS[i].cost != STORE_COST_CAT_COLOR_SOLID) continue;
         colorOptions += "<label class='pick'><input type='radio' name='catColor' value='";
@@ -2418,7 +2437,7 @@ static void handleSetupGet() {
         else msg = "<div class='banner err'>Please enter a name (max 16 characters).</div>";
     }
     page.replace("%%MSG%%", msg);
-    wm.server->send(200, "text/html", page);
+    sendHtmlPage(page);
 }
 
 static void handleSetupPost() {
@@ -2493,7 +2512,7 @@ static void handleRootPage() {
     }
     String page = String(FPSTR(ROOT_MENU_HTML));
     page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
-    wm.server->send(200, "text/html", page);
+    sendHtmlPage(page);
 }
 
 static void handleConfigCatGet() {
@@ -2534,7 +2553,7 @@ static void handleConfigCatGet() {
     if (wm.server->hasArg("saved"))
         msg = "<div class='banner ok'>Settings saved.</div>";
     page.replace("%%MSG%%", msg);
-    wm.server->send(200, "text/html", page);
+    sendHtmlPage(page);
 }
 
 static void handleConfigCityGet() {
@@ -2547,7 +2566,7 @@ static void handleConfigCityGet() {
     if (wm.server->hasArg("saved"))
         msg = "<div class='banner ok'>Settings saved.</div>";
     page.replace("%%MSG%%", msg);
-    wm.server->send(200, "text/html", page);
+    sendHtmlPage(page);
 }
 
 // Renders the buy button/owned-label markup for one store item.
@@ -2600,7 +2619,10 @@ static void handleConfigStoreGet() {
         roomThemeItems += "</div>\n";
     }
     page.replace("%%ROOM_THEME_ITEMS%%", roomThemeItems);
-    String catColorItems = "";
+    // White isn't a CAT_COLORS[] entry (it's the always-available default, equipped via
+    // EQUIP_NONE — see the comment above that catalog) but the wizard and Dress page both
+    // list it as an explicit choice, so show it here too rather than have it look missing.
+    String catColorItems = "<div class='item'><span>Cat - White</span><span class='owned'>Owned</span></div>\n";
     bool blackCatOnSale = isBlackCatSaleActive();
     for (int i = 0; i < CAT_COLOR_COUNT; i++) {
         bool owned = configMgr.config().ownedCatColors & (1 << i);
@@ -2626,7 +2648,7 @@ static void handleConfigStoreGet() {
         else if (err == "save") msg = "<div class='banner err'>Purchase failed to save — please try again.</div>";
     }
     page.replace("%%MSG%%", msg);
-    wm.server->send(200, "text/html", page);
+    sendHtmlPage(page);
 }
 
 static void handleConfigBadgesGet() {
@@ -2641,7 +2663,7 @@ static void handleConfigBadgesGet() {
     page.replace("%%MILESTONES%%", String(level / MILESTONE_LEVEL_INTERVAL));
     page.replace("%%BONUS%%", String(MILESTONE_BONUS_POINTS));
     page.replace("%%INTERVAL%%", String(MILESTONE_LEVEL_INTERVAL));
-    wm.server->send(200, "text/html", page);
+    sendHtmlPage(page);
 }
 
 // Easter egg: grants an arbitrary number of points, reached only via the hidden field
@@ -2703,7 +2725,7 @@ static void handleConfigBackupGet() {
         else if (err == "resetSave") msg = "<div class='banner err'>Reset failed to save — please try again.</div>";
     }
     page.replace("%%MSG%%", msg);
-    wm.server->send(200, "text/html", page);
+    sendHtmlPage(page);
 }
 
 static void handleConfigBackupExportGet() {
@@ -2764,7 +2786,7 @@ static void handleConfigUpdateGet() {
         else msg = "<div class='banner ok'>Already up to date.</div>";
     }
     page.replace("%%MSG%%", msg);
-    wm.server->send(200, "text/html", page);
+    sendHtmlPage(page);
 }
 
 static void handleConfigUpdatePost() {
@@ -2790,7 +2812,7 @@ static void handleConfigUpdateCheckPost() {
             "<h2>Found " + htmlEscape(result.latestVersion) + "</h2>"
             "<p>Installing now — the device will reboot when done. This page won't update further.</p>"
             "</body></html>";
-        wm.server->send(200, "text/html", page);
+        sendHtmlPage(page);
         applyFoundUpdate(result);  // reboots on success; only returns on failure
         return;
     }
@@ -3013,7 +3035,7 @@ static void handleConfigDressGet() {
     String catColorOptions = "";
     catColorOptions += "<label class='pick'><input type='radio' name='catColor' value='none'";
     if (equippedCatColorIdx < 0) catColorOptions += " checked";
-    catColorOptions += "> White (default)</label>";
+    catColorOptions += "> White</label>";
     for (int i = 0; i < CAT_COLOR_COUNT; i++) {
         if (!(ownedCatColors & (1 << i))) continue;
         catColorOptions += "<label class='pick'><input type='radio' name='catColor' value='";
@@ -3029,7 +3051,7 @@ static void handleConfigDressGet() {
     if (wm.server->hasArg("saved"))
         msg = "<div class='banner ok'>Saved.</div>";
     page.replace("%%MSG%%", msg);
-    wm.server->send(200, "text/html", page);
+    sendHtmlPage(page);
 }
 
 static void handleConfigDressPost() {
