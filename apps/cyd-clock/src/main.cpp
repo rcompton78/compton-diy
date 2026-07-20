@@ -3361,7 +3361,18 @@ static void runWiFiManager(ConfigManager& cfg) {
     // wins over WiFiManager's own root handler once we do register it (see
     // handleRootPage()'s comment for why that's unconditional from that point on).
     wm.setWebServerCallback([]() {
-        if (wm.getConfigPortalActive()) return;  // still choosing WiFi — leave WM's own pages alone
+        if (wm.getConfigPortalActive()) {
+            // Still choosing WiFi — send "/" straight to WiFiManager's own network-scan/
+            // credential-entry page instead of falling through to its stock root menu
+            // (which links to "custom"/"info"/"exit", none of which make sense before
+            // WiFi is even configured). Registered here, before WiFiManager wires up its
+            // own "/" handler, so it wins per the first-match-wins ordering noted above.
+            wm.server->on("/", HTTP_GET, []() {
+                wm.server->sendHeader("Location", "/wifi");
+                wm.server->send(302, "text/plain", "");
+            });
+            return;
+        }
         wm.server->on("/",                     HTTP_GET,  handleRootPage);
         wm.server->on("/config",               HTTP_GET,  handleConfigHome);
         wm.server->on("/setup",                HTTP_GET,  handleSetupGet);
@@ -3447,6 +3458,31 @@ void loop() {
     unsigned long now = millis();
     if (peekUntilMs > 0 && now >= peekUntilMs) peekUntilMs = 0;  // peek expired
 
+    // Firmware update check — runs unconditionally, ahead of the sleep-window and
+    // setup-prompt early returns below, so neither an overnight sleep window nor an
+    // in-progress first-run setup can starve it for hours at a time.
+    if (now - lastUpdateCheck > UPDATE_CHECK_INTERVAL_MS) {
+        lastUpdateCheck = now;
+        performUpdateCheck();
+    }
+
+    // First-run setup: hold on the "complete setup at <ip>" screen until the wizard (cat
+    // color + name) has been finished. Checked ahead of the sleep window below so a fresh
+    // device configured at night doesn't have its setup prompt preempted by the sleep screen.
+    if (!configMgr.config().setupComplete) {
+        if (!setupPromptActive) {
+            drawSetupPrompt();
+            setupPromptActive = true;
+        }
+        delay(50);
+        return;
+    }
+    if (setupPromptActive) {
+        setupPromptActive = false;
+        tft.fillScreen(TFT_BLACK);
+        dirty.header = dirty.animal = dirty.animalBg = dirty.picker = dirty.timerRow = true;
+    }
+
     {
         time_t epoch = ntpClient.getEpochTime();
         time_t utcCheck = epoch - (time_t)configMgr.config().utcOffsetSeconds;
@@ -3496,23 +3532,6 @@ void loop() {
         }
     }
 
-    // First-run setup: hold on the "complete setup at <ip>" screen until the wizard (cat
-    // color + name) has been finished — mirrors the sleepScreenActive pattern above, painting
-    // once per transition rather than every loop iteration.
-    if (!configMgr.config().setupComplete) {
-        if (!setupPromptActive) {
-            drawSetupPrompt();
-            setupPromptActive = true;
-        }
-        delay(50);
-        return;
-    }
-    if (setupPromptActive) {
-        setupPromptActive = false;
-        tft.fillScreen(TFT_BLACK);
-        dirty.header = dirty.animal = dirty.animalBg = dirty.picker = dirty.timerRow = true;
-    }
-
     // IP display expiry
     if (showIpUntilMs > 0 && now >= showIpUntilMs) {
         showIpUntilMs = 0;
@@ -3524,13 +3543,6 @@ void loop() {
         weather.fetch(configMgr.config().latitude, configMgr.config().longitude);
         lastWeatherFetch = now;
         dirty.header = true;
-    }
-
-    // Firmware update check — blocks the loop if it finds and applies an update
-    // (see performUpdateCheck()); otherwise a quick network round-trip at most.
-    if (now - lastUpdateCheck > UPDATE_CHECK_INTERVAL_MS) {
-        lastUpdateCheck = now;
-        performUpdateCheck();
     }
 
     // Timer tick + finished detection
