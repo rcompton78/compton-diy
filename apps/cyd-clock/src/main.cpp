@@ -3345,36 +3345,44 @@ static void runWiFiManager(ConfigManager& cfg) {
     // unconditionally by WiFiManager regardless of menu membership, so /update still works.
     const char* menu[] = {"wifi", "custom", "info", "sep", "exit"};
     wm.setMenu(menu, 5);
-    // Claim "/" before WiFiManager registers its own root handler. setWebServerCallback()
-    // fires right after WiFiManager (re)creates its webserver object, before any of its own
-    // server->on() calls (see WiFiManager::setupHTTPServer()) — and WM_WebServer matches
-    // handlers in registration order, stopping at the first match. Registering here wins
-    // that race on every boot (see handleRootPage()'s comment for why this is
-    // unconditional, not just while setup is incomplete).
-    wm.setWebServerCallback([]() { wm.server->on("/", HTTP_GET, handleRootPage); });
+    // Register every custom route from inside setWebServerCallback rather than after
+    // wm.autoConnect() returns. The callback fires right after WiFiManager (re)creates its
+    // webserver object, before any of its own server->on() calls (see
+    // WiFiManager::setupHTTPServer()) — including the (re)creation that happens inside
+    // autoConnect()'s blocking startConfigPortal() when there are no saved credentials. If
+    // registration happened after autoConnect() instead, none of these routes — /setup
+    // included — would exist while a first-time user is connected to the AP and the portal
+    // is still blocking, since autoConnect() doesn't return until the portal exits.
+    // WM_WebServer also matches handlers in registration order and stops at the first match,
+    // so "/" being registered first here wins over WiFiManager's own root handler (see
+    // handleRootPage()'s comment for why that's unconditional, not just while setup is
+    // incomplete).
+    wm.setWebServerCallback([]() {
+        wm.server->on("/",                     HTTP_GET,  handleRootPage);
+        wm.server->on("/config",               HTTP_GET,  handleConfigHome);
+        wm.server->on("/setup",                HTTP_GET,  handleSetupGet);
+        wm.server->on("/config/cat",           HTTP_GET,  handleConfigCatGet);
+        wm.server->on("/config/city",          HTTP_GET,  handleConfigCityGet);
+        wm.server->on("/config/store",         HTTP_GET,  handleConfigStoreGet);
+        wm.server->on("/config/dress",         HTTP_GET,  handleConfigDressGet);
+        wm.server->on("/config/badges",        HTTP_GET,  handleConfigBadgesGet);
+        wm.server->on("/config/backup",        HTTP_GET,  handleConfigBackupGet);
+        wm.server->on("/config/backup/export", HTTP_GET,  handleConfigBackupExportGet);
+        wm.server->on("/config/update",        HTTP_GET,  handleConfigUpdateGet);
+        wm.server->on("/config/update/check",  HTTP_POST, handleConfigUpdateCheckPost);
+        wm.server->on("/save-config/setup",        HTTP_POST, handleSetupPost);
+        wm.server->on("/save-config/cat",          HTTP_POST, handleConfigCatPost);
+        wm.server->on("/save-config/city",         HTTP_POST, handleConfigCityPost);
+        wm.server->on("/save-config/store",        HTTP_POST, handleConfigStorePost);
+        wm.server->on("/save-config/cheat",        HTTP_POST, handleConfigStoreCheatPost);
+        wm.server->on("/save-config/reset",        HTTP_POST, handleConfigResetPost);
+        wm.server->on("/save-config/badges-reset", HTTP_POST, handleConfigBadgesResetPost);
+        wm.server->on("/save-config/dress",        HTTP_POST, handleConfigDressPost);
+        wm.server->on("/save-config/backup",       HTTP_POST, handleConfigBackupPost);
+        wm.server->on("/save-config/update",       HTTP_POST, handleConfigUpdatePost);
+    });
     wm.autoConnect("CYD-Clock");
     wm.startWebPortal();
-    wm.server->on("/config",           HTTP_GET,  handleConfigHome);
-    wm.server->on("/setup",            HTTP_GET,  handleSetupGet);
-    wm.server->on("/config/cat",       HTTP_GET,  handleConfigCatGet);
-    wm.server->on("/config/city",      HTTP_GET,  handleConfigCityGet);
-    wm.server->on("/config/store",     HTTP_GET,  handleConfigStoreGet);
-    wm.server->on("/config/dress",     HTTP_GET,  handleConfigDressGet);
-    wm.server->on("/config/badges",    HTTP_GET,  handleConfigBadgesGet);
-    wm.server->on("/config/backup",        HTTP_GET,  handleConfigBackupGet);
-    wm.server->on("/config/backup/export", HTTP_GET,  handleConfigBackupExportGet);
-    wm.server->on("/config/update",        HTTP_GET,  handleConfigUpdateGet);
-    wm.server->on("/config/update/check",  HTTP_POST, handleConfigUpdateCheckPost);
-    wm.server->on("/save-config/setup", HTTP_POST, handleSetupPost);
-    wm.server->on("/save-config/cat",  HTTP_POST, handleConfigCatPost);
-    wm.server->on("/save-config/city", HTTP_POST, handleConfigCityPost);
-    wm.server->on("/save-config/store", HTTP_POST, handleConfigStorePost);
-    wm.server->on("/save-config/cheat", HTTP_POST, handleConfigStoreCheatPost);
-    wm.server->on("/save-config/reset", HTTP_POST, handleConfigResetPost);
-    wm.server->on("/save-config/badges-reset", HTTP_POST, handleConfigBadgesResetPost);
-    wm.server->on("/save-config/dress", HTTP_POST, handleConfigDressPost);
-    wm.server->on("/save-config/backup", HTTP_POST, handleConfigBackupPost);
-    wm.server->on("/save-config/update", HTTP_POST, handleConfigUpdatePost);
 }
 
 // ── Arduino ───────────────────────────────────────────────────────────────────
