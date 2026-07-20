@@ -338,6 +338,8 @@ unsigned long peekUntilMs      = 0;      // 0 = not peeking; mirrors the showIpU
 bool peekingAsleep             = false;  // true while touch-peeking during the sleep window — freezes cat state, draws the sleeping scene
 bool sleepScreenActive         = false;  // true once the black sleep screen has been painted this session
 bool setupPromptActive         = false;  // true once the first-run "complete setup at <ip>" screen has been painted this session
+bool otaUpdatePending          = false;  // an update was found; flash+reboot deferred until awake and past setup
+OtaCheckResult pendingOtaUpdate;         // valid only while otaUpdatePending is true
 unsigned long forceSickDeadlineMs = 0;   // test-only: armed via /config, 0 = not armed, not persisted
 unsigned long forceThirstDeadlineMs = 0; // test-only: armed via /config, 0 = not armed, not persisted
 
@@ -2443,7 +2445,6 @@ static bool parseHHMM(const String& s, int& outMinutes) {
 static void drawOtaProgress(size_t written, size_t total);
 static OtaCheckResult performUpdateCheckOnly();
 static void applyFoundUpdate(const OtaCheckResult& result);
-static void performUpdateCheck();
 
 // Every config/store page renders live device state (points, owned items, flash-sale
 // status, ...) fresh per request — but without an explicit no-store, a browser is free to
@@ -3325,12 +3326,6 @@ static void applyFoundUpdate(const OtaCheckResult& result) {
     dirty.animalBg = true;
 }
 
-static void performUpdateCheck() {
-    OtaCheckResult result = performUpdateCheckOnly();
-    if (lastUpdateCheckFailed || lastUpdateCheckSkipped || !result.updateAvailable) return;
-    applyFoundUpdate(result);
-}
-
 // ── WiFiManager ───────────────────────────────────────────────────────────────
 static void runWiFiManager(ConfigManager& cfg) {
     (void)cfg;  // config now managed exclusively via /config web page
@@ -3361,7 +3356,18 @@ static void runWiFiManager(ConfigManager& cfg) {
     // wins over WiFiManager's own root handler once we do register it (see
     // handleRootPage()'s comment for why that's unconditional from that point on).
     wm.setWebServerCallback([]() {
-        if (wm.getConfigPortalActive()) return;  // still choosing WiFi — leave WM's own pages alone
+        if (wm.getConfigPortalActive()) {
+            // Still choosing WiFi — send "/" straight to WiFiManager's own network-scan/
+            // credential-entry page instead of falling through to its stock root menu
+            // (which links to "custom"/"info"/"exit", none of which make sense before
+            // WiFi is even configured). Registered here, before WiFiManager wires up its
+            // own "/" handler, so it wins per the first-match-wins ordering noted above.
+            wm.server->on("/", HTTP_GET, []() {
+                wm.server->sendHeader("Location", "/wifi");
+                wm.server->send(302, "text/plain", "");
+            });
+            return;
+        }
         wm.server->on("/",                     HTTP_GET,  handleRootPage);
         wm.server->on("/config",               HTTP_GET,  handleConfigHome);
         wm.server->on("/setup",                HTTP_GET,  handleSetupGet);
@@ -3447,6 +3453,39 @@ void loop() {
     unsigned long now = millis();
     if (peekUntilMs > 0 && now >= peekUntilMs) peekUntilMs = 0;  // peek expired
 
+    // Firmware update check — the network check itself runs unconditionally, ahead of
+    // the sleep-window and setup-prompt early returns below, so neither an overnight
+    // sleep window nor an in-progress first-run setup can starve it for hours at a
+    // time. The flash+reboot step is heavier (lights the screen full-brightness,
+    // reboots the device) so it's deferred via otaUpdatePending until control reaches
+    // past both of those early returns below — i.e. only once the device is awake and
+    // past first-run setup.
+    if (now - lastUpdateCheck > UPDATE_CHECK_INTERVAL_MS) {
+        lastUpdateCheck = now;
+        OtaCheckResult result = performUpdateCheckOnly();
+        if (!lastUpdateCheckFailed && !lastUpdateCheckSkipped && result.updateAvailable) {
+            pendingOtaUpdate  = result;
+            otaUpdatePending  = true;
+        }
+    }
+
+    // First-run setup: hold on the "complete setup at <ip>" screen until the wizard (cat
+    // color + name) has been finished. Checked ahead of the sleep window below so a fresh
+    // device configured at night doesn't have its setup prompt preempted by the sleep screen.
+    if (!configMgr.config().setupComplete) {
+        if (!setupPromptActive) {
+            drawSetupPrompt();
+            setupPromptActive = true;
+        }
+        delay(50);
+        return;
+    }
+    if (setupPromptActive) {
+        setupPromptActive = false;
+        tft.fillScreen(TFT_BLACK);
+        dirty.header = dirty.animal = dirty.animalBg = dirty.picker = dirty.timerRow = true;
+    }
+
     {
         time_t epoch = ntpClient.getEpochTime();
         time_t utcCheck = epoch - (time_t)configMgr.config().utcOffsetSeconds;
@@ -3496,21 +3535,13 @@ void loop() {
         }
     }
 
-    // First-run setup: hold on the "complete setup at <ip>" screen until the wizard (cat
-    // color + name) has been finished — mirrors the sleepScreenActive pattern above, painting
-    // once per transition rather than every loop iteration.
-    if (!configMgr.config().setupComplete) {
-        if (!setupPromptActive) {
-            drawSetupPrompt();
-            setupPromptActive = true;
-        }
-        delay(50);
-        return;
-    }
-    if (setupPromptActive) {
-        setupPromptActive = false;
-        tft.fillScreen(TFT_BLACK);
-        dirty.header = dirty.animal = dirty.animalBg = dirty.picker = dirty.timerRow = true;
+    // Apply any update found by the check above — only reached once we're awake and
+    // past first-run setup (both early-return above this point otherwise), so a
+    // sleeping or mid-setup device is never abruptly lit up full-brightness and
+    // rebooted by an overnight or mid-wizard update.
+    if (otaUpdatePending) {
+        otaUpdatePending = false;
+        applyFoundUpdate(pendingOtaUpdate);  // reboots on success; only returns on failure
     }
 
     // IP display expiry
@@ -3524,13 +3555,6 @@ void loop() {
         weather.fetch(configMgr.config().latitude, configMgr.config().longitude);
         lastWeatherFetch = now;
         dirty.header = true;
-    }
-
-    // Firmware update check — blocks the loop if it finds and applies an update
-    // (see performUpdateCheck()); otherwise a quick network round-trip at most.
-    if (now - lastUpdateCheck > UPDATE_CHECK_INTERVAL_MS) {
-        lastUpdateCheck = now;
-        performUpdateCheck();
     }
 
     // Timer tick + finished detection
