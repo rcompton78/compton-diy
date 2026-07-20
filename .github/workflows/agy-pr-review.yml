@@ -25,6 +25,10 @@ jobs:
         with:
           persist-credentials: false
 
+      # NOTE: currently non-functional -- run_agy_sdk's own policy list
+      # evaluates policy.deny_all() before policy.allow(github_mcp), so
+      # every tool call is denied regardless of trust-workspace/
+      # sandbox-profile. Left in place pending an upstream fix.
       - name: Run Antigravity review
         uses: rsamborski/run-agy-sdk@90e944e2f0d1bfcc392c954cd937f7d3b36d1441
         with:
