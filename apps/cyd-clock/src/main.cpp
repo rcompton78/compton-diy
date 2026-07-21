@@ -84,6 +84,7 @@ static constexpr uint32_t STORE_COST_STARRY_NIGHT = 200;  // premium: has real a
 static constexpr uint32_t STORE_COST_CAT_COLOR_SOLID   = 100;  // black, grey — flat recolor
 static constexpr uint32_t STORE_COST_CAT_COLOR_PATTERN = 200;  // tabby, calico — real stripe/patch art
 static constexpr uint32_t STORE_COST_ACCESSORY_BOW = 50;
+static constexpr uint32_t STORE_COST_RIGHT_ARM_SLOT = 200;  // one-time unlock, not per-stuffy
 
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
@@ -240,28 +241,36 @@ static void drawPenguinPeeking(int cx, int cy, uint16_t accentColor);
 static void drawPenguinFull(int cx, int cy, uint16_t accentColor);
 static void drawUnicornPeeking(int cx, int cy, uint16_t accentColor);
 static void drawUnicornFull(int cx, int cy, uint16_t accentColor);
+static void drawTeddyHeld(int cx, int cy, uint16_t accentColor);
+static void drawBunnyHeld(int cx, int cy, uint16_t accentColor);
+static void drawSquirrelHeld(int cx, int cy, uint16_t accentColor);
+static void drawPenguinHeld(int cx, int cy, uint16_t accentColor);
+static void drawUnicornHeld(int cx, int cy, uint16_t accentColor);
 
 // Stuffy catalog — same purchase/equip model as blanket colors, so more stuffies can be
 // added later without changing the store/dressing-room plumbing. `id` is the stable
 // identifier used in store/dressing-room form requests; ConfigManager persists ownership
 // as an `ownedStuffies` bitmask and the equipped selection as a numeric `equippedStuffy`
 // index (both keyed by catalog position), not the string id. `drawPeeking`/`drawFull` are
-// the sleep-scene art for this stuffy — only one stuffy is ever equipped at a time (see
-// equippedStuffyIndex()), so equipping the bunny replaces the teddy bear at night rather
-// than showing both.
+// the sleep-scene art for this stuffy — only one stuffy is ever equipped there at a time
+// (see equippedStuffyIndex()), so equipping the bunny replaces the teddy bear at night
+// rather than showing both. `drawHeld` is a separate pose for the right-arm slot
+// (equippedStuffyRightIndex(), DIY-64) — day and night, independent of the left slot above,
+// so the same stuffy can be drawPeeking/drawFull on the left and drawHeld on the right at once.
 struct Stuffy {
     const char* id;
     const char* label;
     uint32_t cost;
     void (*drawPeeking)(int cx, int cy, uint16_t accentColor);
     void (*drawFull)(int cx, int cy, uint16_t accentColor);
+    void (*drawHeld)(int cx, int cy, uint16_t accentColor);
 };
 static constexpr Stuffy STUFFIES[] = {
-    {"teddy",    "Teddy Bear",   STORE_COST_TEDDY,    drawTeddyPeeking,    drawTeddyFull},
-    {"bunny",    "Grey Bunny",   STORE_COST_BUNNY,    drawBunnyPeeking,    drawBunnyFull},
-    {"squirrel", "Red Squirrel", STORE_COST_SQUIRREL, drawSquirrelPeeking, drawSquirrelFull},
-    {"penguin",  "Penguin",      STORE_COST_PENGUIN,  drawPenguinPeeking,  drawPenguinFull},
-    {"unicorn",  "White Unicorn", STORE_COST_UNICORN, drawUnicornPeeking,  drawUnicornFull},
+    {"teddy",    "Teddy Bear",   STORE_COST_TEDDY,    drawTeddyPeeking,    drawTeddyFull,    drawTeddyHeld},
+    {"bunny",    "Grey Bunny",   STORE_COST_BUNNY,    drawBunnyPeeking,    drawBunnyFull,    drawBunnyHeld},
+    {"squirrel", "Red Squirrel", STORE_COST_SQUIRREL, drawSquirrelPeeking, drawSquirrelFull, drawSquirrelHeld},
+    {"penguin",  "Penguin",      STORE_COST_PENGUIN,  drawPenguinPeeking,  drawPenguinFull,  drawPenguinHeld},
+    {"unicorn",  "White Unicorn", STORE_COST_UNICORN, drawUnicornPeeking,  drawUnicornFull,  drawUnicornHeld},
 };
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
 
@@ -412,6 +421,8 @@ static int equippedCatColorIndex();
 static uint16_t catBodyColor();
 static bool catHasCuteEyes();
 static int equippedAccessoryIndex();
+static int equippedStuffyRightIndex();
+static int equippedBlanketIndex();
 
 // Tabby/calico pattern art bodies (declared earlier alongside CAT_COLORS[]). Head pass
 // runs after the head fill but before eyes/nose/whiskers/mouth, so those still paint
@@ -594,6 +605,18 @@ static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom b
     tft.fillRoundRect(cx + 26, cy + 18, 12, 36, 6, col);
     tft.fillRoundRect(cx + 14, cy + 50, 28, 10, 5, col);
 
+    // Right-arm stuffy slot (DIY-64) — drawn here, inside drawCat() rather than by each
+    // caller, so it renders identically day (drawAnimal() calls drawCat() directly) and
+    // night (drawSleepingCat() calls drawCat() internally), unlike the left/sleep-scene
+    // stuffy slot below, which is intentionally night-only and layered on top by
+    // drawSleepingCat() alone. Drawn after the paws/tail above so it sits on top of both.
+    int rightArmIdx = equippedStuffyRightIndex();
+    if (rightArmIdx >= 0 && STUFFIES[rightArmIdx].drawHeld) {
+        int blanketIdx = equippedBlanketIndex();
+        uint16_t rightArmAccent = BLANKET_COLORS[blanketIdx >= 0 ? blanketIdx : 0].trim;
+        STUFFIES[rightArmIdx].drawHeld(cx, cy, rightArmAccent);
+    }
+
     if (colorIdx >= 0 && CAT_COLORS[colorIdx].drawBodyPattern) {
         CAT_COLORS[colorIdx].drawBodyPattern(cx, cy);
     }
@@ -630,6 +653,19 @@ static int equippedStuffyIndex() {
         if (owned & (1 << i)) return i;
     }
     return -1;
+}
+
+// Resolver for the right-arm slot (DIY-64) — deliberately does NOT fall back to the
+// lowest-owned stuffy like equippedStuffyIndex() and every other equipped*Index() above.
+// Unlocking the slot is a separate purchase from owning any given stuffy, so there's no
+// "first purchase" moment to auto-equip from; the user always picks explicitly in the
+// dressing room, and an unlocked-but-never-equipped slot just stays empty.
+static int equippedStuffyRightIndex() {
+    if (!configMgr.config().rightArmSlotUnlocked) return -1;
+    uint8_t eq = configMgr.config().equippedStuffyRight;
+    if (eq == EQUIP_NONE) return -1;
+    if (eq < STUFFY_COUNT && (configMgr.config().ownedStuffies & (1 << eq))) return eq;
+    return -1;  // previously-equipped stuffy no longer owned somehow — just show nothing
 }
 
 // Same resolution logic as equippedBlanketIndex(), for the room theme catalog.
@@ -754,7 +790,8 @@ static bool hasNewStoreItems() {
            BLANKET_COLOR_COUNT > configMgr.config().seenBlanketColorCount ||
            ROOM_THEME_COUNT > configMgr.config().seenRoomThemeCount ||
            CAT_COLOR_COUNT > configMgr.config().seenCatColorCount ||
-           ACCESSORY_COUNT > configMgr.config().seenAccessoryCount;
+           ACCESSORY_COUNT > configMgr.config().seenAccessoryCount ||
+           !configMgr.config().seenRightArmSlot;
 }
 
 // Shared ear/head/snout/eyes/nose art reused by both teddy variants below.
@@ -786,6 +823,16 @@ static void drawTeddyFull(int cx, int cy, uint16_t accentColor) {
     tft.fillCircle(bx + 6, by + 33, 4, C_BEAR);            // right foot
 }
 
+// Right-arm slot pose (DIY-64) — small enough to sit on the right paw (cx+8..+32, cy+42..+56,
+// see drawCat()'s paw geometry), drawn day and night, independent of drawPeeking/drawFull
+// above. First-pass geometry, expect to tune after real hardware.
+static void drawTeddyHeld(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 20, by = cy + 30;
+    drawTeddyHead(bx, by, accentColor);
+    tft.fillRoundRect(bx - 7, by + 6, 14, 16, 6, C_BEAR);  // small body sitting on the paw
+    tft.fillCircle(bx, by + 13, 3, accentColor);           // belly patch
+}
+
 // Shared ear/head/snout/eyes/nose art reused by both bunny variants below — same layout as
 // drawTeddyHead() but with tall narrow ears instead of round ones.
 static void drawBunnyHead(int bx, int by, uint16_t snoutColor) {
@@ -815,6 +862,14 @@ static void drawBunnyFull(int cx, int cy, uint16_t accentColor) {
     tft.fillCircle(bx - 5, by + 31, 4, C_BUNNY);            // left foot
     tft.fillCircle(bx + 5, by + 31, 4, C_BUNNY);            // right foot
     tft.fillCircle(bx, by + 33, 3, TFT_WHITE);              // fluffy tail
+}
+
+// Right-arm slot pose (DIY-64) — see drawTeddyHeld() for placement rationale.
+static void drawBunnyHeld(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 20, by = cy + 30;
+    drawBunnyHead(bx, by, accentColor);
+    tft.fillRoundRect(bx - 7, by + 6, 14, 16, 6, C_BUNNY);  // small body sitting on the paw
+    tft.fillCircle(bx, by + 13, 3, accentColor);            // belly patch
 }
 
 // Shared ear/head/snout/eyes/nose art reused by both squirrel variants below — same layout
@@ -856,6 +911,17 @@ static void drawSquirrelFull(int cx, int cy, uint16_t accentColor) {
     tft.fillCircle(bx + 5, by + 31, 4, C_SQUIRREL);            // right foot
 }
 
+// Right-arm slot pose (DIY-64) — see drawTeddyHeld() for placement rationale. Keeps the
+// distinguishing tail-tip poke from drawSquirrelFull(), scaled down to fit.
+static void drawSquirrelHeld(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 20, by = cy + 30;
+    tft.fillCircle(bx + 8, by + 10, 4, C_SQUIRREL);   // tail base, tucked behind the body
+    tft.fillCircle(bx + 10, by + 4, 3, accentColor);  // white tip poking over the shoulder
+    drawSquirrelHead(bx, by, accentColor);
+    tft.fillRoundRect(bx - 7, by + 6, 14, 16, 6, C_SQUIRREL);  // small body sitting on the paw
+    tft.fillCircle(bx, by + 13, 3, accentColor);               // belly patch
+}
+
 // Shared head art reused by both penguin variants below — unlike the other stuffies'
 // snout-and-fur-color heads, the penguin's face patch is always the blanket accent color
 // (its distinguishing white-face silhouette) while eyes sit on top as white-with-pupil
@@ -892,6 +958,15 @@ static void drawPenguinFull(int cx, int cy, uint16_t accentColor) {
     tft.fillTriangle(bx + 6, by + 33, bx + 9, by + 37, bx + 2, by + 37, C_PENGUIN_BEAK);  // right foot
 }
 
+// Right-arm slot pose (DIY-64) — see drawTeddyHeld() for placement rationale. Flippers/feet
+// dropped to keep the pose compact; head + body silhouette is enough to read as a penguin.
+static void drawPenguinHeld(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 20, by = cy + 30;
+    drawPenguinHead(bx, by, accentColor);
+    tft.fillRoundRect(bx - 7, by + 6, 14, 16, 6, C_PENGUIN);     // small body sitting on the paw
+    tft.fillRoundRect(bx - 4, by + 9, 8, 10, 3, accentColor);    // white belly patch
+}
+
 // Shared ear/horn/head/snout/eyes/nose art reused by both unicorn variants below — same
 // layout as drawTeddyHead() but with a pink horn between the ears, the unicorn's
 // distinguishing feature. Horn is centered in x so it never overlaps the ears on either
@@ -926,6 +1001,14 @@ static void drawUnicornFull(int cx, int cy, uint16_t accentColor) {
     tft.fillCircle(bx - 5, by + 31, 4, C_UNICORN);            // left foot
     tft.fillCircle(bx + 5, by + 31, 4, C_UNICORN);            // right foot
     tft.fillCircle(bx, by + 33, 3, C_UNICORN_HORN);           // pink tail
+}
+
+// Right-arm slot pose (DIY-64) — see drawTeddyHeld() for placement rationale.
+static void drawUnicornHeld(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 20, by = cy + 30;
+    drawUnicornHead(bx, by, accentColor);
+    tft.fillRoundRect(bx - 7, by + 6, 14, 16, 6, C_UNICORN);  // small body sitting on the paw
+    tft.fillCircle(bx, by + 13, 3, accentColor);              // belly patch
 }
 
 // Deeply-closed, sleepy eyes for the sleep-window peek — thinner and gently curled at
@@ -2469,6 +2552,9 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h3>Accessories - Head</h3>
 %%ACCESSORY_ITEMS%%
 
+<h3>Right Arm Buddy (day &amp; night)</h3>
+%%RIGHT_ARM_SLOT_ITEM%%
+
 <script>
 // Easter egg: tap the "Store" heading 7 times in a row (no other tap in between)
 // to reveal a text field + button that grants that many points.
@@ -2507,6 +2593,9 @@ static const char CONFIG_DRESS_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 
 <h3>Stuffies (night only)</h3>
 %%STUFFY_OPTIONS%%
+
+<h3>Right Arm Buddy (day &amp; night)</h3>
+%%STUFFY_RIGHT_OPTIONS%%
 
 <h3>Blankets (night only)</h3>
 %%BLANKET_OPTIONS%%
@@ -2759,6 +2848,7 @@ static void handleConfigStoreGet() {
         configMgr.config().seenRoomThemeCount    = (uint8_t)ROOM_THEME_COUNT;
         configMgr.config().seenCatColorCount     = (uint8_t)CAT_COLOR_COUNT;
         configMgr.config().seenAccessoryCount    = (uint8_t)ACCESSORY_COUNT;
+        configMgr.config().seenRightArmSlot      = true;
         configMgr.save();
     }
     String page = String(FPSTR(CONFIG_STORE_HTML));
@@ -2813,6 +2903,11 @@ static void handleConfigStoreGet() {
         accessoryItems += "</div>\n";
     }
     page.replace("%%ACCESSORY_ITEMS%%", accessoryItems);
+    String rightArmSlotItem = "<div class='item'><span>Right Arm Buddy Slot</span>";
+    rightArmSlotItem += storeItemAction("right_arm_slot", configMgr.config().rightArmSlotUnlocked,
+                                         STORE_COST_RIGHT_ARM_SLOT, points);
+    rightArmSlotItem += "</div>\n";
+    page.replace("%%RIGHT_ARM_SLOT_ITEM%%", rightArmSlotItem);
     String msg = "";
     if (wm.server->hasArg("welcome")) {
         msg = "<div class='banner ok'>Welcome! Here's 70 points to get started.</div>";
@@ -3090,6 +3185,7 @@ static void handleConfigStorePost() {
     uint32_t cost;
     bool alreadyOwned;
     int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1, catColorIdx = -1, accessoryIdx = -1;
+    bool rightArmSlotPurchase = false;  // not from a catalog array, so tracked as a plain flag
     for (int i = 0; i < STUFFY_COUNT; i++) {
         if (item == STUFFIES[i].id) { stuffyIdx = i; break; }
     }
@@ -3122,12 +3218,17 @@ static void handleConfigStorePost() {
                     for (int i = 0; i < ACCESSORY_COUNT; i++) {
                         if (item == ACCESSORIES[i].id) { accessoryIdx = i; break; }
                     }
-                    if (accessoryIdx < 0) {
+                    if (accessoryIdx >= 0) {
+                        cost = ACCESSORIES[accessoryIdx].cost;
+                        alreadyOwned = configMgr.config().ownedAccessories & (1 << accessoryIdx);
+                    } else if (item == "right_arm_slot") {
+                        rightArmSlotPurchase = true;
+                        cost = STORE_COST_RIGHT_ARM_SLOT;
+                        alreadyOwned = configMgr.config().rightArmSlotUnlocked;
+                    } else {
                         wm.server->send(400, "text/plain", "Unknown item");
                         return;
                     }
-                    cost = ACCESSORIES[accessoryIdx].cost;
-                    alreadyOwned = configMgr.config().ownedAccessories & (1 << accessoryIdx);
                 }
             }
         }
@@ -3157,6 +3258,8 @@ static void handleConfigStorePost() {
     } else if (accessoryIdx >= 0) {
         configMgr.config().ownedAccessories |= (1 << accessoryIdx);
         configMgr.config().equippedAccessory = accessoryIdx;  // newly bought accessory becomes equipped
+    } else if (rightArmSlotPurchase) {
+        configMgr.config().rightArmSlotUnlocked = true;  // starts empty — see equippedStuffyRightIndex()
     } else {
         configMgr.config().ownedStuffies |= (1 << stuffyIdx);
         configMgr.config().equippedStuffy = stuffyIdx;  // newly bought stuffy becomes equipped
@@ -3168,6 +3271,7 @@ static void handleConfigStorePost() {
         else if (roomThemeIdx >= 0) configMgr.config().ownedRoomThemes &= ~(1 << roomThemeIdx);
         else if (catColorIdx >= 0) configMgr.config().ownedCatColors &= ~(1 << catColorIdx);
         else if (accessoryIdx >= 0) configMgr.config().ownedAccessories &= ~(1 << accessoryIdx);
+        else if (rightArmSlotPurchase) configMgr.config().rightArmSlotUnlocked = false;
         else configMgr.config().ownedStuffies &= ~(1 << stuffyIdx);
         wm.server->sendHeader("Location", "/config/store?err=save");
         wm.server->send(302, "text/plain", "");
@@ -3223,6 +3327,27 @@ static void handleConfigDressGet() {
         }
     }
     page.replace("%%STUFFY_OPTIONS%%", stuffyOptions);
+
+    int equippedStuffyRightIdx = equippedStuffyRightIndex();
+    String stuffyRightOptions = "";
+    if (!configMgr.config().rightArmSlotUnlocked) {
+        stuffyRightOptions = "<p style='color:#888'>Not unlocked yet — visit the Store.</p>";
+    } else if (ownedStuffies == 0) {
+        stuffyRightOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
+    } else {
+        stuffyRightOptions += "<label class='pick'><input type='radio' name='stuffyRight' value='none'";
+        if (equippedStuffyRightIdx < 0) stuffyRightOptions += " checked";
+        stuffyRightOptions += "> None</label>";
+        for (int i = 0; i < STUFFY_COUNT; i++) {
+            if (!(ownedStuffies & (1 << i))) continue;
+            stuffyRightOptions += "<label class='pick'><input type='radio' name='stuffyRight' value='";
+            stuffyRightOptions += STUFFIES[i].id;
+            stuffyRightOptions += "'";
+            if (i == equippedStuffyRightIdx) stuffyRightOptions += " checked";
+            stuffyRightOptions += "> " + String(STUFFIES[i].label) + "</label>";
+        }
+    }
+    page.replace("%%STUFFY_RIGHT_OPTIONS%%", stuffyRightOptions);
 
     uint8_t ownedThemes = configMgr.config().ownedRoomThemes;
     int equippedThemeIdx = equippedRoomThemeIndex();
@@ -3351,6 +3476,27 @@ static void handleConfigDressPost() {
             return;
         }
         configMgr.config().equippedStuffy = idx;
+        changed = true;
+    }
+
+    String stuffyRightId = wm.server->arg("stuffyRight");
+    if (stuffyRightId == "none") {
+        configMgr.config().equippedStuffyRight = EQUIP_NONE;
+        changed = true;
+    } else if (stuffyRightId.length() > 0) {
+        if (!configMgr.config().rightArmSlotUnlocked) {
+            wm.server->send(400, "text/plain", "Right arm slot not unlocked");
+            return;
+        }
+        int idx = -1;
+        for (int i = 0; i < STUFFY_COUNT; i++) {
+            if (stuffyRightId == STUFFIES[i].id) { idx = i; break; }
+        }
+        if (idx < 0 || !(configMgr.config().ownedStuffies & (1 << idx))) {
+            wm.server->send(400, "text/plain", "Invalid selection");
+            return;
+        }
+        configMgr.config().equippedStuffyRight = idx;
         changed = true;
     }
 
