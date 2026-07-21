@@ -604,12 +604,13 @@ static void setCatName(int idx, const String& name) {
     else configMgr.config().catNames[idx] = name;
 }
 
-// Trims, defaults an empty name to "Biscuit", and rejects names over 16 characters or
-// containing control characters. Shared by the setup wizard and the dressing room so
-// every per-cat-color name gets the same validation.
+// Trims and rejects names over 16 characters or containing control characters. Leaves an
+// empty name as empty rather than defaulting it — an empty per-color name is meaningful to
+// setCatName()/getCatName() as "clear to fallback", so only the setup wizard (which has no
+// fallback yet to clear to) should turn an empty submission into "Biscuit". Shared by the
+// setup wizard and the dressing room so every per-cat-color name gets the same validation.
 static bool sanitizeCatName(String& name) {
     name.trim();
-    if (name.length() == 0) name = "Biscuit";
     if (name.length() > 16) return false;
     for (size_t i = 0; i < name.length(); ++i) {
         if ((unsigned char)name[i] < 0x20 || (unsigned char)name[i] == 0x7F) return false;
@@ -2529,6 +2530,9 @@ static void handleSetupPost() {
         wm.server->send(302, "text/plain", "");
         return;
     }
+    // No fallback exists yet at this point in the flow, so an empty submission still
+    // needs a concrete default here, unlike the dressing room's rename fields.
+    if (name.length() == 0) name = "Biscuit";
 
     float lat = wm.server->arg("lat").toFloat();
     float lon = wm.server->arg("lon").toFloat();
