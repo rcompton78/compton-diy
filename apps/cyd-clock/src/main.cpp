@@ -1131,8 +1131,12 @@ static void drawStarryNightBackground(int x, int y, int w, int h) {
 static void drawRightArmStuffy(int cx, int cy, bool hasBlanket) {
     int rightArmIdx = equippedStuffyRightIndex();
     if (rightArmIdx < 0) return;
-    int blanketIdx = equippedBlanketIndex();
-    uint16_t accent = BLANKET_COLORS[blanketIdx >= 0 ? blanketIdx : 0].trim;
+    // The blanket is a night-only item with nothing to visually match during the day, so the
+    // day (and blanket-less night) pose always uses a fixed default accent rather than
+    // whatever blanket color happens to be equipped for the unrelated night scene. Only the
+    // head-only night-with-blanket pose borrows the actual blanket's trim, since that's the
+    // only time it renders on top of the visible blanket it'd otherwise clash with.
+    uint16_t accent = hasBlanket ? BLANKET_COLORS[equippedBlanketIndex()].trim : BLANKET_COLORS[0].trim;
     if (hasBlanket) STUFFIES[rightArmIdx].drawHeldPeeking(cx, cy, accent);
     else            STUFFIES[rightArmIdx].drawHeld(cx, cy, accent);
 }
