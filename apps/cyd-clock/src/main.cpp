@@ -246,6 +246,11 @@ static void drawBunnyHeld(int cx, int cy, uint16_t accentColor);
 static void drawSquirrelHeld(int cx, int cy, uint16_t accentColor);
 static void drawPenguinHeld(int cx, int cy, uint16_t accentColor);
 static void drawUnicornHeld(int cx, int cy, uint16_t accentColor);
+static void drawTeddyHeldPeeking(int cx, int cy, uint16_t accentColor);
+static void drawBunnyHeldPeeking(int cx, int cy, uint16_t accentColor);
+static void drawSquirrelHeldPeeking(int cx, int cy, uint16_t accentColor);
+static void drawPenguinHeldPeeking(int cx, int cy, uint16_t accentColor);
+static void drawUnicornHeldPeeking(int cx, int cy, uint16_t accentColor);
 
 // Stuffy catalog — same purchase/equip model as blanket colors, so more stuffies can be
 // added later without changing the store/dressing-room plumbing. `id` is the stable
@@ -254,9 +259,14 @@ static void drawUnicornHeld(int cx, int cy, uint16_t accentColor);
 // index (both keyed by catalog position), not the string id. `drawPeeking`/`drawFull` are
 // the sleep-scene art for this stuffy — only one stuffy is ever equipped there at a time
 // (see equippedStuffyIndex()), so equipping the bunny replaces the teddy bear at night
-// rather than showing both. `drawHeld` is a separate pose for the right-arm slot
-// (equippedStuffyRightIndex(), DIY-64) — day and night, independent of the left slot above,
-// so the same stuffy can be drawPeeking/drawFull on the left and drawHeld on the right at once.
+// rather than showing both. `drawHeld`/`drawHeldPeeking` are a separate pair for the
+// right-arm slot (equippedStuffyRightIndex(), DIY-64), independent of the left slot above —
+// the same stuffy can be drawPeeking/drawFull on the left and drawHeld on the right at once.
+// `drawHeld` mirrors `drawFull` exactly (full head+body, anchored on the right instead of
+// the left) and `drawHeldPeeking` mirrors `drawPeeking` (head only), so the right-arm slot
+// looks exactly like the left one, just facing the other way. drawRightArmStuffy() (see
+// below) picks between them: `drawHeld` for day and blanket-less night, `drawHeldPeeking`
+// once a blanket would otherwise cover `drawHeld`'s body.
 struct Stuffy {
     const char* id;
     const char* label;
@@ -264,13 +274,14 @@ struct Stuffy {
     void (*drawPeeking)(int cx, int cy, uint16_t accentColor);
     void (*drawFull)(int cx, int cy, uint16_t accentColor);
     void (*drawHeld)(int cx, int cy, uint16_t accentColor);
+    void (*drawHeldPeeking)(int cx, int cy, uint16_t accentColor);
 };
 static constexpr Stuffy STUFFIES[] = {
-    {"teddy",    "Teddy Bear",   STORE_COST_TEDDY,    drawTeddyPeeking,    drawTeddyFull,    drawTeddyHeld},
-    {"bunny",    "Grey Bunny",   STORE_COST_BUNNY,    drawBunnyPeeking,    drawBunnyFull,    drawBunnyHeld},
-    {"squirrel", "Red Squirrel", STORE_COST_SQUIRREL, drawSquirrelPeeking, drawSquirrelFull, drawSquirrelHeld},
-    {"penguin",  "Penguin",      STORE_COST_PENGUIN,  drawPenguinPeeking,  drawPenguinFull,  drawPenguinHeld},
-    {"unicorn",  "White Unicorn", STORE_COST_UNICORN, drawUnicornPeeking,  drawUnicornFull,  drawUnicornHeld},
+    {"teddy",    "Teddy Bear",   STORE_COST_TEDDY,    drawTeddyPeeking,    drawTeddyFull,    drawTeddyHeld,    drawTeddyHeldPeeking},
+    {"bunny",    "Grey Bunny",   STORE_COST_BUNNY,    drawBunnyPeeking,    drawBunnyFull,    drawBunnyHeld,    drawBunnyHeldPeeking},
+    {"squirrel", "Red Squirrel", STORE_COST_SQUIRREL, drawSquirrelPeeking, drawSquirrelFull, drawSquirrelHeld, drawSquirrelHeldPeeking},
+    {"penguin",  "Penguin",      STORE_COST_PENGUIN,  drawPenguinPeeking,  drawPenguinFull,  drawPenguinHeld,  drawPenguinHeldPeeking},
+    {"unicorn",  "White Unicorn", STORE_COST_UNICORN, drawUnicornPeeking,  drawUnicornFull,  drawUnicornHeld, drawUnicornHeldPeeking},
 };
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
 
@@ -605,18 +616,11 @@ static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom b
     tft.fillRoundRect(cx + 26, cy + 18, 12, 36, 6, col);
     tft.fillRoundRect(cx + 14, cy + 50, 28, 10, 5, col);
 
-    // Right-arm stuffy slot (DIY-64) — drawn here, inside drawCat() rather than by each
-    // caller, so it renders identically day (drawAnimal() calls drawCat() directly) and
-    // night (drawSleepingCat() calls drawCat() internally), unlike the left/sleep-scene
-    // stuffy slot below, which is intentionally night-only and layered on top by
-    // drawSleepingCat() alone. Drawn after the paws/tail above so it sits on top of both.
-    int rightArmIdx = equippedStuffyRightIndex();
-    if (rightArmIdx >= 0 && STUFFIES[rightArmIdx].drawHeld) {
-        int blanketIdx = equippedBlanketIndex();
-        uint16_t rightArmAccent = BLANKET_COLORS[blanketIdx >= 0 ? blanketIdx : 0].trim;
-        STUFFIES[rightArmIdx].drawHeld(cx, cy, rightArmAccent);
-    }
-
+    // Right-arm stuffy slot (DIY-64) is drawn by drawRightArmStuffy(), called separately by
+    // each scene (drawAnimal() for day, drawSleepingCat() for night) rather than from here —
+    // now that its pose is a full-size mirror of the left slot's drawFull()/drawPeeking(), it
+    // needs to know whether a blanket is covering the body to pick the right one, which
+    // drawCat() itself has no reason to know about.
     if (colorIdx >= 0 && CAT_COLORS[colorIdx].drawBodyPattern) {
         CAT_COLORS[colorIdx].drawBodyPattern(cx, cy);
     }
@@ -823,14 +827,24 @@ static void drawTeddyFull(int cx, int cy, uint16_t accentColor) {
     tft.fillCircle(bx + 6, by + 33, 4, C_BEAR);            // right foot
 }
 
-// Right-arm slot pose (DIY-64) — small enough to sit on the right paw (cx+8..+32, cy+42..+56,
-// see drawCat()'s paw geometry), drawn day and night, independent of drawPeeking/drawFull
-// above. First-pass geometry, expect to tune after real hardware.
+// Right-arm slot pose (DIY-64) — an exact mirror of drawTeddyFull() (same size/shape, same
+// bx-relative offsets — teddy's body/feet are already left-right symmetric around bx, so no
+// offset needs sign-flipping), just anchored on the right (cx+38 vs. the left's cx-38).
 static void drawTeddyHeld(int cx, int cy, uint16_t accentColor) {
-    int bx = cx + 20, by = cy + 30;
+    int bx = cx + 38, by = cy - 8;
     drawTeddyHead(bx, by, accentColor);
-    tft.fillRoundRect(bx - 7, by + 6, 14, 16, 6, C_BEAR);  // small body sitting on the paw
-    tft.fillCircle(bx, by + 13, 3, accentColor);           // belly patch
+    tft.fillRoundRect(bx - 9, by + 7, 18, 26, 8, C_BEAR);  // body
+    tft.fillCircle(bx, by + 18, 5, accentColor);           // belly patch
+    tft.fillCircle(bx - 6, by + 33, 4, C_BEAR);            // left foot
+    tft.fillCircle(bx + 6, by + 33, 4, C_BEAR);            // right foot
+}
+
+// Night-only right-arm variant (DIY-64) — the blanket in drawSleepingCat() would otherwise
+// cover drawTeddyHeld()'s body, so this mirrors drawTeddyPeeking() instead (head only, same
+// cx+40/cy-6 vs. the left's cx-40/cy-6), drawn on top of the blanket.
+static void drawTeddyHeldPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 40, by = cy - 6;
+    drawTeddyHead(bx, by, accentColor);
 }
 
 // Shared ear/head/snout/eyes/nose art reused by both bunny variants below — same layout as
@@ -866,10 +880,19 @@ static void drawBunnyFull(int cx, int cy, uint16_t accentColor) {
 
 // Right-arm slot pose (DIY-64) — see drawTeddyHeld() for placement rationale.
 static void drawBunnyHeld(int cx, int cy, uint16_t accentColor) {
-    int bx = cx + 20, by = cy + 30;
+    int bx = cx + 38, by = cy - 8;
     drawBunnyHead(bx, by, accentColor);
-    tft.fillRoundRect(bx - 7, by + 6, 14, 16, 6, C_BUNNY);  // small body sitting on the paw
-    tft.fillCircle(bx, by + 13, 3, accentColor);            // belly patch
+    tft.fillRoundRect(bx - 8, by + 7, 16, 24, 8, C_BUNNY);  // body
+    tft.fillCircle(bx, by + 17, 4, accentColor);            // belly patch
+    tft.fillCircle(bx - 5, by + 31, 4, C_BUNNY);            // left foot
+    tft.fillCircle(bx + 5, by + 31, 4, C_BUNNY);            // right foot
+    tft.fillCircle(bx, by + 33, 3, TFT_WHITE);              // fluffy tail
+}
+
+// Night-only right-arm variant (DIY-64) — see drawTeddyHeldPeeking() for rationale.
+static void drawBunnyHeldPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 40, by = cy - 6;
+    drawBunnyHead(bx, by, accentColor);
 }
 
 // Shared ear/head/snout/eyes/nose art reused by both squirrel variants below — same layout
@@ -911,15 +934,30 @@ static void drawSquirrelFull(int cx, int cy, uint16_t accentColor) {
     tft.fillCircle(bx + 5, by + 31, 4, C_SQUIRREL);            // right foot
 }
 
-// Right-arm slot pose (DIY-64) — see drawTeddyHeld() for placement rationale. Keeps the
-// distinguishing tail-tip poke from drawSquirrelFull(), scaled down to fit.
+// Right-arm slot pose (DIY-64) — an exact mirror of drawSquirrelFull(). Unlike teddy/bunny,
+// the tail-tip poke is a one-sided feature (not a symmetric pair), so its x offsets are
+// sign-flipped (bx+10 → bx-10 etc.) to poke toward the body on this side too, rather than
+// literally translating drawSquirrelFull()'s art and having the tail poke away from the cat.
 static void drawSquirrelHeld(int cx, int cy, uint16_t accentColor) {
-    int bx = cx + 20, by = cy + 30;
-    tft.fillCircle(bx + 8, by + 10, 4, C_SQUIRREL);   // tail base, tucked behind the body
-    tft.fillCircle(bx + 10, by + 4, 3, accentColor);  // white tip poking over the shoulder
+    int bx = cx + 38, by = cy - 8;
+    tft.fillCircle(bx - 10, by + 12, 6, C_SQUIRREL);   // tail base, tucked behind the body
+    tft.fillCircle(bx - 13, by + 4,  5, C_SQUIRREL);   // a bit of orange curling up
+    tft.fillCircle(bx - 14, by - 2,  4, accentColor);  // white tip poking over the shoulder
     drawSquirrelHead(bx, by, accentColor);
-    tft.fillRoundRect(bx - 7, by + 6, 14, 16, 6, C_SQUIRREL);  // small body sitting on the paw
-    tft.fillCircle(bx, by + 13, 3, accentColor);               // belly patch
+    tft.fillRoundRect(bx - 8, by + 7, 16, 24, 8, C_SQUIRREL);  // body
+    tft.fillCircle(bx, by + 17, 4, accentColor);               // belly patch
+    tft.fillCircle(bx - 5, by + 31, 4, C_SQUIRREL);            // left foot
+    tft.fillCircle(bx + 5, by + 31, 4, C_SQUIRREL);            // right foot
+}
+
+// Night-only right-arm variant (DIY-64) — see drawTeddyHeldPeeking() for rationale. Tail bump
+// mirrored to poke toward the body (leftward) rather than drawSquirrelPeeking()'s rightward
+// poke, keeping the same "over the near shoulder" silhouette on this side.
+static void drawSquirrelHeldPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 40, by = cy - 6;
+    tft.fillCircle(bx - 12, by + 2, 5, C_SQUIRREL);   // bit of orange poking over the shoulder
+    tft.fillCircle(bx - 13, by - 4, 4, accentColor);  // white tip
+    drawSquirrelHead(bx, by, accentColor);
 }
 
 // Shared head art reused by both penguin variants below — unlike the other stuffies'
@@ -961,10 +999,20 @@ static void drawPenguinFull(int cx, int cy, uint16_t accentColor) {
 // Right-arm slot pose (DIY-64) — see drawTeddyHeld() for placement rationale. Flippers/feet
 // dropped to keep the pose compact; head + body silhouette is enough to read as a penguin.
 static void drawPenguinHeld(int cx, int cy, uint16_t accentColor) {
-    int bx = cx + 20, by = cy + 30;
+    int bx = cx + 38, by = cy - 8;
     drawPenguinHead(bx, by, accentColor);
-    tft.fillRoundRect(bx - 7, by + 6, 14, 16, 6, C_PENGUIN);     // small body sitting on the paw
-    tft.fillRoundRect(bx - 4, by + 9, 8, 10, 3, accentColor);    // white belly patch
+    tft.fillRoundRect(bx - 9, by + 7, 18, 26, 9, C_PENGUIN);      // body
+    tft.fillRoundRect(bx - 5, by + 10, 10, 20, 5, accentColor);   // white belly patch
+    tft.fillTriangle(bx - 9, by + 15, bx - 11, by + 23, bx - 6, by + 24, C_PENGUIN);  // left flipper
+    tft.fillTriangle(bx + 9, by + 15, bx + 11, by + 23, bx + 6, by + 24, C_PENGUIN);  // right flipper
+    tft.fillTriangle(bx - 6, by + 33, bx - 9, by + 37, bx - 2, by + 37, C_PENGUIN_BEAK);  // left foot
+    tft.fillTriangle(bx + 6, by + 33, bx + 9, by + 37, bx + 2, by + 37, C_PENGUIN_BEAK);  // right foot
+}
+
+// Night-only right-arm variant (DIY-64) — see drawTeddyHeldPeeking() for rationale.
+static void drawPenguinHeldPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 40, by = cy - 6;
+    drawPenguinHead(bx, by, accentColor);
 }
 
 // Shared ear/horn/head/snout/eyes/nose art reused by both unicorn variants below — same
@@ -1005,10 +1053,19 @@ static void drawUnicornFull(int cx, int cy, uint16_t accentColor) {
 
 // Right-arm slot pose (DIY-64) — see drawTeddyHeld() for placement rationale.
 static void drawUnicornHeld(int cx, int cy, uint16_t accentColor) {
-    int bx = cx + 20, by = cy + 30;
+    int bx = cx + 38, by = cy - 8;
     drawUnicornHead(bx, by, accentColor);
-    tft.fillRoundRect(bx - 7, by + 6, 14, 16, 6, C_UNICORN);  // small body sitting on the paw
-    tft.fillCircle(bx, by + 13, 3, accentColor);              // belly patch
+    tft.fillRoundRect(bx - 8, by + 7, 16, 24, 8, C_UNICORN);  // body
+    tft.fillCircle(bx, by + 17, 4, accentColor);              // belly patch
+    tft.fillCircle(bx - 5, by + 31, 4, C_UNICORN);            // left foot
+    tft.fillCircle(bx + 5, by + 31, 4, C_UNICORN);            // right foot
+    tft.fillCircle(bx, by + 33, 3, C_UNICORN_HORN);           // pink tail
+}
+
+// Night-only right-arm variant (DIY-64) — see drawTeddyHeldPeeking() for rationale.
+static void drawUnicornHeldPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 40, by = cy - 6;
+    drawUnicornHead(bx, by, accentColor);
 }
 
 // Deeply-closed, sleepy eyes for the sleep-window peek — thinner and gently curled at
@@ -1065,6 +1122,21 @@ static void drawStarryNightBackground(int x, int y, int w, int h) {
     tft.resetViewport();
 }
 
+// Right-arm slot (DIY-64) — called separately by each scene (day in drawAnimal(), night in
+// drawSleepingCat()), rather than unconditionally from inside drawCat(), because which pose
+// is correct depends on whether a blanket covers the body: drawHeld() is a full-size mirror
+// of the left slot's drawFull(), so if a blanket is equipped its body would poke out past the
+// blanket's edge — drawHeldPeeking() (mirroring drawPeeking(), head only) is used instead in
+// that case, drawn by the caller on top of the already-painted blanket.
+static void drawRightArmStuffy(int cx, int cy, bool hasBlanket) {
+    int rightArmIdx = equippedStuffyRightIndex();
+    if (rightArmIdx < 0) return;
+    int blanketIdx = equippedBlanketIndex();
+    uint16_t accent = BLANKET_COLORS[blanketIdx >= 0 ? blanketIdx : 0].trim;
+    if (hasBlanket) STUFFIES[rightArmIdx].drawHeldPeeking(cx, cy, accent);
+    else            STUFFIES[rightArmIdx].drawHeld(cx, cy, accent);
+}
+
 static void drawSleepingCat(int cx, int cy) {
     drawCat(cx, cy, CatMood::Idle, CatStatus::Content, CatBoredom::Entertained,
             CatHealth::Healthy, CatThirst::Hydrated, /*eyeOpen=*/false);
@@ -1092,6 +1164,11 @@ static void drawSleepingCat(int cx, int cy) {
         if (hasBlanket) stuffy.drawPeeking(cx, cy, accentColor);
         else             stuffy.drawFull(cx, cy, accentColor);
     }
+
+    // Right-arm slot (DIY-64) — drawn after the blanket so drawHeldPeeking() (used whenever
+    // hasBlanket) always ends up on top of it. See drawRightArmStuffy() for why the pose
+    // choice depends on hasBlanket.
+    drawRightArmStuffy(cx, cy, hasBlanket);
 }
 
 static void drawSparkles(int cx, int cy, uint8_t frame) {
@@ -1410,6 +1487,7 @@ static void drawAnimal() {
     } else {
         int dy = (cat.mood == CatMood::Celebrate) ? ((cat.frame % 2 == 0) ? -3 : 3) : 0;
         drawCat(CAT_CX, CAT_CY + dy, cat.mood, cat.status, cat.boredom, cat.health, cat.thirst, cat.eyeOpen);
+        drawRightArmStuffy(CAT_CX, CAT_CY + dy, /*hasBlanket=*/false);  // no blanket during the day
 
         if (cat.mood == CatMood::Happy || cat.mood == CatMood::Celebrate) {
             drawSparkles(CAT_CX, CAT_CY, cat.frame);

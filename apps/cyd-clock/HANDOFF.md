@@ -72,48 +72,68 @@ scene**, tucked in beside the sleeping cat's head. This card adds a
   like every other `equipped*Index()` resolver in this file — unlocking the
   slot has no natural "first purchase" moment to auto-equip from, so it
   just returns `-1` (nothing shown) until the user picks explicitly.
-- **Single draw call site for day + night.** `drawSleepingCat()` calls
-  `drawCat()` internally, and the daytime path (`drawAnimal()`) calls
-  `drawCat()` directly — so the new right-arm draw call lives *inside*
-  `drawCat()` itself (right after the existing paws/tail block), not
-  duplicated in both callers. This is different from the existing
-  left/night stuffy, which is intentionally layered on top *only* inside
-  `drawSleepingCat()`.
-- **New `drawHeld` pose per stuffy**, not a reuse of the existing
-  `drawPeeking`/`drawFull` art — those are designed for the sleep scene's
-  beside-the-head placement, not a paw-sized pose. All five stuffies
-  (`STUFFIES[]` in `main.cpp`) got a new compact `drawXHeld()` function,
-  anchored around `cx+20, cy+30` (near the right paw at
-  `cx+8..+32, cy+42..+56`, drawn after the tail so it layers on top). First-
-  pass geometry — **not yet verified on real hardware**, see below.
+- **`drawHeld`/`drawHeldPeeking` are exact mirrors of the left slot's
+  `drawFull`/`drawPeeking`** — same size, same shape, same relative
+  offsets, just anchored on the right (`cx+38, cy-8` / `cx+40, cy-6`
+  instead of `cx-38, cy-8` / `cx-40, cy-6`). For species with left-right
+  symmetric art (teddy, bunny, penguin, unicorn — body/feet/patches already
+  centered on `bx`), the mirror needed no offset changes beyond the anchor
+  sign. Squirrel's tail-tip poke is one-sided, not a symmetric pair, so its
+  offsets are sign-flipped (`bx+10` → `bx-10` etc.) to poke toward the body
+  on this side too, instead of literally translating the left art and
+  having the tail point away from the cat.
+  - **This went through two earlier, discarded designs** worth knowing
+    about if the pose ever looks wrong again: (1) a compact custom
+    "sitting on the paw" pose anchored at `cx+20, cy+30`, dropped because
+    day/night placement didn't match the left slot's height; (2) reusing
+    that compact pose's anchor but keeping the head at the left's exact
+    mirror (`cx+40`) while shifting only the body left of it to dodge the
+    blanket edge — that decentered body from head and looked diagonal.
+- **`drawRightArmStuffy(cx, cy, hasBlanket)`** (defined just above
+  `drawSleepingCat()`) is the single place that picks `drawHeld` vs.
+  `drawHeldPeeking`, and is called separately by each scene — once from
+  `drawAnimal()`'s day branch (`hasBlanket=false`, always) and once from
+  `drawSleepingCat()` (`hasBlanket` from the equipped blanket check already
+  done there for the left slot). It is **not** called from inside
+  `drawCat()` — earlier revisions did that (a single call site shared by
+  day and blanket-less night), but once `drawHeld` became full-size, its
+  body would poke out past the blanket's right edge if left running
+  unconditionally under `drawCat()` with no way to swap in the head-only
+  pose. `drawSleepingCat()` still draws the blanket, then the left
+  slot's `drawPeeking`/`drawFull`, then `drawRightArmStuffy()` last, so
+  `drawHeldPeeking` always lands on top of the blanket.
 
 ## What's left / how to test
 
-Nothing has been flashed or tested on real hardware yet — only
-`pnpm nx run cyd-clock:build` has been run (succeeds on both `cyd` and
-`freenove-s3` envs; `cyd` flash usage is ~94.8%, still within budget).
+Flashed to the `freenove-s3` board for live checking (not `cyd`) — build
+succeeds on both envs, `cyd` flash usage is ~94.9%, still within budget.
+Live hardware feedback drove two rounds of pose fixes already (day/night
+position mismatch, then a diagonal-looking body); re-check the current
+`drawHeld`/`drawHeldPeeking` mirror-of-left approach against real hardware
+rather than assuming it's finished.
 
-Manual test plan once flashed:
+Manual test plan:
 1. Buy a stuffy (e.g. teddy) in the store. Confirm the existing left-slot
    dressing room option shows it; confirm the new "Right Arm Buddy"
    dressing-room section says "Not unlocked yet — visit the Store."
 2. Buy the "Right Arm Buddy Slot" (200 points). Confirm the dressing room's
    right-arm section now lists the owned stuffy + "None", defaulting to
    **None** (not auto-equipped).
-3. Equip a stuffy on the right arm. Confirm it renders on the right
-   paw **during the day**, and confirm it also shows up in the **night
-   sleep scene** without needing anything additional.
+3. Equip a stuffy on the right arm. Confirm it renders full-size, mirrored
+   beside the head (matching the left slot's size/shape/height) **during
+   the day**. At night, confirm it shows the same full pose if no blanket
+   is equipped, or just the head poking out on top of the blanket if one
+   **is** equipped.
 4. Equip a *different* stuffy on the left (night) slot than the right arm,
-   confirm both render independently and don't interfere with each other.
+   confirm both render independently and don't interfere with each other,
+   and don't visually collide now that the right slot is full-size.
 5. Equip the *same* stuffy on both arms — confirm no crash/glitch.
-6. Visually check the right-arm "held" pose doesn't clash badly with the
-   tail or the existing right paw — this is the part most likely to need
-   pixel-position tuning (`drawXHeld()` functions in `main.cpp`, search for
-   `DIY-64`).
+6. Check each species' silhouette reads correctly mirrored, especially
+   squirrel's tail-tip poke (`drawSquirrelHeld`/`drawSquirrelHeldPeeking`
+   in `main.cpp`, search for `DIY-64`) — its offsets were hand-mirrored
+   rather than a straight reuse of the left art, most likely to need
+   tuning.
 7. Pick "None" for the right arm — confirm it disappears (day and night).
-
-If the held pose needs repositioning, all five `drawXHeld()` functions
-share the same `bx = cx + 20, by = cy + 30` anchor — nudge that and rebuild.
 
 ## Not yet done
 
