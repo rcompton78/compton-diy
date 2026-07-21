@@ -31,10 +31,6 @@ void ConfigManager::fromJson(JsonDocument& doc) {
         if (w >= 0 && w <= 1439) _config.sleepWakeMinutes = w;
     }
     {
-        String n = doc["name"] | _config.catName;
-        if (n.length() >= 1 && n.length() <= 16) _config.catName = n;
-    }
-    {
         int s = doc["sickCooldown"] | _config.sickCooldownHours;
         if (s >= 1 && s <= 168) _config.sickCooldownHours = s;
     }
@@ -71,6 +67,36 @@ void ConfigManager::fromJson(JsonDocument& doc) {
     _config.ownedCatColors    = doc["catColors"]         | _config.ownedCatColors;
     _config.equippedCatColor  = doc["catColorEquipped"]  | _config.equippedCatColor;
     _config.seenCatColorCount = doc["seenCatColors"]     | _config.seenCatColorCount;
+    if (doc["catNames"].is<JsonArrayConst>()) {
+        JsonArrayConst arr = doc["catNames"];
+        int i = 0;
+        for (JsonVariantConst v : arr) {
+            if (i >= CAT_NAME_SLOTS) break;
+            String n = v.as<String>();
+            if (n.length() >= 1 && n.length() <= 16) _config.catNames[i] = n;
+            i++;
+        }
+        {
+            String wn = doc["catNameWhite"] | _config.catNameWhite;
+            if (wn.length() >= 1 && wn.length() <= 16) _config.catNameWhite = wn;
+        }
+        {
+            String dn = doc["catNameDefault"] | _config.catNameDefault;
+            if (dn.length() >= 1 && dn.length() <= 16) _config.catNameDefault = dn;
+        }
+    } else {
+        // Legacy migration: this config predates per-color names — carry the single
+        // legacy name forward as the fallback default, and seed every already-owned
+        // color (plus white) with it, so nothing already named gets lost on upgrade.
+        // ownedCatColors above is already the freshly-loaded bitmask, so this reflects
+        // what the device actually owns right now, not a stale in-memory value.
+        String legacy = doc["name"] | _config.catNameDefault;
+        if (legacy.length() >= 1 && legacy.length() <= 16) _config.catNameDefault = legacy;
+        _config.catNameWhite = _config.catNameDefault;
+        for (int i = 0; i < CAT_NAME_SLOTS; i++) {
+            if (_config.ownedCatColors & (1 << i)) _config.catNames[i] = _config.catNameDefault;
+        }
+    }
     _config.totalXp   = doc["xp"] | _config.totalXp;
     _config.highestMilestoneLevel = doc["milestoneLevel"] | _config.highestMilestoneLevel;
     // Migration default is `true`, not the struct's `false`: a config file that predates this
@@ -95,7 +121,6 @@ void ConfigManager::toJson(JsonDocument& doc) const {
     doc["play"]    = _config.lastPlayEpoch;
     doc["sleepBed"]  = _config.sleepBedMinutes;
     doc["sleepWake"] = _config.sleepWakeMinutes;
-    doc["name"]      = _config.catName;
     doc["sickCooldown"] = _config.sickCooldownHours;
     doc["meds"]          = _config.lastMedsEpoch;
     doc["thirstForceMinutes"] = _config.thirstForceMinutes;
@@ -113,6 +138,12 @@ void ConfigManager::toJson(JsonDocument& doc) const {
     doc["catColors"]        = _config.ownedCatColors;
     doc["catColorEquipped"] = _config.equippedCatColor;
     doc["seenCatColors"]    = _config.seenCatColorCount;
+    {
+        JsonArray arr = doc["catNames"].to<JsonArray>();
+        for (int i = 0; i < CAT_NAME_SLOTS; i++) arr.add(_config.catNames[i]);
+    }
+    doc["catNameWhite"]   = _config.catNameWhite;
+    doc["catNameDefault"] = _config.catNameDefault;
     doc["xp"] = _config.totalXp;
     doc["milestoneLevel"] = _config.highestMilestoneLevel;
     doc["setupComplete"]    = _config.setupComplete;

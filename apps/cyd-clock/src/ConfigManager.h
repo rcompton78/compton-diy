@@ -2,6 +2,10 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
+// Capacity for per-cat-color names, index-aligned with CAT_COLORS[] in main.cpp.
+// Must stay >= CAT_COLOR_COUNT (static_assert'd in main.cpp once that catalog is defined).
+static constexpr int CAT_NAME_SLOTS = 8;
+
 struct AppConfig {
     float latitude = 53.5461;   // Default: Edmonton, AB
     float longitude = -113.4938;
@@ -13,7 +17,14 @@ struct AppConfig {
     uint32_t lastPlayEpoch = 0;  // Unix epoch of last play; 0 = never played
     int sleepBedMinutes = 1320;   // 22:00, minutes since midnight
     int sleepWakeMinutes = 420;   // 07:00, minutes since midnight
-    String catName = "Biscuit";   // Max 16 characters
+    String catNames[CAT_NAME_SLOTS];   // per-owned-color name, index-aligned with CAT_COLORS[];
+                                        // empty = not yet named, falls back to catNameDefault
+    String catNameWhite;                // name for the free default white cat; same fallback
+    String catNameDefault = "Biscuit";  // fallback for any color (white or owned) with no name
+                                         // of its own yet; seeded from the single legacy name on
+                                         // migration (see ConfigManager::fromJson()), "Biscuit"
+                                         // for brand-new devices. Max 16 characters, like every
+                                         // other cat name.
     int sickCooldownHours = 4;    // min hours between sick events
     uint32_t lastMedsEpoch = 0;   // Unix epoch of last meds; 0 = never medicated
     int thirstForceMinutes = 120;   // force thirsty after this many minutes without water, absent an earlier random trigger
