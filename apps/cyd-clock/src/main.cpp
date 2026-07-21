@@ -83,6 +83,7 @@ static constexpr uint32_t STORE_COST_ROOM_THEME = 40;  // per flat-color room th
 static constexpr uint32_t STORE_COST_STARRY_NIGHT = 200;  // premium: has real art (moon + stars), not just a flat fill
 static constexpr uint32_t STORE_COST_CAT_COLOR_SOLID   = 100;  // black, grey — flat recolor
 static constexpr uint32_t STORE_COST_CAT_COLOR_PATTERN = 200;  // tabby, calico — real stripe/patch art
+static constexpr uint32_t STORE_COST_ACCESSORY_BOW = 50;
 
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
@@ -91,7 +92,13 @@ static constexpr unsigned long TOUCH_DEBOUNCE_MS = 350;
 
 // Palette
 static constexpr uint16_t C_CAT   = TFT_WHITE;
-static constexpr uint16_t C_PINK  = 0xFC18;  // rose pink
+static constexpr uint16_t C_PINK  = 0xFD1A;  // rose pink — also the nose color, so this brightens both
+static constexpr uint16_t C_BOW_MAGENTA = 0xF81F;  // deliberately distinct from C_PINK (the
+                                                    // inner-ear color) so the bow reads as a
+                                                    // separate object rather than blending in
+static constexpr uint16_t C_BOW_HOT_PINK  = 0xF8B2;  // brighter/truer pink than C_BOW_MAGENTA
+static constexpr uint16_t C_BOW_PURPLE    = 0x939B;  // medium purple
+static constexpr uint16_t C_BOW_BABY_BLUE = 0x8E7E;  // baby blue
 static constexpr uint16_t C_DARK  = 0x2945;  // charcoal
 static constexpr uint16_t C_SEP   = 0x39E7;  // separator
 static constexpr uint16_t C_BTN   = 0x2965;  // button bg
@@ -112,7 +119,9 @@ static constexpr uint16_t C_SQUIRREL = 0xCA25;  // red squirrel peeking out besi
 static constexpr uint16_t C_PENGUIN      = 0x0000;  // penguin peeking out beside the head (black)
 static constexpr uint16_t C_PENGUIN_BEAK = 0xFD20;  // penguin beak/feet (orange)
 static constexpr uint16_t C_UNICORN      = TFT_WHITE;  // unicorn peeking out beside the head (white)
-static constexpr uint16_t C_UNICORN_HORN = 0xFC18;  // unicorn horn (pink), matches C_PINK
+static constexpr uint16_t C_UNICORN_HORN = 0xFC18;  // unicorn horn (pink) — kept as its own constant
+                                                     // rather than reusing C_PINK, so retuning one
+                                                     // doesn't shift the other
 
 // Blanket color catalog — each color is purchased separately in the store and can be
 // equipped independently in the dressing room. `id` is the stable identifier used in
@@ -185,6 +194,36 @@ static constexpr CatColor CAT_COLORS[] = {
 };
 static constexpr int CAT_COLOR_COUNT = sizeof(CAT_COLORS) / sizeof(CAT_COLORS[0]);
 static_assert(CAT_COLOR_COUNT <= CAT_NAME_SLOTS, "increase ConfigManager's CAT_NAME_SLOTS to fit CAT_COLORS");
+
+// Forward-declared for the same reason as the tabby/calico pattern functions above —
+// ACCESSORIES[] needs to reference these before drawCat() (and `tft`) are declared. All four
+// share one shape (drawBowShape(), defined alongside these) and differ only by color.
+static void drawBowMagenta(int cx, int cy);
+static void drawBowHotPink(int cx, int cy);
+static void drawBowPurple(int cx, int cy);
+static void drawBowBabyBlue(int cx, int cy);
+
+// Accessory catalog — same purchase/equip model as cat colors, but layered independently
+// on top of whichever cat color is equipped (an accessory works with any fur color). `id` is
+// the stable identifier used in store/dressing-room form posts and persisted config; never
+// reorder/reuse indices, since ownership is stored as a bitmask keyed by array index. Note
+// "bow"'s label is "Magenta Bow", not "Pink Bow" — id stays as originally shipped (it's the
+// persisted/bitmask key) even though the store-facing name changed once "Hot Pink" was added
+// as the brighter, truer pink.
+struct Accessory {
+    const char* id;
+    const char* label;
+    uint32_t cost;
+    const char* webColor;  // CSS hex approximation, for coloring its label in the config UI
+    void (*draw)(int cx, int cy);  // paints the accessory onto the cat sprite
+};
+static constexpr Accessory ACCESSORIES[] = {
+    {"bow",           "Magenta Bow",   STORE_COST_ACCESSORY_BOW, "#FF00FF", drawBowMagenta},
+    {"bow_hot_pink",  "Hot Pink Bow",  STORE_COST_ACCESSORY_BOW, "#FF1493", drawBowHotPink},
+    {"bow_purple",    "Purple Bow",    STORE_COST_ACCESSORY_BOW, "#9370DB", drawBowPurple},
+    {"bow_baby_blue", "Baby Blue Bow", STORE_COST_ACCESSORY_BOW, "#89CFF0", drawBowBabyBlue},
+};
+static constexpr int ACCESSORY_COUNT = sizeof(ACCESSORIES) / sizeof(ACCESSORIES[0]);
 
 // Forward declarations: each stuffy's sleep-scene art, defined further below alongside
 // drawSleepingCat(). Declared here so the STUFFIES[] catalog can reference them directly —
@@ -371,6 +410,7 @@ static constexpr unsigned long FIREWORKS_FRAME_MS    = 150;
 static int equippedCatColorIndex();
 static uint16_t catBodyColor();
 static bool catHasCuteEyes();
+static int equippedAccessoryIndex();
 
 // Tabby/calico pattern art bodies (declared earlier alongside CAT_COLORS[]). Head pass
 // runs after the head fill but before eyes/nose/whiskers/mouth, so those still paint
@@ -397,6 +437,26 @@ static void drawCalicoBodyPattern(int cx, int cy) {
     tft.fillCircle(cx - 15, cy + 20, 12, C_CALICO_ORANGE);
     tft.fillCircle(cx + 12, cy + 35, 10, C_CALICO_BLACK);
 }
+
+// Accessory art (declared earlier alongside ACCESSORIES[]). Called from drawCat() after the
+// head fill/pattern but before eyes, same layering rule as the head patterns above — first-pass
+// geometry, expect to tune after real hardware. Every bow color shares this one shape (only the
+// fill color differs — see the three thin wrappers below), sitting at the base of the right ear
+// (near where the ear triangle at (cx+32, cy-62) meets the head), angled shallowly along that
+// ear-to-head edge so it reads as resting against the head rather than floating over the ear
+// tip. Every point stays at y <= cy-57, a margin above drawEyes()'s partial blink-redraw rect
+// (cx-28..+28, cy-50..-24 — see drawEyes() below) so blinking never erases part of the bow.
+static void drawBowShape(int cx, int cy, uint16_t color) {
+    // Two wings meeting at a center knot; apex is the knot, each wing's base corners are offset
+    // along the ear-edge diagonal (axis) and perpendicular to it (width), mirrored to either side.
+    tft.fillTriangle(cx + 25, cy - 70, cx + 16, cy - 83, cx + 10, cy - 66, color);
+    tft.fillTriangle(cx + 25, cy - 70, cx + 40, cy - 74, cx + 34, cy - 57, color);
+    tft.fillCircle(cx + 25, cy - 70, 5, color);
+}
+static void drawBowMagenta(int cx, int cy)  { drawBowShape(cx, cy, C_BOW_MAGENTA); }
+static void drawBowHotPink(int cx, int cy)  { drawBowShape(cx, cy, C_BOW_HOT_PINK); }
+static void drawBowPurple(int cx, int cy)   { drawBowShape(cx, cy, C_BOW_PURPLE); }
+static void drawBowBabyBlue(int cx, int cy) { drawBowShape(cx, cy, C_BOW_BABY_BLUE); }
 
 // Draws just the eye shapes (sclera/pupil/glint, or a closed dash) into an already
 // head-colored rect. Shared by drawEyes() (blink-only partial redraw) and drawCat()
@@ -462,6 +522,12 @@ static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom b
     tft.fillRoundRect(cx - 44, cy - 64, 88, 66, 20, col);
     if (colorIdx >= 0 && CAT_COLORS[colorIdx].drawHeadPattern) {
         CAT_COLORS[colorIdx].drawHeadPattern(cx, cy);
+    }
+
+    // Accessories (independent of cat color — a bow works with any fur)
+    int accessoryIdx = equippedAccessoryIndex();
+    if (accessoryIdx >= 0 && ACCESSORIES[accessoryIdx].draw) {
+        ACCESSORIES[accessoryIdx].draw(cx, cy);
     }
 
     // Eyes
@@ -591,6 +657,19 @@ static int equippedCatColorIndex() {
     return -1;
 }
 
+// Same resolution logic as equippedBlanketIndex(), for the accessory catalog.
+static int equippedAccessoryIndex() {
+    uint8_t owned = configMgr.config().ownedAccessories;
+    if (owned == 0) return -1;
+    uint8_t eq = configMgr.config().equippedAccessory;
+    if (eq == EQUIP_NONE) return -1;  // user explicitly unequipped
+    if (eq < ACCESSORY_COUNT && (owned & (1 << eq))) return eq;
+    for (int i = 0; i < ACCESSORY_COUNT; i++) {
+        if (owned & (1 << i)) return i;
+    }
+    return -1;
+}
+
 // Per-cat-color name lookup/assignment, keyed the same way as equippedCatColorIndex()
 // (idx == -1 means the white default cat). Falls back to catNameDefault for any color
 // that hasn't been individually named yet — covers both a freshly-bought color and a
@@ -673,7 +752,8 @@ static bool hasNewStoreItems() {
     return STUFFY_COUNT > configMgr.config().seenStuffyCount ||
            BLANKET_COLOR_COUNT > configMgr.config().seenBlanketColorCount ||
            ROOM_THEME_COUNT > configMgr.config().seenRoomThemeCount ||
-           CAT_COLOR_COUNT > configMgr.config().seenCatColorCount;
+           CAT_COLOR_COUNT > configMgr.config().seenCatColorCount ||
+           ACCESSORY_COUNT > configMgr.config().seenAccessoryCount;
 }
 
 // Shared ear/head/snout/eyes/nose art reused by both teddy variants below.
@@ -2385,6 +2465,9 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h3>Room Themes</h3>
 %%ROOM_THEME_ITEMS%%
 
+<h3>Accessories - Head</h3>
+%%ACCESSORY_ITEMS%%
+
 <script>
 // Easter egg: tap the "Store" heading 7 times in a row (no other tap in between)
 // to reveal a text field + button that grants that many points.
@@ -2429,6 +2512,9 @@ static const char CONFIG_DRESS_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 
 <h3>Room Themes</h3>
 %%ROOM_THEME_OPTIONS%%
+
+<h3>Accessories - Head</h3>
+%%ACCESSORY_OPTIONS%%
 
 <button type="submit" style="width:100%;margin-top:8px">Save</button>
 </form>
@@ -2671,6 +2757,7 @@ static void handleConfigStoreGet() {
         configMgr.config().seenBlanketColorCount = (uint8_t)BLANKET_COLOR_COUNT;
         configMgr.config().seenRoomThemeCount    = (uint8_t)ROOM_THEME_COUNT;
         configMgr.config().seenCatColorCount     = (uint8_t)CAT_COLOR_COUNT;
+        configMgr.config().seenAccessoryCount    = (uint8_t)ACCESSORY_COUNT;
         configMgr.save();
     }
     String page = String(FPSTR(CONFIG_STORE_HTML));
@@ -2717,6 +2804,14 @@ static void handleConfigStoreGet() {
         catColorItems += "</div>\n";
     }
     page.replace("%%CAT_COLOR_ITEMS%%", catColorItems);
+    String accessoryItems = "";
+    for (int i = 0; i < ACCESSORY_COUNT; i++) {
+        bool owned = configMgr.config().ownedAccessories & (1 << i);
+        accessoryItems += "<div class='item'><span style='color:" + String(ACCESSORIES[i].webColor) + "'>" + String(ACCESSORIES[i].label) + "</span>";
+        accessoryItems += storeItemAction(ACCESSORIES[i].id, owned, ACCESSORIES[i].cost, points);
+        accessoryItems += "</div>\n";
+    }
+    page.replace("%%ACCESSORY_ITEMS%%", accessoryItems);
     String msg = "";
     if (wm.server->hasArg("welcome")) {
         msg = "<div class='banner ok'>Welcome! Here's 70 points to get started.</div>";
@@ -2993,7 +3088,7 @@ static void handleConfigStorePost() {
     String item = wm.server->arg("item");
     uint32_t cost;
     bool alreadyOwned;
-    int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1, catColorIdx = -1;
+    int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1, catColorIdx = -1, accessoryIdx = -1;
     for (int i = 0; i < STUFFY_COUNT; i++) {
         if (item == STUFFIES[i].id) { stuffyIdx = i; break; }
     }
@@ -3018,13 +3113,21 @@ static void handleConfigStorePost() {
                 for (int i = 0; i < CAT_COLOR_COUNT; i++) {
                     if (item == CAT_COLORS[i].id) { catColorIdx = i; break; }
                 }
-                if (catColorIdx < 0) {
-                    wm.server->send(400, "text/plain", "Unknown item");
-                    return;
+                if (catColorIdx >= 0) {
+                    cost = (strcmp(CAT_COLORS[catColorIdx].id, "black") == 0 && isBlackCatSaleActive())
+                        ? BLACK_CAT_SALE_PRICE : CAT_COLORS[catColorIdx].cost;
+                    alreadyOwned = configMgr.config().ownedCatColors & (1 << catColorIdx);
+                } else {
+                    for (int i = 0; i < ACCESSORY_COUNT; i++) {
+                        if (item == ACCESSORIES[i].id) { accessoryIdx = i; break; }
+                    }
+                    if (accessoryIdx < 0) {
+                        wm.server->send(400, "text/plain", "Unknown item");
+                        return;
+                    }
+                    cost = ACCESSORIES[accessoryIdx].cost;
+                    alreadyOwned = configMgr.config().ownedAccessories & (1 << accessoryIdx);
                 }
-                cost = (strcmp(CAT_COLORS[catColorIdx].id, "black") == 0 && isBlackCatSaleActive())
-                    ? BLACK_CAT_SALE_PRICE : CAT_COLORS[catColorIdx].cost;
-                alreadyOwned = configMgr.config().ownedCatColors & (1 << catColorIdx);
             }
         }
     }
@@ -3050,6 +3153,9 @@ static void handleConfigStorePost() {
     } else if (catColorIdx >= 0) {
         configMgr.config().ownedCatColors |= (1 << catColorIdx);
         configMgr.config().equippedCatColor = catColorIdx;  // newly bought color becomes equipped
+    } else if (accessoryIdx >= 0) {
+        configMgr.config().ownedAccessories |= (1 << accessoryIdx);
+        configMgr.config().equippedAccessory = accessoryIdx;  // newly bought accessory becomes equipped
     } else {
         configMgr.config().ownedStuffies |= (1 << stuffyIdx);
         configMgr.config().equippedStuffy = stuffyIdx;  // newly bought stuffy becomes equipped
@@ -3060,6 +3166,7 @@ static void handleConfigStorePost() {
         if (blanketIdx >= 0) configMgr.config().ownedBlanketColors &= ~(1 << blanketIdx);
         else if (roomThemeIdx >= 0) configMgr.config().ownedRoomThemes &= ~(1 << roomThemeIdx);
         else if (catColorIdx >= 0) configMgr.config().ownedCatColors &= ~(1 << catColorIdx);
+        else if (accessoryIdx >= 0) configMgr.config().ownedAccessories &= ~(1 << accessoryIdx);
         else configMgr.config().ownedStuffies &= ~(1 << stuffyIdx);
         wm.server->sendHeader("Location", "/config/store?err=save");
         wm.server->send(302, "text/plain", "");
@@ -3157,6 +3264,27 @@ static void handleConfigDressGet() {
                           + htmlEscape(getCatName(i)) + "'>";
     }
     page.replace("%%CAT_COLOR_OPTIONS%%", catColorOptions);
+
+    uint8_t ownedAccessories = configMgr.config().ownedAccessories;
+    int equippedAccessoryIdx = equippedAccessoryIndex();
+    String accessoryOptions = "";
+    if (ownedAccessories == 0) {
+        accessoryOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
+    } else {
+        accessoryOptions += "<label class='pick'><input type='radio' name='accessory' value='none'";
+        if (equippedAccessoryIdx < 0) accessoryOptions += " checked";
+        accessoryOptions += "> None</label>";
+        for (int i = 0; i < ACCESSORY_COUNT; i++) {
+            if (!(ownedAccessories & (1 << i))) continue;
+            accessoryOptions += "<label class='pick'><input type='radio' name='accessory' value='";
+            accessoryOptions += ACCESSORIES[i].id;
+            accessoryOptions += "'";
+            if (i == equippedAccessoryIdx) accessoryOptions += " checked";
+            accessoryOptions += "> <span style='color:" + String(ACCESSORIES[i].webColor) + "'>"
+                              + String(ACCESSORIES[i].label) + "</span></label>";
+        }
+    }
+    page.replace("%%ACCESSORY_OPTIONS%%", accessoryOptions);
 
     String msg = "";
     if (wm.server->hasArg("saved"))
@@ -3256,6 +3384,23 @@ static void handleConfigDressPost() {
             return;
         }
         configMgr.config().equippedCatColor = idx;
+        changed = true;
+    }
+
+    String accessoryId = wm.server->arg("accessory");
+    if (accessoryId == "none") {
+        configMgr.config().equippedAccessory = EQUIP_NONE;
+        changed = true;
+    } else if (accessoryId.length() > 0) {
+        int idx = -1;
+        for (int i = 0; i < ACCESSORY_COUNT; i++) {
+            if (accessoryId == ACCESSORIES[i].id) { idx = i; break; }
+        }
+        if (idx < 0 || !(configMgr.config().ownedAccessories & (1 << idx))) {
+            wm.server->send(400, "text/plain", "Invalid selection");
+            return;
+        }
+        configMgr.config().equippedAccessory = idx;
         changed = true;
     }
 

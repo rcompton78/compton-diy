@@ -42,6 +42,9 @@ struct AppConfig {
     uint8_t ownedCatColors     = 0;  // Store purchase: bitmask, bit N = owns cat color N (white is free, not in this catalog)
     uint8_t equippedCatColor   = 0;  // Dressing room: index of the cat color to display
     uint8_t seenCatColorCount  = 0;  // Highest CAT_COLOR_COUNT the store page has shown the user
+    uint8_t ownedAccessories   = 0;  // Store purchase: bitmask, bit N = owns accessory N
+    uint8_t equippedAccessory  = 0;  // Dressing room: index of the accessory to display
+    uint8_t seenAccessoryCount = 0;  // Highest ACCESSORY_COUNT the store page has shown the user
     uint32_t totalXp   = 0;          // Lifetime XP; only ever increases, separate from spendable `points`
     uint32_t highestMilestoneLevel = 0;  // Highest level whose milestone bonus points have already
                                           // been paid out; not reset by the badges-page XP reset, so a
