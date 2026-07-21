@@ -3168,6 +3168,29 @@ static void handleConfigDressGet() {
 static void handleConfigDressPost() {
     bool changed = false;
 
+    // Validate every submitted name field up front, before any equip mutation below touches
+    // configMgr.config() in memory, so a rejected name 400s atomically instead of leaving
+    // in-memory equip state diverged from disk (see DIY-56 review).
+    bool hasWhiteName = wm.server->hasArg("name_white");
+    String whiteName = wm.server->arg("name_white");
+    if (hasWhiteName && !sanitizeCatName(whiteName)) {
+        wm.server->send(400, "text/plain", "Invalid name");
+        return;
+    }
+    String colorNames[CAT_COLOR_COUNT];
+    bool hasColorName[CAT_COLOR_COUNT] = {};
+    for (int i = 0; i < CAT_COLOR_COUNT; i++) {
+        if (!(configMgr.config().ownedCatColors & (1 << i))) continue;
+        String argName = "name_" + String(CAT_COLORS[i].id);
+        if (!wm.server->hasArg(argName)) continue;
+        colorNames[i] = wm.server->arg(argName);
+        if (!sanitizeCatName(colorNames[i])) {
+            wm.server->send(400, "text/plain", "Invalid name");
+            return;
+        }
+        hasColorName[i] = true;
+    }
+
     String colorId = wm.server->arg("blanketColor");
     if (colorId == "none") {
         configMgr.config().equippedBlanketColor = EQUIP_NONE;
@@ -3239,25 +3262,14 @@ static void handleConfigDressPost() {
     // Rename any owned cat (including white) — one optional field per color, submitted
     // alongside its radio button. Absent fields (e.g. a plain equip-only submission from
     // an older cached page) are left untouched rather than clobbered with an empty name.
-    if (wm.server->hasArg("name_white")) {
-        String n = wm.server->arg("name_white");
-        if (!sanitizeCatName(n)) {
-            wm.server->send(400, "text/plain", "Invalid name");
-            return;
-        }
-        setCatName(-1, n);
+    // Values were already validated above, before any mutation in this function ran.
+    if (hasWhiteName) {
+        setCatName(-1, whiteName);
         changed = true;
     }
     for (int i = 0; i < CAT_COLOR_COUNT; i++) {
-        if (!(configMgr.config().ownedCatColors & (1 << i))) continue;
-        String argName = "name_" + String(CAT_COLORS[i].id);
-        if (!wm.server->hasArg(argName)) continue;
-        String n = wm.server->arg(argName);
-        if (!sanitizeCatName(n)) {
-            wm.server->send(400, "text/plain", "Invalid name");
-            return;
-        }
-        setCatName(i, n);
+        if (!hasColorName[i]) continue;
+        setCatName(i, colorNames[i]);
         changed = true;
     }
 
