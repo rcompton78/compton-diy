@@ -33,8 +33,16 @@ struct AppConfig {
     uint8_t ownedBlanketColors  = 0;  // Store purchase: bitmask, bit N = owns blanket color N
     uint8_t equippedBlanketColor = 0; // Dressing room: index of the blanket color to display
     uint8_t ownedStuffies  = 0;      // Store purchase: bitmask, bit N = owns stuffy N
-    uint8_t equippedStuffy = 0;      // Dressing room: index of the stuffy to display
+    uint8_t equippedStuffy = 0;      // Dressing room: index of the stuffy to display (left arm / night scene)
     uint8_t seenStuffyCount       = 0;  // Highest STUFFY_COUNT the store page has shown the user
+    bool    rightArmSlotUnlocked = false;  // Store purchase: one-time unlock, independent of ownedStuffies —
+                                            // any already-owned stuffy can be equipped here too
+    uint8_t equippedStuffyRight  = 0xFF;   // Dressing room: index of the stuffy on the right arm (day + night).
+                                            // 0xFF is EQUIP_NONE (main.cpp) — defaults here to "nothing equipped"
+                                            // rather than 0, since unlocking the slot shouldn't auto-equip
+                                            // whatever's cheapest/lowest-owned; the user picks explicitly
+    bool    seenRightArmSlot     = false;  // Mirrors seenStuffyCount's "has the store page shown this yet"
+                                            // role, but as a bool since this is a single item, not a catalog
     uint8_t seenBlanketColorCount = 0;  // Highest BLANKET_COLOR_COUNT the store page has shown the user
     uint8_t ownedRoomThemes    = 0;  // Store purchase: bitmask, bit N = owns room theme N
     uint8_t equippedRoomTheme  = 0;  // Dressing room: index of the room theme to display

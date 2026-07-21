@@ -60,6 +60,9 @@ void ConfigManager::fromJson(JsonDocument& doc) {
     }
     _config.equippedStuffy = doc["stuffyEquipped"] | _config.equippedStuffy;
     _config.seenStuffyCount       = doc["seenStuffies"] | _config.seenStuffyCount;
+    _config.rightArmSlotUnlocked = doc["rightArmSlot"]       | _config.rightArmSlotUnlocked;
+    _config.equippedStuffyRight  = doc["stuffyRightEquipped"] | _config.equippedStuffyRight;
+    _config.seenRightArmSlot     = doc["seenRightArmSlot"]    | _config.seenRightArmSlot;
     _config.seenBlanketColorCount = doc["seenBlankets"]  | _config.seenBlanketColorCount;
     _config.ownedRoomThemes    = doc["roomThemes"]       | _config.ownedRoomThemes;
     _config.equippedRoomTheme  = doc["roomThemeEquipped"] | _config.equippedRoomTheme;
@@ -134,6 +137,9 @@ void ConfigManager::toJson(JsonDocument& doc) const {
     doc["stuffies"]        = _config.ownedStuffies;
     doc["stuffyEquipped"]  = _config.equippedStuffy;
     doc["seenStuffies"]    = _config.seenStuffyCount;
+    doc["rightArmSlot"]        = _config.rightArmSlotUnlocked;
+    doc["stuffyRightEquipped"] = _config.equippedStuffyRight;
+    doc["seenRightArmSlot"]    = _config.seenRightArmSlot;
     doc["seenBlankets"]    = _config.seenBlanketColorCount;
     doc["roomThemes"]        = _config.ownedRoomThemes;
     doc["roomThemeEquipped"] = _config.equippedRoomTheme;
