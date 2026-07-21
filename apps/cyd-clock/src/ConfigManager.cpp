@@ -67,6 +67,9 @@ void ConfigManager::fromJson(JsonDocument& doc) {
     _config.ownedCatColors    = doc["catColors"]         | _config.ownedCatColors;
     _config.equippedCatColor  = doc["catColorEquipped"]  | _config.equippedCatColor;
     _config.seenCatColorCount = doc["seenCatColors"]     | _config.seenCatColorCount;
+    _config.ownedAccessories   = doc["accessories"]        | _config.ownedAccessories;
+    _config.equippedAccessory  = doc["accessoryEquipped"]  | _config.equippedAccessory;
+    _config.seenAccessoryCount = doc["seenAccessories"]    | _config.seenAccessoryCount;
     if (doc["catNames"].is<JsonArrayConst>()) {
         JsonArrayConst arr = doc["catNames"];
         int i = 0;
@@ -138,6 +141,9 @@ void ConfigManager::toJson(JsonDocument& doc) const {
     doc["catColors"]        = _config.ownedCatColors;
     doc["catColorEquipped"] = _config.equippedCatColor;
     doc["seenCatColors"]    = _config.seenCatColorCount;
+    doc["accessories"]        = _config.ownedAccessories;
+    doc["accessoryEquipped"]  = _config.equippedAccessory;
+    doc["seenAccessories"]    = _config.seenAccessoryCount;
     {
         JsonArray arr = doc["catNames"].to<JsonArray>();
         for (int i = 0; i < CAT_NAME_SLOTS; i++) arr.add(_config.catNames[i]);
