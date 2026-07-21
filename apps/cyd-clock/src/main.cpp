@@ -224,6 +224,7 @@ static constexpr Accessory ACCESSORIES[] = {
     {"bow_baby_blue", "Baby Blue Bow", STORE_COST_ACCESSORY_BOW, "#89CFF0", drawBowBabyBlue},
 };
 static constexpr int ACCESSORY_COUNT = sizeof(ACCESSORIES) / sizeof(ACCESSORIES[0]);
+static_assert(ACCESSORY_COUNT <= 8, "ownedAccessories bitmask is uint8_t");
 
 // Forward declarations: each stuffy's sleep-scene art, defined further below alongside
 // drawSleepingCat(). Declared here so the STUFFIES[] catalog can reference them directly —
