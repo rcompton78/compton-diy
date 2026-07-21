@@ -1356,7 +1356,7 @@ static uint32_t xpToNextLevel(uint32_t xp) {
 }
 
 // Defined near loop() below, alongside updateFireworksAnim() — forward-declared here so
-// awardXp() (further down) can kick it off on a level-up, mirroring isBlackCatSaleActive()'s
+// awardXp() (further down) can kick it off on a level-up, mirroring isFlashSaleActive()'s
 // forward-declaration for drawSaleFlash() just below.
 static void triggerFireworks(uint32_t bonusPoints);
 
@@ -1457,16 +1457,16 @@ static void drawPoints() {
     tft.drawString(ptsBuf, 234 - ptsWidth, ANIMAL_Y + LEVEL_BADGE_H + 4, 2);
 }
 
-// Forward declaration: true during the black cat flash sale window, defined below
-// alongside isInSleepWindow(). Declared here so drawSaleFlash() can call it directly.
-static bool isBlackCatSaleActive();
+// Forward declaration: true while any flash sale is active, defined below alongside
+// isInSleepWindow(). Declared here so drawSaleFlash() can call it directly.
+static bool isFlashSaleActive();
 
 // "SALE" banner at the bottom of the column, below the points balance, flashing
-// red/yellow while the black cat flash sale is active. Same clear-rect x-start as the
+// red/yellow while any flash sale is active. Same clear-rect x-start as the
 // other two badges (past the head's right edge).
 static void drawSaleFlash() {
     zoneFillRect(BADGE_COL_X, ANIMAL_Y + LEVEL_BADGE_H + 20, BADGE_COL_W, 16);
-    if (!isBlackCatSaleActive()) return;
+    if (!isFlashSaleActive()) return;
     const char* label = "SALE!";
     uint16_t color = saleFlashOn ? TFT_RED : TFT_YELLOW;
     tft.setTextColor(color, zoneBgColor());
@@ -2047,30 +2047,64 @@ static bool isInSleepWindow(int nowMinutes) {
     return nowMinutes >= bed || nowMinutes < wake;                   // wraps midnight
 }
 
-// ── Black cat flash sale (2026-07-18 3pm – 2026-07-20 7am device local time) ───────
-// A one-time promo window, not a recurring daily discount — DIY-54 found the previous
-// daily-recurring version (a bare 3pm-10pm time-of-day check with no date bound) had no
-// way to actually end: every day it silently turned back on at 3pm forever. Expressed as
-// a single absolute start/end instant instead, so it runs once and stays off afterward.
-// YYYYMMDDHHMM, compared as a plain int64 — needs 64 bits since a value like
-// 202607181500 overflows a 32-bit long on this platform.
-static constexpr int64_t BLACK_CAT_SALE_START = 202607181500LL;  // 2026-07-18 15:00
-static constexpr int64_t BLACK_CAT_SALE_END   = 202607200700LL;  // 2026-07-20 07:00
-static constexpr uint32_t BLACK_CAT_SALE_PRICE = 50;  // half off STORE_COST_CAT_COLOR_SOLID
+// ── Flash sales ──────────────────────────────────────────────────────────────
+// Table of one-time promo windows, keyed by store item id. Not recurring daily discounts —
+// DIY-54 found an earlier daily-recurring version (a bare 3pm-10pm time-of-day check with no
+// date bound) had no way to actually end: every day it silently turned back on at 3pm forever.
+// Expressed as absolute start/end instants instead, so each entry runs once and stays off
+// afterward. Start/end are YYYYMMDDHHMM, compared as a plain int64 — needs 64 bits since a
+// value like 202607181500 overflows a 32-bit long on this platform.
+//
+// Only one sale is ever expected to be active at a time, so lookups just scan for the first
+// window containing "now" rather than tracking overlaps.
+struct FlashSale {
+    const char* itemId;
+    int64_t start;
+    int64_t end;
+    uint32_t price;
+};
+static constexpr FlashSale FLASH_SALES[] = {
+    { "black",          202607181500LL, 202607200700LL, 50  },  // 2026-07-18 15:00 - 07-20 07:00, half off STORE_COST_CAT_COLOR_SOLID
+    { "right_arm_slot", 202607211800LL, 202607221800LL, 130 },  // 2026-07-21 18:00 - 07-22 18:00, down from STORE_COST_RIGHT_ARM_SLOT
+};
+static constexpr int FLASH_SALE_COUNT = sizeof(FLASH_SALES) / sizeof(FLASH_SALES[0]);
 
 // Self-contained (fetches its own local time) so it can be called from the store HTTP
 // handlers as well as loop(), not just places that already have nowMinutes in scope.
-static bool isBlackCatSaleActive() {
+// Returns -1 if NTP hasn't synced yet.
+static int64_t flashSaleNow() {
     time_t epoch = ntpClient.getEpochTime();
     time_t utcCheck = epoch - (time_t)configMgr.config().utcOffsetSeconds;
-    if (utcCheck <= 1000000000) return false;  // not NTP-synced yet — sanity check, matches loop()'s
+    if (utcCheck <= 1000000000) return -1;  // not NTP-synced yet — sanity check, matches loop()'s
     struct tm* t = localtime(&epoch);
-    int64_t now = (int64_t)(t->tm_year + 1900) * 100000000LL
-                + (int64_t)(t->tm_mon + 1)     * 1000000LL
-                + (int64_t)t->tm_mday          * 10000LL
-                + (int64_t)t->tm_hour          * 100LL
-                + (int64_t)t->tm_min;
-    return now >= BLACK_CAT_SALE_START && now < BLACK_CAT_SALE_END;
+    return (int64_t)(t->tm_year + 1900) * 100000000LL
+         + (int64_t)(t->tm_mon + 1)     * 1000000LL
+         + (int64_t)t->tm_mday          * 10000LL
+         + (int64_t)t->tm_hour          * 100LL
+         + (int64_t)t->tm_min;
+}
+
+// Index into FLASH_SALES of the currently active sale, or -1 if none.
+static int activeFlashSaleIndex() {
+    int64_t now = flashSaleNow();
+    if (now < 0) return -1;
+    for (int i = 0; i < FLASH_SALE_COUNT; i++) {
+        if (now >= FLASH_SALES[i].start && now < FLASH_SALES[i].end) return i;
+    }
+    return -1;
+}
+
+// True while any flash sale is active — all badges and on-device "SALE!" indicators should
+// gate on this rather than naming a specific sale.
+static bool isFlashSaleActive() { return activeFlashSaleIndex() >= 0; }
+
+// Sale price for itemId if it's the one currently on sale, else defaultCost. Called from both
+// the store-page renderer and the purchase handler so price can't drift between display and
+// charge.
+static uint32_t flashSalePrice(const char* itemId, uint32_t defaultCost) {
+    int idx = activeFlashSaleIndex();
+    if (idx >= 0 && strcmp(FLASH_SALES[idx].itemId, itemId) == 0) return FLASH_SALES[idx].price;
+    return defaultCost;
 }
 
 // Level-up fireworks — a full-screen takeover distinct from the small in-zone Celebrate
@@ -2966,11 +3000,10 @@ static void handleConfigStoreGet() {
     // EQUIP_NONE — see the comment above that catalog) but the wizard and Dress page both
     // list it as an explicit choice, so show it here too rather than have it look missing.
     String catColorItems = "<div class='item'><span>Cat - White</span><span class='owned'>Owned</span></div>\n";
-    bool blackCatOnSale = isBlackCatSaleActive();
     for (int i = 0; i < CAT_COLOR_COUNT; i++) {
         bool owned = configMgr.config().ownedCatColors & (1 << i);
-        bool onSale = blackCatOnSale && strcmp(CAT_COLORS[i].id, "black") == 0;
-        uint32_t itemCost = onSale ? BLACK_CAT_SALE_PRICE : CAT_COLORS[i].cost;
+        uint32_t itemCost = flashSalePrice(CAT_COLORS[i].id, CAT_COLORS[i].cost);
+        bool onSale = itemCost != CAT_COLORS[i].cost;
         catColorItems += "<div class='item'><span style='color:" + String(CAT_COLORS[i].webColor) + "'>Cat - " + String(CAT_COLORS[i].label) + "</span>";
         if (onSale) catColorItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
         catColorItems += storeItemAction(CAT_COLORS[i].id, owned, itemCost, points);
@@ -2985,9 +3018,12 @@ static void handleConfigStoreGet() {
         accessoryItems += "</div>\n";
     }
     page.replace("%%ACCESSORY_ITEMS%%", accessoryItems);
+    uint32_t rightArmSlotCost = flashSalePrice("right_arm_slot", STORE_COST_RIGHT_ARM_SLOT);
+    bool rightArmOnSale = rightArmSlotCost != STORE_COST_RIGHT_ARM_SLOT;
     String rightArmSlotItem = "<div class='item'><span>Right Arm Buddy Slot</span>";
+    if (rightArmOnSale) rightArmSlotItem += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
     rightArmSlotItem += storeItemAction("right_arm_slot", configMgr.config().rightArmSlotUnlocked,
-                                         STORE_COST_RIGHT_ARM_SLOT, points);
+                                         rightArmSlotCost, points);
     rightArmSlotItem += "</div>\n";
     page.replace("%%RIGHT_ARM_SLOT_ITEM%%", rightArmSlotItem);
     String msg = "";
@@ -3293,8 +3329,7 @@ static void handleConfigStorePost() {
                     if (item == CAT_COLORS[i].id) { catColorIdx = i; break; }
                 }
                 if (catColorIdx >= 0) {
-                    cost = (strcmp(CAT_COLORS[catColorIdx].id, "black") == 0 && isBlackCatSaleActive())
-                        ? BLACK_CAT_SALE_PRICE : CAT_COLORS[catColorIdx].cost;
+                    cost = flashSalePrice(CAT_COLORS[catColorIdx].id, CAT_COLORS[catColorIdx].cost);
                     alreadyOwned = configMgr.config().ownedCatColors & (1 << catColorIdx);
                 } else {
                     for (int i = 0; i < ACCESSORY_COUNT; i++) {
@@ -3305,7 +3340,7 @@ static void handleConfigStorePost() {
                         alreadyOwned = configMgr.config().ownedAccessories & (1 << accessoryIdx);
                     } else if (item == "right_arm_slot") {
                         rightArmSlotPurchase = true;
-                        cost = STORE_COST_RIGHT_ARM_SLOT;
+                        cost = flashSalePrice("right_arm_slot", STORE_COST_RIGHT_ARM_SLOT);
                         alreadyOwned = configMgr.config().rightArmSlotUnlocked;
                     } else {
                         wm.server->send(400, "text/plain", "Unknown item");
@@ -4042,13 +4077,13 @@ void loop() {
         wasNew = isNew;
     }
 
-    // Sale flash — while the black cat flash sale is active, toggle the "SALE!" banner's
-    // color every 500ms; repaint once more with the flash off the moment the sale window
-    // ends so it doesn't linger.
+    // Sale flash — while any flash sale is active, toggle the "SALE!" banner's color every
+    // 500ms; repaint once more with the flash off the moment the sale window ends so it
+    // doesn't linger.
     {
         static unsigned long lastSaleFlash = 0;
         static bool wasSaleActive = false;
-        bool saleActive = isBlackCatSaleActive();
+        bool saleActive = isFlashSaleActive();
         if (saleActive && now - lastSaleFlash >= 500) {
             lastSaleFlash = now;
             saleFlashOn = !saleFlashOn;
