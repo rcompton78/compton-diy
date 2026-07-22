@@ -18,6 +18,10 @@ Run a specific project:
 pnpm nx run <project>:<target>
 ```
 
+## Device Setup
+
+- [Cyd-Clock Installation/Setup](apps/cyd-clock/README.md)
+
 ## Projects
 
 ### Apps
