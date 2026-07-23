@@ -137,13 +137,13 @@ struct BlanketColor {
     const char* webColor;  // CSS hex approximation of `base`, for coloring its label in the config UI
 };
 static constexpr BlanketColor BLANKET_COLORS[] = {
-    {"dusty_blue", "Dusty Blue", 0x4BB6, 0xD69A, "#6b8cae"},  // cozy dusty-blue blanket, warm cream fold trim
-    {"cream",      "Cream",      0xFFFA, 0xCD51, "#e8d9b5"},  // soft cream blanket, tan fold trim
-    {"blush_pink", "Blush Pink", 0xF619, 0xDB92, "#e6a8bc"},  // blush pink blanket, deeper rose fold trim
-    {"lavender",   "Lavender",   0xB3FB, 0xE69E, "#b57edc"},  // lavender blanket, pale lilac fold trim
-    {"lemon_yellow", "Lemon Yellow", 0xF6CB, 0xD502, "#F7D959"},  // Bambu PLA Lemon Yellow blanket, mustard-gold fold trim
-    {"apple_green",  "Apple Green",  0xC711, 0x7D2A, "#C2E189"},  // Bambu PLA Apple Green blanket, deeper leaf-green fold trim
-    {"tangerine",    "Tangerine",    0xFD2A, 0xD3E5, "#FFA552"},  // warm orange blanket, burnt-orange fold trim
+    {"dusty_blue",    "Dusty Blue",    0x4BB6, 0xD69A, "#6b8cae"},  // cozy dusty-blue blanket, warm cream fold trim
+    {"cream",         "Cream",         0xFFFA, 0xCD51, "#e8d9b5"},  // soft cream blanket, tan fold trim
+    {"blush_pink",    "Blush Pink",    0xF619, 0xDB92, "#e6a8bc"},  // blush pink blanket, deeper rose fold trim
+    {"lavender",      "Lavender",      0xB3FB, 0xE69E, "#b57edc"},  // lavender blanket, pale lilac fold trim
+    {"lemon_yellow",  "Lemon Yellow",  0xF6CB, 0xD502, "#F7D959"},  // Bambu PLA Lemon Yellow blanket, mustard-gold fold trim
+    {"apple_green",   "Apple Green",   0xC711, 0x7D2A, "#C2E189"},  // Bambu PLA Apple Green blanket, deeper leaf-green fold trim
+    {"tangerine",     "Tangerine",     0xFD2A, 0xD3E5, "#FFA552"},  // warm orange blanket, burnt-orange fold trim
     {"flamingo_pink", "Flamingo Pink", 0xFD16, 0xBBD1, "#FCA3B7"},  // vibrant flamingo-pink blanket, deeper rose fold trim
 };
 static constexpr int BLANKET_COLOR_COUNT = sizeof(BLANKET_COLORS) / sizeof(BLANKET_COLORS[0]);
