@@ -414,6 +414,62 @@ but is a meaningfully bigger lift (key management, a CI signing step) and
 was treated as out of scope for this card. Flagging it here as a known,
 accepted gap rather than silently omitting it.
 
+## Flash Sale API Polling (DIY-79, 2026-07-22)
+
+Replaced the compile-time `FLASH_SALES[]` table (DIY-54's fix for the earlier
+daily-recurring bug) with a live poll of `cat-buddy-api` (DIY-59, a new
+NestJS service in the `compton-apps` repo) — a sale can now be scheduled by
+writing a `flash_sales` row, no firmware release required.
+
+- **Polling**: `fetchFlashSale()` hits `GET /flash-sale/current` with a
+  static `api-key` header on `FLASH_SALE_POLL_INTERVAL_MS` (15 min), placed
+  in `loop()` right next to the OTA check for the same reason — it runs
+  ahead of the sleep-window/setup-prompt early returns so neither can starve
+  it. A 404 (no active sale) is treated as normal, not an error; a
+  network/parse failure leaves the last-known state alone rather than
+  blanking out a real sale over one flaky poll.
+- **TLS**: same root-pinning approach as DIY-41's OTA fix, and it turned out
+  to be the *same* root — `cat-buddy.richcompton.com`'s chain (Nginx Proxy
+  Manager / Let's Encrypt) resolves to ISRG Root X1 too, just via a newer
+  intermediate path (`YE2` → `Root YE` → `ISRG Root X2` → `ISRG Root X1`).
+  `CAT_BUDDY_API_CA_CERT` in `Config.h` reuses that exact cert. If no CA is
+  pinned, `fetchFlashSale()` refuses to poll an `https://` URL rather than
+  falling back to `WiFiClientSecure::setInsecure()` — no build can send the
+  token over an unverified connection.
+- **Any item can go on sale**: the API only returns `{ itemId, startAt,
+  endAt }` — no price, deliberately (DIY-59's scope is "what's on sale and
+  when," not pricing policy). `flashSalePrice()` is now wired into every
+  store category (cat colors, stuffies, blankets, room themes, accessories,
+  right-arm slot), not just the original two, and computes a flat
+  `FLASH_SALE_DISCOUNT_PERCENT` (50%) off whatever the matched item's own
+  listed cost is — no per-item price table to keep in sync as new items are
+  added.
+- **Local testing**: `CAT_BUDDY_API_URL`/`CAT_BUDDY_API_TOKEN` are
+  build-time values (see the new CLAUDE.md convention this introduced,
+  root-level "Build-time secrets/config via env vars + local `.env`
+  override") — a gitignored `apps/cyd-clock/.env` can point a dev build at
+  a local/LAN `cat-buddy-api` instance over plain `http://` (skips TLS
+  entirely, fine for a throwaway dev token) without touching tracked files.
+  `/config/flashsale` on the device shows the raw last-poll HTTP status +
+  response body (not just a summary) and has a "Poll now" button, so you
+  don't have to wait out the 15-minute interval to see what happened.
+- **Real-hardware validation (2026-07-22)**: verified against a live,
+  deployed `cat-buddy-api` (not just local dev) — WSL2 mirrored networking
+  exposed a local dev instance to the physical device over LAN for initial
+  testing; the CA pinning and prod token were then validated against the
+  real `https://cat-buddy.richcompton.com` deployment, including inserting
+  a real flash-sale row (Red Squirrel stuffy) and confirming the device
+  picked it up and priced it correctly. One real bug hit along the way:
+  PlatformIO's incremental build tracks build flags as part of its
+  dependency signature, and a `flash-*` target's own `pio run -t upload`
+  re-triggers that build — an env var exported in one shell/tool call
+  doesn't survive into a separate one, so a token set via `export` (rather
+  than `.env`) got silently wiped back to empty by the *next* command's
+  rebuild, producing an intermittent 401 that looked like a token mismatch
+  but wasn't. `.env` avoids this since it's read fresh on every invocation.
+- **Cost**: `cyd` board is now at 95.4% flash usage — not much headroom
+  left before the next feature needs to trim something.
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`

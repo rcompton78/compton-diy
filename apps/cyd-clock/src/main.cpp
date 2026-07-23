@@ -7,6 +7,7 @@
 #include <WiFiUdp.h>
 
 #include <WiFiClientSecure.h>
+#include <HTTPClient.h>
 #include <Update.h>
 #include <esp_ota_ops.h>
 
@@ -2047,27 +2048,45 @@ static bool isInSleepWindow(int nowMinutes) {
     return nowMinutes >= bed || nowMinutes < wake;                   // wraps midnight
 }
 
-// ── Flash sales ──────────────────────────────────────────────────────────────
-// Table of one-time promo windows, keyed by store item id. Not recurring daily discounts —
-// DIY-54 found an earlier daily-recurring version (a bare 3pm-10pm time-of-day check with no
-// date bound) had no way to actually end: every day it silently turned back on at 3pm forever.
-// Expressed as absolute start/end instants instead, so each entry runs once and stays off
-// afterward. Start/end are YYYYMMDDHHMM, compared as a plain int64 — needs 64 bits since a
-// value like 202607181500 overflows a 32-bit long on this platform.
+// ── Flash sales (DIY-79) ─────────────────────────────────────────────────────
+// Sale windows used to be a compile-time table (see DIY-54's history on why they're
+// absolute start/end instants, not a recurring daily check). DIY-59/DIY-79 move that table
+// server-side into cat-buddy-api (compton-apps repo) so a sale can be scheduled without a
+// firmware release — the device polls GET /flash-sale/current on
+// FLASH_SALE_POLL_INTERVAL_MS and caches the single active-or-upcoming sale it returns.
 //
-// Only one sale is ever expected to be active at a time, so lookups just scan for the first
-// window containing "now" rather than tracking overlaps.
-struct FlashSale {
-    const char* itemId;
-    int64_t start;
-    int64_t end;
-    uint32_t price;
+// The API response is `{ itemId, startAt, endAt }` (ISO-8601 UTC strings) — no price. Price
+// stays a firmware-side concern because cat-buddy-api's scope (DIY-59) is deliberately just
+// "what's on sale and when," not pricing policy. Any store item (cat color, stuffy, blanket,
+// room theme, accessory, right-arm slot) can go on sale just by matching its `id` — see every
+// flashSalePrice() call site below — at a flat FLASH_SALE_DISCOUNT_PERCENT off that item's own
+// listed cost, so there's no per-item price table to keep in sync as new items are added.
+//
+// Only one sale is ever expected to be active at a time, matching the old table's assumption.
+static constexpr uint32_t FLASH_SALE_DISCOUNT_PERCENT = 50;
+
+struct FlashSaleState {
+    bool valid = false;      // true once a poll has successfully populated an active sale
+    char itemId[32] = {0};
+    int64_t start   = 0;     // YYYYMMDDHHMM, same scheme as flashSaleNow() below
+    int64_t end     = 0;
 };
-static constexpr FlashSale FLASH_SALES[] = {
-    { "black",          202607181500LL, 202607200700LL, 50  },  // 2026-07-18 15:00 - 07-20 07:00, half off STORE_COST_CAT_COLOR_SOLID
-    { "right_arm_slot", 202607211800LL, 202607221800LL, 130 },  // 2026-07-21 18:00 - 07-22 18:00, down from STORE_COST_RIGHT_ARM_SLOT
-};
-static constexpr int FLASH_SALE_COUNT = sizeof(FLASH_SALES) / sizeof(FLASH_SALES[0]);
+static FlashSaleState currentFlashSale;
+unsigned long lastFlashSalePoll = 0;
+
+// Surfaced on /config/flashsale so a local dev/test setup (see below) doesn't have to guess
+// why nothing happened — mirrors lastUpdateCheckFailed/lastUpdateCheckSkipped's role for OTA.
+enum class FlashSalePollStatus { NeverPolled, Ok, NoActiveSale, Failed, SkippedNoCaCert, SkippedNoUrl };
+static FlashSalePollStatus lastFlashSalePollStatus = FlashSalePollStatus::NeverPolled;
+static String lastFlashSalePollDetail;  // human-readable extra info: HTTP code, parse error, item id
+static int lastFlashSalePollHttpCode = 0;  // 0 = no request was actually made (e.g. skipped)
+static String lastFlashSalePollRawBody;    // raw HTTP response body, verbatim, for the /config/flashsale page
+
+#ifdef CAT_BUDDY_API_CA_CERT
+#define CAT_BUDDY_HAS_CA_CERT 1
+#else
+#define CAT_BUDDY_HAS_CA_CERT 0
+#endif
 
 // Self-contained (fetches its own local time) so it can be called from the store HTTP
 // handlers as well as loop(), not just places that already have nowMinutes in scope.
@@ -2084,27 +2103,188 @@ static int64_t flashSaleNow() {
          + (int64_t)t->tm_min;
 }
 
-// Index into FLASH_SALES of the currently active sale, or -1 if none.
-static int activeFlashSaleIndex() {
-    int64_t now = flashSaleNow();
-    if (now < 0) return -1;
-    for (int i = 0; i < FLASH_SALE_COUNT; i++) {
-        if (now >= FLASH_SALES[i].start && now < FLASH_SALES[i].end) return i;
-    }
-    return -1;
+// Days-since-epoch for a UTC calendar date (Howard Hinnant's civil_from_days, reversed) —
+// used instead of timegm(), which this Arduino/ESP32 toolchain doesn't provide.
+static time_t utcTmToEpoch(int year, int mon, int day, int hour, int min, int sec) {
+    int y = year - (mon <= 2 ? 1 : 0);
+    long era = (y >= 0 ? y : y - 399) / 400;
+    unsigned yoe = (unsigned)(y - era * 400);
+    unsigned doy = (153 * (mon + (mon > 2 ? -3 : 9)) + 2) / 5 + day - 1;
+    unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    long days = era * 146097L + (long)doe - 719468L;
+    return (time_t)days * 86400L + (time_t)hour * 3600L + (time_t)min * 60L + (time_t)sec;
 }
 
-// True while any flash sale is active — all badges and on-device "SALE!" indicators should
-// gate on this rather than naming a specific sale.
-static bool isFlashSaleActive() { return activeFlashSaleIndex() >= 0; }
+// Converts a UTC ISO-8601 timestamp from the API ("2026-07-21T18:00:00.000Z" or without
+// millis) into the same local YYYYMMDDHHMM int64 scheme flashSaleNow() produces, applying the
+// device's configured UTC offset the same way. Returns -1 on parse failure.
+static int64_t parseIso8601ToLocalStamp(const char* iso) {
+    if (!iso || !iso[0]) return -1;
+    int year, mon, day, hour, min, sec;
+    if (sscanf(iso, "%d-%d-%dT%d:%d:%d", &year, &mon, &day, &hour, &min, &sec) != 6) return -1;
+
+    time_t utcEpoch = utcTmToEpoch(year, mon, day, hour, min, sec);
+    if (utcEpoch <= 0) return -1;
+
+    time_t localEpoch = utcEpoch + (time_t)configMgr.config().utcOffsetSeconds;
+    struct tm* lt = localtime(&localEpoch);
+    return (int64_t)(lt->tm_year + 1900) * 100000000LL
+         + (int64_t)(lt->tm_mon + 1)     * 1000000LL
+         + (int64_t)lt->tm_mday          * 10000LL
+         + (int64_t)lt->tm_hour          * 100LL
+         + (int64_t)lt->tm_min;
+}
+
+// Polls cat-buddy-api for the current flash sale and refreshes currentFlashSale. A 404 (no
+// active sale right now) is expected, not an error, and clears currentFlashSale.valid — same
+// "fail open, don't crash" posture as the OTA check elsewhere in this file. A network/parse
+// failure leaves currentFlashSale as-is so a single flaky poll doesn't blank out a genuinely
+// active sale; it'll retry next interval.
+//
+// TLS is required for an https:// URL — refuses to send the token rather than fall back to
+// WiFiClientSecure::setInsecure() if no CA is pinned (see CAT_BUDDY_API_CA_CERT in Config.h).
+// CAT_BUDDY_API_URL/TOKEN are build-time values (see Config.h + scripts/pio.sh) — a local
+// apps/cyd-clock/.env (see .env.example, DIY-79) can override them to point a dev build at a
+// plain http:// LAN cat-buddy-api instance, which skips TLS entirely; that's acceptable for a
+// throwaway local dev token, not something a real prod deployment should ever use.
+static void fetchFlashSale() {
+    String url = CAT_BUDDY_API_URL;
+    if (!url.length()) {
+        lastFlashSalePollStatus = FlashSalePollStatus::SkippedNoUrl;
+        lastFlashSalePollHttpCode = 0;
+        lastFlashSalePollRawBody = "";
+        return;
+    }
+    String token = CAT_BUDDY_API_TOKEN;
+    bool isHttps = url.startsWith("https://");
+
+    WiFiClientSecure secureClient;
+    WiFiClient plainClient;
+    HTTPClient http;
+    bool began = false;
+
+    if (isHttps) {
+#if CAT_BUDDY_HAS_CA_CERT
+        secureClient.setCACert(CAT_BUDDY_API_CA_CERT);
+        began = http.begin(secureClient, url);
+#else
+        lastFlashSalePollStatus = FlashSalePollStatus::SkippedNoCaCert;
+        lastFlashSalePollHttpCode = 0;
+        lastFlashSalePollRawBody = "";
+        static bool warnedNoCaCert = false;
+        if (!warnedNoCaCert) {
+            Serial.println("flash-sale poll: skipped, https:// URL but no CA pinned (see Config.h, DIY-79) — use a local http:// override to test");
+            warnedNoCaCert = true;
+        }
+        return;
+#endif
+    } else {
+        began = http.begin(plainClient, url);
+    }
+    if (!began) {
+        lastFlashSalePollStatus = FlashSalePollStatus::Failed;
+        lastFlashSalePollDetail = "begin() failed — check the URL";
+        lastFlashSalePollHttpCode = 0;
+        lastFlashSalePollRawBody = "";
+        return;
+    }
+
+    http.addHeader("api-key", token);
+    http.setTimeout(8000);
+
+    int code = http.GET();
+    // Captured regardless of outcome (including negative HTTPClient error codes, e.g.
+    // connection refused/timeout) so /config/flashsale can show exactly what happened, not
+    // just a summary.
+    lastFlashSalePollHttpCode = code;
+    String body = code > 0 ? http.getString() : http.errorToString(code);
+    lastFlashSalePollRawBody = body;
+    http.end();
+
+    if (code == 404) {
+        currentFlashSale.valid = false;
+        lastFlashSalePollStatus = FlashSalePollStatus::NoActiveSale;
+        lastFlashSalePollDetail = "";
+        return;
+    }
+    if (code != HTTP_CODE_OK) {
+        Serial.printf("flash-sale poll failed: HTTP %d\n", code);
+        lastFlashSalePollStatus = FlashSalePollStatus::Failed;
+        lastFlashSalePollDetail = "HTTP " + String(code);
+        return;
+    }
+
+    JsonDocument doc;
+    DeserializationError err = deserializeJson(doc, body);
+    if (err) {
+        Serial.printf("flash-sale poll: JSON parse failed: %s\n", err.c_str());
+        lastFlashSalePollStatus = FlashSalePollStatus::Failed;
+        lastFlashSalePollDetail = String("parse error: ") + err.c_str();
+        return;
+    }
+
+    const char* itemId   = doc["itemId"]  | "";
+    const char* startIso = doc["startAt"] | "";
+    const char* endIso   = doc["endAt"]   | "";
+    int64_t start = parseIso8601ToLocalStamp(startIso);
+    int64_t end   = parseIso8601ToLocalStamp(endIso);
+    if (!itemId[0] || start < 0 || end < 0) {
+        Serial.println("flash-sale poll: malformed response, ignoring");
+        lastFlashSalePollStatus = FlashSalePollStatus::Failed;
+        lastFlashSalePollDetail = "malformed response (missing/unparseable itemId, startAt, or endAt)";
+        return;
+    }
+
+    strlcpy(currentFlashSale.itemId, itemId, sizeof(currentFlashSale.itemId));
+    currentFlashSale.start = start;
+    currentFlashSale.end   = end;
+    currentFlashSale.valid = true;
+    lastFlashSalePollStatus = FlashSalePollStatus::Ok;
+    lastFlashSalePollDetail = String(itemId);
+}
+
+// True while the last-polled flash sale is both valid and inside its window — all badges and
+// on-device "SALE!" indicators should gate on this rather than naming a specific sale.
+static bool isFlashSaleActive() {
+    if (!currentFlashSale.valid) return false;
+    int64_t now = flashSaleNow();
+    if (now < 0) return false;
+    return now >= currentFlashSale.start && now < currentFlashSale.end;
+}
 
 // Sale price for itemId if it's the one currently on sale, else defaultCost. Called from both
 // the store-page renderer and the purchase handler so price can't drift between display and
-// charge.
+// charge. Flat FLASH_SALE_DISCOUNT_PERCENT off defaultCost — works for any item's own cost
+// without a per-item price table (see the comment above FLASH_SALE_DISCOUNT_PERCENT).
 static uint32_t flashSalePrice(const char* itemId, uint32_t defaultCost) {
-    int idx = activeFlashSaleIndex();
-    if (idx >= 0 && strcmp(FLASH_SALES[idx].itemId, itemId) == 0) return FLASH_SALES[idx].price;
-    return defaultCost;
+    if (!isFlashSaleActive() || strcmp(currentFlashSale.itemId, itemId) != 0) return defaultCost;
+    uint32_t discounted = defaultCost * (100 - FLASH_SALE_DISCOUNT_PERCENT) / 100;
+    return discounted > 0 ? discounted : 1;  // never free
+}
+
+// flashSalePrice() matches a sale's itemId against every store category independently, so
+// two catalogs sharing an id string would both silently go on sale together. Walks every
+// catalog's id column (plus the one non-catalog item, "right_arm_slot") and halts at boot
+// if any duplicate is found — cheap O(n^2) over a handful of entries, run once at startup.
+static void assertStoreIdsUnique() {
+    const char* ids[CAT_COLOR_COUNT + ACCESSORY_COUNT + STUFFY_COUNT + BLANKET_COLOR_COUNT + ROOM_THEME_COUNT + 1];
+    int n = 0;
+    for (int i = 0; i < CAT_COLOR_COUNT; i++) ids[n++] = CAT_COLORS[i].id;
+    for (int i = 0; i < ACCESSORY_COUNT; i++) ids[n++] = ACCESSORIES[i].id;
+    for (int i = 0; i < STUFFY_COUNT; i++) ids[n++] = STUFFIES[i].id;
+    for (int i = 0; i < BLANKET_COLOR_COUNT; i++) ids[n++] = BLANKET_COLORS[i].id;
+    for (int i = 0; i < ROOM_THEME_COUNT; i++) ids[n++] = ROOM_THEMES[i].id;
+    ids[n++] = "right_arm_slot";
+
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            if (strcmp(ids[i], ids[j]) == 0) {
+                Serial.printf("FATAL: store item id \"%s\" is not unique across catalogs — flash sales match by id alone\n", ids[i]);
+                Serial.flush();
+                abort();
+            }
+        }
+    }
 }
 
 // Level-up fireworks — a full-screen takeover distinct from the small in-zone Celebrate
@@ -2298,6 +2478,7 @@ static const char CONFIG_HOME_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <a class="nav" href="/config/badges">Badges</a>
 <a class="nav" href="/config/backup">Backup</a>
 <a class="nav" href="/config/update">Firmware Update</a>
+<a class="nav" href="/config/flashsale">Flash Sale API</a>
 </body></html>
 )html";
 
@@ -2632,6 +2813,30 @@ static const char CONFIG_UPDATE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h3>Manual upload</h3>
 <p>Upload a <code>.bin</code> file directly from your browser, e.g. one downloaded from a GitHub release you don't want to wait for.</p>
 <p><a href="/update">Upload firmware manually &rarr;</a></p>
+</body></html>
+)html";
+
+static const char CONFIG_FLASHSALE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cat Control Panel · Flash Sale API</title>
+<style>%%STYLE%%</style>
+</head><body>
+<a class="back" href="/config">&larr; Configuration</a>
+<h2>Flash Sale API</h2>
+%%MSG%%
+
+<h3>Status</h3>
+<p>%%POLL_STATUS%%</p>
+<p>Last HTTP response: <strong>%%POLL_HTTP_CODE%%</strong></p>
+<pre style="background:#1e1e1e;border:1px solid #333;border-radius:5px;padding:10px;white-space:pre-wrap;word-break:break-word;font-size:.82rem;color:#ddd">%%POLL_RAW_BODY%%</pre>
+
+<form method="POST" action="/config/flashsale/check" style="margin-top:12px">
+<button type="submit" style="width:100%">Poll now</button>
+</form>
+
+<p style="margin-top:20px;color:#888;font-size:.82rem">Endpoint/token are build-time values — to test against a local dev server, set them in a gitignored <code>apps/cyd-clock/.env</code> (see <code>.env.example</code>) and rebuild, rather than editing them here.</p>
 </body></html>
 )html";
 
@@ -2974,25 +3179,34 @@ static void handleConfigStoreGet() {
     String stuffyItems = "";
     for (int i = 0; i < STUFFY_COUNT; i++) {
         bool owned = configMgr.config().ownedStuffies & (1 << i);
+        uint32_t itemCost = flashSalePrice(STUFFIES[i].id, STUFFIES[i].cost);
+        bool onSale = itemCost != STUFFIES[i].cost;
         stuffyItems += "<div class='item'><span>" + String(STUFFIES[i].label) + "</span>";
-        stuffyItems += storeItemAction(STUFFIES[i].id, owned, STUFFIES[i].cost, points);
+        if (onSale) stuffyItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        stuffyItems += storeItemAction(STUFFIES[i].id, owned, itemCost, points);
         stuffyItems += "</div>\n";
     }
     page.replace("%%STUFFY_ITEMS%%", stuffyItems);
     String blanketItems = "";
     for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
         bool owned = configMgr.config().ownedBlanketColors & (1 << i);
+        uint32_t itemCost = flashSalePrice(BLANKET_COLORS[i].id, STORE_COST_BLANKET);
+        bool onSale = itemCost != STORE_COST_BLANKET;
         blanketItems += "<div class='item'><span style='color:" + String(BLANKET_COLORS[i].webColor) + "'>Blanket - " + String(BLANKET_COLORS[i].label) + "</span>";
-        blanketItems += storeItemAction(BLANKET_COLORS[i].id, owned, STORE_COST_BLANKET, points);
+        if (onSale) blanketItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        blanketItems += storeItemAction(BLANKET_COLORS[i].id, owned, itemCost, points);
         blanketItems += "</div>\n";
     }
     page.replace("%%BLANKET_ITEMS%%", blanketItems);
     String roomThemeItems = "";
     for (int i = 0; i < ROOM_THEME_COUNT; i++) {
         bool owned = configMgr.config().ownedRoomThemes & (1 << i);
+        uint32_t itemCost = flashSalePrice(ROOM_THEMES[i].id, ROOM_THEMES[i].cost);
+        bool onSale = itemCost != ROOM_THEMES[i].cost;
         String themeColor = ROOM_THEMES[i].webColor ? String(ROOM_THEMES[i].webColor) : "#fff";
         roomThemeItems += "<div class='item'><span style='color:" + themeColor + "'>" + String(ROOM_THEMES[i].label) + "</span>";
-        roomThemeItems += storeItemAction(ROOM_THEMES[i].id, owned, ROOM_THEMES[i].cost, points);
+        if (onSale) roomThemeItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        roomThemeItems += storeItemAction(ROOM_THEMES[i].id, owned, itemCost, points);
         roomThemeItems += "</div>\n";
     }
     page.replace("%%ROOM_THEME_ITEMS%%", roomThemeItems);
@@ -3013,8 +3227,11 @@ static void handleConfigStoreGet() {
     String accessoryItems = "";
     for (int i = 0; i < ACCESSORY_COUNT; i++) {
         bool owned = configMgr.config().ownedAccessories & (1 << i);
+        uint32_t itemCost = flashSalePrice(ACCESSORIES[i].id, ACCESSORIES[i].cost);
+        bool onSale = itemCost != ACCESSORIES[i].cost;
         accessoryItems += "<div class='item'><span style='color:" + String(ACCESSORIES[i].webColor) + "'>" + String(ACCESSORIES[i].label) + "</span>";
-        accessoryItems += storeItemAction(ACCESSORIES[i].id, owned, ACCESSORIES[i].cost, points);
+        if (onSale) accessoryItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        accessoryItems += storeItemAction(ACCESSORIES[i].id, owned, itemCost, points);
         accessoryItems += "</div>\n";
     }
     page.replace("%%ACCESSORY_ITEMS%%", accessoryItems);
@@ -3246,6 +3463,48 @@ static void handleConfigUpdateCheckPost() {
     wm.server->send(302, "text/plain", "");
 }
 
+// Human-readable summary of lastFlashSalePollStatus/currentFlashSale for the /config/flashsale
+// page — same "surface exactly why nothing happened" idea as the update page's skipped/failed
+// banners above.
+static String flashSalePollStatusText() {
+    switch (lastFlashSalePollStatus) {
+        case FlashSalePollStatus::NeverPolled:
+            return "Never polled yet (polls automatically every " + String(FLASH_SALE_POLL_INTERVAL_MS / 60000UL) + " min, or use \"Poll now\" below).";
+        case FlashSalePollStatus::SkippedNoUrl:
+            return "Skipped — no API URL configured (set one below, or rebuild with CAT_BUDDY_API_URL set).";
+        case FlashSalePollStatus::SkippedNoCaCert:
+            return "Skipped — the configured URL is https:// but no CA is pinned in this firmware build (CAT_BUDDY_API_CA_CERT). Use a http:// URL for local testing instead.";
+        case FlashSalePollStatus::Failed:
+            return "Last poll failed: " + htmlEscape(lastFlashSalePollDetail);
+        case FlashSalePollStatus::NoActiveSale:
+            return "Last poll succeeded — no active sale right now.";
+        case FlashSalePollStatus::Ok: {
+            String s = "Last poll succeeded — <strong>" + htmlEscape(lastFlashSalePollDetail) + "</strong> on sale";
+            s += isFlashSaleActive() ? " (currently active)." : " (window not active right now).";
+            return s;
+        }
+    }
+    return "";
+}
+
+static void handleConfigFlashSaleGet() {
+    String page = String(FPSTR(CONFIG_FLASHSALE_HTML));
+    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    page.replace("%%POLL_STATUS%%", flashSalePollStatusText());
+    page.replace("%%POLL_HTTP_CODE%%", lastFlashSalePollHttpCode == 0 ? "(no request made)" : String(lastFlashSalePollHttpCode));
+    page.replace("%%POLL_RAW_BODY%%", lastFlashSalePollRawBody.length() ? htmlEscape(lastFlashSalePollRawBody) : "(empty)");
+    String msg = "";
+    if (wm.server->hasArg("checked")) msg = "<div class='banner ok'>Polled — see status below.</div>";
+    page.replace("%%MSG%%", msg);
+    sendHtmlPage(page);
+}
+
+static void handleConfigFlashSaleCheckPost() {
+    fetchFlashSale();
+    wm.server->sendHeader("Location", "/config/flashsale?checked=1");
+    wm.server->send(302, "text/plain", "");
+}
+
 static void handleConfigCatPost() {
     int   hunger  = wm.server->arg("hunger").toInt();
     int   boredom = wm.server->arg("boredom").toInt();
@@ -3308,21 +3567,21 @@ static void handleConfigStorePost() {
         if (item == STUFFIES[i].id) { stuffyIdx = i; break; }
     }
     if (stuffyIdx >= 0) {
-        cost = STUFFIES[stuffyIdx].cost;
+        cost = flashSalePrice(STUFFIES[stuffyIdx].id, STUFFIES[stuffyIdx].cost);
         alreadyOwned = configMgr.config().ownedStuffies & (1 << stuffyIdx);
     } else {
         for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
             if (item == BLANKET_COLORS[i].id) { blanketIdx = i; break; }
         }
         if (blanketIdx >= 0) {
-            cost = STORE_COST_BLANKET;
+            cost = flashSalePrice(BLANKET_COLORS[blanketIdx].id, STORE_COST_BLANKET);
             alreadyOwned = configMgr.config().ownedBlanketColors & (1 << blanketIdx);
         } else {
             for (int i = 0; i < ROOM_THEME_COUNT; i++) {
                 if (item == ROOM_THEMES[i].id) { roomThemeIdx = i; break; }
             }
             if (roomThemeIdx >= 0) {
-                cost = ROOM_THEMES[roomThemeIdx].cost;
+                cost = flashSalePrice(ROOM_THEMES[roomThemeIdx].id, ROOM_THEMES[roomThemeIdx].cost);
                 alreadyOwned = configMgr.config().ownedRoomThemes & (1 << roomThemeIdx);
             } else {
                 for (int i = 0; i < CAT_COLOR_COUNT; i++) {
@@ -3336,7 +3595,7 @@ static void handleConfigStorePost() {
                         if (item == ACCESSORIES[i].id) { accessoryIdx = i; break; }
                     }
                     if (accessoryIdx >= 0) {
-                        cost = ACCESSORIES[accessoryIdx].cost;
+                        cost = flashSalePrice(ACCESSORIES[accessoryIdx].id, ACCESSORIES[accessoryIdx].cost);
                         alreadyOwned = configMgr.config().ownedAccessories & (1 << accessoryIdx);
                     } else if (item == "right_arm_slot") {
                         rightArmSlotPurchase = true;
@@ -3846,6 +4105,8 @@ static void runWiFiManager(ConfigManager& cfg) {
         wm.server->on("/config/backup/export", HTTP_GET,  handleConfigBackupExportGet);
         wm.server->on("/config/update",        HTTP_GET,  handleConfigUpdateGet);
         wm.server->on("/config/update/check",  HTTP_POST, handleConfigUpdateCheckPost);
+        wm.server->on("/config/flashsale",       HTTP_GET,  handleConfigFlashSaleGet);
+        wm.server->on("/config/flashsale/check", HTTP_POST, handleConfigFlashSaleCheckPost);
         wm.server->on("/save-config/setup",        HTTP_POST, handleSetupPost);
         wm.server->on("/save-config/cat",          HTTP_POST, handleConfigCatPost);
         wm.server->on("/save-config/city",         HTTP_POST, handleConfigCityPost);
@@ -3864,6 +4125,8 @@ static void runWiFiManager(ConfigManager& cfg) {
 // ── Arduino ───────────────────────────────────────────────────────────────────
 void setup() {
     Serial.begin(115200);
+
+    assertStoreIdsUnique();
 
     pinMode(TFT_BACKLIGHT_PIN, OUTPUT);
     digitalWrite(TFT_BACKLIGHT_PIN, HIGH);
@@ -3895,8 +4158,9 @@ void setup() {
     ntpClient.update();
 
     weather.fetch(configMgr.config().latitude, configMgr.config().longitude);
-    lastWeatherFetch = millis();
-    lastUpdateCheck  = millis();
+    lastWeatherFetch  = millis();
+    lastUpdateCheck   = millis();
+    lastFlashSalePoll = millis();
 
     // Confirms this boot is good before the *next* auto-update can overwrite the other
     // OTA slot — see STATUS.md's DIY-41 notes on what this actually guarantees under
@@ -3933,6 +4197,15 @@ void loop() {
             pendingOtaUpdate  = result;
             otaUpdatePending  = true;
         }
+    }
+
+    // Flash-sale poll (DIY-79) — same placement/reasoning as the OTA check above: runs
+    // unconditionally ahead of the sleep-window and setup-prompt early returns so an overnight
+    // sleep window can't starve it, and it's a lightweight JSON GET (no flash/reboot) so there's
+    // no need to defer it like the OTA apply step is.
+    if (now - lastFlashSalePoll > FLASH_SALE_POLL_INTERVAL_MS) {
+        lastFlashSalePoll = now;
+        fetchFlashSale();
     }
 
     // First-run setup: hold on the "complete setup at <ip>" screen until the wizard (cat

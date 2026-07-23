@@ -51,6 +51,8 @@ Example `project.json` for a PlatformIO app:
 ```
 
 > **PlatformIO wrapper:** Always invoke PlatformIO via `scripts/pio.sh` (not `pio` directly). The wrapper uses the repo's `.venv/bin/python3` when available (local dev) and falls back to the system `python3` (CI). Use `cwd: "."` (workspace root) with the `-d <project-dir>` flag so the wrapper can locate itself reliably.
+>
+> **Build-time secrets/config via env vars + local `.env` override:** Follow the `RELEASE_VERSION`/`CAT_BUDDY_API_TOKEN` pattern (see `apps/cyd-clock`) for any value that needs to be baked into firmware at build time via a `-D NAME=\"${sysenv.NAME}\"` flag in `platformio.ini`. `scripts/pio.sh` exports a sensible default for each such var (e.g. `"${NAME:-default}"`) so CI and local builds work without extra setup, then auto-sources a gitignored `<project-dir>/.env` (plain `VAR=value` lines) if one exists, letting a developer override any of them locally without touching tracked files — useful for pointing a build at a local/dev backend instead of the real prod one. `.env` values win over exported shell env vars. Because PlatformIO's own incremental build (SCons) tracks build flags as part of its dependency signature, prefer `.env` over exporting the var in your shell when doing more than a single build+flash in one command — env vars exported in one shell/tool call don't persist to a separate one, and a later incremental rebuild (e.g. from a `flash` target that reruns `pio run -t upload`) can silently pick up an empty/default value and re-bake it in.
 
 ### Multi-board PlatformIO projects
 
