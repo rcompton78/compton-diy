@@ -422,7 +422,7 @@ struct {
     uint8_t frame           = 0;  // advances every FIREWORKS_FRAME_MS, drives burst radius/color
     uint32_t bonusPoints    = 0;  // milestone bonus earned this level-up, 0 if none
 } fireworks;
-static constexpr unsigned long FIREWORKS_DURATION_MS = 2500;
+static constexpr unsigned long FIREWORKS_DURATION_MS = 4500;
 static constexpr unsigned long FIREWORKS_FRAME_MS    = 150;
 
 
