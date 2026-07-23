@@ -2262,6 +2262,31 @@ static uint32_t flashSalePrice(const char* itemId, uint32_t defaultCost) {
     return discounted > 0 ? discounted : 1;  // never free
 }
 
+// flashSalePrice() matches a sale's itemId against every store category independently, so
+// two catalogs sharing an id string would both silently go on sale together. Walks every
+// catalog's id column (plus the one non-catalog item, "right_arm_slot") and halts at boot
+// if any duplicate is found — cheap O(n^2) over a handful of entries, run once at startup.
+static void assertStoreIdsUnique() {
+    const char* ids[CAT_COLOR_COUNT + ACCESSORY_COUNT + STUFFY_COUNT + BLANKET_COLOR_COUNT + ROOM_THEME_COUNT + 1];
+    int n = 0;
+    for (int i = 0; i < CAT_COLOR_COUNT; i++) ids[n++] = CAT_COLORS[i].id;
+    for (int i = 0; i < ACCESSORY_COUNT; i++) ids[n++] = ACCESSORIES[i].id;
+    for (int i = 0; i < STUFFY_COUNT; i++) ids[n++] = STUFFIES[i].id;
+    for (int i = 0; i < BLANKET_COLOR_COUNT; i++) ids[n++] = BLANKET_COLORS[i].id;
+    for (int i = 0; i < ROOM_THEME_COUNT; i++) ids[n++] = ROOM_THEMES[i].id;
+    ids[n++] = "right_arm_slot";
+
+    for (int i = 0; i < n; i++) {
+        for (int j = i + 1; j < n; j++) {
+            if (strcmp(ids[i], ids[j]) == 0) {
+                Serial.printf("FATAL: store item id \"%s\" is not unique across catalogs — flash sales match by id alone\n", ids[i]);
+                Serial.flush();
+                abort();
+            }
+        }
+    }
+}
+
 // Level-up fireworks — a full-screen takeover distinct from the small in-zone Celebrate
 // animation (drawSparkles()/CatMood::Celebrate), reserved for the rarer, bigger moment of
 // actually leveling up. Modeled on updateSleepScreen()'s full fillScreen() ownership below:
@@ -4100,6 +4125,8 @@ static void runWiFiManager(ConfigManager& cfg) {
 // ── Arduino ───────────────────────────────────────────────────────────────────
 void setup() {
     Serial.begin(115200);
+
+    assertStoreIdsUnique();
 
     pinMode(TFT_BACKLIGHT_PIN, OUTPUT);
     digitalWrite(TFT_BACKLIGHT_PIN, HIGH);
