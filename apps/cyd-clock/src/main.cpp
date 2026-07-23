@@ -319,12 +319,13 @@ struct RoomTheme {
 static constexpr RoomTheme ROOM_THEMES[] = {
     // Flat-color placeholders (DIY-38), picked to pair with the blanket palette. Moon /
     // fireplace themes with real art still land in a follow-up card.
-    {"midnight", "Midnight", STORE_COST_ROOM_THEME, 0x18CE, drawFlatThemeBackground, "#5B7FBD"},  // deep navy — pairs with Dusty Blue
-    {"twilight", "Twilight", STORE_COST_ROOM_THEME, 0x28C8, drawFlatThemeBackground, "#9B72CF"},  // deep plum — pairs with Lavender
-    {"forest",   "Forest",   STORE_COST_ROOM_THEME, 0x1143, drawFlatThemeBackground, "#4CAF6D"},  // deep green — pairs with Apple Green
-    {"rosewood", "Rosewood", STORE_COST_ROOM_THEME, 0x30A4, drawFlatThemeBackground, "#C2687D"},  // deep wine — pairs with Blush Pink
-    {"amber",    "Amber",    STORE_COST_ROOM_THEME, 0x28E2, drawFlatThemeBackground, "#D9A441"},  // warm deep brown — pairs with Cream & Lemon Yellow
-    {"starry_night", "Starry Night", STORE_COST_STARRY_NIGHT, TFT_BLACK, drawStarryNightBackground, nullptr},  // moon + stars on black — not a straight color, label stays white
+    {"midnight",           "Midnight",      STORE_COST_ROOM_THEME,   0x18CE,    drawFlatThemeBackground,   "#5B7FBD"},  // deep navy — pairs with Dusty Blue
+    {"twilight",           "Twilight",      STORE_COST_ROOM_THEME,   0x28C8,    drawFlatThemeBackground,   "#9B72CF"},  // deep plum — pairs with Lavender
+    {"forest",             "Forest",        STORE_COST_ROOM_THEME,   0x1143,    drawFlatThemeBackground,   "#4CAF6D"},  // deep green — pairs with Apple Green
+    {"rosewood",           "Rosewood",      STORE_COST_ROOM_THEME,   0x30A4,    drawFlatThemeBackground,   "#C2687D"},  // deep wine — pairs with Blush Pink
+    {"amber",              "Amber",         STORE_COST_ROOM_THEME,   0x28E2,    drawFlatThemeBackground,   "#D9A441"},  // warm deep brown — pairs with Cream & Lemon Yellow
+    {"flamingo_pink_room", "Flamingo Pink", STORE_COST_ROOM_THEME,   0xFD16,    drawFlatThemeBackground,   "#FCA3B7"},  // vibrant flamingo-pink — pairs with the Flamingo Pink blanket (DIY-82); id suffixed "_room" since "flamingo_pink" is already the blanket color's id (assertStoreIdsUnique() requires globally unique ids)
+    {"starry_night",       "Starry Night",  STORE_COST_STARRY_NIGHT, TFT_BLACK, drawStarryNightBackground, nullptr},  // moon + stars on black — not a straight color, label stays white
 };
 static constexpr int ROOM_THEME_COUNT = sizeof(ROOM_THEMES) / sizeof(ROOM_THEMES[0]);
 
