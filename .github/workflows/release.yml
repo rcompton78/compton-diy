@@ -82,6 +82,7 @@ jobs:
       - name: Generate releases
         env:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          CAT_BUDDY_API_TOKEN: ${{ secrets.CAT_BUDDY_API_TOKEN }}
         run: pnpm nx run-many -t release
 
       - name: Generate flasher index
