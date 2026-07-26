@@ -82,6 +82,7 @@ static constexpr uint32_t STORE_COST_UNICORN  = 150;
 static constexpr uint32_t STORE_COST_BLANKET  = 40;  // per blanket color
 static constexpr uint32_t STORE_COST_ROOM_THEME = 40;  // per flat-color room theme, matches blanket pricing
 static constexpr uint32_t STORE_COST_STARRY_NIGHT = 200;  // premium: has real art (moon + stars), not just a flat fill
+static constexpr uint32_t STORE_COST_SIX_SEVEN = 200;  // premium: has real art (rotated digit pairs), not just a flat fill
 static constexpr uint32_t STORE_COST_CAT_COLOR_SOLID   = 100;  // black, grey — flat recolor
 static constexpr uint32_t STORE_COST_CAT_COLOR_PATTERN = 200;  // tabby, calico — real stripe/patch art
 static constexpr uint32_t STORE_COST_ACCESSORY_BOW = 50;
@@ -298,6 +299,10 @@ static void drawFlatThemeBackground(int x, int y, int w, int h);
 // defined further below alongside drawFlatThemeBackground().
 static void drawStarryNightBackground(int x, int y, int w, int h);
 
+// Forward declaration: "6-7" meme theme's dedicated backdrop (rotated digit pairs on
+// black), defined further below alongside drawStarryNightBackground().
+static void drawSixSevenBackground(int x, int y, int w, int h);
+
 // Room theme catalog — same purchase/equip model as blanket colors and stuffies. `id` is
 // the stable identifier used in store/dressing-room form requests; ConfigManager persists
 // ownership as an `ownedRoomThemes` bitmask and the equipped selection as a numeric
@@ -326,6 +331,7 @@ static constexpr RoomTheme ROOM_THEMES[] = {
     {"amber",              "Amber",         STORE_COST_ROOM_THEME,   0x28E2,    drawFlatThemeBackground,   "#D9A441"},  // warm deep brown — pairs with Cream & Lemon Yellow
     {"flamingo_pink_room", "Flamingo Pink", STORE_COST_ROOM_THEME,   0xFD16,    drawFlatThemeBackground,   "#FCA3B7"},  // vibrant flamingo-pink — pairs with the Flamingo Pink blanket (DIY-82); id suffixed "_room" since "flamingo_pink" is already the blanket color's id (assertStoreIdsUnique() requires globally unique ids)
     {"starry_night",       "Starry Night",  STORE_COST_STARRY_NIGHT, TFT_BLACK, drawStarryNightBackground, nullptr},  // moon + stars on black — not a straight color, label stays white
+    {"six_seven",          "6-7",           STORE_COST_SIX_SEVEN,    TFT_BLACK, drawSixSevenBackground,    nullptr},  // rotated "67" digit pairs on black (DIY-87) — not a straight color, label stays white
 };
 static constexpr int ROOM_THEME_COUNT = sizeof(ROOM_THEMES) / sizeof(ROOM_THEMES[0]);
 
@@ -1120,6 +1126,54 @@ static void drawStarryNightBackground(int x, int y, int w, int h) {
         const Star& s = STARRY_NIGHT_STARS[i];
         if (s.r == 0) tft.drawPixel(s.x, s.y, TFT_WHITE);
         else          tft.fillCircle(s.x, s.y, s.r, TFT_WHITE);
+    }
+
+    tft.resetViewport();
+}
+
+// Fixed layout for the "6-7" meme theme's three digit pairs — position, rotation angle, and
+// a distinct color per digit, pre-set rather than randomized per call for the same
+// repeated-partial-redraw reason as STARRY_NIGHT_STARS above. Angles are deliberately
+// mismatched (not a shared value) so the three pairs don't read as one uniform rotation.
+struct SixSeven { int16_t x, y; int16_t angle; uint16_t color6; uint16_t color7; };
+static constexpr SixSeven SIX_SEVENS[] = {
+    {50,  ANIMAL_Y + 35,  -14, 0x07FF, 0xF81F},  // cyan 6 / magenta 7
+    {190, ANIMAL_Y + 85,    9, 0xFFE0, 0x07E0},  // yellow 6 / green 7 — right side, pushed further right
+    {75,  ANIMAL_Y + 118, -20, 0xFD20, 0x781F},  // orange 6 / purple 7 — bottom-left, raised so the stuffy doesn't cover it
+};
+static constexpr int SIX_SEVEN_COUNT = sizeof(SIX_SEVENS) / sizeof(SIX_SEVENS[0]);
+static constexpr int SIX_SEVEN_SPRITE_W = 44, SIX_SEVEN_SPRITE_H = 30;
+
+// "6-7" meme room theme (DIY-87): three "67" digit pairs, each digit its own color, each
+// pair tilted at its own angle, scattered on a black backdrop. TFT_eSPI's drawString() can't
+// rotate text directly, so each pair is drawn at 0 degrees into a small offscreen sprite and
+// then stamped onto the zone with pushRotated() — the standard TFT_eSPI technique for angled
+// text — pivoting around the sprite's own center so it tilts in place rather than swinging
+// around a corner. The sprite is created once and kept alive for the process lifetime rather
+// than recreated every call, since drawBackground() runs on every small erasure throughout
+// the animal zone and repeated heap alloc/free at that frequency would be wasteful.
+static void drawSixSevenBackground(int x, int y, int w, int h) {
+    tft.setViewport(x, y, w, h, false);
+    tft.fillRect(x, y, w, h, TFT_BLACK);
+
+    static TFT_eSprite pairSprite(&tft);
+    static bool pairSpriteReady = false;
+    if (!pairSpriteReady) {
+        pairSprite.createSprite(SIX_SEVEN_SPRITE_W, SIX_SEVEN_SPRITE_H);
+        pairSprite.setTextDatum(TL_DATUM);
+        pairSprite.setPivot(SIX_SEVEN_SPRITE_W / 2, SIX_SEVEN_SPRITE_H / 2);
+        pairSpriteReady = true;
+    }
+
+    for (int i = 0; i < SIX_SEVEN_COUNT; i++) {
+        const SixSeven& s = SIX_SEVENS[i];
+        pairSprite.fillSprite(TFT_BLACK);
+        pairSprite.setTextColor(s.color6);
+        pairSprite.drawString("6", 0, 0, 4);
+        pairSprite.setTextColor(s.color7);
+        pairSprite.drawString("7", 21, 0, 4);
+        tft.setPivot(s.x, s.y);
+        pairSprite.pushRotated(s.angle, TFT_BLACK);
     }
 
     tft.resetViewport();
