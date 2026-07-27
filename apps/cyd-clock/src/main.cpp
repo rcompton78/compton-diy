@@ -535,10 +535,12 @@ static void drawEyes(int cx, int cy, bool eyeOpen) {
 static void zoneFillRect(int x, int y, int w, int h);
 
 static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom boredom, CatHealth health, CatThirst thirst, bool eyeOpen) {
-    bool happy   = (mood == CatMood::Happy || mood == CatMood::Celebrate);
-    bool queasy  = (health == CatHealth::Sick) && !happy;
+    bool queasy  = (health == CatHealth::Sick);
     bool thirsty = (thirst == CatThirst::Thirsty);
-    bool sad     = (status == CatStatus::Hungry || boredom == CatBoredom::VeryBored || thirsty) && !happy && !queasy;
+    bool needy   = (status == CatStatus::Hungry || thirsty) && !queasy;
+    bool happy   = !queasy && !needy && status == CatStatus::Content && thirst == CatThirst::Hydrated &&
+                   boredom == CatBoredom::Entertained;
+    bool sad     = needy;
     uint16_t col = catBodyColor();
     int colorIdx = equippedCatColorIndex();
 
