@@ -534,7 +534,7 @@ static void drawEyes(int cx, int cy, bool eyeOpen) {
 // itself is defined before the resolver it depends on.
 static void zoneFillRect(int x, int y, int w, int h);
 
-static void drawCat(int cx, int cy, CatMood mood, CatStatus status, CatBoredom boredom, CatHealth health, CatThirst thirst, bool eyeOpen) {
+static void drawCat(int cx, int cy, CatStatus status, CatBoredom boredom, CatHealth health, CatThirst thirst, bool eyeOpen) {
     bool queasy  = (health == CatHealth::Sick);
     bool thirsty = (thirst == CatThirst::Thirsty);
     bool needy   = (status == CatStatus::Hungry || thirsty) && !queasy;
@@ -1201,7 +1201,7 @@ static void drawRightArmStuffy(int cx, int cy, bool hasBlanket) {
 }
 
 static void drawSleepingCat(int cx, int cy) {
-    drawCat(cx, cy, CatMood::Idle, CatStatus::Content, CatBoredom::Entertained,
+    drawCat(cx, cy, CatStatus::Content, CatBoredom::Entertained,
             CatHealth::Healthy, CatThirst::Hydrated, /*eyeOpen=*/false);
     drawSleepyEyes(cx, cy);
 
@@ -1549,7 +1549,7 @@ static void drawAnimal() {
         drawSleepingCat(CAT_CX, CAT_CY);
     } else {
         int dy = (cat.mood == CatMood::Celebrate) ? ((cat.frame % 2 == 0) ? -3 : 3) : 0;
-        drawCat(CAT_CX, CAT_CY + dy, cat.mood, cat.status, cat.boredom, cat.health, cat.thirst, cat.eyeOpen);
+        drawCat(CAT_CX, CAT_CY + dy, cat.status, cat.boredom, cat.health, cat.thirst, cat.eyeOpen);
         drawRightArmStuffy(CAT_CX, CAT_CY + dy, /*hasBlanket=*/false);  // no blanket during the day
 
         if (cat.mood == CatMood::Happy || cat.mood == CatMood::Celebrate) {
