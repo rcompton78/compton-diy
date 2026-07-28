@@ -44,8 +44,13 @@ REPO_ROOT        = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
 # ── esptool helpers ──────────────────────────────────────────────────────────
 
 def find_esptool():
-    # PlatformIO downloads esptool into ~/.platformio/packages/tool-esptoolpy/
-    pio_esptool = os.path.expanduser("~/.platformio/packages/tool-esptoolpy/esptool.py")
+    # PlatformIO downloads esptool into its core dir's packages/tool-esptoolpy/.
+    # Match scripts/pio.sh's own PLATFORMIO_CORE_DIR resolution (env var if
+    # set, else REPO_ROOT/.platformio-core) rather than PlatformIO's unisolated
+    # default of ~/.platformio -- this repo deliberately redirects the core
+    # dir per project so toolchain caches can't clobber each other.
+    core_dir = os.environ.get("PLATFORMIO_CORE_DIR", os.path.join(REPO_ROOT, ".platformio-core"))
+    pio_esptool = os.path.join(core_dir, "packages", "tool-esptoolpy", "esptool.py")
     if os.path.exists(pio_esptool):
         return [sys.executable, pio_esptool]
     # Fall back to system esptool module
