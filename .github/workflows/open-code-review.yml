@@ -1,0 +1,38 @@
+name: Open Code Review (DeepSeek)
+
+# DIY-94 follow-up: promotes Open Code Review from the manual workflow_dispatch spike
+# (pr-review-test-open-code-review.yml) to a real automatic PR gate. Uses the tool's own
+# official action for review + comment-posting (sticky summary, incremental inline
+# comments) rather than hand-rolling it, then fails the build if it found anything at all.
+on:
+  pull_request:
+    branches: [master]
+
+jobs:
+  review:
+    # Fork PRs never get repo secrets on the pull_request event — skip cleanly instead of
+    # failing on a missing DEEPSEEK_API_KEY.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+
+    steps:
+      - uses: alibaba/open-code-review@e670b3b3f6b56ef63f4222148696e315268a26e2 # v1.8.0
+        with:
+          llm_url: https://api.deepseek.com
+          llm_auth_token: ${{ secrets.DEEPSEEK_API_KEY }}
+          llm_model: deepseek-chat
+          llm_use_anthropic: 'false'
+          sticky_summary: 'true'
+          incremental: 'true'
+
+      - name: Fail on any finding
+        run: |
+          count=$(jq '.comments | length' /tmp/ocr-result.json)
+          if [ "$count" -gt 0 ]; then
+            echo "::error::Open Code Review found $count issue(s) — see the posted PR comments."
+            exit 1
+          fi
+          echo "No issues found."
