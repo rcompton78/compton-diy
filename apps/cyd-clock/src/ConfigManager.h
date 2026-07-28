@@ -44,7 +44,8 @@ struct AppConfig {
     bool    seenRightArmSlot     = false;  // Mirrors seenStuffyCount's "has the store page shown this yet"
                                             // role, but as a bool since this is a single item, not a catalog
     uint8_t seenBlanketColorCount = 0;  // Highest BLANKET_COLOR_COUNT the store page has shown the user
-    uint8_t ownedRoomThemes    = 0;  // Store purchase: bitmask, bit N = owns room theme N
+    uint16_t ownedRoomThemes   = 0;  // Store purchase: bitmask, bit N = owns room theme N (widened to
+                                      // uint16_t in DIY-90 — 9th theme needs bit 8, uint8_t was full)
     uint8_t equippedRoomTheme  = 0;  // Dressing room: index of the room theme to display
     uint8_t seenRoomThemeCount = 0;  // Highest ROOM_THEME_COUNT the store page has shown the user
     uint8_t ownedCatColors     = 0;  // Store purchase: bitmask, bit N = owns cat color N (white is free, not in this catalog)

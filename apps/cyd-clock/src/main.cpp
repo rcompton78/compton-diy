@@ -83,6 +83,7 @@ static constexpr uint32_t STORE_COST_BLANKET  = 40;  // per blanket color
 static constexpr uint32_t STORE_COST_ROOM_THEME = 40;  // per flat-color room theme, matches blanket pricing
 static constexpr uint32_t STORE_COST_STARRY_NIGHT = 200;  // premium: has real art (moon + stars), not just a flat fill
 static constexpr uint32_t STORE_COST_SIX_SEVEN = 200;  // premium: has real art (rotated digit pairs), not just a flat fill
+static constexpr uint32_t STORE_COST_SKY = 200;  // premium: has real art (clouds + rainbow), not just a flat fill
 static constexpr uint32_t STORE_COST_CAT_COLOR_SOLID   = 100;  // black, grey — flat recolor
 static constexpr uint32_t STORE_COST_CAT_COLOR_PATTERN = 200;  // tabby, calico — real stripe/patch art
 static constexpr uint32_t STORE_COST_ACCESSORY_BOW = 50;
@@ -303,6 +304,10 @@ static void drawStarryNightBackground(int x, int y, int w, int h);
 // black), defined further below alongside drawStarryNightBackground().
 static void drawSixSevenBackground(int x, int y, int w, int h);
 
+// Forward declaration: "Clear Sky" theme's dedicated backdrop (light blue sky, scattered
+// clouds, small rainbow), defined further below alongside drawSixSevenBackground().
+static void drawSkyBackground(int x, int y, int w, int h);
+
 // Room theme catalog — same purchase/equip model as blanket colors and stuffies. `id` is
 // the stable identifier used in store/dressing-room form requests; ConfigManager persists
 // ownership as an `ownedRoomThemes` bitmask and the equipped selection as a numeric
@@ -332,6 +337,7 @@ static constexpr RoomTheme ROOM_THEMES[] = {
     {"flamingo_pink_room", "Flamingo Pink", STORE_COST_ROOM_THEME,   0xFD16,    drawFlatThemeBackground,   "#FCA3B7"},  // vibrant flamingo-pink — pairs with the Flamingo Pink blanket (DIY-82); id suffixed "_room" since "flamingo_pink" is already the blanket color's id (assertStoreIdsUnique() requires globally unique ids)
     {"starry_night",       "Starry Night",  STORE_COST_STARRY_NIGHT, TFT_BLACK, drawStarryNightBackground, nullptr},  // moon + stars on black — not a straight color, label stays white
     {"six_seven",          "6-7",           STORE_COST_SIX_SEVEN,    TFT_BLACK, drawSixSevenBackground,    nullptr},  // rotated "67" digit pairs on black (DIY-87) — not a straight color, label stays white
+    {"clear_sky",          "Clear Sky",     STORE_COST_SKY,          0x5D9C,    drawSkyBackground,         nullptr},  // light blue sky + clouds + rainbow (DIY-90) — not a straight color, label stays white
 };
 static constexpr int ROOM_THEME_COUNT = sizeof(ROOM_THEMES) / sizeof(ROOM_THEMES[0]);
 
@@ -685,7 +691,7 @@ static int equippedStuffyRightIndex() {
 
 // Same resolution logic as equippedBlanketIndex(), for the room theme catalog.
 static int equippedRoomThemeIndex() {
-    uint8_t owned = configMgr.config().ownedRoomThemes;
+    uint16_t owned = configMgr.config().ownedRoomThemes;
     if (owned == 0) return -1;
     uint8_t eq = configMgr.config().equippedRoomTheme;
     if (eq == EQUIP_NONE) return -1;  // user explicitly unequipped
@@ -1176,6 +1182,66 @@ static void drawSixSevenBackground(int x, int y, int w, int h) {
         pairSprite.drawString("7", 21, 0, 4);
         tft.setPivot(s.x, s.y);
         pairSprite.pushRotated(s.angle, TFT_BLACK);
+    }
+
+    tft.resetViewport();
+}
+
+// Fixed cloud layout for the "Clear Sky" theme — pre-set positions rather than re-randomized
+// per call, for the same repeated-partial-redraw reason as STARRY_NIGHT_STARS/SIX_SEVENS
+// above. Each cloud is drawn as 3-4 overlapping filled ellipses/circles (TFT_eSPI has no
+// native cloud primitive) around a common "puffiness" radius `r`.
+struct Cloud { int16_t x, y; uint8_t r; };
+static constexpr Cloud SKY_CLOUDS[] = {
+    {42,  ANIMAL_Y + 8,  8},    // top-left, small — tucked under the header, clear of the rainbow below it
+    {170, ANIMAL_Y + 15, 13},   // top-right, larger
+    {60,  ANIMAL_Y + 150, 9},   // bottom-left, small — kept clear of the cat's feet
+    {205, ANIMAL_Y + 140, 11},  // bottom-right
+};
+static constexpr int SKY_CLOUD_COUNT = sizeof(SKY_CLOUDS) / sizeof(SKY_CLOUDS[0]);
+
+// Concentric rainbow bands (outer -> inner), classic ROYGBIV order, drawn via drawArc()'s
+// ring-thickness trick: each band's outer radius equals the previous band's inner radius,
+// so the bands sit flush with no gaps or overlaps.
+struct RainbowBand { uint16_t color; };
+static constexpr RainbowBand SKY_RAINBOW_BANDS[] = {
+    {TFT_RED}, {0xFD20 /*orange*/}, {TFT_YELLOW}, {TFT_GREEN}, {0x001F /*blue*/}, {0x781F /*violet*/},
+};
+static constexpr int SKY_RAINBOW_BAND_COUNT = sizeof(SKY_RAINBOW_BANDS) / sizeof(SKY_RAINBOW_BANDS[0]);
+// Placed in the top-left corner of the zone — the only patch of open real estate: the badge
+// column claims the top-right (BADGE_COL_X=168 onward), and the meds/play + water/treat
+// buttons claim the bottom-left/bottom-right corners (see TREAT_X/PLAY_X/etc.), so a bow
+// centered lower-right (the original placement) rendered directly on top of the treat button.
+// TFT_eSPI's drawArc() angle 0 is at 6 o'clock, sweeping clockwise (90=9 o'clock/left,
+// 180=12 o'clock/top, 270=3 o'clock/right) — 90..270 sweeps a half circle through the top,
+// i.e. a classic downward-opening arch (∩ shape).
+static constexpr int SKY_RAINBOW_CX = 35, SKY_RAINBOW_CY = ANIMAL_Y + 60;  // arc center, top-left of the zone
+static constexpr int SKY_RAINBOW_OUTER_R = 32;   // outer radius of the outermost (red) band
+static constexpr int SKY_RAINBOW_BAND_THICKNESS = 4;
+static constexpr uint32_t SKY_RAINBOW_START_ANGLE = 90, SKY_RAINBOW_END_ANGLE = 270;  // half-circle arch, opening downward
+
+// "Clear Sky" room theme (DIY-90): light blue sky, a scatter of puffy clouds built from
+// overlapping filled ellipses/circles, and a small rainbow drawn as concentric drawArc()
+// rings. Same setViewport/resetViewport clipping convention as drawStarryNightBackground —
+// see that function's comment for why.
+static void drawSkyBackground(int x, int y, int w, int h) {
+    tft.setViewport(x, y, w, h, false);
+    tft.fillRect(x, y, w, h, 0x5D9C);  // light blue sky
+
+    for (int i = 0; i < SKY_CLOUD_COUNT; i++) {
+        const Cloud& c = SKY_CLOUDS[i];
+        tft.fillEllipse(c.x,          c.y,          c.r,           (int)(c.r * 0.6f), TFT_WHITE);
+        tft.fillCircle(c.x - c.r,     c.y + 2,      (int)(c.r * 0.65f),                TFT_WHITE);
+        tft.fillCircle(c.x + c.r,     c.y + 2,      (int)(c.r * 0.65f),                TFT_WHITE);
+        tft.fillCircle(c.x + (c.r/3), c.y - (c.r/2),(int)(c.r * 0.7f),                 TFT_WHITE);
+    }
+
+    for (int i = 0; i < SKY_RAINBOW_BAND_COUNT; i++) {
+        int outerR = SKY_RAINBOW_OUTER_R - i * SKY_RAINBOW_BAND_THICKNESS;
+        int innerR = outerR - SKY_RAINBOW_BAND_THICKNESS;
+        tft.drawArc(SKY_RAINBOW_CX, SKY_RAINBOW_CY, outerR, innerR,
+                    SKY_RAINBOW_START_ANGLE, SKY_RAINBOW_END_ANGLE,
+                    SKY_RAINBOW_BANDS[i].color, 0x5D9C, true);
     }
 
     tft.resetViewport();
@@ -3783,7 +3849,7 @@ static void handleConfigDressGet() {
     }
     page.replace("%%STUFFY_RIGHT_OPTIONS%%", stuffyRightOptions);
 
-    uint8_t ownedThemes = configMgr.config().ownedRoomThemes;
+    uint16_t ownedThemes = configMgr.config().ownedRoomThemes;
     int equippedThemeIdx = equippedRoomThemeIndex();
     String themeOptions = "";
     if (ownedThemes == 0) {
