@@ -21,3 +21,9 @@
 - **Lint:** `pnpm nx affected -t lint`
 - **Build:** `pnpm nx affected -t build`
 - **Test:** `pnpm nx affected -t test`
+
+## Open Code Review Gate
+
+- **Enabled:** yes
+- **Workflow file:** .github/workflows/open-code-review.yml
+- **Version:** v2
