@@ -3,6 +3,10 @@ name: Open Code Review (DeepSeek)
 # DIY-94 follow-up: calls the reusable version of this workflow, extracted to
 # rcompton78/gh-actions so other repos can use the same gate. Pinned to @v1 —
 # bump deliberately, don't float on @main.
+#
+# DIY-95 TEMP: pointed at the unreleased gh-actions feature branch to exercise the new
+# reply-driven suppression logic live on this PR before it's tagged @v2. Revert to @v1
+# (or bump to @v2 once tagged) before merging DIY-66.
 on:
   pull_request:
     branches: [master]
@@ -20,5 +24,5 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    uses: rcompton78/gh-actions/.github/workflows/open-code-review.yml@v1
+    uses: rcompton78/gh-actions/.github/workflows/open-code-review.yml@feature/diy-95-reply-driven-pr-suppression
     secrets: inherit
