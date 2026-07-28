@@ -450,7 +450,7 @@ writing a `flash_sales` row, no firmware release required.
   override") — a gitignored `apps/cyd-clock/.env` can point a dev build at
   a local/LAN `cat-buddy-api` instance over plain `http://` (skips TLS
   entirely, fine for a throwaway dev token) without touching tracked files.
-  `/config/flashsale` on the device shows the raw last-poll HTTP status +
+  `/config/admin/flashsale` on the device shows the raw last-poll HTTP status +
   response body (not just a summary) and has a "Poll now" button, so you
   don't have to wait out the 15-minute interval to see what happened.
 - **Real-hardware validation (2026-07-22)**: verified against a live,

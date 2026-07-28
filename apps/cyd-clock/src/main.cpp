@@ -2198,13 +2198,13 @@ struct FlashSaleState {
 static FlashSaleState currentFlashSale;
 unsigned long lastFlashSalePoll = 0;
 
-// Surfaced on /config/flashsale so a local dev/test setup (see below) doesn't have to guess
+// Surfaced on /config/admin/flashsale so a local dev/test setup (see below) doesn't have to guess
 // why nothing happened — mirrors lastUpdateCheckFailed/lastUpdateCheckSkipped's role for OTA.
 enum class FlashSalePollStatus { NeverPolled, Ok, NoActiveSale, Failed, SkippedNoCaCert, SkippedNoUrl };
 static FlashSalePollStatus lastFlashSalePollStatus = FlashSalePollStatus::NeverPolled;
 static String lastFlashSalePollDetail;  // human-readable extra info: HTTP code, parse error, item id
 static int lastFlashSalePollHttpCode = 0;  // 0 = no request was actually made (e.g. skipped)
-static String lastFlashSalePollRawBody;    // raw HTTP response body, verbatim, for the /config/flashsale page
+static String lastFlashSalePollRawBody;    // raw HTTP response body, verbatim, for the /config/admin/flashsale page
 
 #ifdef CAT_BUDDY_API_CA_CERT
 #define CAT_BUDDY_HAS_CA_CERT 1
@@ -2318,7 +2318,7 @@ static void fetchFlashSale() {
 
     int code = http.GET();
     // Captured regardless of outcome (including negative HTTPClient error codes, e.g.
-    // connection refused/timeout) so /config/flashsale can show exactly what happened, not
+    // connection refused/timeout) so /config/admin/flashsale can show exactly what happened, not
     // just a summary.
     lastFlashSalePollHttpCode = code;
     String body = code > 0 ? http.getString() : http.errorToString(code);
@@ -3624,7 +3624,7 @@ static void handleConfigUpdateCheckPost() {
     wm.server->send(302, "text/plain", "");
 }
 
-// Human-readable summary of lastFlashSalePollStatus/currentFlashSale for the /config/flashsale
+// Human-readable summary of lastFlashSalePollStatus/currentFlashSale for the /config/admin/flashsale
 // page — same "surface exactly why nothing happened" idea as the update page's skipped/failed
 // banners above.
 static String flashSalePollStatusText() {
