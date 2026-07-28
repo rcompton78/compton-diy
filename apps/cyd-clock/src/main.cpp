@@ -4126,10 +4126,20 @@ static void handleConfigDressPost() {
         changed = true;
     }
 
+    // A stuffy is one physical toy — the left (drawPeeking/drawFull) and right-arm
+    // (drawHeld/drawHeldPeeking, DIY-64) slots are separate equip choices but must name
+    // different stuffies. Both slots are resolved into local variables first — without
+    // touching configMgr.config() — so the conflict check below can reject before anything
+    // is mutated. Committing straight into configMgr.config() as each slot resolved (as this
+    // used to) meant a rejected request could still leave the in-memory config (which
+    // rendering reads live) holding the same stuffy on both arms, since the 400 return skips
+    // configMgr.save() but not the earlier writes.
+    int newStuffy = configMgr.config().equippedStuffy;
+    bool stuffyChanged = false;
     String stuffyId = wm.server->arg("stuffy");
     if (stuffyId == "none") {
-        configMgr.config().equippedStuffy = EQUIP_NONE;
-        changed = true;
+        newStuffy = EQUIP_NONE;
+        stuffyChanged = true;
     } else if (stuffyId.length() > 0) {
         int idx = -1;
         for (int i = 0; i < STUFFY_COUNT; i++) {
@@ -4139,14 +4149,16 @@ static void handleConfigDressPost() {
             wm.server->send(400, "text/plain", "Invalid selection");
             return;
         }
-        configMgr.config().equippedStuffy = idx;
-        changed = true;
+        newStuffy = idx;
+        stuffyChanged = true;
     }
 
+    int newStuffyRight = configMgr.config().equippedStuffyRight;
+    bool stuffyRightChanged = false;
     String stuffyRightId = wm.server->arg("stuffyRight");
     if (stuffyRightId == "none") {
-        configMgr.config().equippedStuffyRight = EQUIP_NONE;
-        changed = true;
+        newStuffyRight = EQUIP_NONE;
+        stuffyRightChanged = true;
     } else if (stuffyRightId.length() > 0) {
         if (!configMgr.config().rightArmSlotUnlocked) {
             wm.server->send(400, "text/plain", "Right arm slot not unlocked");
@@ -4160,20 +4172,17 @@ static void handleConfigDressPost() {
             wm.server->send(400, "text/plain", "Invalid selection");
             return;
         }
-        configMgr.config().equippedStuffyRight = idx;
-        changed = true;
+        newStuffyRight = idx;
+        stuffyRightChanged = true;
     }
 
-    // A stuffy is one physical toy — the left (drawPeeking/drawFull) and right-arm
-    // (drawHeld/drawHeldPeeking, DIY-64) slots are separate equip choices but must name
-    // different stuffies. Checked after both slots above are resolved so it covers every
-    // combination: both fields submitted together, or just one field submitted against the
-    // other slot's already-equipped (unchanged) value.
-    if (configMgr.config().equippedStuffy != EQUIP_NONE &&
-        configMgr.config().equippedStuffy == configMgr.config().equippedStuffyRight) {
+    if (newStuffy != EQUIP_NONE && newStuffy == newStuffyRight) {
         wm.server->send(400, "text/plain", "Can't equip the same stuffy on both arms");
         return;
     }
+
+    if (stuffyChanged)      { configMgr.config().equippedStuffy      = newStuffy;      changed = true; }
+    if (stuffyRightChanged) { configMgr.config().equippedStuffyRight = newStuffyRight; changed = true; }
 
     String roomThemeId = wm.server->arg("roomTheme");
     if (roomThemeId == "none") {
