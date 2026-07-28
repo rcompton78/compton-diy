@@ -4176,7 +4176,12 @@ static void handleConfigDressPost() {
         stuffyRightChanged = true;
     }
 
-    if (newStuffy != EQUIP_NONE && newStuffy == newStuffyRight) {
+    // Only enforced when this request actually touched a stuffy slot — a config from before
+    // this guard existed could already have the same stuffy on both arms, and an unrelated
+    // field change (e.g. blanket color) shouldn't 400 out just because that pre-existing state
+    // happens to conflict.
+    if ((stuffyChanged || stuffyRightChanged) &&
+        newStuffy != EQUIP_NONE && newStuffy == newStuffyRight) {
         wm.server->send(400, "text/plain", "Can't equip the same stuffy on both arms");
         return;
     }
