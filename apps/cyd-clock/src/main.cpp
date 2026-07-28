@@ -2334,16 +2334,29 @@ static int64_t parseIso8601ToLocalStamp(const char* iso) {
 
 // Shared with assertStoreIdsUnique() below and fetchFlashSale()'s unknown-item guard — collects
 // every purchasable store item's id (every catalog's id column, plus the one non-catalog item,
-// "right_arm_slot") into `ids`. Returns the count written.
+// "right_arm_slot") into `ids`, which the caller must size to at least `cap` entries. Returns
+// the count written. `cap` is checked on every write rather than trusted from the caller — every
+// call site below sizes its buffer via STORE_ITEM_ID_COUNT, which is kept in sync by
+// construction (it's the same catalog counts summed here), but if a future catalog is added or
+// grown without updating it, this halts immediately instead of silently overrunning the
+// caller's stack buffer.
 static constexpr int STORE_ITEM_ID_COUNT = CAT_COLOR_COUNT + ACCESSORY_COUNT + STUFFY_COUNT + BLANKET_COLOR_COUNT + ROOM_THEME_COUNT + 1;
-static int collectStoreItemIds(const char** ids) {
+static int collectStoreItemIds(const char** ids, int cap) {
     int n = 0;
-    for (int i = 0; i < CAT_COLOR_COUNT; i++) ids[n++] = CAT_COLORS[i].id;
-    for (int i = 0; i < ACCESSORY_COUNT; i++) ids[n++] = ACCESSORIES[i].id;
-    for (int i = 0; i < STUFFY_COUNT; i++) ids[n++] = STUFFIES[i].id;
-    for (int i = 0; i < BLANKET_COLOR_COUNT; i++) ids[n++] = BLANKET_COLORS[i].id;
-    for (int i = 0; i < ROOM_THEME_COUNT; i++) ids[n++] = ROOM_THEMES[i].id;
-    ids[n++] = "right_arm_slot";
+    auto push = [&](const char* id) {
+        if (n >= cap) {
+            Serial.println("FATAL: collectStoreItemIds() overran its capacity — a catalog was added/grown without updating STORE_ITEM_ID_COUNT");
+            Serial.flush();
+            abort();
+        }
+        ids[n++] = id;
+    };
+    for (int i = 0; i < CAT_COLOR_COUNT; i++) push(CAT_COLORS[i].id);
+    for (int i = 0; i < ACCESSORY_COUNT; i++) push(ACCESSORIES[i].id);
+    for (int i = 0; i < STUFFY_COUNT; i++) push(STUFFIES[i].id);
+    for (int i = 0; i < BLANKET_COLOR_COUNT; i++) push(BLANKET_COLORS[i].id);
+    for (int i = 0; i < ROOM_THEME_COUNT; i++) push(ROOM_THEMES[i].id);
+    push("right_arm_slot");
     return n;
 }
 
@@ -2354,7 +2367,7 @@ static int collectStoreItemIds(const char** ids) {
 // while still visually announcing itself).
 static bool isKnownStoreItemId(const char* id) {
     const char* ids[STORE_ITEM_ID_COUNT];
-    int n = collectStoreItemIds(ids);
+    int n = collectStoreItemIds(ids, STORE_ITEM_ID_COUNT);
     for (int i = 0; i < n; i++) {
         if (strcmp(ids[i], id) == 0) return true;
     }
@@ -2507,7 +2520,7 @@ static uint32_t flashSalePrice(const char* itemId, uint32_t defaultCost) {
 // cheap O(n^2) over a handful of entries, run once at startup.
 static void assertStoreIdsUnique() {
     const char* ids[STORE_ITEM_ID_COUNT];
-    int n = collectStoreItemIds(ids);
+    int n = collectStoreItemIds(ids, STORE_ITEM_ID_COUNT);
 
     for (int i = 0; i < n; i++) {
         for (int j = i + 1; j < n; j++) {
@@ -3932,6 +3945,40 @@ static void handleConfigStorePost() {
     wm.server->send(302, "text/plain", "");
 }
 
+// Shared by the left ("stuffy") and right-arm ("stuffyRight") slot pickers on the dressing
+// room page — the two lists are identical apart from which field name they post, which
+// slot's equipped index they check/highlight, and how they describe the other arm's
+// conflicting pick. `otherArmIdx` is the *other* slot's currently-equipped index (< 0 if
+// none): matching it greys out and disables that option here, so the user can't select a
+// stuffy that's already on the other arm in the first place — see the
+// stuffyChanged/stuffyRightChanged guard in handleConfigDressPost() below, which this keeps
+// the user from ever needing to hit.
+static String buildStuffyRadioOptions(const char* fieldName, int equippedIdx, int otherArmIdx, const char* otherArmLabel) {
+    uint8_t ownedStuffies = configMgr.config().ownedStuffies;
+    String options = "<label class='pick'><input type='radio' name='";
+    options += fieldName;
+    options += "' value='none'";
+    if (equippedIdx < 0) options += " checked";
+    options += "> None</label>";
+    for (int i = 0; i < STUFFY_COUNT; i++) {
+        if (!(ownedStuffies & (1 << i))) continue;
+        bool onOtherArm = (i == otherArmIdx);
+        options += "<label class='pick";
+        if (onOtherArm) options += " disabled";
+        options += "'><input type='radio' name='";
+        options += fieldName;
+        options += "' value='";
+        options += STUFFIES[i].id;
+        options += "'";
+        if (i == equippedIdx) options += " checked";
+        if (onOtherArm) options += " disabled";
+        options += "> " + String(STUFFIES[i].label);
+        if (onOtherArm) { options += " (on "; options += otherArmLabel; options += " arm)"; }
+        options += "</label>";
+    }
+    return options;
+}
+
 static void handleConfigDressGet() {
     String page = String(FPSTR(CONFIG_DRESS_HTML));
     page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
@@ -3964,26 +4011,7 @@ static void handleConfigDressGet() {
     if (ownedStuffies == 0) {
         stuffyOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
     } else {
-        stuffyOptions += "<label class='pick'><input type='radio' name='stuffy' value='none'";
-        if (equippedStuffyIdx < 0) stuffyOptions += " checked";
-        stuffyOptions += "> None</label>";
-        for (int i = 0; i < STUFFY_COUNT; i++) {
-            if (!(ownedStuffies & (1 << i))) continue;
-            // Greyed out and disabled, not just server-rejected, when this stuffy is already
-            // equipped on the other arm — see the equippedStuffy==equippedStuffyRight guard in
-            // the /save-config/dress handler below, which this keeps the user from ever hitting.
-            bool onOtherArm = (i == equippedStuffyRightIdx);
-            stuffyOptions += "<label class='pick";
-            if (onOtherArm) stuffyOptions += " disabled";
-            stuffyOptions += "'><input type='radio' name='stuffy' value='";
-            stuffyOptions += STUFFIES[i].id;
-            stuffyOptions += "'";
-            if (i == equippedStuffyIdx) stuffyOptions += " checked";
-            if (onOtherArm) stuffyOptions += " disabled";
-            stuffyOptions += "> " + String(STUFFIES[i].label);
-            if (onOtherArm) stuffyOptions += " (on right arm)";
-            stuffyOptions += "</label>";
-        }
+        stuffyOptions = buildStuffyRadioOptions("stuffy", equippedStuffyIdx, equippedStuffyRightIdx, "right");
     }
     page.replace("%%STUFFY_OPTIONS%%", stuffyOptions);
 
@@ -3993,23 +4021,7 @@ static void handleConfigDressGet() {
     } else if (ownedStuffies == 0) {
         stuffyRightOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
     } else {
-        stuffyRightOptions += "<label class='pick'><input type='radio' name='stuffyRight' value='none'";
-        if (equippedStuffyRightIdx < 0) stuffyRightOptions += " checked";
-        stuffyRightOptions += "> None</label>";
-        for (int i = 0; i < STUFFY_COUNT; i++) {
-            if (!(ownedStuffies & (1 << i))) continue;
-            bool onOtherArm = (i == equippedStuffyIdx);
-            stuffyRightOptions += "<label class='pick";
-            if (onOtherArm) stuffyRightOptions += " disabled";
-            stuffyRightOptions += "'><input type='radio' name='stuffyRight' value='";
-            stuffyRightOptions += STUFFIES[i].id;
-            stuffyRightOptions += "'";
-            if (i == equippedStuffyRightIdx) stuffyRightOptions += " checked";
-            if (onOtherArm) stuffyRightOptions += " disabled";
-            stuffyRightOptions += "> " + String(STUFFIES[i].label);
-            if (onOtherArm) stuffyRightOptions += " (on left arm)";
-            stuffyRightOptions += "</label>";
-        }
+        stuffyRightOptions = buildStuffyRadioOptions("stuffyRight", equippedStuffyRightIdx, equippedStuffyIdx, "left");
     }
     page.replace("%%STUFFY_RIGHT_OPTIONS%%", stuffyRightOptions);
 
