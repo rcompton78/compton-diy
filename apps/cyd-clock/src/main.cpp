@@ -79,6 +79,7 @@ static constexpr uint32_t STORE_COST_BUNNY    = 60;
 static constexpr uint32_t STORE_COST_SQUIRREL = 150;
 static constexpr uint32_t STORE_COST_PENGUIN  = 150;
 static constexpr uint32_t STORE_COST_UNICORN  = 150;
+static constexpr uint32_t STORE_COST_SNOWMAN  = 150;
 static constexpr uint32_t STORE_COST_BLANKET  = 40;  // per blanket color
 static constexpr uint32_t STORE_COST_ROOM_THEME = 40;  // per flat-color room theme, matches blanket pricing
 static constexpr uint32_t STORE_COST_STARRY_NIGHT = 200;  // premium: has real art (moon + stars), not just a flat fill
@@ -126,6 +127,11 @@ static constexpr uint16_t C_UNICORN      = TFT_WHITE;  // unicorn peeking out be
 static constexpr uint16_t C_UNICORN_HORN = 0xFC18;  // unicorn horn (pink) — kept as its own constant
                                                      // rather than reusing C_PINK, so retuning one
                                                      // doesn't shift the other
+static constexpr uint16_t C_SNOWMAN        = 0xDEFB;  // snowman peeking out beside the head (pale snow-blue, distinct from plain TFT_WHITE)
+static constexpr uint16_t C_SNOWMAN_COAL   = 0x0000;  // snowman hat/eyes/buttons (coal black)
+static constexpr uint16_t C_SNOWMAN_CARROT = 0xFD20;  // snowman nose (orange) — same hex as C_FISH/C_PENGUIN_BEAK by
+                                                       // coincidence, not intentional reuse; kept as its own constant
+                                                       // so retuning one doesn't silently shift the other two
 
 // Blanket color catalog — each color is purchased separately in the store and can be
 // equipped independently in the dressing room. `id` is the stable identifier used in
@@ -245,16 +251,20 @@ static void drawPenguinPeeking(int cx, int cy, uint16_t accentColor);
 static void drawPenguinFull(int cx, int cy, uint16_t accentColor);
 static void drawUnicornPeeking(int cx, int cy, uint16_t accentColor);
 static void drawUnicornFull(int cx, int cy, uint16_t accentColor);
+static void drawSnowmanPeeking(int cx, int cy, uint16_t accentColor);
+static void drawSnowmanFull(int cx, int cy, uint16_t accentColor);
 static void drawTeddyHeld(int cx, int cy, uint16_t accentColor);
 static void drawBunnyHeld(int cx, int cy, uint16_t accentColor);
 static void drawSquirrelHeld(int cx, int cy, uint16_t accentColor);
 static void drawPenguinHeld(int cx, int cy, uint16_t accentColor);
 static void drawUnicornHeld(int cx, int cy, uint16_t accentColor);
+static void drawSnowmanHeld(int cx, int cy, uint16_t accentColor);
 static void drawTeddyHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawBunnyHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawSquirrelHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawPenguinHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawUnicornHeldPeeking(int cx, int cy, uint16_t accentColor);
+static void drawSnowmanHeldPeeking(int cx, int cy, uint16_t accentColor);
 
 // Stuffy catalog — same purchase/equip model as blanket colors, so more stuffies can be
 // added later without changing the store/dressing-room plumbing. `id` is the stable
@@ -286,6 +296,7 @@ static constexpr Stuffy STUFFIES[] = {
     {"squirrel", "Red Squirrel", STORE_COST_SQUIRREL, drawSquirrelPeeking, drawSquirrelFull, drawSquirrelHeld, drawSquirrelHeldPeeking},
     {"penguin",  "Penguin",      STORE_COST_PENGUIN,  drawPenguinPeeking,  drawPenguinFull,  drawPenguinHeld,  drawPenguinHeldPeeking},
     {"unicorn",  "White Unicorn", STORE_COST_UNICORN, drawUnicornPeeking,  drawUnicornFull,  drawUnicornHeld, drawUnicornHeldPeeking},
+    {"snowman",  "Snowman",      STORE_COST_SNOWMAN,  drawSnowmanPeeking,  drawSnowmanFull,  drawSnowmanHeld, drawSnowmanHeldPeeking},
 };
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
 
@@ -1083,6 +1094,63 @@ static void drawUnicornHeld(int cx, int cy, uint16_t accentColor) {
 static void drawUnicornHeldPeeking(int cx, int cy, uint16_t accentColor) {
     int bx = cx + 40, by = cy - 6;
     drawUnicornHead(bx, by, accentColor);
+}
+
+// Shared hat/head/face art reused by both snowman variants below (DIY-89). Body stays a
+// fixed C_SNOWMAN (snow-blue) regardless of blanket, same as C_UNICORN/C_PENGUIN — the
+// scarf is the one detail that takes the accent color, so the snowman doesn't visually
+// vanish into a matching white/pale blanket the way an all-fixed-white silhouette would.
+static void drawSnowmanHead(int bx, int by, uint16_t scarfColor) {
+    tft.fillRect(bx - 8, by - 13, 16, 5, C_SNOWMAN_COAL);        // hat brim — bottom edge overlaps into the head circle below so there's no gap between hat and head
+    tft.fillRect(bx - 5, by - 21, 10, 8, C_SNOWMAN_COAL);        // hat body
+    tft.fillCircle(bx, by, 9, C_SNOWMAN);                        // head — painted after the hat, so it cleanly covers the brim's center while leaving the brim's edges visible as a rim
+    tft.fillRect(bx - 9, by + 6, 18, 4, scarfColor);              // scarf
+    tft.fillCircle(bx - 3, by - 2, 1, C_SNOWMAN_COAL);            // left eye
+    tft.fillCircle(bx + 3, by - 2, 1, C_SNOWMAN_COAL);            // right eye
+    tft.fillTriangle(bx, by + 1, bx, by + 3, bx + 5, by + 2, C_SNOWMAN_CARROT);  // carrot nose
+    tft.fillCircle(bx - 3, by + 3, 1, C_SNOWMAN_COAL);            // left mouth coal
+    tft.fillCircle(bx,     by + 4, 1, C_SNOWMAN_COAL);            // center mouth coal
+    tft.fillCircle(bx + 3, by + 3, 1, C_SNOWMAN_COAL);            // right mouth coal
+}
+
+// Snowman peeking out beside the head, tucked into the blanket's top edge —
+// only reads correctly when the blanket is also owned to tuck behind.
+static void drawSnowmanPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 40, by = cy - 6;
+    drawSnowmanHead(bx, by, accentColor);
+}
+
+// Body + buttons shared by drawSnowmanFull()/drawSnowmanHeld() below — unlike teddy (whose
+// feet differ by side), the snowman's body is radially symmetric, so left and right poses
+// need no mirroring beyond the (bx, by) anchor drawSnowmanHead() already receives.
+static void drawSnowmanBody(int bx, int by) {
+    tft.fillCircle(bx, by + 21, 12, C_SNOWMAN);                   // body
+    tft.fillCircle(bx, by + 15, 1, C_SNOWMAN_COAL);               // top button
+    tft.fillCircle(bx, by + 21, 1, C_SNOWMAN_COAL);               // middle button
+    tft.fillCircle(bx, by + 27, 1, C_SNOWMAN_COAL);               // bottom button
+}
+
+// Full-body snowman sitting beside the cat — used when the snowman is owned without the
+// blanket, since there's no blanket edge to tuck a lone head behind. Buttons stay fixed to
+// C_SNOWMAN_COAL rather than the accent color, matching the fixed-detail convention the
+// other stuffies use for their non-accent features.
+static void drawSnowmanFull(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 38, by = cy - 8;
+    drawSnowmanHead(bx, by, accentColor);
+    drawSnowmanBody(bx, by);
+}
+
+// Right-arm slot pose (DIY-64) — see drawTeddyHeld() for placement rationale.
+static void drawSnowmanHeld(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 38, by = cy - 8;
+    drawSnowmanHead(bx, by, accentColor);
+    drawSnowmanBody(bx, by);
+}
+
+// Night-only right-arm variant (DIY-64) — see drawTeddyHeldPeeking() for rationale.
+static void drawSnowmanHeldPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 40, by = cy - 6;
+    drawSnowmanHead(bx, by, accentColor);
 }
 
 // Deeply-closed, sleepy eyes for the sleep-window peek — thinner and gently curled at
@@ -2211,7 +2279,7 @@ unsigned long lastFlashSalePoll = 0;
 
 // Surfaced on /config/admin/flashsale so a local dev/test setup (see below) doesn't have to guess
 // why nothing happened — mirrors lastUpdateCheckFailed/lastUpdateCheckSkipped's role for OTA.
-enum class FlashSalePollStatus { NeverPolled, Ok, NoActiveSale, Failed, SkippedNoCaCert, SkippedNoUrl };
+enum class FlashSalePollStatus { NeverPolled, Ok, NoActiveSale, Failed, SkippedNoCaCert, SkippedNoUrl, SkippedUnknownItem };
 static FlashSalePollStatus lastFlashSalePollStatus = FlashSalePollStatus::NeverPolled;
 static String lastFlashSalePollDetail;  // human-readable extra info: HTTP code, parse error, item id
 static int lastFlashSalePollHttpCode = 0;  // 0 = no request was actually made (e.g. skipped)
@@ -2268,6 +2336,48 @@ static int64_t parseIso8601ToLocalStamp(const char* iso) {
          + (int64_t)lt->tm_mday          * 10000LL
          + (int64_t)lt->tm_hour          * 100LL
          + (int64_t)lt->tm_min;
+}
+
+// Shared with assertStoreIdsUnique() below and fetchFlashSale()'s unknown-item guard — collects
+// every purchasable store item's id (every catalog's id column, plus the one non-catalog item,
+// "right_arm_slot") into `ids`, which the caller must size to at least `cap` entries. Returns
+// the count written. `cap` is checked on every write rather than trusted from the caller — every
+// call site below sizes its buffer via STORE_ITEM_ID_COUNT, which is kept in sync by
+// construction (it's the same catalog counts summed here), but if a future catalog is added or
+// grown without updating it, this halts immediately instead of silently overrunning the
+// caller's stack buffer.
+static constexpr int STORE_ITEM_ID_COUNT = CAT_COLOR_COUNT + ACCESSORY_COUNT + STUFFY_COUNT + BLANKET_COLOR_COUNT + ROOM_THEME_COUNT + 1;
+static int collectStoreItemIds(const char** ids, int cap) {
+    int n = 0;
+    auto push = [&](const char* id) {
+        if (n >= cap) {
+            Serial.println("FATAL: collectStoreItemIds() overran its capacity — a catalog was added/grown without updating STORE_ITEM_ID_COUNT");
+            Serial.flush();
+            abort();
+        }
+        ids[n++] = id;
+    };
+    for (int i = 0; i < CAT_COLOR_COUNT; i++) push(CAT_COLORS[i].id);
+    for (int i = 0; i < ACCESSORY_COUNT; i++) push(ACCESSORIES[i].id);
+    for (int i = 0; i < STUFFY_COUNT; i++) push(STUFFIES[i].id);
+    for (int i = 0; i < BLANKET_COLOR_COUNT; i++) push(BLANKET_COLORS[i].id);
+    for (int i = 0; i < ROOM_THEME_COUNT; i++) push(ROOM_THEMES[i].id);
+    push("right_arm_slot");
+    return n;
+}
+
+// True if `id` matches some real, purchasable store item — used by fetchFlashSale() to reject a
+// flash sale for an item id that doesn't exist (typo, removed item, catalog drift) rather than
+// letting the device show an active "SALE!" flash for an item that can never actually go on
+// sale (flashSalePrice() would never match it either, so the sale would silently do nothing
+// while still visually announcing itself).
+static bool isKnownStoreItemId(const char* id) {
+    const char* ids[STORE_ITEM_ID_COUNT];
+    int n = collectStoreItemIds(ids, STORE_ITEM_ID_COUNT);
+    for (int i = 0; i < n; i++) {
+        if (strcmp(ids[i], id) == 0) return true;
+    }
+    return false;
 }
 
 // Polls cat-buddy-api for the current flash sale and refreshes currentFlashSale. A 404 (no
@@ -2369,6 +2479,22 @@ static void fetchFlashSale() {
         lastFlashSalePollDetail = "malformed response (missing/unparseable itemId, startAt, or endAt)";
         return;
     }
+    // Safety net (DIY-89 piggyback): the response parsed cleanly but names an item that doesn't
+    // exist in any catalog. Unlike the failure paths above (network error, bad JSON), this is a
+    // fully-formed, successfully-parsed response, so it's treated as authoritative rather than
+    // left alone for a retry — explicitly invalidating currentFlashSale skips the sale outright
+    // instead of leaving a stale sale active or showing a "SALE!" flash for an item that can
+    // never actually discount (flashSalePrice() would never match it either).
+    if (!isKnownStoreItemId(itemId)) {
+        Serial.printf("flash-sale poll: unknown item id \"%s\", skipping sale\n", itemId);
+        // Not FlashSalePollStatus::Failed — the poll itself succeeded (HTTP 200, valid JSON);
+        // it just named an item that doesn't exist. Distinguishing the two keeps
+        // /config/admin/flashsale from reporting a genuinely healthy poll as "failed".
+        lastFlashSalePollStatus = FlashSalePollStatus::SkippedUnknownItem;
+        lastFlashSalePollDetail = String("unknown item id: ") + itemId;
+        currentFlashSale.valid = false;
+        return;
+    }
 
     strlcpy(currentFlashSale.itemId, itemId, sizeof(currentFlashSale.itemId));
     currentFlashSale.start = start;
@@ -2398,18 +2524,12 @@ static uint32_t flashSalePrice(const char* itemId, uint32_t defaultCost) {
 }
 
 // flashSalePrice() matches a sale's itemId against every store category independently, so
-// two catalogs sharing an id string would both silently go on sale together. Walks every
-// catalog's id column (plus the one non-catalog item, "right_arm_slot") and halts at boot
-// if any duplicate is found — cheap O(n^2) over a handful of entries, run once at startup.
+// two catalogs sharing an id string would both silently go on sale together. Walks
+// collectStoreItemIds()'s combined id list and halts at boot if any duplicate is found —
+// cheap O(n^2) over a handful of entries, run once at startup.
 static void assertStoreIdsUnique() {
-    const char* ids[CAT_COLOR_COUNT + ACCESSORY_COUNT + STUFFY_COUNT + BLANKET_COLOR_COUNT + ROOM_THEME_COUNT + 1];
-    int n = 0;
-    for (int i = 0; i < CAT_COLOR_COUNT; i++) ids[n++] = CAT_COLORS[i].id;
-    for (int i = 0; i < ACCESSORY_COUNT; i++) ids[n++] = ACCESSORIES[i].id;
-    for (int i = 0; i < STUFFY_COUNT; i++) ids[n++] = STUFFIES[i].id;
-    for (int i = 0; i < BLANKET_COLOR_COUNT; i++) ids[n++] = BLANKET_COLORS[i].id;
-    for (int i = 0; i < ROOM_THEME_COUNT; i++) ids[n++] = ROOM_THEMES[i].id;
-    ids[n++] = "right_arm_slot";
+    const char* ids[STORE_ITEM_ID_COUNT];
+    int n = collectStoreItemIds(ids, STORE_ITEM_ID_COUNT);
 
     for (int i = 0; i < n; i++) {
         for (int j = i + 1; j < n; j++) {
@@ -2564,6 +2684,8 @@ button:hover{background:#005ec4}
 .err{background:#631}
 .pick{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:1rem;color:#ddd}
 .pick input{display:inline-block;width:auto;margin:0}
+.pick.disabled{color:#666}
+.pick.disabled input{cursor:not-allowed}
 .medal{width:64px;height:64px;border-radius:50%;display:flex;align-items:center;justify-content:center;
   font-size:1.6rem;font-weight:bold;color:#000;margin:0 auto 14px;box-shadow:inset 0 0 0 5px rgba(0,0,0,.25)}
 )css";
@@ -3649,6 +3771,8 @@ static String flashSalePollStatusText() {
             return "Skipped — the configured URL is https:// but no CA is pinned in this firmware build (CAT_BUDDY_API_CA_CERT). Use a http:// URL for local testing instead.";
         case FlashSalePollStatus::Failed:
             return "Last poll failed: " + htmlEscape(lastFlashSalePollDetail);
+        case FlashSalePollStatus::SkippedUnknownItem:
+            return "Last poll succeeded, but the sale was skipped — " + htmlEscape(lastFlashSalePollDetail) + ".";
         case FlashSalePollStatus::NoActiveSale:
             return "Last poll succeeded — no active sale right now.";
         case FlashSalePollStatus::Ok: {
@@ -3832,6 +3956,40 @@ static void handleConfigStorePost() {
     wm.server->send(302, "text/plain", "");
 }
 
+// Shared by the left ("stuffy") and right-arm ("stuffyRight") slot pickers on the dressing
+// room page — the two lists are identical apart from which field name they post, which
+// slot's equipped index they check/highlight, and how they describe the other arm's
+// conflicting pick. `otherArmIdx` is the *other* slot's currently-equipped index (< 0 if
+// none): matching it greys out and disables that option here, so the user can't select a
+// stuffy that's already on the other arm in the first place — see the
+// stuffyChanged/stuffyRightChanged guard in handleConfigDressPost() below, which this keeps
+// the user from ever needing to hit.
+static String buildStuffyRadioOptions(const char* fieldName, int equippedIdx, int otherArmIdx, const char* otherArmLabel) {
+    uint8_t ownedStuffies = configMgr.config().ownedStuffies;
+    String options = "<label class='pick'><input type='radio' name='";
+    options += fieldName;
+    options += "' value='none'";
+    if (equippedIdx < 0) options += " checked";
+    options += "> None</label>";
+    for (int i = 0; i < STUFFY_COUNT; i++) {
+        if (!(ownedStuffies & (1 << i))) continue;
+        bool onOtherArm = (i == otherArmIdx);
+        options += "<label class='pick";
+        if (onOtherArm) options += " disabled";
+        options += "'><input type='radio' name='";
+        options += fieldName;
+        options += "' value='";
+        options += STUFFIES[i].id;
+        options += "'";
+        if (i == equippedIdx) options += " checked";
+        if (onOtherArm) options += " disabled";
+        options += "> " + String(STUFFIES[i].label);
+        if (onOtherArm) { options += " (on "; options += otherArmLabel; options += " arm)"; }
+        options += "</label>";
+    }
+    return options;
+}
+
 static void handleConfigDressGet() {
     String page = String(FPSTR(CONFIG_DRESS_HTML));
     page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
@@ -3859,42 +4017,22 @@ static void handleConfigDressGet() {
 
     uint8_t ownedStuffies = configMgr.config().ownedStuffies;
     int equippedStuffyIdx = equippedStuffyIndex();
+    int equippedStuffyRightIdx = equippedStuffyRightIndex();
     String stuffyOptions = "";
     if (ownedStuffies == 0) {
         stuffyOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
     } else {
-        stuffyOptions += "<label class='pick'><input type='radio' name='stuffy' value='none'";
-        if (equippedStuffyIdx < 0) stuffyOptions += " checked";
-        stuffyOptions += "> None</label>";
-        for (int i = 0; i < STUFFY_COUNT; i++) {
-            if (!(ownedStuffies & (1 << i))) continue;
-            stuffyOptions += "<label class='pick'><input type='radio' name='stuffy' value='";
-            stuffyOptions += STUFFIES[i].id;
-            stuffyOptions += "'";
-            if (i == equippedStuffyIdx) stuffyOptions += " checked";
-            stuffyOptions += "> " + String(STUFFIES[i].label) + "</label>";
-        }
+        stuffyOptions = buildStuffyRadioOptions("stuffy", equippedStuffyIdx, equippedStuffyRightIdx, "right");
     }
     page.replace("%%STUFFY_OPTIONS%%", stuffyOptions);
 
-    int equippedStuffyRightIdx = equippedStuffyRightIndex();
     String stuffyRightOptions = "";
     if (!configMgr.config().rightArmSlotUnlocked) {
         stuffyRightOptions = "<p style='color:#888'>Not unlocked yet — visit the Store.</p>";
     } else if (ownedStuffies == 0) {
         stuffyRightOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
     } else {
-        stuffyRightOptions += "<label class='pick'><input type='radio' name='stuffyRight' value='none'";
-        if (equippedStuffyRightIdx < 0) stuffyRightOptions += " checked";
-        stuffyRightOptions += "> None</label>";
-        for (int i = 0; i < STUFFY_COUNT; i++) {
-            if (!(ownedStuffies & (1 << i))) continue;
-            stuffyRightOptions += "<label class='pick'><input type='radio' name='stuffyRight' value='";
-            stuffyRightOptions += STUFFIES[i].id;
-            stuffyRightOptions += "'";
-            if (i == equippedStuffyRightIdx) stuffyRightOptions += " checked";
-            stuffyRightOptions += "> " + String(STUFFIES[i].label) + "</label>";
-        }
+        stuffyRightOptions = buildStuffyRadioOptions("stuffyRight", equippedStuffyRightIdx, equippedStuffyIdx, "left");
     }
     page.replace("%%STUFFY_RIGHT_OPTIONS%%", stuffyRightOptions);
 
@@ -4011,10 +4149,20 @@ static void handleConfigDressPost() {
         changed = true;
     }
 
+    // A stuffy is one physical toy — the left (drawPeeking/drawFull) and right-arm
+    // (drawHeld/drawHeldPeeking, DIY-64) slots are separate equip choices but must name
+    // different stuffies. Both slots are resolved into local variables first — without
+    // touching configMgr.config() — so the conflict check below can reject before anything
+    // is mutated. Committing straight into configMgr.config() as each slot resolved (as this
+    // used to) meant a rejected request could still leave the in-memory config (which
+    // rendering reads live) holding the same stuffy on both arms, since the 400 return skips
+    // configMgr.save() but not the earlier writes.
+    int newStuffy = configMgr.config().equippedStuffy;
+    bool stuffyChanged = false;
     String stuffyId = wm.server->arg("stuffy");
     if (stuffyId == "none") {
-        configMgr.config().equippedStuffy = EQUIP_NONE;
-        changed = true;
+        newStuffy = EQUIP_NONE;
+        stuffyChanged = true;
     } else if (stuffyId.length() > 0) {
         int idx = -1;
         for (int i = 0; i < STUFFY_COUNT; i++) {
@@ -4024,14 +4172,16 @@ static void handleConfigDressPost() {
             wm.server->send(400, "text/plain", "Invalid selection");
             return;
         }
-        configMgr.config().equippedStuffy = idx;
-        changed = true;
+        newStuffy = idx;
+        stuffyChanged = true;
     }
 
+    int newStuffyRight = configMgr.config().equippedStuffyRight;
+    bool stuffyRightChanged = false;
     String stuffyRightId = wm.server->arg("stuffyRight");
     if (stuffyRightId == "none") {
-        configMgr.config().equippedStuffyRight = EQUIP_NONE;
-        changed = true;
+        newStuffyRight = EQUIP_NONE;
+        stuffyRightChanged = true;
     } else if (stuffyRightId.length() > 0) {
         if (!configMgr.config().rightArmSlotUnlocked) {
             wm.server->send(400, "text/plain", "Right arm slot not unlocked");
@@ -4045,9 +4195,22 @@ static void handleConfigDressPost() {
             wm.server->send(400, "text/plain", "Invalid selection");
             return;
         }
-        configMgr.config().equippedStuffyRight = idx;
-        changed = true;
+        newStuffyRight = idx;
+        stuffyRightChanged = true;
     }
+
+    // Only enforced when this request actually touched a stuffy slot — a config from before
+    // this guard existed could already have the same stuffy on both arms, and an unrelated
+    // field change (e.g. blanket color) shouldn't 400 out just because that pre-existing state
+    // happens to conflict.
+    if ((stuffyChanged || stuffyRightChanged) &&
+        newStuffy != EQUIP_NONE && newStuffy == newStuffyRight) {
+        wm.server->send(400, "text/plain", "Can't equip the same stuffy on both arms");
+        return;
+    }
+
+    if (stuffyChanged)      { configMgr.config().equippedStuffy      = newStuffy;      changed = true; }
+    if (stuffyRightChanged) { configMgr.config().equippedStuffyRight = newStuffyRight; changed = true; }
 
     String roomThemeId = wm.server->arg("roomTheme");
     if (roomThemeId == "none") {
