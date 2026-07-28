@@ -1,4 +1,3 @@
-// DIY-60 CI test marker (phase 1, self-hosted runner) — safe to remove after verifying the release pipeline
 #include <Arduino.h>
 #include <SPI.h>
 #include <TFT_eSPI.h>
