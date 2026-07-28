@@ -1,0 +1,5 @@
+self-hosted-runner:
+  # Custom label for the home-diy self-hosted runner used by release.yml's
+  # build-and-release job (persistent Nx/PlatformIO cache on a homelab box).
+  labels:
+    - compton-diy

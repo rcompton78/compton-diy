@@ -1,4 +1,5 @@
 # Freenove ESP32-S3 CYD Immich Frame
+# DIY-60 CI test marker (phase 1, self-hosted runner) — safe to remove after verifying the release pipeline
 substitutions:
   name: "immich-frame-freenove-s3"
   friendly_name: "Immich Frame Freenove S3"
