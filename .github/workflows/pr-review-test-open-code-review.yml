@@ -1,0 +1,59 @@
+name: PR Review Test - Open Code Review (DeepSeek)
+
+# DIY-94 spike: alibaba/open-code-review publishes an official composite action, but its
+# comment-posting step keys off context.issue.number, which doesn't exist on a
+# workflow_dispatch run with no associated PR event. So this workflow reuses the action's
+# confirmed `ocr review --from --to --format json` invocation and real OCR_LLM_* env vars
+# directly, and stops after producing the JSON result (no PR comment posting attempted).
+on:
+  workflow_dispatch:
+    inputs:
+      base_ref:
+        description: 'Branch to diff the current branch against'
+        required: false
+        type: string
+        default: master
+
+jobs:
+  open-code-review-deepseek:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install open-code-review CLI
+        run: npm install -g @alibaba-group/open-code-review@latest
+
+      - name: Compute merge-base
+        env:
+          BASE_REF: ${{ inputs.base_ref }}
+        run: |
+          git fetch origin "$BASE_REF"
+          MERGE_BASE=$(git merge-base "origin/$BASE_REF" "$GITHUB_SHA")
+          echo "MERGE_BASE=$MERGE_BASE" >> "$GITHUB_ENV"
+
+      - name: Run OpenCodeReview
+        env:
+          OCR_LLM_URL: https://api.deepseek.com
+          OCR_LLM_TOKEN: ${{ secrets.DEEPSEEK_API_KEY }}
+          OCR_LLM_MODEL: deepseek-chat
+          OCR_USE_ANTHROPIC: 'false'
+        run: |
+          ocr review --from "$MERGE_BASE" --to "$GITHUB_SHA" --format json > ocr-review-result.json
+
+      - name: Show review result
+        run: cat ocr-review-result.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: open-code-review-result
+          path: ocr-review-result.json
