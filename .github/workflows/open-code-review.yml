@@ -13,5 +13,8 @@ jobs:
     # failing on a missing DEEPSEEK_API_KEY. Lives here (the caller) rather than in the
     # reusable workflow, since github.repository there wouldn't resolve to this repo.
     if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      pull-requests: write
     uses: rcompton78/gh-actions/.github/workflows/open-code-review.yml@v1
     secrets: inherit
