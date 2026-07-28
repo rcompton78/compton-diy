@@ -10,15 +10,28 @@ concurrency:
 
 jobs:
   build-and-release:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, compton-diy]
     permissions:
       contents: write
+    env:
+      NX_CACHE_DIRECTORY: /hdd/compton-diy/nx-cache
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           fetch-tags: true
           persist-credentials: false
+
+      - name: Configure git
+        run: git config --local --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Prepare persistent cache directories
+        run: |
+          mkdir -p /hdd/compton-diy "$NX_CACHE_DIRECTORY"
+          ln -sfn /hdd/compton-diy/venv-root .venv
+          ln -sfn /hdd/compton-diy/venv-espframe apps/espframe/.venv
+          ln -sfn /hdd/compton-diy/platformio-core-root .platformio-core
+          ln -sfn /hdd/compton-diy/platformio-core-espframe apps/espframe/.platformio-core
 
       - name: Compute version
         id: version
@@ -40,25 +53,32 @@ jobs:
           fi
           echo "sha=$BASE" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
       - name: Install PlatformIO
         run: |
-          pip install platformio
-          python3 -m platformio system info
+          if [ ! -x .venv/bin/python3 ]; then
+            python3 -m venv .venv
+          fi
+          .venv/bin/pip install --upgrade --quiet platformio
+          .venv/bin/python3 -m platformio system info
 
       - name: Install ESPHome
         run: |
           ESPHOME_VERSION="$(python3 -c "import json; print(json.load(open('apps/espframe/product/contract/project.json'))['esphome_version'])")"
-          pip install "esphome==$ESPHOME_VERSION"
+          CURRENT_VERSION="$(apps/espframe/.venv/bin/esphome version 2>/dev/null | awk '{print $2}')"
+          if [ "$CURRENT_VERSION" != "$ESPHOME_VERSION" ]; then
+            echo "ESPHome $CURRENT_VERSION -> $ESPHOME_VERSION: rebuilding venv"
+            rm -rf apps/espframe/.venv
+            python3.12 -m venv apps/espframe/.venv
+            apps/espframe/.venv/bin/pip install --quiet "esphome==$ESPHOME_VERSION"
+          else
+            echo "ESPHome $ESPHOME_VERSION already installed, reusing venv"
+          fi
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
         with:
           version: 10
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 20
           cache: pnpm
@@ -89,7 +109,7 @@ jobs:
         run: python3 tools/esp-flasher/generate_index.py --version="${{ steps.version.outputs.version }}"
 
       - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: dist/
 
@@ -151,4 +171,4 @@ jobs:
     steps:
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
