@@ -2198,13 +2198,13 @@ struct FlashSaleState {
 static FlashSaleState currentFlashSale;
 unsigned long lastFlashSalePoll = 0;
 
-// Surfaced on /config/flashsale so a local dev/test setup (see below) doesn't have to guess
+// Surfaced on /config/admin/flashsale so a local dev/test setup (see below) doesn't have to guess
 // why nothing happened — mirrors lastUpdateCheckFailed/lastUpdateCheckSkipped's role for OTA.
 enum class FlashSalePollStatus { NeverPolled, Ok, NoActiveSale, Failed, SkippedNoCaCert, SkippedNoUrl };
 static FlashSalePollStatus lastFlashSalePollStatus = FlashSalePollStatus::NeverPolled;
 static String lastFlashSalePollDetail;  // human-readable extra info: HTTP code, parse error, item id
 static int lastFlashSalePollHttpCode = 0;  // 0 = no request was actually made (e.g. skipped)
-static String lastFlashSalePollRawBody;    // raw HTTP response body, verbatim, for the /config/flashsale page
+static String lastFlashSalePollRawBody;    // raw HTTP response body, verbatim, for the /config/admin/flashsale page
 
 #ifdef CAT_BUDDY_API_CA_CERT
 #define CAT_BUDDY_HAS_CA_CERT 1
@@ -2318,7 +2318,7 @@ static void fetchFlashSale() {
 
     int code = http.GET();
     // Captured regardless of outcome (including negative HTTPClient error codes, e.g.
-    // connection refused/timeout) so /config/flashsale can show exactly what happened, not
+    // connection refused/timeout) so /config/admin/flashsale can show exactly what happened, not
     // just a summary.
     lastFlashSalePollHttpCode = code;
     String body = code > 0 ? http.getString() : http.errorToString(code);
@@ -2594,7 +2594,7 @@ static const char CONFIG_HOME_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <style>%%STYLE%%</style>
 </head><body>
 <a class="back" href="/">&larr; Main Menu</a>
-<h2>Cat Control Panel</h2>
+<h2 id="ccpTitle">Cat Control Panel</h2>
 <a class="nav" href="/config/cat">Cat</a>
 <a class="nav" href="/config/city">City (weather &amp; timezone)</a>
 <a class="nav" href="/config/store">Store</a>
@@ -2602,7 +2602,38 @@ static const char CONFIG_HOME_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <a class="nav" href="/config/badges">Badges</a>
 <a class="nav" href="/config/backup">Backup</a>
 <a class="nav" href="/config/update">Firmware Update</a>
-<a class="nav" href="/config/flashsale">Flash Sale API</a>
+<a class="nav" id="adminNav" href="/config/admin" style="display:none">Admin</a>
+<script>
+// Hidden entry point: tap the "Cat Control Panel" heading 7 times in a row
+// (no other tap in between) to reveal the Admin nav link. Same idiom as the
+// Store page's cheat-code easter egg — resets on every page load.
+(function(){
+    var taps = 0;
+    var title = document.getElementById('ccpTitle');
+    var admin = document.getElementById('adminNav');
+    document.addEventListener('click', function(e){
+        if (e.target === title) {
+            taps++;
+            if (taps >= 7) { admin.style.display = 'block'; }
+        } else {
+            taps = 0;
+        }
+    });
+})();
+</script>
+</body></html>
+)html";
+
+static const char CONFIG_ADMIN_HTML[] PROGMEM = R"html(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cat Control Panel &middot; Admin</title>
+<style>%%STYLE%%</style>
+</head><body>
+<a class="back" href="/config">&larr; Configuration</a>
+<h2>Admin</h2>
+<a class="nav" href="/config/admin/flashsale">Flash Sale API</a>
 </body></html>
 )html";
 
@@ -2947,7 +2978,7 @@ static const char CONFIG_FLASHSALE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <title>Cat Control Panel · Flash Sale API</title>
 <style>%%STYLE%%</style>
 </head><body>
-<a class="back" href="/config">&larr; Configuration</a>
+<a class="back" href="/config/admin">&larr; Admin</a>
 <h2>Flash Sale API</h2>
 %%MSG%%
 
@@ -2956,7 +2987,7 @@ static const char CONFIG_FLASHSALE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <p>Last HTTP response: <strong>%%POLL_HTTP_CODE%%</strong></p>
 <pre style="background:#1e1e1e;border:1px solid #333;border-radius:5px;padding:10px;white-space:pre-wrap;word-break:break-word;font-size:.82rem;color:#ddd">%%POLL_RAW_BODY%%</pre>
 
-<form method="POST" action="/config/flashsale/check" style="margin-top:12px">
+<form method="POST" action="/config/admin/flashsale/check" style="margin-top:12px">
 <button type="submit" style="width:100%">Poll now</button>
 </form>
 
@@ -3107,6 +3138,12 @@ static void handleConfigHome() {
         return;
     }
     String page = String(FPSTR(CONFIG_HOME_HTML));
+    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    sendHtmlPage(page);
+}
+
+static void handleConfigAdminGet() {
+    String page = String(FPSTR(CONFIG_ADMIN_HTML));
     page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
     sendHtmlPage(page);
 }
@@ -3587,7 +3624,7 @@ static void handleConfigUpdateCheckPost() {
     wm.server->send(302, "text/plain", "");
 }
 
-// Human-readable summary of lastFlashSalePollStatus/currentFlashSale for the /config/flashsale
+// Human-readable summary of lastFlashSalePollStatus/currentFlashSale for the /config/admin/flashsale
 // page — same "surface exactly why nothing happened" idea as the update page's skipped/failed
 // banners above.
 static String flashSalePollStatusText() {
@@ -3625,7 +3662,7 @@ static void handleConfigFlashSaleGet() {
 
 static void handleConfigFlashSaleCheckPost() {
     fetchFlashSale();
-    wm.server->sendHeader("Location", "/config/flashsale?checked=1");
+    wm.server->sendHeader("Location", "/config/admin/flashsale?checked=1");
     wm.server->send(302, "text/plain", "");
 }
 
@@ -4219,6 +4256,7 @@ static void runWiFiManager(ConfigManager& cfg) {
         }
         wm.server->on("/",                     HTTP_GET,  handleRootPage);
         wm.server->on("/config",               HTTP_GET,  handleConfigHome);
+        wm.server->on("/config/admin",         HTTP_GET,  handleConfigAdminGet);
         wm.server->on("/setup",                HTTP_GET,  handleSetupGet);
         wm.server->on("/config/cat",           HTTP_GET,  handleConfigCatGet);
         wm.server->on("/config/city",          HTTP_GET,  handleConfigCityGet);
@@ -4229,8 +4267,8 @@ static void runWiFiManager(ConfigManager& cfg) {
         wm.server->on("/config/backup/export", HTTP_GET,  handleConfigBackupExportGet);
         wm.server->on("/config/update",        HTTP_GET,  handleConfigUpdateGet);
         wm.server->on("/config/update/check",  HTTP_POST, handleConfigUpdateCheckPost);
-        wm.server->on("/config/flashsale",       HTTP_GET,  handleConfigFlashSaleGet);
-        wm.server->on("/config/flashsale/check", HTTP_POST, handleConfigFlashSaleCheckPost);
+        wm.server->on("/config/admin/flashsale",       HTTP_GET,  handleConfigFlashSaleGet);
+        wm.server->on("/config/admin/flashsale/check", HTTP_POST, handleConfigFlashSaleCheckPost);
         wm.server->on("/save-config/setup",        HTTP_POST, handleSetupPost);
         wm.server->on("/save-config/cat",          HTTP_POST, handleConfigCatPost);
         wm.server->on("/save-config/city",         HTTP_POST, handleConfigCityPost);

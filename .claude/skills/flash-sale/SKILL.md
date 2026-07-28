@@ -68,5 +68,5 @@ right-arm buddy slot unlock).
    verification and just report the SQL result if they'd rather not share it in-session.
 
 The device firmware only picks up a change on its next poll (`FLASH_SALE_POLL_INTERVAL_MS`,
-15 min) or when someone hits "Poll now" on its `/config/flashsale` web page — mention this
+15 min) or when someone hits "Poll now" on its `/config/admin/flashsale` web page — mention this
 so the user doesn't expect an instant change on the device screen.
