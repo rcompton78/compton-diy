@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: [master]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   review:
     # Fork PRs never get repo secrets on the pull_request event — skip cleanly instead of
