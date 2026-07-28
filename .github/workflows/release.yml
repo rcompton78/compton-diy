@@ -27,7 +27,9 @@ jobs:
 
       - name: Prepare persistent cache directories
         run: |
-          mkdir -p /hdd/compton-diy "$NX_CACHE_DIRECTORY"
+          mkdir -p /hdd/compton-diy/venv-root /hdd/compton-diy/venv-espframe \
+            /hdd/compton-diy/platformio-core-root /hdd/compton-diy/platformio-core-espframe \
+            "$NX_CACHE_DIRECTORY"
           ln -sfn /hdd/compton-diy/venv-root .venv
           ln -sfn /hdd/compton-diy/venv-espframe apps/espframe/.venv
           ln -sfn /hdd/compton-diy/platformio-core-root .platformio-core
@@ -68,6 +70,7 @@ jobs:
           if [ "$CURRENT_VERSION" != "$ESPHOME_VERSION" ]; then
             echo "ESPHome $CURRENT_VERSION -> $ESPHOME_VERSION: rebuilding venv"
             rm -rf /hdd/compton-diy/venv-espframe
+            mkdir -p /hdd/compton-diy/venv-espframe
             python3.12 -m venv apps/espframe/.venv
             apps/espframe/.venv/bin/pip install --quiet "esphome==$ESPHOME_VERSION"
           else
