@@ -56,7 +56,7 @@ jobs:
       - name: Install PlatformIO
         run: |
           if [ ! -x .venv/bin/python3 ]; then
-            python3 -m venv .venv
+            python3.12 -m venv .venv
           fi
           .venv/bin/pip install --upgrade --quiet platformio
           .venv/bin/python3 -m platformio system info
@@ -67,7 +67,7 @@ jobs:
           CURRENT_VERSION="$(apps/espframe/.venv/bin/esphome version 2>/dev/null | awk '{print $2}')"
           if [ "$CURRENT_VERSION" != "$ESPHOME_VERSION" ]; then
             echo "ESPHome $CURRENT_VERSION -> $ESPHOME_VERSION: rebuilding venv"
-            rm -rf apps/espframe/.venv
+            rm -rf /hdd/compton-diy/venv-espframe
             python3.12 -m venv apps/espframe/.venv
             apps/espframe/.venv/bin/pip install --quiet "esphome==$ESPHOME_VERSION"
           else
