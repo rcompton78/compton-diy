@@ -15,6 +15,7 @@ jobs:
       contents: write
     env:
       NX_CACHE_DIRECTORY: /hdd/compton-diy/nx-cache
+      NX_WORKSPACE_DATA_DIRECTORY: /hdd/compton-diy/nx-workspace-data
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -27,7 +28,7 @@ jobs:
 
       - name: Prepare persistent cache directories
         run: |
-          mkdir -p /hdd/compton-diy "$NX_CACHE_DIRECTORY"
+          mkdir -p /hdd/compton-diy "$NX_CACHE_DIRECTORY" "$NX_WORKSPACE_DATA_DIRECTORY"
           ln -sfn /hdd/compton-diy/venv-root .venv
           ln -sfn /hdd/compton-diy/venv-espframe apps/espframe/.venv
           ln -sfn /hdd/compton-diy/platformio-core-root .platformio-core
