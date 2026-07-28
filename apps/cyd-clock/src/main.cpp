@@ -382,7 +382,7 @@ enum class CatBoredom { Entertained, Bored, VeryBored }; // mirrors CatStatus ti
 enum class CatHealth  { Healthy, Sick };              // random event, cleared by meds
 enum class CatThirst  { Hydrated, Thirsty };          // random event, cleared by water
 
-struct {
+struct Cat {
     CatMood    mood              = CatMood::Idle;
     CatStatus  status            = CatStatus::Content;
     CatBoredom boredom           = CatBoredom::Entertained;
@@ -419,15 +419,15 @@ OtaCheckResult pendingOtaUpdate;         // valid only while otaUpdatePending is
 unsigned long forceSickDeadlineMs = 0;   // test-only: armed via /config, 0 = not armed, not persisted
 unsigned long forceThirstDeadlineMs = 0; // test-only: armed via /config, 0 = not armed, not persisted
 
-struct { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick, hungerLines, zzzFx, animalBg; } dirty = {true, true, true, true, false, false, false, false, false, true};
+struct Dirty { bool header, animal, picker, timerRow, eyesOnly, timerTick, headerTick, hungerLines, zzzFx, animalBg; } dirty = {true, true, true, true, false, false, false, false, false, true};
 bool pointsFlashOn = false;  // toggled every ~500ms while hasNewStoreItems(); read by drawPoints()
-bool saleFlashOn = false;    // toggled every ~500ms while the black cat flash sale is active; read by drawSaleFlash()
+bool saleFlashOn = false;    // toggled every ~500ms while a flash sale is active; read by drawSaleFlash()
 
 // Level-up fireworks: a full-screen takeover (distinct from the small in-zone Celebrate
 // animation) that plays once when awardXp() crosses a level boundary, with the milestone
 // bonus (if any) flashing on top. Mirrors the sleepScreenActive/setupPromptActive pattern
 // of owning the screen directly rather than going through the zone-scoped dirty flags.
-struct {
+struct Fireworks {
     bool active            = false;
     unsigned long since     = 0;  // millis() when triggered
     unsigned long lastFrame = 0;  // millis() of last frame advance
@@ -1481,8 +1481,8 @@ static uint32_t xpToNextLevel(uint32_t xp) {
 }
 
 // Defined near loop() below, alongside updateFireworksAnim() — forward-declared here so
-// awardXp() (further down) can kick it off on a level-up, mirroring isFlashSaleActive()'s
-// forward-declaration for drawSaleFlash() just below.
+// awardXp()'s callers (further down) can kick it off on a level-up, mirroring
+// isFlashSaleActive()'s forward-declaration for drawSaleFlash() just below.
 static void triggerFireworks(uint32_t bonusPoints);
 
 // Right-hand badge column x-start: past x=164 so it doesn't clip the cat's head
@@ -1764,17 +1764,26 @@ static void drawTimerRow() {
     }
 }
 
+// Result of awardXp(): whether this award crossed a level boundary (fireworks-worthy
+// on its own, even with zero bonus — not every level crosses a milestone) and the
+// milestone bonus, if any, earned alongside it.
+struct AwardXpResult {
+    bool leveledUp;
+    uint32_t bonusPoints;
+};
+
 // Awards XP 1:1 alongside points. XP is a separate, monotonically-increasing lifetime
 // counter — never spent, never reduced by store purchases. Also grants a one-time bonus
 // to the spendable points balance for every MILESTONE_LEVEL_INTERVAL level crossed by
 // this single award (a big cheat grant can cross more than one milestone at once) that
 // hasn't already paid out a bonus before — tracked via highestMilestoneLevel, so resetting
 // totalXp back to 0 (see handleConfigBadgesResetPost()) and re-leveling can't re-farm the
-// same bonus. Kicks off the level-up fireworks animation, passing along the total bonus
-// points earned this award so it can flash alongside it. Does not call configMgr.save()
-// itself — callers already save after their own mutation.
-static void awardXp(uint32_t amount) {
-    if (amount == 0) return;
+// same bonus. Does not call configMgr.save() itself — callers already save after their
+// own mutation. Does not trigger fireworks itself — callers check result.leveledUp and
+// call triggerFireworks(result.bonusPoints) so this stays decoupled from the fireworks
+// takeover animation.
+static AwardXpResult awardXp(uint32_t amount) {
+    if (amount == 0) return {false, 0};
     uint32_t oldLevel = levelForXp(configMgr.config().totalXp);
     configMgr.config().totalXp += amount;
     uint32_t newLevel = levelForXp(configMgr.config().totalXp);
@@ -1794,8 +1803,9 @@ static void awardXp(uint32_t amount) {
         // second, smaller celebration on top of/after the big one.
         cat.mood = CatMood::Idle;
         dirty.animal = true;  // redraw the level badge
-        triggerFireworks(bonusEarned);
+        return {true, bonusEarned};
     }
+    return {false, bonusEarned};
 }
 
 // Persists a care action's timestamp as UTC and, if the action addressed a genuine
@@ -1807,7 +1817,8 @@ static void persistCareAction(uint32_t& lastEpochField, bool wasNeeded, uint32_t
         lastEpochField = (uint32_t)utc;
         if (wasNeeded) {
             configMgr.config().points += pointsAwarded;
-            awardXp(pointsAwarded);
+            AwardXpResult xpResult = awardXp(pointsAwarded);
+            if (xpResult.leveledUp) triggerFireworks(xpResult.bonusPoints);
             dirty.animal = true;
         }
         configMgr.save();
@@ -3477,7 +3488,8 @@ static void handleConfigStoreCheatPost() {
     long amount = wm.server->arg("amount").toInt();
     if (amount > 0 && amount <= 1000000) {
         configMgr.config().points += (uint32_t)amount;
-        awardXp((uint32_t)amount);
+        AwardXpResult xpResult = awardXp((uint32_t)amount);
+        if (xpResult.leveledUp) triggerFireworks(xpResult.bonusPoints);
         configMgr.save();
     }
     wm.server->sendHeader("Location", "/config/store?cheat=1");
