@@ -125,13 +125,13 @@ static constexpr uint16_t C_PENGUIN      = 0x0000;  // penguin peeking out besid
 static constexpr uint16_t C_PENGUIN_BEAK = 0xFD20;  // penguin beak/feet (orange)
 static constexpr uint16_t C_UNICORN      = TFT_WHITE;  // unicorn peeking out beside the head (white)
 static constexpr uint16_t C_UNICORN_HORN = 0xFC18;  // unicorn horn (pink) — kept as its own constant
+                                                     // rather than reusing C_PINK, so retuning one
+                                                     // doesn't shift the other
 static constexpr uint16_t C_SNOWMAN        = 0xDEFB;  // snowman peeking out beside the head (pale snow-blue, distinct from plain TFT_WHITE)
 static constexpr uint16_t C_SNOWMAN_COAL   = 0x0000;  // snowman hat/eyes/buttons (coal black)
 static constexpr uint16_t C_SNOWMAN_CARROT = 0xFD20;  // snowman nose (orange) — same hex as C_FISH/C_PENGUIN_BEAK by
                                                        // coincidence, not intentional reuse; kept as its own constant
                                                        // so retuning one doesn't silently shift the other two
-                                                     // rather than reusing C_PINK, so retuning one
-                                                     // doesn't shift the other
 
 // Blanket color catalog — each color is purchased separately in the store and can be
 // equipped independently in the dressing room. `id` is the stable identifier used in
