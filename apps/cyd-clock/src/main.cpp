@@ -127,7 +127,9 @@ static constexpr uint16_t C_UNICORN      = TFT_WHITE;  // unicorn peeking out be
 static constexpr uint16_t C_UNICORN_HORN = 0xFC18;  // unicorn horn (pink) — kept as its own constant
 static constexpr uint16_t C_SNOWMAN        = 0xDEFB;  // snowman peeking out beside the head (pale snow-blue, distinct from plain TFT_WHITE)
 static constexpr uint16_t C_SNOWMAN_COAL   = 0x0000;  // snowman hat/eyes/buttons (coal black)
-static constexpr uint16_t C_SNOWMAN_CARROT = 0xFD20;  // snowman nose (orange)
+static constexpr uint16_t C_SNOWMAN_CARROT = 0xFD20;  // snowman nose (orange) — same hex as C_FISH/C_PENGUIN_BEAK by
+                                                       // coincidence, not intentional reuse; kept as its own constant
+                                                       // so retuning one doesn't silently shift the other two
                                                      // rather than reusing C_PINK, so retuning one
                                                      // doesn't shift the other
 
@@ -1118,6 +1120,16 @@ static void drawSnowmanPeeking(int cx, int cy, uint16_t accentColor) {
     drawSnowmanHead(bx, by, accentColor);
 }
 
+// Body + buttons shared by drawSnowmanFull()/drawSnowmanHeld() below — unlike teddy (whose
+// feet differ by side), the snowman's body is radially symmetric, so left and right poses
+// need no mirroring beyond the (bx, by) anchor drawSnowmanHead() already receives.
+static void drawSnowmanBody(int bx, int by) {
+    tft.fillCircle(bx, by + 21, 12, C_SNOWMAN);                   // body
+    tft.fillCircle(bx, by + 15, 1, C_SNOWMAN_COAL);               // top button
+    tft.fillCircle(bx, by + 21, 1, C_SNOWMAN_COAL);               // middle button
+    tft.fillCircle(bx, by + 27, 1, C_SNOWMAN_COAL);               // bottom button
+}
+
 // Full-body snowman sitting beside the cat — used when the snowman is owned without the
 // blanket, since there's no blanket edge to tuck a lone head behind. Buttons stay fixed to
 // C_SNOWMAN_COAL rather than the accent color, matching the fixed-detail convention the
@@ -1125,20 +1137,14 @@ static void drawSnowmanPeeking(int cx, int cy, uint16_t accentColor) {
 static void drawSnowmanFull(int cx, int cy, uint16_t accentColor) {
     int bx = cx - 38, by = cy - 8;
     drawSnowmanHead(bx, by, accentColor);
-    tft.fillCircle(bx, by + 21, 12, C_SNOWMAN);                   // body
-    tft.fillCircle(bx, by + 15, 1, C_SNOWMAN_COAL);               // top button
-    tft.fillCircle(bx, by + 21, 1, C_SNOWMAN_COAL);               // middle button
-    tft.fillCircle(bx, by + 27, 1, C_SNOWMAN_COAL);               // bottom button
+    drawSnowmanBody(bx, by);
 }
 
 // Right-arm slot pose (DIY-64) — see drawTeddyHeld() for placement rationale.
 static void drawSnowmanHeld(int cx, int cy, uint16_t accentColor) {
     int bx = cx + 38, by = cy - 8;
     drawSnowmanHead(bx, by, accentColor);
-    tft.fillCircle(bx, by + 21, 12, C_SNOWMAN);                   // body
-    tft.fillCircle(bx, by + 15, 1, C_SNOWMAN_COAL);               // top button
-    tft.fillCircle(bx, by + 21, 1, C_SNOWMAN_COAL);               // middle button
-    tft.fillCircle(bx, by + 27, 1, C_SNOWMAN_COAL);               // bottom button
+    drawSnowmanBody(bx, by);
 }
 
 // Night-only right-arm variant (DIY-64) — see drawTeddyHeldPeeking() for rationale.
