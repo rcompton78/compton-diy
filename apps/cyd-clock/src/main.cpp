@@ -2273,7 +2273,7 @@ unsigned long lastFlashSalePoll = 0;
 
 // Surfaced on /config/admin/flashsale so a local dev/test setup (see below) doesn't have to guess
 // why nothing happened — mirrors lastUpdateCheckFailed/lastUpdateCheckSkipped's role for OTA.
-enum class FlashSalePollStatus { NeverPolled, Ok, NoActiveSale, Failed, SkippedNoCaCert, SkippedNoUrl };
+enum class FlashSalePollStatus { NeverPolled, Ok, NoActiveSale, Failed, SkippedNoCaCert, SkippedNoUrl, SkippedUnknownItem };
 static FlashSalePollStatus lastFlashSalePollStatus = FlashSalePollStatus::NeverPolled;
 static String lastFlashSalePollDetail;  // human-readable extra info: HTTP code, parse error, item id
 static int lastFlashSalePollHttpCode = 0;  // 0 = no request was actually made (e.g. skipped)
@@ -2481,7 +2481,10 @@ static void fetchFlashSale() {
     // never actually discount (flashSalePrice() would never match it either).
     if (!isKnownStoreItemId(itemId)) {
         Serial.printf("flash-sale poll: unknown item id \"%s\", skipping sale\n", itemId);
-        lastFlashSalePollStatus = FlashSalePollStatus::Failed;
+        // Not FlashSalePollStatus::Failed — the poll itself succeeded (HTTP 200, valid JSON);
+        // it just named an item that doesn't exist. Distinguishing the two keeps
+        // /config/admin/flashsale from reporting a genuinely healthy poll as "failed".
+        lastFlashSalePollStatus = FlashSalePollStatus::SkippedUnknownItem;
         lastFlashSalePollDetail = String("unknown item id: ") + itemId;
         currentFlashSale.valid = false;
         return;
@@ -3762,6 +3765,8 @@ static String flashSalePollStatusText() {
             return "Skipped — the configured URL is https:// but no CA is pinned in this firmware build (CAT_BUDDY_API_CA_CERT). Use a http:// URL for local testing instead.";
         case FlashSalePollStatus::Failed:
             return "Last poll failed: " + htmlEscape(lastFlashSalePollDetail);
+        case FlashSalePollStatus::SkippedUnknownItem:
+            return "Last poll succeeded, but the sale was skipped — " + htmlEscape(lastFlashSalePollDetail) + ".";
         case FlashSalePollStatus::NoActiveSale:
             return "Last poll succeeded — no active sale right now.";
         case FlashSalePollStatus::Ok: {
