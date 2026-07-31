@@ -1408,6 +1408,15 @@ static void drawSleepingCat(int cx, int cy) {
             CatHealth::Healthy, CatThirst::Hydrated, /*eyeOpen=*/false);
     drawSleepyEyes(cx, cy);
 
+    // Re-draw glasses: drawSleepyEyes()'s fillRect (cx-28..+28, cy-50..-24) repaints the
+    // same eye region drawCat() already drew the glasses into, wiping them out — same
+    // fix as drawEyes()'s blink redraw, but here we just redraw rather than skip, since
+    // the sleep scene isn't on a fast update loop like blinking is.
+    int glassesIdx = equippedGlassesIndex();
+    if (glassesIdx >= 0 && GLASSES[glassesIdx].draw) {
+        GLASSES[glassesIdx].draw(cx, cy);
+    }
+
     int  blanketIdx = equippedBlanketIndex();
     bool hasBlanket = blanketIdx >= 0;
     int  stuffyIdx  = equippedStuffyIndex();
