@@ -24,6 +24,4 @@
 
 ## Open Code Review Gate
 
-- **Enabled:** yes
-- **Workflow file:** .github/workflows/open-code-review.yml
-- **Version:** v2
+- **Enabled:** no — replaced by the revbot GitHub App (self-hosted on the homelab)
