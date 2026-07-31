@@ -32,7 +32,10 @@ struct AppConfig {
     uint32_t points = 0;            // Gamification points earned from timely care actions
     uint8_t ownedBlanketColors  = 0;  // Store purchase: bitmask, bit N = owns blanket color N
     uint8_t equippedBlanketColor = 0; // Dressing room: index of the blanket color to display
-    uint8_t ownedStuffies  = 0;      // Store purchase: bitmask, bit N = owns stuffy N
+    uint16_t ownedStuffies = 0;      // Store purchase: bitmask, bit N = owns stuffy N (widened to
+                                      // uint16_t in DIY-97 — the snowman (DIY-89) brought the catalog
+                                      // to 6 entries, uint8_t only had headroom to 8, same reasoning
+                                      // as ownedRoomThemes' DIY-90 widening)
     uint8_t equippedStuffy = 0;      // Dressing room: index of the stuffy to display (left arm / night scene)
     uint8_t seenStuffyCount       = 0;  // Highest STUFFY_COUNT the store page has shown the user
     bool    rightArmSlotUnlocked = false;  // Store purchase: one-time unlock, independent of ownedStuffies —

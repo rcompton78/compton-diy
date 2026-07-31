@@ -326,6 +326,7 @@ static constexpr Stuffy STUFFIES[] = {
     {"snowman",  "Snowman",      STORE_COST_SNOWMAN,  drawSnowmanPeeking,  drawSnowmanFull,  drawSnowmanHeld, drawSnowmanHeldPeeking},
 };
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
+static_assert(STUFFY_COUNT <= 16, "ownedStuffies bitmask is uint16_t");
 
 // Forward declaration: shared flat-color backdrop for themes with no dedicated art of their
 // own, defined further below alongside drawSleepingCat(). Declared here so the ROOM_THEMES[]
@@ -731,7 +732,7 @@ static int equippedBlanketIndex() {
 
 // Same resolution logic as equippedBlanketIndex(), for the stuffy catalog.
 static int equippedStuffyIndex() {
-    uint8_t owned = configMgr.config().ownedStuffies;
+    uint16_t owned = configMgr.config().ownedStuffies;
     if (owned == 0) return -1;
     uint8_t eq = configMgr.config().equippedStuffy;
     if (eq == EQUIP_NONE) return -1;  // user explicitly unequipped
@@ -4076,7 +4077,7 @@ static void handleConfigStorePost() {
 // stuffyChanged/stuffyRightChanged guard in handleConfigDressPost() below, which this keeps
 // the user from ever needing to hit.
 static String buildStuffyRadioOptions(const char* fieldName, int equippedIdx, int otherArmIdx, const char* otherArmLabel) {
-    uint8_t ownedStuffies = configMgr.config().ownedStuffies;
+    uint16_t ownedStuffies = configMgr.config().ownedStuffies;
     String options = "<label class='pick'><input type='radio' name='";
     options += fieldName;
     options += "' value='none'";
@@ -4126,7 +4127,7 @@ static void handleConfigDressGet() {
     }
     page.replace("%%BLANKET_OPTIONS%%", options);
 
-    uint8_t ownedStuffies = configMgr.config().ownedStuffies;
+    uint16_t ownedStuffies = configMgr.config().ownedStuffies;
     int equippedStuffyIdx = equippedStuffyIndex();
     int equippedStuffyRightIdx = equippedStuffyRightIndex();
     String stuffyOptions = "";

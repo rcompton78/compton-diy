@@ -52,8 +52,11 @@ void ConfigManager::fromJson(JsonDocument& doc) {
     }
     _config.equippedBlanketColor = doc["blanketEquipped"] | _config.equippedBlanketColor;
     {
-        uint8_t stuffies;
-        if (doc["stuffies"].is<uint8_t>()) stuffies = doc["stuffies"];
+        // .is<uint16_t>(), not uint8_t: once 9+ stuffies are owned the bitmask value exceeds
+        // 255, and an is<uint8_t>() check would silently fail and fall through to the
+        // legacy/default branches below, losing real ownership data (DIY-97).
+        uint16_t stuffies;
+        if (doc["stuffies"].is<uint16_t>()) stuffies = doc["stuffies"];
         else if (doc["teddy"] | false) stuffies = 1;  // migrate legacy single-teddy flag
         else stuffies = _config.ownedStuffies;
         _config.ownedStuffies = stuffies;
