@@ -88,6 +88,7 @@ static constexpr uint32_t STORE_COST_SKY = 200;  // premium: has real art (cloud
 static constexpr uint32_t STORE_COST_CAT_COLOR_SOLID   = 100;  // black, grey — flat recolor
 static constexpr uint32_t STORE_COST_CAT_COLOR_PATTERN = 200;  // tabby, calico — real stripe/patch art
 static constexpr uint32_t STORE_COST_ACCESSORY_BOW = 50;
+static constexpr uint32_t STORE_COST_ACCESSORY_GLASSES = 50;  // matches bow pricing — same "flat recolor-tier" accessory
 static constexpr uint32_t STORE_COST_RIGHT_ARM_SLOT = 200;  // one-time unlock, not per-stuffy
 
 // Touch calibration — print "Touch: x= y=" from serial to tune
@@ -104,6 +105,8 @@ static constexpr uint16_t C_BOW_MAGENTA = 0xF81F;  // deliberately distinct from
 static constexpr uint16_t C_BOW_HOT_PINK  = 0xF8B2;  // brighter/truer pink than C_BOW_MAGENTA
 static constexpr uint16_t C_BOW_PURPLE    = 0x939B;  // medium purple
 static constexpr uint16_t C_BOW_BABY_BLUE = 0x8E7E;  // baby blue
+static constexpr uint16_t C_GLASSES_RIM  = 0xFC18;  // pink rim (same pink family as the unicorn horn)
+static constexpr uint16_t C_GLASSES_LENS = 0x2945;  // dark tinted lens — same charcoal as C_DARK
 static constexpr uint16_t C_DARK  = 0x2945;  // charcoal
 static constexpr uint16_t C_SEP   = 0x39E7;  // separator
 static constexpr uint16_t C_BTN   = 0x2965;  // button bg
@@ -236,6 +239,30 @@ static constexpr Accessory ACCESSORIES[] = {
 };
 static constexpr int ACCESSORY_COUNT = sizeof(ACCESSORIES) / sizeof(ACCESSORIES[0]);
 static_assert(ACCESSORY_COUNT <= 8, "ownedAccessories bitmask is uint8_t");
+
+// Forward-declared for the same reason as the bow functions above — GLASSES[] needs this
+// before drawCat() (and `tft`) are declared.
+static void drawSunglassesPinkRim(int cx, int cy);
+
+// Glasses catalog — a separate accessory slot from ACCESSORIES[] (own store section, own
+// dressing-room control, own owned/equipped bitmask), even though the struct shape and
+// purchase/equip model are identical. Kept as its own catalog rather than folded into
+// ACCESSORIES[] because glasses sit on the face (drawn after the eyes) while the head
+// accessories above sit on the head (drawn before the eyes) — mixing the two into one
+// catalog/bitmask would mean drawCat() couldn't just draw "the equipped accessory" in one
+// place, but would need to branch on which kind it is anyway.
+struct Glasses {
+    const char* id;
+    const char* label;
+    uint32_t cost;
+    const char* webColor;  // CSS hex approximation, for coloring its label in the config UI
+    void (*draw)(int cx, int cy);  // paints the glasses onto the cat sprite, over the eyes
+};
+static constexpr Glasses GLASSES[] = {
+    {"sunglasses_pink", "Pink-Rim Sunglasses", STORE_COST_ACCESSORY_GLASSES, "#FF80C0", drawSunglassesPinkRim},
+};
+static constexpr int GLASSES_COUNT = sizeof(GLASSES) / sizeof(GLASSES[0]);
+static_assert(GLASSES_COUNT <= 8, "ownedGlasses bitmask is uint8_t");
 
 // Forward declarations: each stuffy's sleep-scene art, defined further below alongside
 // drawSleepingCat(). Declared here so the STUFFIES[] catalog can reference them directly —
@@ -458,6 +485,7 @@ static int equippedCatColorIndex();
 static uint16_t catBodyColor();
 static bool catHasCuteEyes();
 static int equippedAccessoryIndex();
+static int equippedGlassesIndex();
 static int equippedStuffyRightIndex();
 static int equippedBlanketIndex();
 
@@ -506,6 +534,26 @@ static void drawBowMagenta(int cx, int cy)  { drawBowShape(cx, cy, C_BOW_MAGENTA
 static void drawBowHotPink(int cx, int cy)  { drawBowShape(cx, cy, C_BOW_HOT_PINK); }
 static void drawBowPurple(int cx, int cy)   { drawBowShape(cx, cy, C_BOW_PURPLE); }
 static void drawBowBabyBlue(int cx, int cy) { drawBowShape(cx, cy, C_BOW_BABY_BLUE); }
+
+// Glasses art (declared earlier alongside GLASSES[]). Called from drawCat() after the eyes
+// (unlike the bow above, which is drawn before them) so the round lenses sit over the eye
+// shapes drawn by drawEyeShapes() at (cx-15/+15, cy-37, r=11). Round rim + round lens per
+// eye, joined by a bridge. Note: drawEyes()'s partial blink redraw only repaints the eye
+// rect, not these glasses, so blinking is skipped entirely while glasses are equipped (see
+// the cat-state update loop) rather than trying to keep a partial redraw path in sync here.
+static void drawSunglassesPinkRim(int cx, int cy) {
+    tft.fillCircle(cx - 15, cy - 37, 14, C_GLASSES_RIM);
+    tft.fillCircle(cx - 15, cy - 37, 11, C_GLASSES_LENS);
+    tft.fillCircle(cx + 15, cy - 37, 14, C_GLASSES_RIM);
+    tft.fillCircle(cx + 15, cy - 37, 11, C_GLASSES_LENS);
+    tft.fillRect(cx - 4, cy - 40, 8, 4, C_GLASSES_RIM);  // bridge
+    // Temple arms — from each lens's outer edge back toward the ear/side of the head, so the
+    // band reads as wrapping around toward the back rather than the lenses floating free.
+    for (int w = -2; w <= 2; w++) {
+        tft.drawLine(cx - 29, cy - 37 + w, cx - 43, cy - 47 + w, C_GLASSES_RIM);
+        tft.drawLine(cx + 29, cy - 37 + w, cx + 43, cy - 47 + w, C_GLASSES_RIM);
+    }
+}
 
 // Draws just the eye shapes (sclera/pupil/glint, or a closed dash) into an already
 // head-colored rect. Shared by drawEyes() (blink-only partial redraw) and drawCat()
@@ -583,6 +631,13 @@ static void drawCat(int cx, int cy, CatStatus status, CatBoredom boredom, CatHea
 
     // Eyes
     drawEyeShapes(cx, cy, eyeOpen, catHasCuteEyes());
+
+    // Glasses (drawn after the eyes, unlike the head accessories above, since they sit on
+    // the face over the eyes rather than on the head)
+    int glassesIdx = equippedGlassesIndex();
+    if (glassesIdx >= 0 && GLASSES[glassesIdx].draw) {
+        GLASSES[glassesIdx].draw(cx, cy);
+    }
 
     // Nose
     tft.fillTriangle(cx, cy - 22, cx - 4, cy - 15, cx + 4, cy - 15, C_PINK);
@@ -739,6 +794,19 @@ static int equippedAccessoryIndex() {
     return -1;
 }
 
+// Same resolution logic as equippedBlanketIndex(), for the glasses catalog.
+static int equippedGlassesIndex() {
+    uint8_t owned = configMgr.config().ownedGlasses;
+    if (owned == 0) return -1;
+    uint8_t eq = configMgr.config().equippedGlasses;
+    if (eq == EQUIP_NONE) return -1;  // user explicitly unequipped
+    if (eq < GLASSES_COUNT && (owned & (1 << eq))) return eq;
+    for (int i = 0; i < GLASSES_COUNT; i++) {
+        if (owned & (1 << i)) return i;
+    }
+    return -1;
+}
+
 // Per-cat-color name lookup/assignment, keyed the same way as equippedCatColorIndex()
 // (idx == -1 means the white default cat). Falls back to catNameDefault for any color
 // that hasn't been individually named yet — covers both a freshly-bought color and a
@@ -823,6 +891,7 @@ static bool hasNewStoreItems() {
            ROOM_THEME_COUNT > configMgr.config().seenRoomThemeCount ||
            CAT_COLOR_COUNT > configMgr.config().seenCatColorCount ||
            ACCESSORY_COUNT > configMgr.config().seenAccessoryCount ||
+           GLASSES_COUNT > configMgr.config().seenGlassesCount ||
            !configMgr.config().seenRightArmSlot;
 }
 
@@ -2045,8 +2114,10 @@ static void updateCatAnim() {
         cat.mood = CatMood::Idle; changed = true;
     }
 
-    // Blink (idle only) — eye-only redraw to avoid full-zone flash
-    if (cat.mood == CatMood::Idle) {
+    // Blink (idle only) — eye-only redraw to avoid full-zone flash. Skipped while glasses
+    // are equipped: drawEyes()'s partial redraw only repaints the eye rect, not the glasses
+    // layered over it, so a blink would erase the glasses until the next full drawCat().
+    if (cat.mood == CatMood::Idle && equippedGlassesIndex() < 0) {
         if ( cat.eyeOpen && now - cat.lastBlink > 4000) { cat.eyeOpen = false; cat.lastBlink = now; dirty.eyesOnly = true; }
         if (!cat.eyeOpen && now - cat.lastBlink >  150) { cat.eyeOpen = true;                       dirty.eyesOnly = true; }
     } else if (!cat.eyeOpen) {
@@ -2346,7 +2417,7 @@ static int64_t parseIso8601ToLocalStamp(const char* iso) {
 // construction (it's the same catalog counts summed here), but if a future catalog is added or
 // grown without updating it, this halts immediately instead of silently overrunning the
 // caller's stack buffer.
-static constexpr int STORE_ITEM_ID_COUNT = CAT_COLOR_COUNT + ACCESSORY_COUNT + STUFFY_COUNT + BLANKET_COLOR_COUNT + ROOM_THEME_COUNT + 1;
+static constexpr int STORE_ITEM_ID_COUNT = CAT_COLOR_COUNT + ACCESSORY_COUNT + GLASSES_COUNT + STUFFY_COUNT + BLANKET_COLOR_COUNT + ROOM_THEME_COUNT + 1;
 static int collectStoreItemIds(const char** ids, int cap) {
     int n = 0;
     auto push = [&](const char* id) {
@@ -2359,6 +2430,7 @@ static int collectStoreItemIds(const char** ids, int cap) {
     };
     for (int i = 0; i < CAT_COLOR_COUNT; i++) push(CAT_COLORS[i].id);
     for (int i = 0; i < ACCESSORY_COUNT; i++) push(ACCESSORIES[i].id);
+    for (int i = 0; i < GLASSES_COUNT; i++) push(GLASSES[i].id);
     for (int i = 0; i < STUFFY_COUNT; i++) push(STUFFIES[i].id);
     for (int i = 0; i < BLANKET_COLOR_COUNT; i++) push(BLANKET_COLORS[i].id);
     for (int i = 0; i < ROOM_THEME_COUNT; i++) push(ROOM_THEMES[i].id);
@@ -3161,6 +3233,9 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h3>Accessories - Head</h3>
 %%ACCESSORY_ITEMS%%
 
+<h3>Glasses</h3>
+%%GLASSES_ITEMS%%
+
 <h3>Right Arm Buddy (day &amp; night)</h3>
 %%RIGHT_ARM_SLOT_ITEM%%
 
@@ -3214,6 +3289,9 @@ static const char CONFIG_DRESS_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 
 <h3>Accessories - Head</h3>
 %%ACCESSORY_OPTIONS%%
+
+<h3>Glasses</h3>
+%%GLASSES_OPTIONS%%
 
 <button type="submit" style="width:100%;margin-top:8px">Save</button>
 </form>
@@ -3463,6 +3541,7 @@ static void handleConfigStoreGet() {
         configMgr.config().seenRoomThemeCount    = (uint8_t)ROOM_THEME_COUNT;
         configMgr.config().seenCatColorCount     = (uint8_t)CAT_COLOR_COUNT;
         configMgr.config().seenAccessoryCount    = (uint8_t)ACCESSORY_COUNT;
+        configMgr.config().seenGlassesCount      = (uint8_t)GLASSES_COUNT;
         configMgr.config().seenRightArmSlot      = true;
         configMgr.save();
     }
@@ -3529,6 +3608,17 @@ static void handleConfigStoreGet() {
         accessoryItems += "</div>\n";
     }
     page.replace("%%ACCESSORY_ITEMS%%", accessoryItems);
+    String glassesItems = "";
+    for (int i = 0; i < GLASSES_COUNT; i++) {
+        bool owned = configMgr.config().ownedGlasses & (1 << i);
+        uint32_t itemCost = flashSalePrice(GLASSES[i].id, GLASSES[i].cost);
+        bool onSale = itemCost != GLASSES[i].cost;
+        glassesItems += "<div class='item'><span style='color:" + String(GLASSES[i].webColor) + "'>" + String(GLASSES[i].label) + "</span>";
+        if (onSale) glassesItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        glassesItems += storeItemAction(GLASSES[i].id, owned, itemCost, points);
+        glassesItems += "</div>\n";
+    }
+    page.replace("%%GLASSES_ITEMS%%", glassesItems);
     uint32_t rightArmSlotCost = flashSalePrice("right_arm_slot", STORE_COST_RIGHT_ARM_SLOT);
     bool rightArmOnSale = rightArmSlotCost != STORE_COST_RIGHT_ARM_SLOT;
     String rightArmSlotItem = "<div class='item'><span>Right Arm Buddy Slot</span>";
@@ -3858,7 +3948,7 @@ static void handleConfigStorePost() {
     String item = wm.server->arg("item");
     uint32_t cost;
     bool alreadyOwned;
-    int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1, catColorIdx = -1, accessoryIdx = -1;
+    int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1, catColorIdx = -1, accessoryIdx = -1, glassesIdx = -1;
     bool rightArmSlotPurchase = false;  // not from a catalog array, so tracked as a plain flag
     for (int i = 0; i < STUFFY_COUNT; i++) {
         if (item == STUFFIES[i].id) { stuffyIdx = i; break; }
@@ -3894,13 +3984,21 @@ static void handleConfigStorePost() {
                     if (accessoryIdx >= 0) {
                         cost = flashSalePrice(ACCESSORIES[accessoryIdx].id, ACCESSORIES[accessoryIdx].cost);
                         alreadyOwned = configMgr.config().ownedAccessories & (1 << accessoryIdx);
-                    } else if (item == "right_arm_slot") {
-                        rightArmSlotPurchase = true;
-                        cost = flashSalePrice("right_arm_slot", STORE_COST_RIGHT_ARM_SLOT);
-                        alreadyOwned = configMgr.config().rightArmSlotUnlocked;
                     } else {
-                        wm.server->send(400, "text/plain", "Unknown item");
-                        return;
+                        for (int i = 0; i < GLASSES_COUNT; i++) {
+                            if (item == GLASSES[i].id) { glassesIdx = i; break; }
+                        }
+                        if (glassesIdx >= 0) {
+                            cost = flashSalePrice(GLASSES[glassesIdx].id, GLASSES[glassesIdx].cost);
+                            alreadyOwned = configMgr.config().ownedGlasses & (1 << glassesIdx);
+                        } else if (item == "right_arm_slot") {
+                            rightArmSlotPurchase = true;
+                            cost = flashSalePrice("right_arm_slot", STORE_COST_RIGHT_ARM_SLOT);
+                            alreadyOwned = configMgr.config().rightArmSlotUnlocked;
+                        } else {
+                            wm.server->send(400, "text/plain", "Unknown item");
+                            return;
+                        }
                     }
                 }
             }
@@ -3931,6 +4029,9 @@ static void handleConfigStorePost() {
     } else if (accessoryIdx >= 0) {
         configMgr.config().ownedAccessories |= (1 << accessoryIdx);
         configMgr.config().equippedAccessory = accessoryIdx;  // newly bought accessory becomes equipped
+    } else if (glassesIdx >= 0) {
+        configMgr.config().ownedGlasses |= (1 << glassesIdx);
+        configMgr.config().equippedGlasses = glassesIdx;  // newly bought glasses become equipped
     } else if (rightArmSlotPurchase) {
         configMgr.config().rightArmSlotUnlocked = true;  // starts empty — see equippedStuffyRightIndex()
     } else {
@@ -3944,6 +4045,7 @@ static void handleConfigStorePost() {
         else if (roomThemeIdx >= 0) configMgr.config().ownedRoomThemes &= ~(1 << roomThemeIdx);
         else if (catColorIdx >= 0) configMgr.config().ownedCatColors &= ~(1 << catColorIdx);
         else if (accessoryIdx >= 0) configMgr.config().ownedAccessories &= ~(1 << accessoryIdx);
+        else if (glassesIdx >= 0) configMgr.config().ownedGlasses &= ~(1 << glassesIdx);
         else if (rightArmSlotPurchase) configMgr.config().rightArmSlotUnlocked = false;
         else configMgr.config().ownedStuffies &= ~(1 << stuffyIdx);
         wm.server->sendHeader("Location", "/config/store?err=save");
@@ -4098,6 +4200,27 @@ static void handleConfigDressGet() {
         }
     }
     page.replace("%%ACCESSORY_OPTIONS%%", accessoryOptions);
+
+    uint8_t ownedGlasses = configMgr.config().ownedGlasses;
+    int equippedGlassesIdx = equippedGlassesIndex();
+    String glassesOptions = "";
+    if (ownedGlasses == 0) {
+        glassesOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
+    } else {
+        glassesOptions += "<label class='pick'><input type='radio' name='glasses' value='none'";
+        if (equippedGlassesIdx < 0) glassesOptions += " checked";
+        glassesOptions += "> None</label>";
+        for (int i = 0; i < GLASSES_COUNT; i++) {
+            if (!(ownedGlasses & (1 << i))) continue;
+            glassesOptions += "<label class='pick'><input type='radio' name='glasses' value='";
+            glassesOptions += GLASSES[i].id;
+            glassesOptions += "'";
+            if (i == equippedGlassesIdx) glassesOptions += " checked";
+            glassesOptions += "> <span style='color:" + String(GLASSES[i].webColor) + "'>"
+                              + String(GLASSES[i].label) + "</span></label>";
+        }
+    }
+    page.replace("%%GLASSES_OPTIONS%%", glassesOptions);
 
     String msg = "";
     if (wm.server->hasArg("saved"))
@@ -4260,6 +4383,23 @@ static void handleConfigDressPost() {
             return;
         }
         configMgr.config().equippedAccessory = idx;
+        changed = true;
+    }
+
+    String glassesId = wm.server->arg("glasses");
+    if (glassesId == "none") {
+        configMgr.config().equippedGlasses = EQUIP_NONE;
+        changed = true;
+    } else if (glassesId.length() > 0) {
+        int idx = -1;
+        for (int i = 0; i < GLASSES_COUNT; i++) {
+            if (glassesId == GLASSES[i].id) { idx = i; break; }
+        }
+        if (idx < 0 || !(configMgr.config().ownedGlasses & (1 << idx))) {
+            wm.server->send(400, "text/plain", "Invalid selection");
+            return;
+        }
+        configMgr.config().equippedGlasses = idx;
         changed = true;
     }
 
