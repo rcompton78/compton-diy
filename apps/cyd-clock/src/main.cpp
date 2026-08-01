@@ -166,6 +166,12 @@ static constexpr uint16_t C_TABBY_STRIPE = 0x7A23;  // dark brown stripes
 static constexpr uint16_t C_CALICO_ORANGE = C_FISH;  // ginger patches — reuses the treat-button orange
 static constexpr uint16_t C_CALICO_BLACK  = 0x1082;  // black patches — same tone as the solid "black" cat, for the same C_DARK contrast reason
 
+// Two solid pink shades, shipped as separate purchasable colors rather than one — kept
+// as their own constants rather than reusing C_PINK/C_BOW_HOT_PINK, so retuning one doesn't
+// shift the others.
+static constexpr uint16_t C_CAT_PINK_SOFT = 0xFE7A;  // light pastel pink fur (~#ffd1dc)
+static constexpr uint16_t C_CAT_PINK_HOT  = 0xFB56;  // hot pink fur (~#ff69b4)
+
 // Tabby/calico pattern art, layered on top of the base fill. Split into a head pass
 // (called after the head fill, before eyes/nose/whiskers/mouth so those still paint
 // cleanly on top of any overlap) and a body pass (called after body/paws/tail, so
@@ -201,10 +207,12 @@ static constexpr CatColor CAT_COLORS[] = {
     // details visible while still reading as "black cat".
     // webColor is #fff, not the near-black fill above — that's for the store/dressing-room
     // label text, which would be nearly invisible against the page's own dark background.
-    {"black",  "Black",  0x1082, "#ffffff", false, STORE_COST_CAT_COLOR_SOLID,   nullptr, nullptr},
-    {"grey",   "Grey",   0x8410, "#808080", true,  STORE_COST_CAT_COLOR_SOLID,   nullptr, nullptr},
-    {"tabby",  "Tabby",  C_TABBY_BASE, "#c89050", false, STORE_COST_CAT_COLOR_PATTERN, drawTabbyHeadPattern,  drawTabbyBodyPattern},
-    {"calico", "Calico", TFT_WHITE,    "#ffffff", false, STORE_COST_CAT_COLOR_PATTERN, drawCalicoHeadPattern, drawCalicoBodyPattern},
+    {"black",    "Black",    0x1082,          "#ffffff", false, STORE_COST_CAT_COLOR_SOLID,   nullptr,               nullptr},
+    {"grey",     "Grey",     0x8410,          "#808080", true,  STORE_COST_CAT_COLOR_SOLID,   nullptr,               nullptr},
+    {"tabby",    "Tabby",    C_TABBY_BASE,    "#c89050", false, STORE_COST_CAT_COLOR_PATTERN, drawTabbyHeadPattern,  drawTabbyBodyPattern},
+    {"calico",   "Calico",   TFT_WHITE,       "#ffffff", false, STORE_COST_CAT_COLOR_PATTERN, drawCalicoHeadPattern, drawCalicoBodyPattern},
+    {"pink",     "Pink",     C_CAT_PINK_SOFT, "#ffd1dc", false, STORE_COST_CAT_COLOR_SOLID,   nullptr,               nullptr},
+    {"hot_pink", "Hot Pink", C_CAT_PINK_HOT,  "#ff69b4", false, STORE_COST_CAT_COLOR_SOLID,   nullptr,               nullptr},
 };
 static constexpr int CAT_COLOR_COUNT = sizeof(CAT_COLORS) / sizeof(CAT_COLORS[0]);
 static_assert(CAT_COLOR_COUNT <= CAT_NAME_SLOTS, "increase ConfigManager's CAT_NAME_SLOTS to fit CAT_COLORS");
