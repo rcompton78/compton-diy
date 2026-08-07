@@ -1,11 +1,114 @@
-# Throwaway diagnostic for DIY-102 -- tests the guessed ILI9341 SPI pins and
-# FT6336 touch interrupt pin on the AliExpress 2.8" capacitive board.
-#
-# Expects: backlight on, screen fills solid red, and tapping the screen logs
-# "Touch at x=.. y=.." over serial.
+# Throwaway diagnostic for DIY-102 -- automated GPIO sweep to find the real
+# display CS pin. Bypasses ESPHome's spi:/display: components entirely and
+# manually bit-bangs a minimal ST7789/ILI9341-compatible init + white-fill
+# sequence (CASET/RASET/RAMWR are identical opcodes across both families) at
+# CLK=GPIO14, MOSI=GPIO13, DC=GPIO2 (corroborated by two independent
+# community boards in this same "2.8 ESP32 240*320" silkscreen family) while
+# cycling CS through a list of candidate GPIOs. Watch the physical screen:
+# whichever candidate makes it light up (even partially/garbled) is the real
+# CS pin. Each candidate gets a few seconds before moving to the next; it
+# logs which GPIO it's trying so the serial log and the screen stay in sync.
 
 esphome:
   name: display-touch-test
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          const int clk = 14;
+          const int mosi = 13;
+          const int dc = 2;
+          const int reset = 4;
+          int cs_candidates[] = {15, 5, 4, 27, 26, 25, 17, 16, 22, 19};
+          int num_candidates = 10;
+
+          pinMode(clk, OUTPUT);
+          pinMode(mosi, OUTPUT);
+          pinMode(dc, OUTPUT);
+          pinMode(reset, OUTPUT);
+          digitalWrite(clk, LOW);
+
+          auto spi_write_byte = [&](uint8_t b) {
+            for (int i = 0; i < 8; i++) {
+              digitalWrite(mosi, (b & 0x80) ? HIGH : LOW);
+              digitalWrite(clk, HIGH);
+              b <<= 1;
+              digitalWrite(clk, LOW);
+            }
+          };
+          auto send_cmd = [&](uint8_t cmd) {
+            digitalWrite(dc, LOW);
+            spi_write_byte(cmd);
+          };
+          auto send_data = [&](uint8_t data) {
+            digitalWrite(dc, HIGH);
+            spi_write_byte(data);
+          };
+
+          for (int idx = 0; idx < num_candidates; idx++) {
+            int cs = cs_candidates[idx];
+            pinMode(cs, OUTPUT);
+            digitalWrite(cs, HIGH);
+
+            ESP_LOGI("sweep", "[%d/%d] Trying CS=GPIO%d -- watch the screen now",
+                     idx + 1, num_candidates, cs);
+
+            // Hardware reset (shared across candidates -- harmless to repeat)
+            digitalWrite(reset, HIGH);
+            delay(10);
+            digitalWrite(reset, LOW);
+            delay(10);
+            digitalWrite(reset, HIGH);
+            delay(120);
+
+            digitalWrite(cs, LOW);
+            send_cmd(0x01);  // SWRESET
+            digitalWrite(cs, HIGH);
+            delay(150);
+
+            digitalWrite(cs, LOW);
+            send_cmd(0x11);  // SLPOUT
+            digitalWrite(cs, HIGH);
+            delay(120);
+
+            digitalWrite(cs, LOW);
+            send_cmd(0x3A);  // COLMOD
+            send_data(0x55); // 16bpp
+            digitalWrite(cs, HIGH);
+
+            digitalWrite(cs, LOW);
+            send_cmd(0x29);  // DISPON
+            digitalWrite(cs, HIGH);
+            delay(20);
+
+            // Address window: cols 0-239, rows 0-39 (a strip, not full
+            // screen, to keep each attempt fast)
+            digitalWrite(cs, LOW);
+            send_cmd(0x2A);  // CASET
+            send_data(0x00); send_data(0x00); send_data(0x00); send_data(0xEF);
+            digitalWrite(cs, HIGH);
+
+            digitalWrite(cs, LOW);
+            send_cmd(0x2B);  // RASET
+            send_data(0x00); send_data(0x00); send_data(0x00); send_data(0x27);
+            digitalWrite(cs, HIGH);
+
+            digitalWrite(cs, LOW);
+            send_cmd(0x2C);  // RAMWR
+            digitalWrite(dc, HIGH);
+            for (long i = 0; i < 240L * 40L; i++) {
+              spi_write_byte(0xFF);
+              spi_write_byte(0xFF);
+              if (i % 2000 == 0) {
+                App.feed_wdt();
+              }
+            }
+            digitalWrite(cs, HIGH);
+
+            ESP_LOGI("sweep", "[%d/%d] Filled with CS=GPIO%d", idx + 1, num_candidates, cs);
+            delay(5000);
+          }
+          ESP_LOGI("sweep", "Sweep complete -- note which GPIO (if any) showed white");
 
 esp32:
   board: esp32dev
@@ -27,36 +130,8 @@ light:
     id: backlight
     restore_mode: ALWAYS_ON
 
-spi:
-  clk_pin: GPIO14
-  mosi_pin: GPIO13
-  miso_pin: GPIO12
-
-display:
-  - platform: ili9xxx
-    model: ILI9341
-    invert_colors: true
-    cs_pin: GPIO15
-    dc_pin: GPIO2
-    reset_pin: GPIO4
-    dimensions:
-      width: 240
-      height: 320
-    update_interval: never
-    lambda: |-
-      it.fill(Color(255, 0, 0));
-
-i2c:
-  id: i2c_bus
-  sda: GPIO33
-  scl: GPIO32
-  scan: true
-
-touchscreen:
-  - platform: ft63x6
-    id: tft_touch
-    i2c_id: i2c_bus
-    on_touch:
-      - logger.log:
-          format: "Touch at x=%d y=%d"
-          args: [touch.x, touch.y]
+# touchscreen: omitted for this test -- ESPHome's touchscreen component
+# requires a display: component to be declared, which we're deliberately
+# not using here (bypassed for the manual GPIO sweep above). Touch is
+# already separately confirmed working; add it back once display pins are
+# known.
