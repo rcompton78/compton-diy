@@ -1,0 +1,246 @@
+# =============================================================================
+# DASHBOARD APP LOGIC - board-agnostic
+# =============================================================================
+# WiFi/API/logger, OTA + auto-update checking (same http_request-manifest
+# mechanism as espframe, see apps/espframe/common/addon/firmware_update.yaml),
+# and the 6-button LVGL touch UI calling Home Assistant services directly
+# over the native API (`homeassistant.service`) — no local entities, this
+# device is a remote control, not a sensor.
+#
+# Requires a board package to have already defined `tft_display` (display)
+# and `tft_touch` (touchscreen) — see boards/freenove-s3.yaml.
+# =============================================================================
+
+substitutions:
+  firmware_version: "dev"
+  firmware_manifest_url: "https://rcompton78.github.io/compton-diy/media-room-dashboard/manifest.json"
+
+esphome:
+  project:
+    name: "compton-diy.media-room-dashboard"
+    version: "${firmware_version}"
+
+# No compile-time ssid/password: this device relies entirely on the
+# captive-portal flow below to get station wifi credentials at runtime
+# (submitted once via the fallback AP, then persisted to the ESP32's NVS
+# flash partition — separate from the OTA app partition, so it survives
+# firmware updates without needing to be baked into every build). Same
+# mechanism as apps/espframe's factory image (apps/espframe/builds/
+# freenove-s3.yaml).
+wifi:
+  # No AP password: it's a short, physically-supervised setup window, and an
+  # open network is one less thing to type on a phone.
+  ap:
+    ssid: "${friendly_name} Setup"
+  # Switches which LVGL page is shown -- without this, the setup AP exists
+  # and works but nothing on the device's own screen tells you it's there
+  # (you'd only find it by checking a phone's wifi list), and the 6 buttons
+  # would sit there doing nothing useful before HA is even reachable.
+  #
+  # NOTE: on_disconnect fires for every transient drop, including retries
+  # against the saved network, not just once the fallback AP truly comes up
+  # -- there's no clean way to distinguish "still retrying" from "gave up,
+  # AP is up" without checking wifi_component's is_ap_active(). Every way
+  # tried to do that (a separate `interval: 1s` polling it and calling
+  # lvgl.page.show from there, both repeating and one-shot-guarded; a
+  # one-shot `delay: 15s` + conditional check inside on_disconnect itself)
+  # reproduced the SAME failure: the device fully hangs (no serial output
+  # at all, not just a bad render) the moment lvgl.page.show: setup_page
+  # actually executes while the fallback AP + captive_portal are active --
+  # reproduced 4 times across totally different trigger mechanisms and
+  # setup_page content/position, which rules out our YAML being the cause.
+  # Likely a real ESPHome/LVGL resource-contention bug with captive_portal's
+  # DNS/web server, not something fixable by restructuring this file.
+  # Reverted to a single combined message instead, which is fully stable.
+  # See Jira DIY-105 for the full investigation before attempting this
+  # split again.
+  on_connect:
+    - lvgl.page.show: main_page
+  on_disconnect:
+    - lvgl.page.show: setup_page
+
+captive_portal:
+
+logger:
+  level: INFO
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+# -----------------------------------------------------------------------------
+# OTA + auto-update check against the GitHub Pages manifest (see CLAUDE.md's
+# "Release workflow" section — dist/media-room-dashboard/manifest.json).
+# -----------------------------------------------------------------------------
+http_request:
+
+ota:
+  - platform: http_request
+
+update:
+  - platform: http_request
+    id: firmware_update
+    name: "Firmware Update"
+    source: ${firmware_manifest_url}
+    update_interval: 6h
+    on_update_available:
+      then:
+        - update.perform: firmware_update
+
+text_sensor:
+  - platform: template
+    name: "Firmware Version"
+    entity_category: diagnostic
+    update_interval: never
+    lambda: 'return {"${firmware_version}"};'
+
+# -----------------------------------------------------------------------------
+# Two LVGL pages, switched by the wifi on_connect/on_disconnect handlers
+# above: `setup_page` (shown by default, i.e. at boot before wifi connects --
+# covers both "still retrying the saved network" and "gave up, join the
+# fallback AP", see the NOTE on wifi.on_disconnect above for why those two
+# cases share one page) explains how to configure wifi; `main_page` -- the
+# 6-button dashboard, hidden until the device is actually reachable from HA
+# -- is a 2 column x 3 row grid over the full 240x320 portrait panel (this
+# board's native, already-confirmed-working orientation, no rotation
+# transform). Button -> HA service mapping is the finalized list from Jira
+# DIY-102.
+# -----------------------------------------------------------------------------
+# byte_order: big_endian avoids a known LVGL+ili9xxx grey-screen bug hit on
+# this same panel in apps/espframe (see project memory project_diy44_espframe
+# — little_endian was copied verbatim from a different, mipi_dsi-based board
+# and never validated against this SPI panel).
+lvgl:
+  displays: [tft_display]
+  touchscreens: [tft_touch]
+  byte_order: big_endian
+  pages:
+    - id: setup_page
+      bg_color: 0x000000
+      bg_opa: COVER
+      widgets:
+        - label:
+            x: 0
+            y: 80
+            width: 240
+            text: "Connecting to WiFi"
+            text_font: montserrat_14
+            text_color: 0xFFFFFF
+            align: TOP_MID
+            text_align: CENTER
+        - label:
+            x: 0
+            y: 110
+            width: 240
+            text: "${friendly_name}"
+            text_font: montserrat_28
+            text_color: 0xFFFFFF
+            align: TOP_MID
+            text_align: CENTER
+        - label:
+            x: 0
+            y: 220
+            width: 240
+            text: "If setup is needed, join\n'${friendly_name} Setup' wifi"
+            text_font: montserrat_14
+            text_color: 0xFFFFFF
+            align: TOP_MID
+            text_align: CENTER
+    - id: main_page
+      bg_color: 0x000000
+      bg_opa: COVER
+      widgets:
+        - button:
+            id: btn_roku_power
+            x: 8
+            y: 8
+            width: 108
+            height: 96
+            widgets:
+              - label:
+                  text: "Roku\nPower"
+                  align: CENTER
+            on_click:
+              - homeassistant.service:
+                  service: remote.toggle
+                  data:
+                    entity_id: remote.living_room_tv
+        - button:
+            id: btn_roku_play_game
+            x: 124
+            y: 8
+            width: 108
+            height: 96
+            widgets:
+              - label:
+                  text: "Play\nGame"
+                  align: CENTER
+            on_click:
+              - homeassistant.service:
+                  service: remote.send_command
+                  data:
+                    entity_id: remote.living_room_tv
+                    device: cc6a35ae75dc995d71981ff3e2a4a3ae
+                    command: input_hdmi1
+        - button:
+            id: btn_roku_watch_tv
+            x: 8
+            y: 112
+            width: 108
+            height: 96
+            widgets:
+              - label:
+                  text: "Watch\nTV"
+                  align: CENTER
+            on_click:
+              - homeassistant.service:
+                  service: remote.send_command
+                  data:
+                    entity_id: remote.living_room_tv
+                    device: cc6a35ae75dc995d71981ff3e2a4a3ae
+                    command: input_hdmi3
+        - button:
+            id: btn_window_lamp
+            x: 124
+            y: 112
+            width: 108
+            height: 96
+            widgets:
+              - label:
+                  text: "Window\nLamp"
+                  align: CENTER
+            on_click:
+              - homeassistant.service:
+                  service: light.toggle
+                  data:
+                    entity_id: light.media_room_window_lamp_2
+        - button:
+            id: btn_window_lights
+            x: 8
+            y: 216
+            width: 108
+            height: 96
+            widgets:
+              - label:
+                  text: "Window\nLights"
+                  align: CENTER
+            on_click:
+              - homeassistant.service:
+                  service: light.toggle
+                  data:
+                    entity_id: light.window_lights
+        - button:
+            id: btn_lamp
+            x: 124
+            y: 216
+            width: 108
+            height: 96
+            widgets:
+              - label:
+                  text: "Lamp"
+                  align: CENTER
+            on_click:
+              - homeassistant.service:
+                  service: switch.toggle
+                  data:
+                    entity_id: switch.media_room_plug

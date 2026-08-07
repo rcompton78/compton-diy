@@ -1,0 +1,122 @@
+# =============================================================================
+# BOARD HAL: Freenove ESP32-S3 CYD (2.8" ILI9341 + FT6336U capacitive touch)
+# =============================================================================
+# Hardware-only ESPHome package: chip, PSRAM, backlight, SPI display, I2C
+# touch. No app logic (no wifi/api/ota/UI) lives here on purpose.
+#
+# To port this app to a different board (e.g. the AliExpress 2.8" board this
+# card was originally targeting, see docs/diy-102-bringup/HANDOFF.md), add a
+# new file here — `boards/<name>.yaml` — that provides the same component
+# ids this file provides (`tft_display`, `tft_touch`, `backlight_output`) and
+# point a new `builds/<name>.yaml` at it instead of this file. Nothing in
+# common/dashboard.yaml needs to change.
+#
+# Display pins and the ILI9341 init sequence are copied from apps/espframe's
+# freenove-s3 device (same physical board), which confirmed this exact
+# alternate init sequence is required — ESPHome's stock `ili9xxx` "ILI9341"
+# model leaves this panel blank white. See
+# apps/espframe/builds/.esphome/external_components/*/devices/freenove-s3/
+# device/device.yaml for the source of truth this was copied from, and
+# https://github.com/Bodmer/TFT_eSPI/issues/1172 for background on why the
+# alternate sequence is needed.
+#
+# Touch pins: SDA=GPIO16, SCL=GPIO15, RST=GPIO18, INT=GPIO17. These are the
+# same pins apps/cyd-clock ships for this exact board (see its
+# include/Config.h under BOARD_FREENOVE_S3) and are confirmed working there
+# on this physical unit -- so the pins were never the problem. The actual
+# root cause: ESPHome's ft63x6 component toggles the reset pin and reads the
+# chip-id register only 10ms later (hard_reset_() in ft63x6.cpp), but the
+# FT6336U needs much longer than that to come back up after reset --
+# cyd-clock's own driver (libs/touch-driver, wrapping
+# https://github.com/aselectroworks/Arduino-FT6336U) waits a full 500ms
+# after toggling reset before doing anything on the bus. ESPHome's component
+# has no config knob for that delay, so instead the reset_pin is left
+# unset here entirely -- skipping ESPHome's too-fast reset toggle lets the
+# chip's own power-on boot (which has had ~1s by the time this component's
+# setup() runs) stand in for it. interrupt_pin is also left unset (polling
+# mode) since it's optional and this isolates the fix to the one thing that
+# was actually broken.
+# =============================================================================
+
+esp32:
+  variant: ESP32S3
+  flash_size: 16MB
+  framework:
+    type: esp-idf
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+esphome:
+  on_boot:
+    - priority: -100
+      then:
+        - output.set_level:
+            id: backlight_output
+            level: 100%
+
+output:
+  - platform: ledc
+    id: backlight_output
+    pin: GPIO45
+
+spi:
+  id: spi_bus_display
+  clk_pin: GPIO12
+  mosi_pin: GPIO11
+  miso_pin: GPIO13
+
+i2c:
+  - id: i2c_bus_touch
+    sda: GPIO16
+    scl: GPIO15
+    frequency: 400kHz
+
+# BGR order, inverted colors, and the alternate init sequence below all match
+# the working freenove-s3 config in apps/espframe — this is the same panel.
+display:
+  - platform: ili9xxx
+    model: CUSTOM
+    id: tft_display
+    spi_id: spi_bus_display
+    cs_pin: GPIO10
+    dc_pin: GPIO46
+    color_order: BGR
+    invert_colors: true
+    auto_clear_enabled: false
+    update_interval: never
+    transform:
+      mirror_x: true
+    dimensions:
+      width: 240
+      height: 320
+    init_sequence:
+      - [0xCF, 0x00, 0xC1, 0x30]
+      - [0xED, 0x64, 0x03, 0x12, 0x81]
+      - [0xE8, 0x85, 0x00, 0x78]
+      - [0xCB, 0x39, 0x2C, 0x00, 0x34, 0x02]
+      - [0xF7, 0x20]
+      - [0xEA, 0x00, 0x00]
+      - [0xC0, 0x10]                                                                       # PWCTR1
+      - [0xC1, 0x00]                                                                       # PWCTR2
+      - [0xC5, 0x30, 0x30]                                                                 # VMCTR1
+      - [0xC7, 0xB7]                                                                       # VMCTR2
+      - [0x3A, 0x55]                                                                       # PIXFMT (16bpp)
+      - [0x36, 0x08]                                                                       # MADCTL (BGR, no rotation)
+      - [0xB1, 0x00, 0x1A]                                                                 # FRMCTR1
+      - [0xB6, 0x08, 0x82, 0x27]                                                           # DFUNCTR
+      - [0xF2, 0x00]                                                                       # 3Gamma disable
+      - [0x26, 0x01]                                                                       # GAMMASET
+      - [0xE0, 0x0F, 0x2A, 0x28, 0x08, 0x0E, 0x08, 0x54, 0xA9, 0x43, 0x0A, 0x0F, 0x00, 0x00, 0x00, 0x00]  # GMCTRP1
+      - [0xE1, 0x00, 0x15, 0x17, 0x07, 0x11, 0x06, 0x2B, 0x56, 0x3C, 0x05, 0x10, 0x0F, 0x3F, 0x3F, 0x0F]  # GMCTRN1
+      - [0x2B, 0x00, 0x00, 0x01, 0x3F]                                                     # PASET (rows 0-319)
+      - [0x2A, 0x00, 0x00, 0x00, 0xEF]                                                     # CASET (cols 0-239)
+      - [0x11]                                                                             # SLPOUT
+      - [0x29]                                                                             # DISPON
+
+touchscreen:
+  - platform: ft63x6
+    id: tft_touch
+    display: tft_display
+    i2c_id: i2c_bus_touch

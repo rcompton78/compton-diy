@@ -1,0 +1,20 @@
+# =============================================================================
+# BUILD: Media Room Dashboard - Freenove ESP32-S3 CYD
+# =============================================================================
+# Entrypoint passed to `esphome`/scripts/espframe-esphome.sh. Combines the
+# freenove-s3 board HAL with the board-agnostic dashboard app logic. To add
+# another board, copy this file to builds/<name>.yaml and point `board:` at
+# boards/<name>.yaml instead.
+# =============================================================================
+
+substitutions:
+  name: "media-room-dash-freenove-s3"
+  friendly_name: "Media Room Dashboard"
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+packages:
+  board: !include ../boards/freenove-s3.yaml
+  dashboard: !include ../common/dashboard.yaml
