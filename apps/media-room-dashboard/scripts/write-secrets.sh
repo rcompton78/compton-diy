@@ -23,17 +23,26 @@ if [ -f "$OUT" ]; then
     exit 0
 fi
 
+if [ ! -f "$EXAMPLE" ]; then
+    echo "==> $EXAMPLE not found" >&2
+    exit 1
+fi
+
 echo "==> Generating $OUT from environment (falling back to example placeholders)"
-: > "$OUT"
+TMP="$OUT.tmp"
+umask 077
+: > "$TMP"
 while IFS= read -r line; do
     if [[ "$line" =~ ^([A-Za-z0-9_]+):.*$ ]]; then
         key="${BASH_REMATCH[1]}"
         env_name="$(echo "$key" | tr '[:lower:]' '[:upper:]')"
         env_value="${!env_name:-}"
         if [ -n "$env_value" ]; then
-            printf '%s: "%s"\n' "$key" "$env_value" >> "$OUT"
+            escaped="$(printf '%s' "$env_value" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+            printf '%s: "%s"\n' "$key" "$escaped" >> "$TMP"
             continue
         fi
     fi
-    echo "$line" >> "$OUT"
+    echo "$line" >> "$TMP"
 done < "$EXAMPLE"
+mv "$TMP" "$OUT"

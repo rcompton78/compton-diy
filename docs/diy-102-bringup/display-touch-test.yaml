@@ -19,8 +19,11 @@ esphome:
           const int mosi = 13;
           const int dc = 2;
           const int reset = 4;
-          int cs_candidates[] = {15, 5, 4, 27, 26, 25, 17, 16, 22, 19};
-          int num_candidates = 10;
+          // GPIO4 (reset) must never appear here -- pulling it low as a CS
+          // candidate would hold the display in reset during that
+          // candidate's init/RAMWR writes, guaranteeing a false negative.
+          int cs_candidates[] = {15, 5, 27, 26, 25, 17, 16, 22, 19};
+          int num_candidates = 9;
 
           pinMode(clk, OUTPUT);
           pinMode(mosi, OUTPUT);
@@ -106,6 +109,7 @@ esphome:
             digitalWrite(cs, HIGH);
 
             ESP_LOGI("sweep", "[%d/%d] Filled with CS=GPIO%d", idx + 1, num_candidates, cs);
+            App.feed_wdt();
             delay(5000);
           }
           ESP_LOGI("sweep", "Sweep complete -- note which GPIO (if any) showed white");

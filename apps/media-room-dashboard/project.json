@@ -26,6 +26,7 @@
       },
       "dependsOn": ["write-secrets"],
       "cache": true,
+      "inputs": ["default", "{projectRoot}/builds/secrets.yaml"],
       "outputs": ["{projectRoot}/builds/.esphome/build/media-room-dash-freenove-s3"]
     },
     "flash-freenove-s3": {
