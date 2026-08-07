@@ -30,6 +30,7 @@ fi
 
 echo "==> Generating $OUT from environment (falling back to example placeholders)"
 TMP="$OUT.tmp"
+trap 'rm -f "$TMP"' EXIT
 umask 077
 : > "$TMP"
 while IFS= read -r line; do
@@ -38,7 +39,7 @@ while IFS= read -r line; do
         env_name="$(echo "$key" | tr '[:lower:]' '[:upper:]')"
         env_value="${!env_name:-}"
         if [ -n "$env_value" ]; then
-            escaped="$(printf '%s' "$env_value" | sed 's/\\/\\\\/g; s/"/\\"/g')"
+            escaped="$(printf '%s' "$env_value" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g' | sed ':a;N;$!ba;s/\n/\\n/g')"
             printf '%s: "%s"\n' "$key" "$escaped" >> "$TMP"
             continue
         fi
@@ -46,3 +47,4 @@ while IFS= read -r line; do
     echo "$line" >> "$TMP"
 done < "$EXAMPLE"
 mv "$TMP" "$OUT"
+trap - EXIT
