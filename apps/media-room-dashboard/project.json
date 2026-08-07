@@ -1,0 +1,56 @@
+{
+  "name": "media-room-dashboard",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "targets": {
+    "write-secrets": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "apps/media-room-dashboard/scripts/write-secrets.sh",
+        "cwd": "."
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "echo done",
+        "cwd": "."
+      },
+      "dependsOn": ["build-freenove-s3"]
+    },
+    "build-freenove-s3": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/espframe-esphome.sh compile apps/media-room-dashboard/builds/freenove-s3.yaml",
+        "cwd": "."
+      },
+      "dependsOn": ["write-secrets"],
+      "cache": true,
+      "inputs": ["default", "{projectRoot}/builds/secrets.yaml"],
+      "outputs": ["{projectRoot}/builds/.esphome/build/media-room-dash-freenove-s3"]
+    },
+    "flash-freenove-s3": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/espframe-esphome.sh upload apps/media-room-dashboard/builds/freenove-s3.yaml --device /dev/ttyACM0",
+        "cwd": "."
+      },
+      "dependsOn": ["build-freenove-s3"]
+    },
+    "monitor-freenove-s3": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/espframe-esphome.sh logs apps/media-room-dashboard/builds/freenove-s3.yaml --device /dev/ttyACM0",
+        "cwd": "."
+      }
+    },
+    "release": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "python3 tools/esp-flasher/generate_release.py --project-dir apps/media-room-dashboard --name \"Media Room Dashboard\" --esphome freenove-s3:ESP32-S3:media-room-dash-freenove-s3 --version ${RELEASE_VERSION:-dev}",
+        "cwd": "."
+      },
+      "dependsOn": ["build-freenove-s3"]
+    }
+  }
+}

@@ -1,0 +1,32 @@
+# Throwaway diagnostic config for DIY-102 -- identifies the capacitive touch
+# controller (GT911 vs CST820/CST826/etc.) on the AliExpress 2.8" ILI9341
+# board by scanning the I2C bus and logging any responding addresses.
+#
+# Usage:
+#   scripts/espframe-esphome.sh run i2c-scan.yaml
+# (run from this scratchpad directory, or pass the full path)
+#
+# Plug the board in over USB, pick the port when prompted, then watch the
+# logs after boot -- ESPHome logs each found address as
+# "Found device at address 0x.."
+#
+# NOTE: sda/scl below are a guess (GPIO21/22 is the common default on plain
+# ESP32 dev boards). If nothing is found, check the board's silkscreen for
+# labeled touch pins (often broken out on a separate header near the FPC
+# connector) and edit sda/scl to match, then re-run.
+
+esphome:
+  name: i2c-scan
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+logger:
+  level: DEBUG
+
+i2c:
+  sda: GPIO33
+  scl: GPIO32
+  scan: true

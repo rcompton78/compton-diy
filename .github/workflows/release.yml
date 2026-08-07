@@ -95,6 +95,7 @@ jobs:
         env:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
           CAT_BUDDY_API_TOKEN: ${{ secrets.CAT_BUDDY_API_TOKEN }}
+          API_ENCRYPTION_KEY: ${{ secrets.API_ENCRYPTION_KEY }}
         run: |
           pnpm nx run-many -t build
           pnpm nx run-many -t build-fs
@@ -103,6 +104,7 @@ jobs:
         env:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
           CAT_BUDDY_API_TOKEN: ${{ secrets.CAT_BUDDY_API_TOKEN }}
+          API_ENCRYPTION_KEY: ${{ secrets.API_ENCRYPTION_KEY }}
         run: pnpm nx run-many -t release
 
       - name: Generate flasher index
