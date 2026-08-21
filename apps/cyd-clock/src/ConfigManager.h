@@ -37,6 +37,11 @@ struct AppConfig {
                                       // to 6 entries, uint8_t only had headroom to 8, same reasoning
                                       // as ownedRoomThemes' DIY-90 widening)
     uint8_t equippedStuffy = 0;      // Dressing room: index of the stuffy to display (left arm / night scene)
+    uint16_t ownedStuffiesSecond = 0; // Store purchase: bitmask, bit N = owns a 2nd copy of stuffy N (DIY-106).
+                                      // Kept as its own bitmask rather than widening ownedStuffies to 2-bit
+                                      // counts, so old on-disk configs just default this to 0 with no
+                                      // migration needed. Owning a 2nd copy is what allows the same stuffy
+                                      // to be equipped on both arms at once — see buildStuffyRadioOptions().
     uint8_t seenStuffyCount       = 0;  // Highest STUFFY_COUNT the store page has shown the user
     bool    rightArmSlotUnlocked = false;  // Store purchase: one-time unlock, independent of ownedStuffies —
                                             // any already-owned stuffy can be equipped here too

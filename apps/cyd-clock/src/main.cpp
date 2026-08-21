@@ -3550,6 +3550,23 @@ static String storeItemAction(const char* item, bool owned, uint32_t cost, uint3
     return html;
 }
 
+// Stuffy variant of storeItemAction() — stuffies can be bought twice (DIY-106), so the same
+// item id posts a second purchase once the first is owned, rather than being blocked as
+// "already owned" until a 2nd copy is owned too. Labeled "Buy 2nd for N" so it's clear the
+// button re-buys the same item rather than something new.
+static String storeItemActionStuffy(const char* item, bool ownedFirst, bool ownedSecond,
+                                     uint32_t cost, uint32_t points) {
+    if (ownedSecond) return "<span class='owned'>Owned (x2)</span>";
+    String html = "<form method='POST' action='/save-config/store'>";
+    html += "<input type='hidden' name='item' value='" + String(item) + "'>";
+    html += "<button type='submit'";
+    if (points < cost) html += " disabled";
+    html += ">";
+    html += ownedFirst ? "Buy 2nd for " : "Buy for ";
+    html += String(cost) + "</button></form>";
+    return html;
+}
+
 static void handleConfigStoreGet() {
     // Clear the on-device points flash by stamping the current catalog sizes as "seen" —
     // any store visit acknowledges every item added up to this point.
@@ -3569,12 +3586,13 @@ static void handleConfigStoreGet() {
     page.replace("%%POINTS%%", String(points));
     String stuffyItems = "";
     for (int i = 0; i < STUFFY_COUNT; i++) {
-        bool owned = configMgr.config().ownedStuffies & (1 << i);
+        bool ownedFirst = configMgr.config().ownedStuffies & (1 << i);
+        bool ownedSecond = configMgr.config().ownedStuffiesSecond & (1 << i);
         uint32_t itemCost = flashSalePrice(STUFFIES[i].id, STUFFIES[i].cost);
         bool onSale = itemCost != STUFFIES[i].cost;
         stuffyItems += "<div class='item'><span>" + String(STUFFIES[i].label) + "</span>";
         if (onSale) stuffyItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
-        stuffyItems += storeItemAction(STUFFIES[i].id, owned, itemCost, points);
+        stuffyItems += storeItemActionStuffy(STUFFIES[i].id, ownedFirst, ownedSecond, itemCost, points);
         stuffyItems += "</div>\n";
     }
     page.replace("%%STUFFY_ITEMS%%", stuffyItems);
@@ -3973,7 +3991,10 @@ static void handleConfigStorePost() {
     }
     if (stuffyIdx >= 0) {
         cost = flashSalePrice(STUFFIES[stuffyIdx].id, STUFFIES[stuffyIdx].cost);
-        alreadyOwned = configMgr.config().ownedStuffies & (1 << stuffyIdx);
+        // Stuffies can be bought twice (DIY-106) — only maxed at 2 copies counts as
+        // "already owned" here; owning just the 1st copy still allows this same item id
+        // to be bought again for the 2nd, handled in the purchase branch below.
+        alreadyOwned = configMgr.config().ownedStuffiesSecond & (1 << stuffyIdx);
     } else {
         for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
             if (item == BLANKET_COLORS[i].id) { blanketIdx = i; break; }
@@ -4052,6 +4073,11 @@ static void handleConfigStorePost() {
         configMgr.config().equippedGlasses = glassesIdx;  // newly bought glasses become equipped
     } else if (rightArmSlotPurchase) {
         configMgr.config().rightArmSlotUnlocked = true;  // starts empty — see equippedStuffyRightIndex()
+    } else if (configMgr.config().ownedStuffies & (1 << stuffyIdx)) {
+        // 1st copy already owned — this purchase is for the 2nd copy (DIY-106). Doesn't
+        // touch equippedStuffy/equippedStuffyRight; the user picks which arm gets it via
+        // the dressing room, same as unlocking the right arm slot doesn't auto-equip either.
+        configMgr.config().ownedStuffiesSecond |= (1 << stuffyIdx);
     } else {
         configMgr.config().ownedStuffies |= (1 << stuffyIdx);
         configMgr.config().equippedStuffy = stuffyIdx;  // newly bought stuffy becomes equipped
@@ -4065,6 +4091,7 @@ static void handleConfigStorePost() {
         else if (accessoryIdx >= 0) configMgr.config().ownedAccessories &= ~(1 << accessoryIdx);
         else if (glassesIdx >= 0) configMgr.config().ownedGlasses &= ~(1 << glassesIdx);
         else if (rightArmSlotPurchase) configMgr.config().rightArmSlotUnlocked = false;
+        else if (configMgr.config().ownedStuffiesSecond & (1 << stuffyIdx)) configMgr.config().ownedStuffiesSecond &= ~(1 << stuffyIdx);
         else configMgr.config().ownedStuffies &= ~(1 << stuffyIdx);
         wm.server->sendHeader("Location", "/config/store?err=save");
         wm.server->send(302, "text/plain", "");
@@ -4083,9 +4110,12 @@ static void handleConfigStorePost() {
 // none): matching it greys out and disables that option here, so the user can't select a
 // stuffy that's already on the other arm in the first place — see the
 // stuffyChanged/stuffyRightChanged guard in handleConfigDressPost() below, which this keeps
-// the user from ever needing to hit.
+// the user from ever needing to hit. Owning a 2nd copy of that stuffy (DIY-106) lifts the
+// disable, since a 2nd copy means there's genuinely one for each arm — the "(on X arm)" note
+// still shows so it's clear that arm is also wearing it.
 static String buildStuffyRadioOptions(const char* fieldName, int equippedIdx, int otherArmIdx, const char* otherArmLabel) {
     uint16_t ownedStuffies = configMgr.config().ownedStuffies;
+    uint16_t ownedStuffiesSecond = configMgr.config().ownedStuffiesSecond;
     String options = "<label class='pick'><input type='radio' name='";
     options += fieldName;
     options += "' value='none'";
@@ -4094,17 +4124,18 @@ static String buildStuffyRadioOptions(const char* fieldName, int equippedIdx, in
     for (int i = 0; i < STUFFY_COUNT; i++) {
         if (!(ownedStuffies & (1 << i))) continue;
         bool onOtherArm = (i == otherArmIdx);
+        bool conflicts = onOtherArm && !(ownedStuffiesSecond & (1 << i));
         options += "<label class='pick";
-        if (onOtherArm) options += " disabled";
+        if (conflicts) options += " disabled";
         options += "'><input type='radio' name='";
         options += fieldName;
         options += "' value='";
         options += STUFFIES[i].id;
         options += "'";
         if (i == equippedIdx) options += " checked";
-        if (onOtherArm) options += " disabled";
+        if (conflicts) options += " disabled";
         options += "> " + String(STUFFIES[i].label);
-        if (onOtherArm) { options += " (on "; options += otherArmLabel; options += " arm)"; }
+        if (onOtherArm) { options += " (also on "; options += otherArmLabel; options += " arm)"; }
         options += "</label>";
     }
     return options;
@@ -4343,9 +4374,11 @@ static void handleConfigDressPost() {
     // Only enforced when this request actually touched a stuffy slot — a config from before
     // this guard existed could already have the same stuffy on both arms, and an unrelated
     // field change (e.g. blanket color) shouldn't 400 out just because that pre-existing state
-    // happens to conflict.
+    // happens to conflict. Owning a 2nd copy of the stuffy (DIY-106) lifts the conflict —
+    // there's genuinely one for each arm in that case.
     if ((stuffyChanged || stuffyRightChanged) &&
-        newStuffy != EQUIP_NONE && newStuffy == newStuffyRight) {
+        newStuffy != EQUIP_NONE && newStuffy == newStuffyRight &&
+        !(configMgr.config().ownedStuffiesSecond & (1 << newStuffy))) {
         wm.server->send(400, "text/plain", "Can't equip the same stuffy on both arms");
         return;
     }

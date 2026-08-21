@@ -62,6 +62,7 @@ void ConfigManager::fromJson(JsonDocument& doc) {
         _config.ownedStuffies = stuffies;
     }
     _config.equippedStuffy = doc["stuffyEquipped"] | _config.equippedStuffy;
+    if (doc["stuffiesSecond"].is<uint16_t>()) _config.ownedStuffiesSecond = doc["stuffiesSecond"];
     _config.seenStuffyCount       = doc["seenStuffies"] | _config.seenStuffyCount;
     _config.rightArmSlotUnlocked = doc["rightArmSlot"]       | _config.rightArmSlotUnlocked;
     _config.equippedStuffyRight  = doc["stuffyRightEquipped"] | _config.equippedStuffyRight;
@@ -142,6 +143,7 @@ void ConfigManager::toJson(JsonDocument& doc) const {
     doc["blanketEquipped"] = _config.equippedBlanketColor;
     doc["stuffies"]        = _config.ownedStuffies;
     doc["stuffyEquipped"]  = _config.equippedStuffy;
+    doc["stuffiesSecond"]  = _config.ownedStuffiesSecond;
     doc["seenStuffies"]    = _config.seenStuffyCount;
     doc["rightArmSlot"]        = _config.rightArmSlotUnlocked;
     doc["stuffyRightEquipped"] = _config.equippedStuffyRight;
