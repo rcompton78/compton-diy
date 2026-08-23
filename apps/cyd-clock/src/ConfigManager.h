@@ -30,7 +30,10 @@ struct AppConfig {
     int thirstForceMinutes = 120;   // force thirsty after this many minutes without water, absent an earlier random trigger
     uint32_t lastWaterEpoch = 0;    // Unix epoch of last water; 0 = never watered
     uint32_t points = 0;            // Gamification points earned from timely care actions
-    uint8_t ownedBlanketColors  = 0;  // Store purchase: bitmask, bit N = owns blanket color N
+    uint16_t ownedBlanketColors = 0;  // Store purchase: bitmask, bit N = owns blanket color N (widened
+                                      // to uint16_t in DIY-107 — bow/blanket color parity brought the
+                                      // catalog past 8 entries, same reasoning as ownedStuffies' DIY-97
+                                      // widening)
     uint8_t equippedBlanketColor = 0; // Dressing room: index of the blanket color to display
     uint16_t ownedStuffies = 0;      // Store purchase: bitmask, bit N = owns stuffy N (widened to
                                       // uint16_t in DIY-97 — the snowman (DIY-89) brought the catalog
@@ -59,7 +62,10 @@ struct AppConfig {
     uint8_t ownedCatColors     = 0;  // Store purchase: bitmask, bit N = owns cat color N (white is free, not in this catalog)
     uint8_t equippedCatColor   = 0;  // Dressing room: index of the cat color to display
     uint8_t seenCatColorCount  = 0;  // Highest CAT_COLOR_COUNT the store page has shown the user
-    uint8_t ownedAccessories   = 0;  // Store purchase: bitmask, bit N = owns accessory N
+    uint16_t ownedAccessories  = 0;  // Store purchase: bitmask, bit N = owns accessory N (widened to
+                                      // uint16_t in DIY-107 — bow/blanket color parity brought the
+                                      // catalog past 8 entries, same reasoning as ownedStuffies' DIY-97
+                                      // widening)
     uint8_t equippedAccessory  = 0;  // Dressing room: index of the accessory to display
     uint8_t seenAccessoryCount = 0;  // Highest ACCESSORY_COUNT the store page has shown the user
     uint8_t ownedGlasses       = 0;  // Store purchase: bitmask, bit N = owns glasses N
