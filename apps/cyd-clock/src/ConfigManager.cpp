@@ -44,8 +44,12 @@ void ConfigManager::fromJson(JsonDocument& doc) {
     {
         // Distinguish "blanketColors absent" (preserve current ownership — e.g. a partial
         // backup import) from "blanketColors present as 0" (an owner-cleared/reset state).
-        uint8_t colors;
-        if (doc["blanketColors"].is<uint8_t>()) colors = doc["blanketColors"];
+        // .is<uint16_t>(), not uint8_t: once 9+ blanket colors are owned the bitmask value
+        // exceeds 255, and an is<uint8_t>() check would silently fail and fall through to the
+        // legacy/default branches below, losing real ownership data (same bug fixed for
+        // ownedStuffies in DIY-97).
+        uint16_t colors;
+        if (doc["blanketColors"].is<uint16_t>()) colors = doc["blanketColors"];
         else if (doc["blanket"] | false) colors = 1;  // migrate legacy single-blanket flag
         else colors = _config.ownedBlanketColors;
         _config.ownedBlanketColors = colors;

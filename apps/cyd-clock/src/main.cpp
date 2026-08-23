@@ -105,6 +105,15 @@ static constexpr uint16_t C_BOW_MAGENTA = 0xF81F;  // deliberately distinct from
 static constexpr uint16_t C_BOW_HOT_PINK  = 0xF8B2;  // brighter/truer pink than C_BOW_MAGENTA
 static constexpr uint16_t C_BOW_PURPLE    = 0x939B;  // medium purple
 static constexpr uint16_t C_BOW_BABY_BLUE = 0x8E7E;  // baby blue
+// Below: DIY-107 bow/blanket color parity — matches the six blanket colors that didn't
+// already have a bow counterpart, reusing each blanket's own `base` value (see
+// BLANKET_COLORS below) so the two slots look identical when equipped together.
+static constexpr uint16_t C_BOW_DUSTY_BLUE    = 0x4BB6;  // matches the Dusty Blue blanket
+static constexpr uint16_t C_BOW_CREAM         = 0xFFFA;  // matches the Cream blanket
+static constexpr uint16_t C_BOW_LEMON_YELLOW  = 0xF6CB;  // matches the Lemon Yellow blanket
+static constexpr uint16_t C_BOW_APPLE_GREEN   = 0xC711;  // matches the Apple Green blanket
+static constexpr uint16_t C_BOW_TANGERINE     = 0xFD2A;  // matches the Tangerine blanket
+static constexpr uint16_t C_BOW_FLAMINGO_PINK = 0xFD16;  // matches the Flamingo Pink blanket
 static constexpr uint16_t C_GLASSES_RIM  = 0xFC18;  // pink rim (same pink family as the unicorn horn)
 static constexpr uint16_t C_GLASSES_LENS = 0x2945;  // dark tinted lens — same charcoal as C_DARK
 static constexpr uint16_t C_DARK  = 0x2945;  // charcoal
@@ -156,8 +165,16 @@ static constexpr BlanketColor BLANKET_COLORS[] = {
     {"apple_green",   "Apple Green",   0xC711, 0x7D2A, "#C2E189"},  // Bambu PLA Apple Green blanket, deeper leaf-green fold trim
     {"tangerine",     "Tangerine",     0xFD2A, 0xD3E5, "#FFA552"},  // warm orange blanket, burnt-orange fold trim
     {"flamingo_pink", "Flamingo Pink", 0xFD16, 0xBBD1, "#FCA3B7"},  // vibrant flamingo-pink blanket, deeper rose fold trim
+    // Below: DIY-107 bow/blanket color parity — matches the four bow accessory colors that
+    // didn't already have a blanket counterpart, using each bow's own base color as `base`
+    // (see C_BOW_* above) so the two slots look identical when equipped together.
+    {"magenta",       "Magenta",       0xF81F, 0xA014, "#FF00FF"},  // matches the Magenta bow, deeper magenta fold trim
+    {"hot_pink",      "Hot Pink",      0xF8B2, 0xA06B, "#FF1493"},  // matches the Hot Pink bow, deeper rose fold trim
+    {"purple",        "Purple",        0x939B, 0x5A51, "#9370DB"},  // matches the Purple bow, deeper purple fold trim
+    {"baby_blue",     "Baby Blue",     0x8E7E, 0x5413, "#89CFF0"},  // matches the Baby Blue bow, deeper blue fold trim
 };
 static constexpr int BLANKET_COLOR_COUNT = sizeof(BLANKET_COLORS) / sizeof(BLANKET_COLORS[0]);
+static_assert(BLANKET_COLOR_COUNT <= 16, "ownedBlanketColors bitmask is uint16_t");
 
 // Pattern accent colors for the two patterned cat colors below — kept as named constants
 // since both the catalog and the pattern-drawing functions reference them.
@@ -224,6 +241,12 @@ static void drawBowMagenta(int cx, int cy);
 static void drawBowHotPink(int cx, int cy);
 static void drawBowPurple(int cx, int cy);
 static void drawBowBabyBlue(int cx, int cy);
+static void drawBowDustyBlue(int cx, int cy);
+static void drawBowCream(int cx, int cy);
+static void drawBowLemonYellow(int cx, int cy);
+static void drawBowAppleGreen(int cx, int cy);
+static void drawBowTangerine(int cx, int cy);
+static void drawBowFlamingoPink(int cx, int cy);
 
 // Accessory catalog — same purchase/equip model as cat colors, but layered independently
 // on top of whichever cat color is equipped (an accessory works with any fur color). `id` is
@@ -244,9 +267,17 @@ static constexpr Accessory ACCESSORIES[] = {
     {"bow_hot_pink",  "Hot Pink Bow",  STORE_COST_ACCESSORY_BOW, "#FF1493", drawBowHotPink},
     {"bow_purple",    "Purple Bow",    STORE_COST_ACCESSORY_BOW, "#9370DB", drawBowPurple},
     {"bow_baby_blue", "Baby Blue Bow", STORE_COST_ACCESSORY_BOW, "#89CFF0", drawBowBabyBlue},
+    // Below: DIY-107 bow/blanket color parity — matches the six blanket colors that didn't
+    // already have a bow counterpart.
+    {"bow_dusty_blue",    "Dusty Blue Bow",    STORE_COST_ACCESSORY_BOW, "#6b8cae", drawBowDustyBlue},
+    {"bow_cream",         "Cream Bow",         STORE_COST_ACCESSORY_BOW, "#e8d9b5", drawBowCream},
+    {"bow_lemon_yellow",  "Lemon Yellow Bow",  STORE_COST_ACCESSORY_BOW, "#F7D959", drawBowLemonYellow},
+    {"bow_apple_green",   "Apple Green Bow",   STORE_COST_ACCESSORY_BOW, "#C2E189", drawBowAppleGreen},
+    {"bow_tangerine",     "Tangerine Bow",     STORE_COST_ACCESSORY_BOW, "#FFA552", drawBowTangerine},
+    {"bow_flamingo_pink", "Flamingo Pink Bow", STORE_COST_ACCESSORY_BOW, "#FCA3B7", drawBowFlamingoPink},
 };
 static constexpr int ACCESSORY_COUNT = sizeof(ACCESSORIES) / sizeof(ACCESSORIES[0]);
-static_assert(ACCESSORY_COUNT <= 8, "ownedAccessories bitmask is uint8_t");
+static_assert(ACCESSORY_COUNT <= 16, "ownedAccessories bitmask is uint16_t");
 
 // Forward-declared for the same reason as the bow functions above — GLASSES[] needs this
 // before drawCat() (and `tft`) are declared.
@@ -543,6 +574,12 @@ static void drawBowMagenta(int cx, int cy)  { drawBowShape(cx, cy, C_BOW_MAGENTA
 static void drawBowHotPink(int cx, int cy)  { drawBowShape(cx, cy, C_BOW_HOT_PINK); }
 static void drawBowPurple(int cx, int cy)   { drawBowShape(cx, cy, C_BOW_PURPLE); }
 static void drawBowBabyBlue(int cx, int cy) { drawBowShape(cx, cy, C_BOW_BABY_BLUE); }
+static void drawBowDustyBlue(int cx, int cy)    { drawBowShape(cx, cy, C_BOW_DUSTY_BLUE); }
+static void drawBowCream(int cx, int cy)        { drawBowShape(cx, cy, C_BOW_CREAM); }
+static void drawBowLemonYellow(int cx, int cy)  { drawBowShape(cx, cy, C_BOW_LEMON_YELLOW); }
+static void drawBowAppleGreen(int cx, int cy)   { drawBowShape(cx, cy, C_BOW_APPLE_GREEN); }
+static void drawBowTangerine(int cx, int cy)    { drawBowShape(cx, cy, C_BOW_TANGERINE); }
+static void drawBowFlamingoPink(int cx, int cy) { drawBowShape(cx, cy, C_BOW_FLAMINGO_PINK); }
 
 // Glasses art (declared earlier alongside GLASSES[]). Called from drawCat() after the eyes
 // (unlike the bow above, which is drawn before them) so the round lenses sit over the eye
@@ -727,7 +764,7 @@ static void drawCat(int cx, int cy, CatStatus status, CatBoredom boredom, CatHea
 // otherwise the lowest-index owned color (covers stale/out-of-range equipped state), or
 // -1 if no blanket color is owned at all.
 static int equippedBlanketIndex() {
-    uint8_t owned = configMgr.config().ownedBlanketColors;
+    uint16_t owned = configMgr.config().ownedBlanketColors;
     if (owned == 0) return -1;
     uint8_t eq = configMgr.config().equippedBlanketColor;
     if (eq == EQUIP_NONE) return -1;  // user explicitly unequipped
@@ -792,7 +829,7 @@ static int equippedCatColorIndex() {
 
 // Same resolution logic as equippedBlanketIndex(), for the accessory catalog.
 static int equippedAccessoryIndex() {
-    uint8_t owned = configMgr.config().ownedAccessories;
+    uint16_t owned = configMgr.config().ownedAccessories;
     if (owned == 0) return -1;
     uint8_t eq = configMgr.config().equippedAccessory;
     if (eq == EQUIP_NONE) return -1;  // user explicitly unequipped
@@ -4145,7 +4182,7 @@ static void handleConfigDressGet() {
     String page = String(FPSTR(CONFIG_DRESS_HTML));
     page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
 
-    uint8_t owned = configMgr.config().ownedBlanketColors;
+    uint16_t owned = configMgr.config().ownedBlanketColors;
     int equippedIdx = equippedBlanketIndex();
     String options = "";
     if (owned == 0) {
@@ -4229,7 +4266,7 @@ static void handleConfigDressGet() {
     }
     page.replace("%%CAT_COLOR_OPTIONS%%", catColorOptions);
 
-    uint8_t ownedAccessories = configMgr.config().ownedAccessories;
+    uint16_t ownedAccessories = configMgr.config().ownedAccessories;
     int equippedAccessoryIdx = equippedAccessoryIndex();
     String accessoryOptions = "";
     if (ownedAccessories == 0) {
