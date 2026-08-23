@@ -169,7 +169,7 @@ static constexpr BlanketColor BLANKET_COLORS[] = {
     // didn't already have a blanket counterpart, using each bow's own base color as `base`
     // (see C_BOW_* above) so the two slots look identical when equipped together.
     {"magenta",       "Magenta",       0xF81F, 0xA014, "#FF00FF"},  // matches the Magenta bow, deeper magenta fold trim
-    {"hot_pink",      "Hot Pink",      0xF8B2, 0xA06B, "#FF1493"},  // matches the Hot Pink bow, deeper rose fold trim
+    {"hot_pink_blanket", "Hot Pink",   0xF8B2, 0xA06B, "#FF1493"},  // matches the Hot Pink bow, deeper rose fold trim; id suffixed "_blanket" since "hot_pink" is already the cat color's id (assertStoreIdsUnique() requires globally unique ids)
     {"purple",        "Purple",        0x939B, 0x5A51, "#9370DB"},  // matches the Purple bow, deeper purple fold trim
     {"baby_blue",     "Baby Blue",     0x8E7E, 0x5413, "#89CFF0"},  // matches the Baby Blue bow, deeper blue fold trim
 };
