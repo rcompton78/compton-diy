@@ -7,16 +7,18 @@ bool ConfigManager::begin() {
     return LittleFS.begin(true);
 }
 
-// Basic sanity check for a packed YYYYMMDD date int (0 = unset, always valid) — used below to
+// Sanity check for a packed YYYYMMDD date int (0 = unset, always valid) — used below to
 // reject malformed persisted/imported theme-week dates before they can reach
-// isThemeWeekActive()'s window math (main.cpp), which has no validation of its own. Not
-// calendar-perfect (doesn't special-case Feb 29 on non-leap years, or 30 vs. 31-day months) —
-// just enough to catch obviously-garbage values like month 13 or day 32 from a hand-edited
-// config file or a corrupted backup import.
+// isThemeWeekActive()'s window math (main.cpp), which has no validation of its own.
+// Calendar-aware (rejects e.g. Feb 30, and Feb 29 on a non-leap year), not just range-checked.
 static bool isPlausibleDateOrZero(int32_t d) {
     if (d == 0) return true;
     int y = d / 10000, mo = (d / 100) % 100, day = d % 100;
-    return y >= 2000 && y <= 2100 && mo >= 1 && mo <= 12 && day >= 1 && day <= 31;
+    if (y < 2000 || y > 2100 || mo < 1 || mo > 12 || day < 1) return false;
+    static constexpr int DAYS_IN_MONTH[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    bool leapYear = (y % 4 == 0 && y % 100 != 0) || y % 400 == 0;
+    int maxDay = (mo == 2 && leapYear) ? 29 : DAYS_IN_MONTH[mo - 1];
+    return day <= maxDay;
 }
 
 void ConfigManager::fromJson(JsonDocument& doc) {
@@ -140,11 +142,14 @@ void ConfigManager::fromJson(JsonDocument& doc) {
     {
         int32_t start = doc["themeWeekBirthdayStartDate"] | _config.themeWeekBirthdayStartDate;
         int32_t end   = doc["themeWeekBirthdayEndDate"]   | _config.themeWeekBirthdayEndDate;
-        // Reject the whole pair on any malformed/inverted range, rather than one field — a
-        // start with no matching end (or vice versa) is just as meaningless to
-        // isThemeWeekActive() as either being individually invalid.
+        // Reject the whole pair on any malformed/inverted/partial range, rather than one
+        // field — a start with no matching end (or vice versa) is just as meaningless to
+        // isThemeWeekActive() as either being individually invalid, so only a fully-cleared
+        // (0, 0) pair or a fully-set pair with end >= start is accepted; anything else leaves
+        // the previously-persisted values untouched rather than silently disabling a
+        // possibly-active range with a broken half-pair.
         if (isPlausibleDateOrZero(start) && isPlausibleDateOrZero(end) &&
-            (start == 0 || end == 0 || end >= start)) {
+            ((start == 0 && end == 0) || (start != 0 && end != 0 && end >= start))) {
             _config.themeWeekBirthdayStartDate = start;
             _config.themeWeekBirthdayEndDate   = end;
         }
