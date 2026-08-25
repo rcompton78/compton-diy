@@ -125,6 +125,10 @@ void ConfigManager::fromJson(JsonDocument& doc) {
     _config.autoUpdateEnabled     = doc["autoUpdate"]   | _config.autoUpdateEnabled;
     _config.lastUpdateCheckVersion = doc["lastCheckVer"] | _config.lastUpdateCheckVersion;
     _config.lastUpdateCheckEpoch   = doc["lastCheckAt"]  | _config.lastUpdateCheckEpoch;
+    _config.themeWeekBirthdayStartDate = doc["themeWeekBirthdayStartDate"] | _config.themeWeekBirthdayStartDate;
+    _config.themeWeekBirthdayEndDate   = doc["themeWeekBirthdayEndDate"]   | _config.themeWeekBirthdayEndDate;
+    _config.activeThemeWeekKey     = doc["themeWeekActive"] | _config.activeThemeWeekKey;
+    _config.preThemeWeekRoomTheme  = doc["themeWeekPrevRoomTheme"] | _config.preThemeWeekRoomTheme;
 }
 
 void ConfigManager::toJson(JsonDocument& doc) const {
@@ -177,6 +181,10 @@ void ConfigManager::toJson(JsonDocument& doc) const {
     doc["autoUpdate"]   = _config.autoUpdateEnabled;
     doc["lastCheckVer"] = _config.lastUpdateCheckVersion;
     doc["lastCheckAt"]  = _config.lastUpdateCheckEpoch;
+    doc["themeWeekBirthdayStartDate"] = _config.themeWeekBirthdayStartDate;
+    doc["themeWeekBirthdayEndDate"]   = _config.themeWeekBirthdayEndDate;
+    doc["themeWeekActive"]         = _config.activeThemeWeekKey;
+    doc["themeWeekPrevRoomTheme"]  = _config.preThemeWeekRoomTheme;
 }
 
 bool ConfigManager::load() {
