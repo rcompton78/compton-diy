@@ -470,6 +470,76 @@ writing a `flash_sales` row, no firmware release required.
 - **Cost**: `cyd` board is now at 95.4% flash usage — not much headroom
   left before the next feature needs to trim something.
 
+## Theme Weeks — Birthday Theme (DIY-108, 2026-08-24)
+
+Added the first "special theme week" — a date range the admin schedules from the
+device's own secret admin screen, during which the cat gets birthday cosmetics
+(party hat, birthday balloon sunglasses, a confetti/balloons room theme) that
+auto-equip on day one and force-revert once the range ends. Meant to be a reusable
+pattern for future theme weeks (Christmas, etc.), though those are expected to be
+hardcoded additions later, not a generic system built now.
+
+- **Entirely local/offline** — this went through two designs before landing here.
+  The first polled a new `cat-buddy-api` `/theme-week` endpoint (mirroring
+  flash-sale's pattern, with a `theme_weeks` table and a write side this time).
+  The user then decided against storing theme-week schedules server-side at all,
+  so that whole piece (entity/migration/controller/module) was dropped — never
+  pushed, so it left no trace in `compton-apps`. The admin now enters a plain
+  start/end **date** (no time-of-day — `/config/admin/themeweek`, an `<input
+  type=date>` pair) directly on the device, persisted in `ConfigManager`
+  (`themeWeekBirthdayStartDate`/`EndDate`, packed `YYYYMMDD`) and evaluated every
+  `loop()` tick against the device's own NTP-synced clock — no network call
+  involved at all, works offline, and actually *reduced* flash usage versus the
+  network-polling version.
+- **Theme-exclusive cosmetics** — the party hat (`ACCESSORIES[]`), birthday
+  balloon sunglasses (`GLASSES[]`), and the "Birthday" room theme (`ROOM_THEMES[]`)
+  are appended to the end of their catalogs but are never store-purchasable: store
+  rendering, the purchase-lookup handler, and the "new store items!" badge all
+  bound themselves to a `*_STORE_COUNT` constant (count of real, purchasable
+  entries) rather than the catalog's full count, so the theme-exclusive entries
+  never show up as buyable and never trip the badge. The dressing room needed *no*
+  changes at all — it already only lists owned items, so once
+  `applyThemeWeekCosmetics()` sets the owned bit, the existing equip/unequip UI
+  just works, letting the user freely swap them out mid-week without any special
+  casing.
+- **Apply/revert transition**: `checkThemeWeekTransition()` compares the local
+  date range against `activeThemeWeekKey` (what's currently applied) every tick.
+  On day one it grants + force-equips the three items and snapshots whatever room
+  theme was equipped beforehand (`preThemeWeekRoomTheme`). At the end of the
+  range it clears the three owned bits and restores that snapshot — deliberately
+  *not* touching `equippedAccessory`/`equippedGlasses` on revert, since
+  `equippedAccessoryIndex()`/`equippedGlassesIndex()` already fall back once the
+  owned bit clears; only the room theme needed an explicit restore, since its
+  fallback picks "lowest owned theme," not "what the user had before."
+- **A cupcake stuffy was tried and dropped**: the first cut of "birthday fun"
+  used a 4th theme-exclusive item, a cupcake stuffy (own catalog entry in
+  `STUFFIES[]`, 4 draw poses). On real hardware it was reported hard to see —
+  root cause was pastel-on-pastel: the stuffy's wrapper/frosting colors were
+  nearly identical to the Birthday room theme's own pale-pink backdrop
+  (`0xFCF3`), since stuffies only ever render against the equipped room theme
+  (the night "peek" scene's backdrop, not a fixed black). Fixed once (saturated
+  colors + a `C_DARK` outline), but the user then decided to drop the cupcake
+  entirely in favor of the balloon sunglasses instead — simpler (one catalog
+  slot, no 4-pose art), and the same contrast lesson carried over directly into
+  its design (bold single-color balloon lenses, no pastels, no fine internal
+  detail).
+- **Contrast is a recurring hazard for anything drawn on the animal zone**: the
+  same pastel-vs-birthday-backdrop bug also hit the pre-existing "thirsty"
+  water-drop indicator (drawn directly onto whatever room theme is equipped,
+  same as every stuffy/accessory) — fixed the same way, a `C_DARK` outline
+  added generically (not birthday-specific), so it holds up against any future
+  room theme, not just this one pale one. Also had to nudge its position after
+  the balloon sunglasses shipped, since the two ended up geometrically
+  overlapping at the original coordinates.
+- **Local testing**: no `cat-buddy-api` dependency anymore, so nothing to stand
+  up — verified entirely through the device's own admin form. Real-hardware
+  validation: `curl -X POST /config/admin/themeweek/set` with `start`/`end` form
+  fields (same as a browser submission) → confirmed via
+  `/config/backup/export`'s raw config JSON that apply/revert both fire
+  correctly and immediately (no waiting on a poll interval), including edge
+  cases (a same-day range, an already-past range immediately reverting on
+  submit).
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`

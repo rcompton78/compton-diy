@@ -80,6 +80,27 @@ struct AppConfig {
     bool autoUpdateEnabled = true;         // Whether periodic firmware update checks run at all
     String lastUpdateCheckVersion;         // Latest release tag seen at the last check; empty = never checked
     uint32_t lastUpdateCheckEpoch = 0;     // Unix epoch of last check; 0 = never checked
+
+    // Special theme weeks (DIY-108) — entirely local/offline, set via the device's own 7-tap
+    // secret admin page (/config/admin/themeweek), not any server. Only one theme
+    // ("birthday") is supported for now, so its date range gets its own two fields rather
+    // than a generic table — see main.cpp's Theme weeks section for the full mechanism.
+    // Calendar dates only (no time-of-day — the admin page is a plain date picker), packed as
+    // YYYYMMDD; 0 = unset. The theme is active for the whole of both the start and end date,
+    // inclusive, evaluated against the device's own already-configured local clock/timezone
+    // (same one the on-screen clock uses) — see isThemeWeekActive()/addOneCalendarDay() in
+    // main.cpp for how the inclusive end date becomes an exclusive end-of-day boundary.
+    int32_t themeWeekBirthdayStartDate = 0;
+    int32_t themeWeekBirthdayEndDate   = 0;
+    // Tracks what this device has already applied locally, so applyThemeWeekCosmetics()/
+    // revertThemeWeekCosmetics() in main.cpp only fire once per transition rather than on
+    // every loop() tick. Empty = no theme week's cosmetics are currently applied.
+    String activeThemeWeekKey;
+    // Snapshot of equippedRoomTheme taken the moment a theme week's cosmetics were applied,
+    // so revertThemeWeekCosmetics() can put back exactly what the user had equipped before,
+    // regardless of what they changed it to during the theme week — 0xFF (EQUIP_NONE in
+    // main.cpp) means "no theme was equipped before".
+    uint8_t preThemeWeekRoomTheme = 0xFF;
 };
 
 class ConfigManager {

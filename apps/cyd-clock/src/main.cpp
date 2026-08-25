@@ -144,6 +144,14 @@ static constexpr uint16_t C_SNOWMAN_COAL   = 0x0000;  // snowman hat/eyes/button
 static constexpr uint16_t C_SNOWMAN_CARROT = 0xFD20;  // snowman nose (orange) — same hex as C_FISH/C_PENGUIN_BEAK by
                                                        // coincidence, not intentional reuse; kept as its own constant
                                                        // so retuning one doesn't silently shift the other two
+static constexpr uint16_t C_PARTY_HAT      = 0x939B;  // party hat cone — same purple as C_BOW_PURPLE
+static constexpr uint16_t C_PARTY_HAT_TRIM = 0xF6CB;  // party hat base band/pompom — same yellow as C_BOW_LEMON_YELLOW
+// Bold, saturated colors rather than pastels — the birthday theme's own room-theme backdrop
+// (0xFCF3, pale pink, see drawBirthdayBackground()) is what these render against once the
+// theme applies both, so anything close to that pale pink washes out (learned the hard way
+// from the cupcake stuffy this replaced, DIY-108).
+static constexpr uint16_t C_BALLOON_GLASSES_RED  = TFT_RED;     // one balloon lens
+static constexpr uint16_t C_BALLOON_GLASSES_BLUE = 0x001F;      // the other balloon lens (true blue)
 
 // Blanket color catalog — each color is purchased separately in the store and can be
 // equipped independently in the dressing room. `id` is the stable identifier used in
@@ -248,6 +256,10 @@ static void drawBowAppleGreen(int cx, int cy);
 static void drawBowTangerine(int cx, int cy);
 static void drawBowFlamingoPink(int cx, int cy);
 
+// Forward-declared for the same reason as the bow functions above. Unlike the bows, this one
+// isn't store-purchasable — see ACCESSORY_STORE_COUNT below.
+static void drawPartyHat(int cx, int cy);
+
 // Accessory catalog — same purchase/equip model as cat colors, but layered independently
 // on top of whichever cat color is equipped (an accessory works with any fur color). `id` is
 // the stable identifier used in store/dressing-room form posts and persisted config; never
@@ -275,13 +287,28 @@ static constexpr Accessory ACCESSORIES[] = {
     {"bow_apple_green",   "Apple Green Bow",   STORE_COST_ACCESSORY_BOW, "#C2E189", drawBowAppleGreen},
     {"bow_tangerine",     "Tangerine Bow",     STORE_COST_ACCESSORY_BOW, "#FFA552", drawBowTangerine},
     {"bow_flamingo_pink", "Flamingo Pink Bow", STORE_COST_ACCESSORY_BOW, "#FCA3B7", drawBowFlamingoPink},
+    // Below: theme-week exclusives (DIY-108) — MUST stay appended after every real
+    // store-purchasable entry above. Never store-purchasable (see ACCESSORY_STORE_COUNT,
+    // which store rendering/purchase code bounds itself to instead of ACCESSORY_COUNT); owned
+    // only for the duration of an active theme week, granted/revoked by
+    // applyThemeWeekCosmetics()/revertThemeWeekCosmetics().
+    {"party_hat", "Party Hat", 0, "#9370DB", drawPartyHat},
 };
 static constexpr int ACCESSORY_COUNT = sizeof(ACCESSORIES) / sizeof(ACCESSORIES[0]);
 static_assert(ACCESSORY_COUNT <= 16, "ownedAccessories bitmask is uint16_t");
+// Count of normal, store-purchasable accessories — everything before the theme-week-exclusive
+// block above. Store rendering/purchase/seen-count logic bounds itself to this, not the full
+// ACCESSORY_COUNT, so theme-exclusive entries never show up as purchasable and never trip the
+// "new store items!" badge (see hasNewStoreItems()).
+static constexpr int ACCESSORY_STORE_COUNT = ACCESSORY_COUNT - 1;
 
 // Forward-declared for the same reason as the bow functions above — GLASSES[] needs this
 // before drawCat() (and `tft`) are declared.
 static void drawSunglassesPinkRim(int cx, int cy);
+
+// Forward-declared for the same reason. Unlike the sunglasses above, this one isn't
+// store-purchasable — see GLASSES_STORE_COUNT below.
+static void drawBalloonSunglasses(int cx, int cy);
 
 // Glasses catalog — a separate accessory slot from ACCESSORIES[] (own store section, own
 // dressing-room control, own owned/equipped bitmask), even though the struct shape and
@@ -299,9 +326,14 @@ struct Glasses {
 };
 static constexpr Glasses GLASSES[] = {
     {"sunglasses_pink", "Pink-Rim Sunglasses", STORE_COST_ACCESSORY_GLASSES, "#FF80C0", drawSunglassesPinkRim},
+    // Below: theme-week exclusive (DIY-108) — MUST stay appended after every real
+    // store-purchasable entry above; see GLASSES_STORE_COUNT.
+    {"balloon_sunglasses", "Birthday Balloon Sunglasses", 0, "#FF0000", drawBalloonSunglasses},
 };
 static constexpr int GLASSES_COUNT = sizeof(GLASSES) / sizeof(GLASSES[0]);
 static_assert(GLASSES_COUNT <= 8, "ownedGlasses bitmask is uint8_t");
+// Count of normal, store-purchasable glasses — see ACCESSORY_STORE_COUNT's comment for why.
+static constexpr int GLASSES_STORE_COUNT = GLASSES_COUNT - 1;
 
 // Forward declarations: each stuffy's sleep-scene art, defined further below alongside
 // drawSleepingCat(). Declared here so the STUFFIES[] catalog can reference them directly —
@@ -386,6 +418,10 @@ static void drawSixSevenBackground(int x, int y, int w, int h);
 // clouds, small rainbow), defined further below alongside drawSixSevenBackground().
 static void drawSkyBackground(int x, int y, int w, int h);
 
+// Forward declaration: theme-week-exclusive (DIY-108) "Birthday" backdrop (confetti +
+// balloons), defined further below alongside drawSkyBackground().
+static void drawBirthdayBackground(int x, int y, int w, int h);
+
 // Room theme catalog — same purchase/equip model as blanket colors and stuffies. `id` is
 // the stable identifier used in store/dressing-room form requests; ConfigManager persists
 // ownership as an `ownedRoomThemes` bitmask and the equipped selection as a numeric
@@ -416,8 +452,13 @@ static constexpr RoomTheme ROOM_THEMES[] = {
     {"starry_night",       "Starry Night",  STORE_COST_STARRY_NIGHT, TFT_BLACK, drawStarryNightBackground, nullptr},  // moon + stars on black — not a straight color, label stays white
     {"six_seven",          "6-7",           STORE_COST_SIX_SEVEN,    TFT_BLACK, drawSixSevenBackground,    nullptr},  // rotated "67" digit pairs on black (DIY-87) — not a straight color, label stays white
     {"clear_sky",          "Clear Sky",     STORE_COST_SKY,          0x5D9C,    drawSkyBackground,         nullptr},  // light blue sky + clouds + rainbow (DIY-90) — not a straight color, label stays white
+    // Below: theme-week exclusive (DIY-108) — MUST stay appended after every real
+    // store-purchasable entry above; see ROOM_THEME_STORE_COUNT.
+    {"birthday", "Birthday", 0, 0xFCF3, drawBirthdayBackground, nullptr},  // confetti + balloons — not a straight color, label stays white
 };
 static constexpr int ROOM_THEME_COUNT = sizeof(ROOM_THEMES) / sizeof(ROOM_THEMES[0]);
+// Count of normal, store-purchasable room themes — see ACCESSORY_STORE_COUNT's comment for why.
+static constexpr int ROOM_THEME_STORE_COUNT = ROOM_THEME_COUNT - 1;
 
 // Sentinel stored in equippedBlanketColor/equippedStuffy/equippedRoomTheme to mean
 // "explicitly unequipped by the user in the dressing room", as opposed to 0 which means "no
@@ -581,6 +622,18 @@ static void drawBowAppleGreen(int cx, int cy)   { drawBowShape(cx, cy, C_BOW_APP
 static void drawBowTangerine(int cx, int cy)    { drawBowShape(cx, cy, C_BOW_TANGERINE); }
 static void drawBowFlamingoPink(int cx, int cy) { drawBowShape(cx, cy, C_BOW_FLAMINGO_PINK); }
 
+// Party hat art (theme-week exclusive, DIY-108). Centered on top of the head, between the
+// ears, rather than off to one side like the bows above — apex tops out at cy-86, matching
+// the ears' own apex height (see drawCat()'s ear triangles), so it stays inside the cat's
+// zoneFillRect() clear rect (cy-88) with a couple pixels of headroom.
+static void drawPartyHat(int cx, int cy) {
+    tft.fillTriangle(cx - 13, cy - 63, cx + 13, cy - 63, cx, cy - 86, C_PARTY_HAT);
+    tft.fillRect(cx - 13, cy - 65, 26, 4, C_PARTY_HAT_TRIM);      // base band
+    tft.fillCircle(cx, cy - 86, 4, C_PARTY_HAT_TRIM);             // pompom
+    tft.fillCircle(cx - 5, cy - 72, 2, C_PARTY_HAT_TRIM);         // polka dots
+    tft.fillCircle(cx + 4, cy - 76, 2, C_PARTY_HAT_TRIM);
+}
+
 // Glasses art (declared earlier alongside GLASSES[]). Called from drawCat() after the eyes
 // (unlike the bow above, which is drawn before them) so the round lenses sit over the eye
 // shapes drawn by drawEyeShapes() at (cx-15/+15, cy-37, r=11). Round rim + round lens per
@@ -598,6 +651,29 @@ static void drawSunglassesPinkRim(int cx, int cy) {
     for (int w = -2; w <= 2; w++) {
         tft.drawLine(cx - 29, cy - 37 + w, cx - 43, cy - 47 + w, C_GLASSES_RIM);
         tft.drawLine(cx + 29, cy - 37 + w, cx + 43, cy - 47 + w, C_GLASSES_RIM);
+    }
+}
+
+// Theme-week-exclusive glasses art (DIY-108) — same layering/temple-arm mechanics as
+// drawSunglassesPinkRim() above (see its comment), but each lens is a bold single-color
+// balloon silhouette (one red, one blue — see C_BALLOON_GLASSES_RED/BLUE) with a small knot
+// and a string hanging down, rather than a rim+lens pair. Deliberately no internal detail on
+// the balloons themselves — a flat fill reads clearly at this resolution, same lesson learned
+// from the cupcake stuffy this replaced (fine detail/pastel colors don't survive the real
+// screen's size and the birthday theme's own pale-pink backdrop).
+static void drawBalloonSunglasses(int cx, int cy) {
+    tft.fillCircle(cx - 15, cy - 37, 12, C_BALLOON_GLASSES_RED);
+    tft.fillTriangle(cx - 18, cy - 26, cx - 12, cy - 26, cx - 15, cy - 22, C_BALLOON_GLASSES_RED);  // knot
+    tft.drawLine(cx - 15, cy - 22, cx - 15, cy - 16, C_DARK);  // string
+
+    tft.fillCircle(cx + 15, cy - 37, 12, C_BALLOON_GLASSES_BLUE);
+    tft.fillTriangle(cx + 12, cy - 26, cx + 18, cy - 26, cx + 15, cy - 22, C_BALLOON_GLASSES_BLUE);  // knot
+    tft.drawLine(cx + 15, cy - 22, cx + 15, cy - 16, C_DARK);  // string
+
+    tft.fillRect(cx - 4, cy - 40, 8, 4, C_GLASSES_RIM);  // bridge
+    for (int w = -2; w <= 2; w++) {
+        tft.drawLine(cx - 27, cy - 37 + w, cx - 43, cy - 47 + w, C_GLASSES_RIM);
+        tft.drawLine(cx + 27, cy - 37 + w, cx + 43, cy - 47 + w, C_GLASSES_RIM);
     }
 }
 
@@ -723,11 +799,23 @@ static void drawCat(int cx, int cy, CatStatus status, CatBoredom boredom, CatHea
         tft.fillCircle(cx + 22, cy - 24, 5, C_SICK);
     }
 
-    // Thirsty signal — a single water drop at the temple, dripping-sweat style
+    // Thirsty signal — a single water drop at the temple, dripping-sweat style. Drawn directly
+    // onto the animal zone's room-theme backdrop (zoneFillRect() at the top of this function),
+    // which can be any equipped theme's color — a plain fill with no outline read poorly
+    // against the pale-pink "Birthday" theme specifically (DIY-108). Outlined in C_DARK (same
+    // fix as the cupcake stuffy this theme also shipped) so the droplet's silhouette reads
+    // against light AND dark backdrops alike, not just whatever theme happened to be equipped
+    // when this was first drawn — same generic fix applies to every room theme, not just this
+    // one pale one.
     if (thirsty) {
-        int tdx = cx + 30, tdy = cy - 48;
-        tft.fillTriangle(tdx, tdy - 5, tdx - 4, tdy + 3, tdx + 4, tdy + 3, C_WATER);
-        tft.fillCircle(tdx, tdy + 4, 4, C_WATER);
+        // Moved down/right of the glasses lens+temple-arm area (roughly cx+3..+43,
+        // cy-25..-49 at this height — see e.g. drawBalloonSunglasses()'s lens/temple
+        // coordinates) so the two never overlap, regardless of which glasses are equipped.
+        int tdx = cx + 40, tdy = cy - 24;
+        tft.fillTriangle(tdx, tdy - 6, tdx - 5, tdy + 4, tdx + 5, tdy + 4, C_WATER);
+        tft.fillCircle(tdx, tdy + 5, 5, C_WATER);
+        tft.drawTriangle(tdx, tdy - 6, tdx - 5, tdy + 4, tdx + 5, tdy + 4, C_DARK);
+        tft.drawCircle(tdx, tdy + 5, 5, C_DARK);
     }
 
     // Body
@@ -932,12 +1020,15 @@ static void zoneFillRect(int x, int y, int w, int h) {
 // cat color shipped in a firmware update) since the last time the user opened the store
 // page — cleared by handleConfigStoreGet(), which stamps the current catalog sizes as "seen".
 static bool hasNewStoreItems() {
+    // *_STORE_COUNT, not the full *_COUNT — the theme-week-exclusive entries appended to
+    // those catalogs (DIY-108) are never store-purchasable, so they must never trip this
+    // badge either.
     return STUFFY_COUNT > configMgr.config().seenStuffyCount ||
            BLANKET_COLOR_COUNT > configMgr.config().seenBlanketColorCount ||
-           ROOM_THEME_COUNT > configMgr.config().seenRoomThemeCount ||
+           ROOM_THEME_STORE_COUNT > configMgr.config().seenRoomThemeCount ||
            CAT_COLOR_COUNT > configMgr.config().seenCatColorCount ||
-           ACCESSORY_COUNT > configMgr.config().seenAccessoryCount ||
-           GLASSES_COUNT > configMgr.config().seenGlassesCount ||
+           ACCESSORY_STORE_COUNT > configMgr.config().seenAccessoryCount ||
+           GLASSES_STORE_COUNT > configMgr.config().seenGlassesCount ||
            !configMgr.config().seenRightArmSlot;
 }
 
@@ -1425,6 +1516,53 @@ static void drawSkyBackground(int x, int y, int w, int h) {
         tft.drawArc(SKY_RAINBOW_CX, SKY_RAINBOW_CY, outerR, innerR,
                     SKY_RAINBOW_START_ANGLE, SKY_RAINBOW_END_ANGLE,
                     SKY_RAINBOW_BANDS[i].color, 0x5D9C, true);
+    }
+
+    tft.resetViewport();
+}
+
+// Fixed balloon layout for the theme-week-exclusive (DIY-108) "Birthday" theme — pre-set
+// positions/colors rather than re-randomized per call, same repeated-partial-redraw reason as
+// SKY_CLOUDS/STARRY_NIGHT_STARS above.
+struct Balloon { int16_t x, y; uint16_t color; };
+static constexpr Balloon BIRTHDAY_BALLOONS[] = {
+    {50,  ANIMAL_Y + 30, C_BOW_MAGENTA},
+    {190, ANIMAL_Y + 22, C_BOW_BABY_BLUE},
+    {215, ANIMAL_Y + 70, C_BOW_LEMON_YELLOW},
+};
+static constexpr int BIRTHDAY_BALLOON_COUNT = sizeof(BIRTHDAY_BALLOONS) / sizeof(BIRTHDAY_BALLOONS[0]);
+
+// Fixed confetti scatter, same idea as BIRTHDAY_BALLOONS above — a handful of small colored
+// squares rather than a full particle system.
+struct Confetti { int16_t x, y; uint16_t color; };
+static constexpr Confetti BIRTHDAY_CONFETTI[] = {
+    {25, ANIMAL_Y + 100, C_BOW_LEMON_YELLOW}, {70, ANIMAL_Y + 15, C_BOW_APPLE_GREEN},
+    {110, ANIMAL_Y + 160, C_BOW_MAGENTA},     {150, ANIMAL_Y + 120, C_BOW_BABY_BLUE},
+    {230, ANIMAL_Y + 145, C_BOW_TANGERINE},   {15, ANIMAL_Y + 55, C_BOW_PURPLE},
+    {180, ANIMAL_Y + 165, C_BOW_LEMON_YELLOW}, {235, ANIMAL_Y + 10, C_BOW_APPLE_GREEN},
+};
+static constexpr int BIRTHDAY_CONFETTI_COUNT = sizeof(BIRTHDAY_CONFETTI) / sizeof(BIRTHDAY_CONFETTI[0]);
+
+// "Birthday" room theme (DIY-108) — pastel backdrop, a scatter of confetti squares, and a
+// few floating balloons (ellipse + string). Only ever owned/selectable during an active
+// theme week (see ROOM_THEME_STORE_COUNT and applyThemeWeekCosmetics()/
+// revertThemeWeekCosmetics()) — this is cyd-clock's first "special theme week" visual, not a
+// normal store item. Same setViewport/resetViewport clipping convention as
+// drawStarryNightBackground() — see that function's comment for why.
+static void drawBirthdayBackground(int x, int y, int w, int h) {
+    tft.setViewport(x, y, w, h, false);
+    tft.fillRect(x, y, w, h, 0xFCF3);  // pale party-pink
+
+    for (int i = 0; i < BIRTHDAY_CONFETTI_COUNT; i++) {
+        const Confetti& c = BIRTHDAY_CONFETTI[i];
+        tft.fillRect(c.x, c.y, 4, 4, c.color);
+    }
+
+    for (int i = 0; i < BIRTHDAY_BALLOON_COUNT; i++) {
+        const Balloon& b = BIRTHDAY_BALLOONS[i];
+        tft.drawLine(b.x, b.y + 12, b.x, b.y + 26, C_DARK);  // string
+        tft.fillEllipse(b.x, b.y, 9, 11, b.color);
+        tft.fillTriangle(b.x - 2, b.y + 10, b.x + 2, b.y + 10, b.x, b.y + 13, b.color);  // knot
     }
 
     tft.resetViewport();
@@ -2669,6 +2807,126 @@ static void assertStoreIdsUnique() {
     }
 }
 
+// ── Theme weeks (DIY-108) ────────────────────────────────────────────────────
+// Special theme weeks are entirely local/offline — the admin enters the date range directly
+// on the device's own 7-tap secret admin page (/config/admin/themeweek), which persists it in
+// ConfigManager (themeWeekBirthdayStartDate/EndDate below) and the device evaluates the
+// active/expired transition purely against its own NTP-synced clock. No network round trip,
+// no cat-buddy-api dependency — this intentionally replaced an earlier design that polled a
+// cat-buddy-api endpoint for the range (see DIY-108 history); the user decided against storing
+// theme-week schedules server-side at all.
+//
+// Only one theme, "birthday", is supported for now — hardcoded rather than a generic
+// multi-theme-key system, per the card's explicit scope for this pass. Future themes
+// (Christmas, etc.) are expected to each get their own hardcoded start/end config fields and
+// apply/revert branch later, not a generic table.
+static constexpr const char* THEME_WEEK_BIRTHDAY = "birthday";
+
+// Adds one calendar day to a YYYYMMDD date-only int (e.g. 20260831 -> 20260901) — used to turn
+// an inclusive admin-picked end date into the exclusive end-of-day boundary
+// isThemeWeekActive() compares against. Pure calendar-digit arithmetic: utcTmToEpoch() is used
+// only as a scratch epoch to get correct month/year rollover (via gmtime()), not as any real
+// UTC conversion — same trick parseIso8601ToLocalStamp() uses elsewhere for a different reason.
+static int32_t addOneCalendarDay(int32_t yyyymmdd) {
+    int y = yyyymmdd / 10000, mo = (yyyymmdd / 100) % 100, d = yyyymmdd % 100;
+    time_t t = utcTmToEpoch(y, mo, d, 0, 0, 0) + 86400;
+    struct tm* g = gmtime(&t);
+    return (int32_t)(g->tm_year + 1900) * 10000 + (int32_t)(g->tm_mon + 1) * 100 + (int32_t)g->tm_mday;
+}
+
+// True while a birthday range is configured (both dates non-zero) and the device's current
+// local date/time falls inside it — active for the whole of both the start and end date,
+// inclusive. Expands the stored YYYYMMDD dates into the packed-decimal YYYYMMDDHHMM scheme
+// flashSaleNow() produces (start at 00:00, end at 00:00 of the day *after* the picked end
+// date, i.e. an exclusive boundary) and compares directly — no timezone conversion at all,
+// since both sides are always the device's own local wall clock (the same clock/timezone the
+// on-screen time already uses).
+static bool isThemeWeekActive() {
+    int32_t startDate = configMgr.config().themeWeekBirthdayStartDate;
+    int32_t endDate   = configMgr.config().themeWeekBirthdayEndDate;
+    if (startDate == 0 || endDate == 0) return false;
+    int64_t start = (int64_t)startDate * 10000;                    // 00:00 of the start date
+    int64_t end   = (int64_t)addOneCalendarDay(endDate) * 10000;   // 00:00 of the day after the end date
+    int64_t now = flashSaleNow();
+    if (now < 0) return false;
+    return now >= start && now < end;
+}
+
+// Grants + equips the birthday theme's exclusive cosmetics — called once per transition (see
+// checkThemeWeekTransition()), gated by activeThemeWeekKey so it never re-fires while already
+// applied. Snapshots the room theme the user had equipped beforehand so
+// revertThemeWeekCosmetics() can restore it exactly, regardless of anything the user changes
+// during the week.
+static void applyThemeWeekCosmetics() {
+    configMgr.config().preThemeWeekRoomTheme = configMgr.config().equippedRoomTheme;
+
+    // Index of the theme-exclusive entry in each catalog — it's the first (and, today, only)
+    // entry after the store-purchasable ones, i.e. right at the *_STORE_COUNT index.
+    int hatIdx = ACCESSORY_STORE_COUNT;         // party_hat
+    int glassesIdx = GLASSES_STORE_COUNT;       // balloon_sunglasses
+    int themeIdx = ROOM_THEME_STORE_COUNT;      // birthday
+
+    configMgr.config().ownedAccessories |= (1 << hatIdx);
+    configMgr.config().equippedAccessory = hatIdx;
+    configMgr.config().ownedGlasses |= (1 << glassesIdx);
+    configMgr.config().equippedGlasses = glassesIdx;
+    configMgr.config().ownedRoomThemes |= (1 << themeIdx);
+    configMgr.config().equippedRoomTheme = themeIdx;
+
+    configMgr.config().activeThemeWeekKey = THEME_WEEK_BIRTHDAY;
+    configMgr.save();
+    dirty.animal = true;
+    dirty.animalBg = true;  // the newly-equipped room theme changes the backdrop
+}
+
+// Force-removes the birthday theme's exclusive cosmetics and restores the pre-theme-week room
+// theme — called once when a previously-applied theme week ends. Only clears the owned bits;
+// equippedAccessory/equippedGlasses are left as-is since equippedAccessoryIndex()/
+// equippedGlassesIndex() already fall back gracefully once the owned bit clears (see their
+// "owned bit not set" branch) — the room theme is the one exception that needs an explicit
+// restore, since its fallback would pick "lowest owned theme" rather than "what the user had
+// before".
+static void revertThemeWeekCosmetics() {
+    int hatIdx = ACCESSORY_STORE_COUNT;
+    int glassesIdx = GLASSES_STORE_COUNT;
+    int themeIdx = ROOM_THEME_STORE_COUNT;
+
+    configMgr.config().ownedAccessories &= ~(1 << hatIdx);
+    configMgr.config().ownedGlasses &= ~(1 << glassesIdx);
+    configMgr.config().ownedRoomThemes &= ~(1 << themeIdx);
+
+    configMgr.config().equippedRoomTheme = configMgr.config().preThemeWeekRoomTheme;
+    configMgr.config().preThemeWeekRoomTheme = EQUIP_NONE;
+    configMgr.config().activeThemeWeekKey = "";
+    configMgr.save();
+    dirty.animal = true;
+    dirty.animalBg = true;
+}
+
+// Checks the locally-configured birthday range against activeThemeWeekKey and fires
+// apply/revert on a transition. Pure local-state comparison (no network), so it's cheap
+// enough to call unconditionally from every loop() tick (see that call site) — this also
+// means the admin page's "Set"/"Clear" actions (handleConfigThemeWeekSetPost/ClearPost) can
+// call it directly too, so a schedule change takes effect on the very same request rather
+// than waiting for the next loop() tick.
+//
+// Bails out entirely while the clock hasn't NTP-synced yet (flashSaleNow() < 0) rather than
+// letting isThemeWeekActive() report that as "inactive" — a device rebooting mid-theme-week
+// would otherwise see a false "not active" on the first few ticks after boot (before sync),
+// fire a premature revertThemeWeekCosmetics(), then re-apply moments later once the clock
+// catches up. "Clock unknown" must mean "leave whatever's currently applied alone," not
+// "treat the theme as over."
+static void checkThemeWeekTransition() {
+    if (flashSaleNow() < 0) return;
+    bool active = isThemeWeekActive();
+    bool applied = configMgr.config().activeThemeWeekKey == THEME_WEEK_BIRTHDAY;
+    if (active && !applied) {
+        applyThemeWeekCosmetics();
+    } else if (!active && applied) {
+        revertThemeWeekCosmetics();
+    }
+}
+
 // Level-up fireworks — a full-screen takeover distinct from the small in-zone Celebrate
 // animation (drawSparkles()/CatMood::Celebrate), reserved for the rarer, bigger moment of
 // actually leveling up. Modeled on updateSleepScreen()'s full fillScreen() ownership below:
@@ -2894,6 +3152,7 @@ static const char CONFIG_ADMIN_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <a class="back" href="/config">&larr; Configuration</a>
 <h2>Admin</h2>
 <a class="nav" href="/config/admin/flashsale">Flash Sale API</a>
+<a class="nav" href="/config/admin/themeweek">Theme Week</a>
 </body></html>
 )html";
 
@@ -3255,6 +3514,35 @@ static const char CONFIG_FLASHSALE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 </body></html>
 )html";
 
+static const char CONFIG_THEMEWEEK_HTML[] PROGMEM = R"html(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cat Control Panel &middot; Theme Week</title>
+<style>%%STYLE%%</style>
+</head><body>
+<a class="back" href="/config/admin">&larr; Admin</a>
+<h2>Theme Week</h2>
+%%MSG%%
+<p class="dim">Schedules the birthday theme (DIY-108) — the device shows its cosmetics for the whole of both days picked below, then reverts automatically. Stored on this device only, evaluated against its own clock/timezone (the same one the clock screen uses) — nothing is sent anywhere.</p>
+
+<h3>Status</h3>
+<p>%%STATUS%%</p>
+
+<h3>Schedule</h3>
+<form method="POST" action="/config/admin/themeweek/set">
+<label>Start date<input type="date" name="start" value="%%START_VALUE%%" required></label>
+<label>End date<input type="date" name="end" value="%%END_VALUE%%" required></label>
+<button type="submit" style="width:100%">Schedule</button>
+</form>
+<p class="dim" style="font-size:.82rem">Dates are calendar days, not a specific time — the theme is active from the start of the start date through the end of the end date. Scheduling replaces any range set previously.</p>
+
+<form method="POST" action="/config/admin/themeweek/clear" style="margin-top:12px">
+<button type="submit" style="width:100%">Clear scheduled/active theme week</button>
+</form>
+</body></html>
+)html";
+
 static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
@@ -3610,10 +3898,10 @@ static void handleConfigStoreGet() {
     if (hasNewStoreItems()) {
         configMgr.config().seenStuffyCount       = (uint8_t)STUFFY_COUNT;
         configMgr.config().seenBlanketColorCount = (uint8_t)BLANKET_COLOR_COUNT;
-        configMgr.config().seenRoomThemeCount    = (uint8_t)ROOM_THEME_COUNT;
+        configMgr.config().seenRoomThemeCount    = (uint8_t)ROOM_THEME_STORE_COUNT;
         configMgr.config().seenCatColorCount     = (uint8_t)CAT_COLOR_COUNT;
-        configMgr.config().seenAccessoryCount    = (uint8_t)ACCESSORY_COUNT;
-        configMgr.config().seenGlassesCount      = (uint8_t)GLASSES_COUNT;
+        configMgr.config().seenAccessoryCount    = (uint8_t)ACCESSORY_STORE_COUNT;
+        configMgr.config().seenGlassesCount      = (uint8_t)GLASSES_STORE_COUNT;
         configMgr.config().seenRightArmSlot      = true;
         configMgr.save();
     }
@@ -3645,7 +3933,7 @@ static void handleConfigStoreGet() {
     }
     page.replace("%%BLANKET_ITEMS%%", blanketItems);
     String roomThemeItems = "";
-    for (int i = 0; i < ROOM_THEME_COUNT; i++) {
+    for (int i = 0; i < ROOM_THEME_STORE_COUNT; i++) {
         bool owned = configMgr.config().ownedRoomThemes & (1 << i);
         uint32_t itemCost = flashSalePrice(ROOM_THEMES[i].id, ROOM_THEMES[i].cost);
         bool onSale = itemCost != ROOM_THEMES[i].cost;
@@ -3671,7 +3959,7 @@ static void handleConfigStoreGet() {
     }
     page.replace("%%CAT_COLOR_ITEMS%%", catColorItems);
     String accessoryItems = "";
-    for (int i = 0; i < ACCESSORY_COUNT; i++) {
+    for (int i = 0; i < ACCESSORY_STORE_COUNT; i++) {
         bool owned = configMgr.config().ownedAccessories & (1 << i);
         uint32_t itemCost = flashSalePrice(ACCESSORIES[i].id, ACCESSORIES[i].cost);
         bool onSale = itemCost != ACCESSORIES[i].cost;
@@ -3682,7 +3970,7 @@ static void handleConfigStoreGet() {
     }
     page.replace("%%ACCESSORY_ITEMS%%", accessoryItems);
     String glassesItems = "";
-    for (int i = 0; i < GLASSES_COUNT; i++) {
+    for (int i = 0; i < GLASSES_STORE_COUNT; i++) {
         bool owned = configMgr.config().ownedGlasses & (1 << i);
         uint32_t itemCost = flashSalePrice(GLASSES[i].id, GLASSES[i].cost);
         bool onSale = itemCost != GLASSES[i].cost;
@@ -3965,6 +4253,106 @@ static void handleConfigFlashSaleCheckPost() {
     wm.server->send(302, "text/plain", "");
 }
 
+// Formats a YYYYMMDD date-only int as "YYYY-MM-DD", for pre-filling an <input type=date>. 0
+// (unset) formats as "".
+static String dateToInputValue(int32_t yyyymmdd) {
+    if (yyyymmdd <= 0) return "";
+    int y = yyyymmdd / 10000, mo = (yyyymmdd / 100) % 100, d = yyyymmdd % 100;
+    char buf[12];
+    snprintf(buf, sizeof(buf), "%04d-%02d-%02d", y, mo, d);
+    return String(buf);
+}
+
+// Parses an <input type=date> value ("YYYY-MM-DD") into a YYYYMMDD int. Returns 0 on parse
+// failure.
+static int32_t parseDateInput(const String& s) {
+    int y, mo, d;
+    if (sscanf(s.c_str(), "%d-%d-%d", &y, &mo, &d) != 3) return 0;
+    return (int32_t)y * 10000 + (int32_t)mo * 100 + (int32_t)d;
+}
+
+static constexpr const char* MONTH_ABBREV[] = {
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+};
+
+// Formats a YYYYMMDD date-only int as "Aug 24, 2026", for the human-readable status line —
+// e.g. via formatDateRange() below.
+static String formatDate(int32_t yyyymmdd) {
+    int y = yyyymmdd / 10000, mo = (yyyymmdd / 100) % 100, d = yyyymmdd % 100;
+    if (mo < 1 || mo > 12) return String(yyyymmdd);  // malformed, fall back to raw digits
+    return String(MONTH_ABBREV[mo - 1]) + " " + String(d) + ", " + String(y);
+}
+
+// Formats a start/end YYYYMMDD pair as "Aug 24 – Aug 31, 2026" (year shown once, at the end)
+// when both dates share a year, or "Dec 28, 2026 – Jan 3, 2027" (full date on both sides)
+// when a range spans a year boundary.
+static String formatDateRange(int32_t startDate, int32_t endDate) {
+    int startYear = startDate / 10000, endYear = endDate / 10000;
+    if (startYear == endYear) {
+        int mo = (startDate / 100) % 100, d = startDate % 100;
+        String startPart = (mo >= 1 && mo <= 12) ? (String(MONTH_ABBREV[mo - 1]) + " " + String(d)) : String(startDate);
+        return startPart + " \xE2\x80\x93 " + formatDate(endDate);  // "\xE2\x80\x93" = en dash (UTF-8)
+    }
+    return formatDate(startDate) + " \xE2\x80\x93 " + formatDate(endDate);
+}
+
+// Human-readable summary of the locally-stored birthday range for the
+// /config/admin/themeweek page.
+static String themeWeekStatusText() {
+    int32_t startDate = configMgr.config().themeWeekBirthdayStartDate;
+    int32_t endDate   = configMgr.config().themeWeekBirthdayEndDate;
+    if (startDate == 0 || endDate == 0) return "No theme week scheduled.";
+
+    String s = "Birthday: <strong>" + formatDateRange(startDate, endDate) + "</strong>";
+    if (isThemeWeekActive()) {
+        s += " (currently active).";
+    } else {
+        int64_t now = flashSaleNow();
+        int64_t end = (int64_t)addOneCalendarDay(endDate) * 10000;
+        s += (now >= 0 && now >= end) ? " (already ended)." : " (not active yet).";
+    }
+    return s;
+}
+
+static void handleConfigThemeWeekGet() {
+    String page = String(FPSTR(CONFIG_THEMEWEEK_HTML));
+    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    page.replace("%%STATUS%%", themeWeekStatusText());
+    page.replace("%%START_VALUE%%", dateToInputValue(configMgr.config().themeWeekBirthdayStartDate));
+    page.replace("%%END_VALUE%%", dateToInputValue(configMgr.config().themeWeekBirthdayEndDate));
+    String msg = "";
+    if (wm.server->hasArg("scheduled")) msg = "<div class='banner ok'>Scheduled — see status below.</div>";
+    else if (wm.server->hasArg("cleared")) msg = "<div class='banner ok'>Cleared.</div>";
+    else if (wm.server->hasArg("err")) msg = "<div class='banner err'>End date must be on or after the start date.</div>";
+    page.replace("%%MSG%%", msg);
+    sendHtmlPage(page);
+}
+
+static void handleConfigThemeWeekSetPost() {
+    int32_t start = parseDateInput(wm.server->arg("start"));
+    int32_t end   = parseDateInput(wm.server->arg("end"));
+    if (start == 0 || end == 0 || end < start) {
+        wm.server->sendHeader("Location", "/config/admin/themeweek?err=1");
+        wm.server->send(302, "text/plain", "");
+        return;
+    }
+    configMgr.config().themeWeekBirthdayStartDate = start;
+    configMgr.config().themeWeekBirthdayEndDate   = end;
+    configMgr.save();
+    checkThemeWeekTransition();  // apply immediately if the new range is already active
+    wm.server->sendHeader("Location", "/config/admin/themeweek?scheduled=1");
+    wm.server->send(302, "text/plain", "");
+}
+
+static void handleConfigThemeWeekClearPost() {
+    configMgr.config().themeWeekBirthdayStartDate = 0;
+    configMgr.config().themeWeekBirthdayEndDate   = 0;
+    configMgr.save();
+    checkThemeWeekTransition();  // revert immediately if it was currently applied
+    wm.server->sendHeader("Location", "/config/admin/themeweek?cleared=1");
+    wm.server->send(302, "text/plain", "");
+}
+
 static void handleConfigCatPost() {
     int   hunger  = wm.server->arg("hunger").toInt();
     int   boredom = wm.server->arg("boredom").toInt();
@@ -4023,6 +4411,9 @@ static void handleConfigStorePost() {
     bool alreadyOwned;
     int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1, catColorIdx = -1, accessoryIdx = -1, glassesIdx = -1;
     bool rightArmSlotPurchase = false;  // not from a catalog array, so tracked as a plain flag
+    // *_STORE_COUNT bounds throughout this lookup, not the full *_COUNT — the theme-week-
+    // exclusive entries (DIY-108, appended at the end of ROOM_THEMES[]/ACCESSORIES[]/
+    // GLASSES[]) must never be purchasable here, no matter what item id is posted.
     for (int i = 0; i < STUFFY_COUNT; i++) {
         if (item == STUFFIES[i].id) { stuffyIdx = i; break; }
     }
@@ -4040,7 +4431,7 @@ static void handleConfigStorePost() {
             cost = flashSalePrice(BLANKET_COLORS[blanketIdx].id, STORE_COST_BLANKET);
             alreadyOwned = configMgr.config().ownedBlanketColors & (1 << blanketIdx);
         } else {
-            for (int i = 0; i < ROOM_THEME_COUNT; i++) {
+            for (int i = 0; i < ROOM_THEME_STORE_COUNT; i++) {
                 if (item == ROOM_THEMES[i].id) { roomThemeIdx = i; break; }
             }
             if (roomThemeIdx >= 0) {
@@ -4054,14 +4445,14 @@ static void handleConfigStorePost() {
                     cost = flashSalePrice(CAT_COLORS[catColorIdx].id, CAT_COLORS[catColorIdx].cost);
                     alreadyOwned = configMgr.config().ownedCatColors & (1 << catColorIdx);
                 } else {
-                    for (int i = 0; i < ACCESSORY_COUNT; i++) {
+                    for (int i = 0; i < ACCESSORY_STORE_COUNT; i++) {
                         if (item == ACCESSORIES[i].id) { accessoryIdx = i; break; }
                     }
                     if (accessoryIdx >= 0) {
                         cost = flashSalePrice(ACCESSORIES[accessoryIdx].id, ACCESSORIES[accessoryIdx].cost);
                         alreadyOwned = configMgr.config().ownedAccessories & (1 << accessoryIdx);
                     } else {
-                        for (int i = 0; i < GLASSES_COUNT; i++) {
+                        for (int i = 0; i < GLASSES_STORE_COUNT; i++) {
                             if (item == GLASSES[i].id) { glassesIdx = i; break; }
                         }
                         if (glassesIdx >= 0) {
@@ -4672,6 +5063,9 @@ static void runWiFiManager(ConfigManager& cfg) {
         wm.server->on("/config/update/check",  HTTP_POST, handleConfigUpdateCheckPost);
         wm.server->on("/config/admin/flashsale",       HTTP_GET,  handleConfigFlashSaleGet);
         wm.server->on("/config/admin/flashsale/check", HTTP_POST, handleConfigFlashSaleCheckPost);
+        wm.server->on("/config/admin/themeweek",       HTTP_GET,  handleConfigThemeWeekGet);
+        wm.server->on("/config/admin/themeweek/set",   HTTP_POST, handleConfigThemeWeekSetPost);
+        wm.server->on("/config/admin/themeweek/clear", HTTP_POST, handleConfigThemeWeekClearPost);
         wm.server->on("/save-config/setup",        HTTP_POST, handleSetupPost);
         wm.server->on("/save-config/cat",          HTTP_POST, handleConfigCatPost);
         wm.server->on("/save-config/city",         HTTP_POST, handleConfigCityPost);
@@ -4772,6 +5166,12 @@ void loop() {
         lastFlashSalePoll = now;
         fetchFlashSale();
     }
+
+    // Theme-week transition check (DIY-108) — entirely local (no network involved), so it
+    // just runs every tick rather than being gated behind a poll interval like the flash-sale
+    // check above. The admin page's Set/Clear handlers also call this directly so a schedule
+    // change takes effect on the same request rather than waiting for the next tick.
+    checkThemeWeekTransition();
 
     // First-run setup: hold on the "complete setup at <ip>" screen until the wizard (cat
     // color + name) has been finished. Checked ahead of the sleep window below so a fresh
