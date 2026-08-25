@@ -7,6 +7,18 @@ bool ConfigManager::begin() {
     return LittleFS.begin(true);
 }
 
+// Basic sanity check for a packed YYYYMMDD date int (0 = unset, always valid) — used below to
+// reject malformed persisted/imported theme-week dates before they can reach
+// isThemeWeekActive()'s window math (main.cpp), which has no validation of its own. Not
+// calendar-perfect (doesn't special-case Feb 29 on non-leap years, or 30 vs. 31-day months) —
+// just enough to catch obviously-garbage values like month 13 or day 32 from a hand-edited
+// config file or a corrupted backup import.
+static bool isPlausibleDateOrZero(int32_t d) {
+    if (d == 0) return true;
+    int y = d / 10000, mo = (d / 100) % 100, day = d % 100;
+    return y >= 2000 && y <= 2100 && mo >= 1 && mo <= 12 && day >= 1 && day <= 31;
+}
+
 void ConfigManager::fromJson(JsonDocument& doc) {
     _config.latitude         = doc["lat"]    | _config.latitude;
     _config.longitude        = doc["lon"]    | _config.longitude;
@@ -125,8 +137,18 @@ void ConfigManager::fromJson(JsonDocument& doc) {
     _config.autoUpdateEnabled     = doc["autoUpdate"]   | _config.autoUpdateEnabled;
     _config.lastUpdateCheckVersion = doc["lastCheckVer"] | _config.lastUpdateCheckVersion;
     _config.lastUpdateCheckEpoch   = doc["lastCheckAt"]  | _config.lastUpdateCheckEpoch;
-    _config.themeWeekBirthdayStartDate = doc["themeWeekBirthdayStartDate"] | _config.themeWeekBirthdayStartDate;
-    _config.themeWeekBirthdayEndDate   = doc["themeWeekBirthdayEndDate"]   | _config.themeWeekBirthdayEndDate;
+    {
+        int32_t start = doc["themeWeekBirthdayStartDate"] | _config.themeWeekBirthdayStartDate;
+        int32_t end   = doc["themeWeekBirthdayEndDate"]   | _config.themeWeekBirthdayEndDate;
+        // Reject the whole pair on any malformed/inverted range, rather than one field — a
+        // start with no matching end (or vice versa) is just as meaningless to
+        // isThemeWeekActive() as either being individually invalid.
+        if (isPlausibleDateOrZero(start) && isPlausibleDateOrZero(end) &&
+            (start == 0 || end == 0 || end >= start)) {
+            _config.themeWeekBirthdayStartDate = start;
+            _config.themeWeekBirthdayEndDate   = end;
+        }
+    }
     _config.activeThemeWeekKey     = doc["themeWeekActive"] | _config.activeThemeWeekKey;
     _config.preThemeWeekRoomTheme  = doc["themeWeekPrevRoomTheme"] | _config.preThemeWeekRoomTheme;
 }

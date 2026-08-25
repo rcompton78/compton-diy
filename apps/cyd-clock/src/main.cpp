@@ -2909,7 +2909,15 @@ static void revertThemeWeekCosmetics() {
 // means the admin page's "Set"/"Clear" actions (handleConfigThemeWeekSetPost/ClearPost) can
 // call it directly too, so a schedule change takes effect on the very same request rather
 // than waiting for the next loop() tick.
+//
+// Bails out entirely while the clock hasn't NTP-synced yet (flashSaleNow() < 0) rather than
+// letting isThemeWeekActive() report that as "inactive" — a device rebooting mid-theme-week
+// would otherwise see a false "not active" on the first few ticks after boot (before sync),
+// fire a premature revertThemeWeekCosmetics(), then re-apply moments later once the clock
+// catches up. "Clock unknown" must mean "leave whatever's currently applied alone," not
+// "treat the theme as over."
 static void checkThemeWeekTransition() {
+    if (flashSaleNow() < 0) return;
     bool active = isThemeWeekActive();
     bool applied = configMgr.config().activeThemeWeekKey == THEME_WEEK_BIRTHDAY;
     if (active && !applied) {
