@@ -1576,12 +1576,15 @@ static void drawRightArmStuffy(int cx, int cy, bool hasBlanket) {
 // combination of the two — drawing the droplet last, on top of both, means it's never
 // blocked regardless of what's equipped, without needing to hand-fit it into whatever gap
 // happens to be left between them.
+// Plain fill, no outline (DIY-109) — same triangle+circle shape as drawWaterBtn()'s droplet,
+// matched exactly (including the missing outline) so the two read as the same icon. An
+// earlier version of this outlined it in C_DARK for contrast against pale backdrops, but on
+// real hardware the outline's own edges (unavoidably jagged at this size) read as stray dark
+// lines cutting across the droplet rather than a clean border.
 static void drawThirstyDroplet(int cx, int cy) {
     int tdx = cx + 40, tdy = cy - 28;
     tft.fillTriangle(tdx, tdy - 6, tdx - 5, tdy + 4, tdx + 5, tdy + 4, C_WATER);
     tft.fillCircle(tdx, tdy + 5, 5, C_WATER);
-    tft.drawTriangle(tdx, tdy - 6, tdx - 5, tdy + 4, tdx + 5, tdy + 4, C_DARK);
-    tft.drawCircle(tdx, tdy + 5, 5, C_DARK);
 }
 
 static void drawSleepingCat(int cx, int cy) {
