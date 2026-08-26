@@ -799,28 +799,6 @@ static void drawCat(int cx, int cy, CatStatus status, CatBoredom boredom, CatHea
         tft.fillCircle(cx + 22, cy - 24, 5, C_SICK);
     }
 
-    // Thirsty signal — a single water drop at the temple, dripping-sweat style. Drawn directly
-    // onto the animal zone's room-theme backdrop (zoneFillRect() at the top of this function),
-    // which can be any equipped theme's color — a plain fill with no outline read poorly
-    // against the pale-pink "Birthday" theme specifically (DIY-108). Outlined in C_DARK (same
-    // fix as the cupcake stuffy this theme also shipped) so the droplet's silhouette reads
-    // against light AND dark backdrops alike, not just whatever theme happened to be equipped
-    // when this was first drawn — same generic fix applies to every room theme, not just this
-    // one pale one.
-    if (thirsty) {
-        // Moved down/right of the glasses lens+temple-arm area (roughly cx+3..+43,
-        // cy-25..-49 at this height — see e.g. drawBalloonSunglasses()'s lens/temple
-        // coordinates) so the two never overlap, regardless of which glasses are equipped.
-        // Raised as high as that gap allows (DIY-109) — any lower and the right-arm
-        // stuffy's head/ears (drawRightArmStuffy(), held pose anchored around cy-8 to
-        // -30 depending on the stuffy) partially cover the droplet.
-        int tdx = cx + 40, tdy = cy - 34;
-        tft.fillTriangle(tdx, tdy - 6, tdx - 5, tdy + 4, tdx + 5, tdy + 4, C_WATER);
-        tft.fillCircle(tdx, tdy + 5, 5, C_WATER);
-        tft.drawTriangle(tdx, tdy - 6, tdx - 5, tdy + 4, tdx + 5, tdy + 4, C_DARK);
-        tft.drawCircle(tdx, tdy + 5, 5, C_DARK);
-    }
-
     // Body
     tft.fillRoundRect(cx - 30, cy + 2, 60, 54, 15, col);
 
@@ -1590,6 +1568,22 @@ static void drawRightArmStuffy(int cx, int cy, bool hasBlanket) {
     else            STUFFIES[rightArmIdx].drawHeld(cx, cy, accent);
 }
 
+// Thirsty signal — a single water drop at the temple, dripping-sweat style (DIY-109: drawn
+// as its own pass, called from drawAnimal() *after* drawRightArmStuffy(), rather than from
+// inside drawCat() itself. Both the equipped glasses (drawn inside drawCat()) and the
+// right-arm stuffy (drawn separately, after drawCat()) can occupy this same temple-ish
+// region depending on which are equipped, and no single fixed y-offset dodges every
+// combination of the two — drawing the droplet last, on top of both, means it's never
+// blocked regardless of what's equipped, without needing to hand-fit it into whatever gap
+// happens to be left between them.
+static void drawThirstyDroplet(int cx, int cy) {
+    int tdx = cx + 40, tdy = cy - 28;
+    tft.fillTriangle(tdx, tdy - 6, tdx - 5, tdy + 4, tdx + 5, tdy + 4, C_WATER);
+    tft.fillCircle(tdx, tdy + 5, 5, C_WATER);
+    tft.drawTriangle(tdx, tdy - 6, tdx - 5, tdy + 4, tdx + 5, tdy + 4, C_DARK);
+    tft.drawCircle(tdx, tdy + 5, 5, C_DARK);
+}
+
 static void drawSleepingCat(int cx, int cy) {
     drawCat(cx, cy, CatStatus::Content, CatBoredom::Entertained,
             CatHealth::Healthy, CatThirst::Hydrated, /*eyeOpen=*/false);
@@ -1950,6 +1944,11 @@ static void drawAnimal() {
         int dy = (cat.mood == CatMood::Celebrate) ? ((cat.frame % 2 == 0) ? -3 : 3) : 0;
         drawCat(CAT_CX, CAT_CY + dy, cat.status, cat.boredom, cat.health, cat.thirst, cat.eyeOpen);
         drawRightArmStuffy(CAT_CX, CAT_CY + dy, /*hasBlanket=*/false);  // no blanket during the day
+        // Drawn after the stuffy above (DIY-109) so it's never covered by it — see
+        // drawThirstyDroplet()'s comment.
+        if (cat.thirst == CatThirst::Thirsty) {
+            drawThirstyDroplet(CAT_CX, CAT_CY + dy);
+        }
 
         if (cat.mood == CatMood::Happy || cat.mood == CatMood::Celebrate) {
             drawSparkles(CAT_CX, CAT_CY, cat.frame);
