@@ -811,7 +811,10 @@ static void drawCat(int cx, int cy, CatStatus status, CatBoredom boredom, CatHea
         // Moved down/right of the glasses lens+temple-arm area (roughly cx+3..+43,
         // cy-25..-49 at this height — see e.g. drawBalloonSunglasses()'s lens/temple
         // coordinates) so the two never overlap, regardless of which glasses are equipped.
-        int tdx = cx + 40, tdy = cy - 24;
+        // Raised as high as that gap allows (DIY-109) — any lower and the right-arm
+        // stuffy's head/ears (drawRightArmStuffy(), held pose anchored around cy-8 to
+        // -30 depending on the stuffy) partially cover the droplet.
+        int tdx = cx + 40, tdy = cy - 34;
         tft.fillTriangle(tdx, tdy - 6, tdx - 5, tdy + 4, tdx + 5, tdy + 4, C_WATER);
         tft.fillCircle(tdx, tdy + 5, 5, C_WATER);
         tft.drawTriangle(tdx, tdy - 6, tdx - 5, tdy + 4, tdx + 5, tdy + 4, C_DARK);
