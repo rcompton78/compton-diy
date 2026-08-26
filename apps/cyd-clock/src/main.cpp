@@ -1581,8 +1581,17 @@ static void drawRightArmStuffy(int cx, int cy, bool hasBlanket) {
 // earlier version of this outlined it in C_DARK for contrast against pale backdrops, but on
 // real hardware the outline's own edges (unavoidably jagged at this size) read as stray dark
 // lines cutting across the droplet rather than a clean border.
+//
+// tdy=cy-38 sits in the gap between the tallest held stuffy (snowman's hat, whose brim rect
+// stays a full cy-29 all the way across x=cx+33..43, unlike the other stuffies' rounded
+// ears/heads which taper down well before reaching this x) and the equipped glasses' temple
+// arm (~cy-43..-47 at this x, see drawSunglassesPinkRim()/drawBalloonSunglasses()). That gap
+// is only ~1-2px tall at x=cx+40, less than the droplet's own height, so this can only get
+// close — the tip grazes 2-3px into the temple arm's line, and the base sits ~1px into the
+// snowman's hat. Both are cosmetic (the droplet still draws on top, so it's never blocked),
+// and far smaller than the double-digit-pixel overlaps of earlier positions.
 static void drawThirstyDroplet(int cx, int cy) {
-    int tdx = cx + 40, tdy = cy - 28;
+    int tdx = cx + 40, tdy = cy - 38;
     tft.fillTriangle(tdx, tdy - 6, tdx - 5, tdy + 4, tdx + 5, tdy + 4, C_WATER);
     tft.fillCircle(tdx, tdy + 5, 5, C_WATER);
 }
