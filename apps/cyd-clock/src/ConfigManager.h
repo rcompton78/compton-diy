@@ -54,6 +54,11 @@ struct AppConfig {
                                             // whatever's cheapest/lowest-owned; the user picks explicitly
     bool    seenRightArmSlot     = false;  // Mirrors seenStuffyCount's "has the store page shown this yet"
                                             // role, but as a bool since this is a single item, not a catalog
+    uint16_t ownedToys        = 0;  // Store purchase: bitmask, bit N = owns toy N (DIY-110)
+    uint8_t equippedToy       = 0xFF;  // Dressing room: index of the toy to display (left arm, day only).
+                                        // 0xFF is EQUIP_NONE (main.cpp) — defaults to "nothing equipped"
+                                        // rather than 0, same reasoning as equippedStuffyRight.
+    uint8_t seenToyCount      = 0;  // Highest TOY_COUNT the store page has shown the user
     uint8_t seenBlanketColorCount = 0;  // Highest BLANKET_COLOR_COUNT the store page has shown the user
     uint16_t ownedRoomThemes   = 0;  // Store purchase: bitmask, bit N = owns room theme N (widened to
                                       // uint16_t in DIY-90 — 9th theme needs bit 8, uint8_t was full)

@@ -90,6 +90,7 @@ static constexpr uint32_t STORE_COST_CAT_COLOR_PATTERN = 200;  // tabby, calico 
 static constexpr uint32_t STORE_COST_ACCESSORY_BOW = 50;
 static constexpr uint32_t STORE_COST_ACCESSORY_GLASSES = 50;  // matches bow pricing — same "flat recolor-tier" accessory
 static constexpr uint32_t STORE_COST_RIGHT_ARM_SLOT = 200;  // one-time unlock, not per-stuffy
+static constexpr uint32_t STORE_COST_HOCKEY_STICK = 50;  // matches bow/glasses pricing — same "flat recolor-tier" accessory
 
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
@@ -152,6 +153,11 @@ static constexpr uint16_t C_PARTY_HAT_TRIM = 0xF6CB;  // party hat base band/pom
 // from the cupcake stuffy this replaced, DIY-108).
 static constexpr uint16_t C_BALLOON_GLASSES_RED  = TFT_RED;     // one balloon lens
 static constexpr uint16_t C_BALLOON_GLASSES_BLUE = 0x001F;      // the other balloon lens (true blue)
+
+// Toy catalog colors (DIY-110) — first entry is the mini hockey stick.
+static constexpr uint16_t C_HOCKEY_SHAFT = 0xA145;  // wood-tone shaft (tan/brown)
+static constexpr uint16_t C_HOCKEY_TAPE  = 0x0000;  // black grip tape wrap
+static constexpr uint16_t C_HOCKEY_BLADE = 0x0000;  // black blade, same as the tape
 
 // Blanket color catalog — each color is purchased separately in the store and can be
 // equipped independently in the dressing room. `id` is the stable identifier used in
@@ -398,6 +404,33 @@ static constexpr Stuffy STUFFIES[] = {
 };
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
 static_assert(STUFFY_COUNT <= 16, "ownedStuffies bitmask is uint16_t");
+
+// Forward declaration: the mini hockey stick's art, defined further below alongside
+// drawTeddyHead() and friends. Declared here so the TOYS[] catalog can reference it
+// directly, same as the stuffy draw-function forward declarations above.
+static void drawHockeyStickHeld(int cx, int cy);
+
+// Toy catalog (DIY-110) — a category parallel to STUFFIES[] above, but worn in the left
+// arm slot rather than wherever a stuffy currently attaches: stuffies occupy that same
+// left position at night (drawFull/drawPeeking, the sleep scene) and the right arm both
+// day and night (drawRightArmStuffy, DIY-64), so a toy renders only during the day, using
+// the left position that's otherwise empty then. `id` is the stable identifier used in
+// store/dressing-room form requests; ConfigManager persists ownership as an `ownedToys`
+// bitmask and the equipped selection as a numeric `equippedToy` index (both keyed by
+// catalog position), not the string id. Only one toy is ever equipped at a time (see
+// equippedToyIndex()) — unlike stuffies there's no second slot/second-copy purchase, since
+// toys only ever occupy the one left-arm spot.
+struct Toy {
+    const char* id;
+    const char* label;
+    uint32_t cost;
+    void (*drawHeld)(int cx, int cy);
+};
+static constexpr Toy TOYS[] = {
+    {"hockey_stick", "Mini Hockey Stick", STORE_COST_HOCKEY_STICK, drawHockeyStickHeld},
+};
+static constexpr int TOY_COUNT = sizeof(TOYS) / sizeof(TOYS[0]);
+static_assert(TOY_COUNT <= 16, "ownedToys bitmask is uint16_t");
 
 // Forward declaration: shared flat-color backdrop for themes with no dedicated art of their
 // own, defined further below alongside drawSleepingCat(). Declared here so the ROOM_THEMES[]
@@ -922,6 +955,19 @@ static int equippedGlassesIndex() {
     return -1;
 }
 
+// Same resolution logic as equippedBlanketIndex(), for the toy catalog.
+static int equippedToyIndex() {
+    uint16_t owned = configMgr.config().ownedToys;
+    if (owned == 0) return -1;
+    uint8_t eq = configMgr.config().equippedToy;
+    if (eq == EQUIP_NONE) return -1;  // user explicitly unequipped
+    if (eq < TOY_COUNT && (owned & (1 << eq))) return eq;
+    for (int i = 0; i < TOY_COUNT; i++) {
+        if (owned & (1 << i)) return i;
+    }
+    return -1;
+}
+
 // Per-cat-color name lookup/assignment, keyed the same way as equippedCatColorIndex()
 // (idx == -1 means the white default cat). Falls back to catNameDefault for any color
 // that hasn't been individually named yet — covers both a freshly-bought color and a
@@ -1010,6 +1056,7 @@ static bool hasNewStoreItems() {
            CAT_COLOR_COUNT > configMgr.config().seenCatColorCount ||
            ACCESSORY_STORE_COUNT > configMgr.config().seenAccessoryCount ||
            GLASSES_STORE_COUNT > configMgr.config().seenGlassesCount ||
+           TOY_COUNT > configMgr.config().seenToyCount ||
            !configMgr.config().seenRightArmSlot;
 }
 
@@ -1549,6 +1596,28 @@ static void drawBirthdayBackground(int x, int y, int w, int h) {
     tft.resetViewport();
 }
 
+// Mini hockey stick (DIY-110) — the toy catalog's first entry, held in the left arm slot.
+// Anchored at the same bx/by as drawTeddyFull()'s left position (cx-38, cy-8), tucked under
+// the arm at an angle: shaft running up-and-out from the paw, black tape wrap where the
+// (imaginary) hand grips it, blade angled out at the bottom.
+static void drawHockeyStickHeld(int cx, int cy) {
+    int bx = cx - 38, by = cy - 8;
+    tft.fillRoundRect(bx - 3, by - 28, 7, 46, 3, C_HOCKEY_SHAFT);  // shaft
+    tft.fillRect(bx - 3, by - 28, 7, 9, C_HOCKEY_TAPE);            // grip tape, near the top
+    tft.fillRoundRect(bx - 3, by + 14, 18, 6, 3, C_HOCKEY_BLADE);  // blade, angled out to the right
+}
+
+// Left-arm toy slot (DIY-110) — parallel to drawRightArmStuffy() below, but day-only: stuffies
+// already occupy the left position at night (drawFull()/drawPeeking() in drawSleepingCat())
+// and the right arm both day and night (drawRightArmStuffy()), so this is the one spot left
+// free for a toy without ever overlapping either. Called only from drawAnimal()'s day branch,
+// never from drawSleepingCat().
+static void drawLeftArmToy(int cx, int cy) {
+    int toyIdx = equippedToyIndex();
+    if (toyIdx < 0) return;
+    TOYS[toyIdx].drawHeld(cx, cy);
+}
+
 // Right-arm slot (DIY-64) — called separately by each scene (day in drawAnimal(), night in
 // drawSleepingCat()), rather than unconditionally from inside drawCat(), because which pose
 // is correct depends on whether a blanket covers the body: drawHeld() is a full-size mirror
@@ -1955,6 +2024,7 @@ static void drawAnimal() {
     } else {
         int dy = (cat.mood == CatMood::Celebrate) ? ((cat.frame % 2 == 0) ? -3 : 3) : 0;
         drawCat(CAT_CX, CAT_CY + dy, cat.status, cat.boredom, cat.health, cat.thirst, cat.eyeOpen);
+        drawLeftArmToy(CAT_CX, CAT_CY + dy);  // day only — see drawLeftArmToy()'s comment
         drawRightArmStuffy(CAT_CX, CAT_CY + dy, /*hasBlanket=*/false);  // no blanket during the day
         // Drawn after the stuffy above (DIY-109) so it's never covered by it — see
         // drawThirstyDroplet()'s comment.
@@ -2624,7 +2694,7 @@ static int64_t parseIso8601ToLocalStamp(const char* iso) {
 // construction (it's the same catalog counts summed here), but if a future catalog is added or
 // grown without updating it, this halts immediately instead of silently overrunning the
 // caller's stack buffer.
-static constexpr int STORE_ITEM_ID_COUNT = CAT_COLOR_COUNT + ACCESSORY_COUNT + GLASSES_COUNT + STUFFY_COUNT + BLANKET_COLOR_COUNT + ROOM_THEME_COUNT + 1;
+static constexpr int STORE_ITEM_ID_COUNT = CAT_COLOR_COUNT + ACCESSORY_COUNT + GLASSES_COUNT + STUFFY_COUNT + TOY_COUNT + BLANKET_COLOR_COUNT + ROOM_THEME_COUNT + 1;
 static int collectStoreItemIds(const char** ids, int cap) {
     int n = 0;
     auto push = [&](const char* id) {
@@ -2639,6 +2709,7 @@ static int collectStoreItemIds(const char** ids, int cap) {
     for (int i = 0; i < ACCESSORY_COUNT; i++) push(ACCESSORIES[i].id);
     for (int i = 0; i < GLASSES_COUNT; i++) push(GLASSES[i].id);
     for (int i = 0; i < STUFFY_COUNT; i++) push(STUFFIES[i].id);
+    for (int i = 0; i < TOY_COUNT; i++) push(TOYS[i].id);
     for (int i = 0; i < BLANKET_COLOR_COUNT; i++) push(BLANKET_COLORS[i].id);
     for (int i = 0; i < ROOM_THEME_COUNT; i++) push(ROOM_THEMES[i].id);
     push("right_arm_slot");
@@ -3593,6 +3664,9 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h3>Glasses</h3>
 %%GLASSES_ITEMS%%
 
+<h3>Toys (day only)</h3>
+%%TOY_ITEMS%%
+
 <h3>Right Arm Buddy (day &amp; night)</h3>
 %%RIGHT_ARM_SLOT_ITEM%%
 
@@ -3649,6 +3723,9 @@ static const char CONFIG_DRESS_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 
 <h3>Glasses</h3>
 %%GLASSES_OPTIONS%%
+
+<h3>Toys (day only)</h3>
+%%TOY_OPTIONS%%
 
 <button type="submit" style="width:100%;margin-top:8px">Save</button>
 </form>
@@ -3916,6 +3993,7 @@ static void handleConfigStoreGet() {
         configMgr.config().seenCatColorCount     = (uint8_t)CAT_COLOR_COUNT;
         configMgr.config().seenAccessoryCount    = (uint8_t)ACCESSORY_STORE_COUNT;
         configMgr.config().seenGlassesCount      = (uint8_t)GLASSES_STORE_COUNT;
+        configMgr.config().seenToyCount          = (uint8_t)TOY_COUNT;
         configMgr.config().seenRightArmSlot      = true;
         configMgr.save();
     }
@@ -3994,6 +4072,17 @@ static void handleConfigStoreGet() {
         glassesItems += "</div>\n";
     }
     page.replace("%%GLASSES_ITEMS%%", glassesItems);
+    String toyItems = "";
+    for (int i = 0; i < TOY_COUNT; i++) {
+        bool owned = configMgr.config().ownedToys & (1 << i);
+        uint32_t itemCost = flashSalePrice(TOYS[i].id, TOYS[i].cost);
+        bool onSale = itemCost != TOYS[i].cost;
+        toyItems += "<div class='item'><span>" + String(TOYS[i].label) + "</span>";
+        if (onSale) toyItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        toyItems += storeItemAction(TOYS[i].id, owned, itemCost, points);
+        toyItems += "</div>\n";
+    }
+    page.replace("%%TOY_ITEMS%%", toyItems);
     uint32_t rightArmSlotCost = flashSalePrice("right_arm_slot", STORE_COST_RIGHT_ARM_SLOT);
     bool rightArmOnSale = rightArmSlotCost != STORE_COST_RIGHT_ARM_SLOT;
     String rightArmSlotItem = "<div class='item'><span>Right Arm Buddy Slot</span>";
@@ -4423,7 +4512,7 @@ static void handleConfigStorePost() {
     String item = wm.server->arg("item");
     uint32_t cost;
     bool alreadyOwned;
-    int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1, catColorIdx = -1, accessoryIdx = -1, glassesIdx = -1;
+    int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1, catColorIdx = -1, accessoryIdx = -1, glassesIdx = -1, toyIdx = -1;
     bool rightArmSlotPurchase = false;  // not from a catalog array, so tracked as a plain flag
     // *_STORE_COUNT bounds throughout this lookup, not the full *_COUNT — the theme-week-
     // exclusive entries (DIY-108, appended at the end of ROOM_THEMES[]/ACCESSORIES[]/
@@ -4472,13 +4561,21 @@ static void handleConfigStorePost() {
                         if (glassesIdx >= 0) {
                             cost = flashSalePrice(GLASSES[glassesIdx].id, GLASSES[glassesIdx].cost);
                             alreadyOwned = configMgr.config().ownedGlasses & (1 << glassesIdx);
-                        } else if (item == "right_arm_slot") {
-                            rightArmSlotPurchase = true;
-                            cost = flashSalePrice("right_arm_slot", STORE_COST_RIGHT_ARM_SLOT);
-                            alreadyOwned = configMgr.config().rightArmSlotUnlocked;
                         } else {
-                            wm.server->send(400, "text/plain", "Unknown item");
-                            return;
+                            for (int i = 0; i < TOY_COUNT; i++) {
+                                if (item == TOYS[i].id) { toyIdx = i; break; }
+                            }
+                            if (toyIdx >= 0) {
+                                cost = flashSalePrice(TOYS[toyIdx].id, TOYS[toyIdx].cost);
+                                alreadyOwned = configMgr.config().ownedToys & (1 << toyIdx);
+                            } else if (item == "right_arm_slot") {
+                                rightArmSlotPurchase = true;
+                                cost = flashSalePrice("right_arm_slot", STORE_COST_RIGHT_ARM_SLOT);
+                                alreadyOwned = configMgr.config().rightArmSlotUnlocked;
+                            } else {
+                                wm.server->send(400, "text/plain", "Unknown item");
+                                return;
+                            }
                         }
                     }
                 }
@@ -4513,6 +4610,9 @@ static void handleConfigStorePost() {
     } else if (glassesIdx >= 0) {
         configMgr.config().ownedGlasses |= (1 << glassesIdx);
         configMgr.config().equippedGlasses = glassesIdx;  // newly bought glasses become equipped
+    } else if (toyIdx >= 0) {
+        configMgr.config().ownedToys |= (1 << toyIdx);
+        configMgr.config().equippedToy = toyIdx;  // newly bought toy becomes equipped
     } else if (rightArmSlotPurchase) {
         configMgr.config().rightArmSlotUnlocked = true;  // starts empty — see equippedStuffyRightIndex()
     } else if (configMgr.config().ownedStuffies & (1 << stuffyIdx)) {
@@ -4532,6 +4632,7 @@ static void handleConfigStorePost() {
         else if (catColorIdx >= 0) configMgr.config().ownedCatColors &= ~(1 << catColorIdx);
         else if (accessoryIdx >= 0) configMgr.config().ownedAccessories &= ~(1 << accessoryIdx);
         else if (glassesIdx >= 0) configMgr.config().ownedGlasses &= ~(1 << glassesIdx);
+        else if (toyIdx >= 0) configMgr.config().ownedToys &= ~(1 << toyIdx);
         else if (rightArmSlotPurchase) configMgr.config().rightArmSlotUnlocked = false;
         else if (configMgr.config().ownedStuffiesSecond & (1 << stuffyIdx)) configMgr.config().ownedStuffiesSecond &= ~(1 << stuffyIdx);
         else configMgr.config().ownedStuffies &= ~(1 << stuffyIdx);
@@ -4713,6 +4814,26 @@ static void handleConfigDressGet() {
     }
     page.replace("%%GLASSES_OPTIONS%%", glassesOptions);
 
+    uint16_t ownedToys = configMgr.config().ownedToys;
+    int equippedToyIdx = equippedToyIndex();
+    String toyOptions = "";
+    if (ownedToys == 0) {
+        toyOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
+    } else {
+        toyOptions += "<label class='pick'><input type='radio' name='toy' value='none'";
+        if (equippedToyIdx < 0) toyOptions += " checked";
+        toyOptions += "> None</label>";
+        for (int i = 0; i < TOY_COUNT; i++) {
+            if (!(ownedToys & (1 << i))) continue;
+            toyOptions += "<label class='pick'><input type='radio' name='toy' value='";
+            toyOptions += TOYS[i].id;
+            toyOptions += "'";
+            if (i == equippedToyIdx) toyOptions += " checked";
+            toyOptions += "> " + String(TOYS[i].label) + "</label>";
+        }
+    }
+    page.replace("%%TOY_OPTIONS%%", toyOptions);
+
     String msg = "";
     if (wm.server->hasArg("saved"))
         msg = "<div class='banner ok'>Saved.</div>";
@@ -4893,6 +5014,23 @@ static void handleConfigDressPost() {
             return;
         }
         configMgr.config().equippedGlasses = idx;
+        changed = true;
+    }
+
+    String toyId = wm.server->arg("toy");
+    if (toyId == "none") {
+        configMgr.config().equippedToy = EQUIP_NONE;
+        changed = true;
+    } else if (toyId.length() > 0) {
+        int idx = -1;
+        for (int i = 0; i < TOY_COUNT; i++) {
+            if (toyId == TOYS[i].id) { idx = i; break; }
+        }
+        if (idx < 0 || !(configMgr.config().ownedToys & (1 << idx))) {
+            wm.server->send(400, "text/plain", "Invalid selection");
+            return;
+        }
+        configMgr.config().equippedToy = idx;
         changed = true;
     }
 
