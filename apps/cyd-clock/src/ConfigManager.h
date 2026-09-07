@@ -54,6 +54,17 @@ struct AppConfig {
                                             // whatever's cheapest/lowest-owned; the user picks explicitly
     bool    seenRightArmSlot     = false;  // Mirrors seenStuffyCount's "has the store page shown this yet"
                                             // role, but as a bool since this is a single item, not a catalog
+    uint16_t ownedToys        = 0;  // Store purchase: bitmask, bit N = owns toy N (DIY-110)
+    uint8_t equippedToy       = 0xFF;  // Dressing room: index of the toy on the right arm slot, only
+                                        // meaningful when equippedRightArmKind == RIGHT_ARM_KIND_TOY
+                                        // (main.cpp) — see equippedToyIndex(). 0xFF is EQUIP_NONE
+                                        // (main.cpp), same reasoning as equippedStuffyRight.
+    uint8_t equippedRightArmKind = 0;  // Which of equippedStuffyRight/equippedToy (if either) is actually
+                                        // showing on the shared right-arm slot: 0 = RIGHT_ARM_KIND_NONE,
+                                        // 1 = RIGHT_ARM_KIND_STUFFY, 2 = RIGHT_ARM_KIND_TOY (main.cpp).
+                                        // The slot holds exactly one of the two, mutually exclusive by
+                                        // construction rather than by an implicit priority rule (DIY-110).
+    uint8_t seenToyCount      = 0;  // Highest TOY_COUNT the store page has shown the user
     uint8_t seenBlanketColorCount = 0;  // Highest BLANKET_COLOR_COUNT the store page has shown the user
     uint16_t ownedRoomThemes   = 0;  // Store purchase: bitmask, bit N = owns room theme N (widened to
                                       // uint16_t in DIY-90 — 9th theme needs bit 8, uint8_t was full)

@@ -85,6 +85,31 @@ void ConfigManager::fromJson(JsonDocument& doc) {
     _config.rightArmSlotUnlocked = doc["rightArmSlot"]       | _config.rightArmSlotUnlocked;
     _config.equippedStuffyRight  = doc["stuffyRightEquipped"] | _config.equippedStuffyRight;
     _config.seenRightArmSlot     = doc["seenRightArmSlot"]    | _config.seenRightArmSlot;
+    if (doc["toys"].is<uint16_t>()) _config.ownedToys = doc["toys"];
+    _config.equippedToy      = doc["toyEquipped"] | _config.equippedToy;
+    _config.seenToyCount     = doc["seenToys"]    | _config.seenToyCount;
+    if (doc["rightArmKind"].is<uint8_t>()) {
+        _config.equippedRightArmKind = doc["rightArmKind"];
+    } else if (_config.equippedStuffyRight < 16 &&
+               (_config.ownedStuffies & (1 << _config.equippedStuffyRight))) {
+        // Migrating a config that predates this field (DIY-110): a still-owned, still-valid
+        // right-arm stuffy index means the right arm was showing a stuffy under the old
+        // kind-less model, so preserve that on upgrade rather than defaulting to "nothing
+        // equipped" — same reasoning as this file's other legacy migrations (e.g.
+        // setupComplete, the old single-teddy/blanket flags above). `< 16`, not a catalog
+        // count constant, since STUFFY_COUNT/TOY_COUNT are main.cpp-only — ownedStuffies is
+        // itself only 16 bits wide, so this is the widest range a shift below can safely
+        // check without relying on those constants or risking undefined behavior from
+        // shifting by an out-of-range amount.
+        _config.equippedRightArmKind = 1;  // RIGHT_ARM_KIND_STUFFY (main.cpp)
+    } else if (_config.equippedToy < 16 &&
+               (_config.ownedToys & (1 << _config.equippedToy))) {
+        _config.equippedRightArmKind = 2;  // RIGHT_ARM_KIND_TOY (main.cpp) — toys are new in
+                                            // this same update, so this branch shouldn't
+                                            // currently be reachable from a real predating
+                                            // config, but mirrors the stuffy branch above for
+                                            // symmetry/robustness.
+    }
     _config.seenBlanketColorCount = doc["seenBlankets"]  | _config.seenBlanketColorCount;
     _config.ownedRoomThemes    = doc["roomThemes"]       | _config.ownedRoomThemes;
     _config.equippedRoomTheme  = doc["roomThemeEquipped"] | _config.equippedRoomTheme;
@@ -183,6 +208,10 @@ void ConfigManager::toJson(JsonDocument& doc) const {
     doc["rightArmSlot"]        = _config.rightArmSlotUnlocked;
     doc["stuffyRightEquipped"] = _config.equippedStuffyRight;
     doc["seenRightArmSlot"]    = _config.seenRightArmSlot;
+    doc["toys"]            = _config.ownedToys;
+    doc["toyEquipped"]     = _config.equippedToy;
+    doc["seenToys"]        = _config.seenToyCount;
+    doc["rightArmKind"]    = _config.equippedRightArmKind;
     doc["seenBlankets"]    = _config.seenBlanketColorCount;
     doc["roomThemes"]        = _config.ownedRoomThemes;
     doc["roomThemeEquipped"] = _config.equippedRoomTheme;

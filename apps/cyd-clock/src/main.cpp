@@ -90,6 +90,7 @@ static constexpr uint32_t STORE_COST_CAT_COLOR_PATTERN = 200;  // tabby, calico 
 static constexpr uint32_t STORE_COST_ACCESSORY_BOW = 50;
 static constexpr uint32_t STORE_COST_ACCESSORY_GLASSES = 50;  // matches bow pricing — same "flat recolor-tier" accessory
 static constexpr uint32_t STORE_COST_RIGHT_ARM_SLOT = 200;  // one-time unlock, not per-stuffy
+static constexpr uint32_t STORE_COST_HOCKEY_STICK = 100;
 
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
@@ -152,6 +153,13 @@ static constexpr uint16_t C_PARTY_HAT_TRIM = 0xF6CB;  // party hat base band/pom
 // from the cupcake stuffy this replaced, DIY-108).
 static constexpr uint16_t C_BALLOON_GLASSES_RED  = TFT_RED;     // one balloon lens
 static constexpr uint16_t C_BALLOON_GLASSES_BLUE = 0x001F;      // the other balloon lens (true blue)
+
+// Toy catalog colors (DIY-110) — first entry is the mini hockey stick.
+static constexpr uint16_t C_HOCKEY_SHAFT = 0xA145;  // wood-tone shaft (tan/brown)
+static constexpr uint16_t C_HOCKEY_TAPE  = 0x0000;  // tape color on a light background (black);
+                                                     // flips to white on a dark background — see
+                                                     // drawHockeyStickHeld()'s tapeColor computation.
+                                                     // Shared by both taped regions (grip + blade).
 
 // Blanket color catalog — each color is purchased separately in the store and can be
 // equipped independently in the dressing room. `id` is the stable identifier used in
@@ -399,6 +407,37 @@ static constexpr Stuffy STUFFIES[] = {
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
 static_assert(STUFFY_COUNT <= 16, "ownedStuffies bitmask is uint16_t");
 
+// Forward declaration: the mini hockey stick's art, defined further below alongside
+// drawTeddyHead() and friends. Declared here so the TOYS[] catalog can reference it
+// directly, same as the stuffy draw-function forward declarations above.
+static void drawHockeyStickHeld(int cx, int cy);
+
+// Toy catalog (DIY-110) — a category parallel to STUFFIES[] above, sharing the right-arm
+// slot (rightArmSlotUnlocked, DIY-64) with the right-arm stuffy rather than getting a slot of
+// its own: on-device testing showed the toy read better held in the same right-arm spot than
+// the originally-specced left arm, but that spot is already a held item's home, so the two
+// are mutually exclusive sub-categories of one slot (equippedRightArmKind picks which, if
+// either) rather than each getting independent space — see equippedToyIndex() and
+// drawRightArmToy(). Equipping a toy there requires the same rightArmSlotUnlocked purchase
+// as a stuffy does; owning the toy itself (ownedToys) is still its own, separate purchase,
+// same as owning a stuffy is separate from unlocking the slot. `id` is the stable identifier
+// used in store/dressing-room form requests; ConfigManager persists ownership as an
+// `ownedToys` bitmask and the equipped selection as a numeric `equippedToy` index (both
+// keyed by catalog position), not the string id. Only one toy is ever equipped at a time —
+// unlike stuffies there's no second-copy purchase, since a toy only ever occupies the one
+// shared right-arm spot, never two at once.
+struct Toy {
+    const char* id;
+    const char* label;
+    uint32_t cost;
+    void (*drawHeld)(int cx, int cy);
+};
+static constexpr Toy TOYS[] = {
+    {"hockey_stick", "Mini Hockey Stick", STORE_COST_HOCKEY_STICK, drawHockeyStickHeld},
+};
+static constexpr int TOY_COUNT = sizeof(TOYS) / sizeof(TOYS[0]);
+static_assert(TOY_COUNT <= 16, "ownedToys bitmask is uint16_t");
+
 // Forward declaration: shared flat-color backdrop for themes with no dedicated art of their
 // own, defined further below alongside drawSleepingCat(). Declared here so the ROOM_THEMES[]
 // catalog can reference it directly, same as the stuffy draw-function forward declarations
@@ -466,6 +505,16 @@ static constexpr int ROOM_THEME_STORE_COUNT = ROOM_THEME_COUNT - 1;
 // equippedBlanketIndex()/equippedStuffyIndex()/equippedRoomThemeIndex()). Never a valid
 // catalog index since all catalogs stay well under 255 entries.
 static constexpr uint8_t EQUIP_NONE = 0xFF;
+
+// Right-arm slot sub-category discriminator (DIY-110 restructure) — the right-arm slot
+// (rightArmSlotUnlocked, DIY-64) can hold exactly one of a stuffy or a toy, never both,
+// mutually exclusive rather than one silently hiding the other. `equippedStuffyRight` and
+// `equippedToy` each keep their own catalog index regardless of which is currently active —
+// only `equippedRightArmKind` says which one (if either) actually renders; see
+// equippedStuffyRightIndex()/equippedToyIndex().
+static constexpr uint8_t RIGHT_ARM_KIND_NONE   = 0;
+static constexpr uint8_t RIGHT_ARM_KIND_STUFFY = 1;
+static constexpr uint8_t RIGHT_ARM_KIND_TOY    = 2;
 
 // Quick-pick durations
 static constexpr uint32_t    PICK_SEC[] = {60, 300, 600, 1800};
@@ -857,13 +906,17 @@ static int equippedStuffyIndex() {
     return -1;
 }
 
-// Resolver for the right-arm slot (DIY-64) — deliberately does NOT fall back to the
-// lowest-owned stuffy like equippedStuffyIndex() and every other equipped*Index() above.
-// Unlocking the slot is a separate purchase from owning any given stuffy, so there's no
-// "first purchase" moment to auto-equip from; the user always picks explicitly in the
-// dressing room, and an unlocked-but-never-equipped slot just stays empty.
+// Resolver for the right-arm slot's stuffy sub-category (DIY-64) — deliberately does NOT
+// fall back to the lowest-owned stuffy like equippedStuffyIndex() and every other
+// equipped*Index() above. Unlocking the slot is a separate purchase from owning any given
+// stuffy, so there's no "first purchase" moment to auto-equip from; the user always picks
+// explicitly in the dressing room, and an unlocked-but-never-equipped slot just stays empty.
+// Also requires equippedRightArmKind == RIGHT_ARM_KIND_STUFFY (DIY-110) — the slot holds
+// exactly one of a stuffy or a toy, so a stale equippedStuffyRight index left over from
+// before the user switched the slot to a toy must never render.
 static int equippedStuffyRightIndex() {
     if (!configMgr.config().rightArmSlotUnlocked) return -1;
+    if (configMgr.config().equippedRightArmKind != RIGHT_ARM_KIND_STUFFY) return -1;
     uint8_t eq = configMgr.config().equippedStuffyRight;
     if (eq == EQUIP_NONE) return -1;
     if (eq < STUFFY_COUNT && (configMgr.config().ownedStuffies & (1 << eq))) return eq;
@@ -920,6 +973,19 @@ static int equippedGlassesIndex() {
         if (owned & (1 << i)) return i;
     }
     return -1;
+}
+
+// Resolver for the right-arm slot's toy sub-category (DIY-110) — mirrors
+// equippedStuffyRightIndex() exactly (same rightArmSlotUnlocked gate, same "no fallback,
+// user picks explicitly" behavior, same kind check so a stale index from before switching
+// the slot to a stuffy never renders), since a toy occupies the very same physical slot.
+static int equippedToyIndex() {
+    if (!configMgr.config().rightArmSlotUnlocked) return -1;
+    if (configMgr.config().equippedRightArmKind != RIGHT_ARM_KIND_TOY) return -1;
+    uint8_t eq = configMgr.config().equippedToy;
+    if (eq == EQUIP_NONE) return -1;
+    if (eq < TOY_COUNT && (configMgr.config().ownedToys & (1 << eq))) return eq;
+    return -1;  // previously-equipped toy no longer owned somehow — just show nothing
 }
 
 // Per-cat-color name lookup/assignment, keyed the same way as equippedCatColorIndex()
@@ -1010,6 +1076,7 @@ static bool hasNewStoreItems() {
            CAT_COLOR_COUNT > configMgr.config().seenCatColorCount ||
            ACCESSORY_STORE_COUNT > configMgr.config().seenAccessoryCount ||
            GLASSES_STORE_COUNT > configMgr.config().seenGlassesCount ||
+           TOY_COUNT > configMgr.config().seenToyCount ||
            !configMgr.config().seenRightArmSlot;
 }
 
@@ -1549,6 +1616,73 @@ static void drawBirthdayBackground(int x, int y, int w, int h) {
     tft.resetViewport();
 }
 
+// Perceived luminance of an RGB565 color, used below to pick a contrasting tape color —
+// standard ITU-R BT.601 weights on the 5/6/5-bit channels scaled up to 8 bits each.
+// Threshold of 128 matches the usual "midpoint" cutoff for light-vs-dark text/UI contrast.
+static bool colorReadsDark(uint16_t c) {
+    uint8_t r = ((c >> 11) & 0x1F) * 255 / 31;
+    uint8_t g = ((c >> 5)  & 0x3F) * 255 / 63;
+    uint8_t b = (c & 0x1F) * 255 / 31;
+    uint16_t luminance = (r * 299 + g * 587 + b * 114) / 1000;
+    return luminance < 128;
+}
+
+// Mini hockey stick (DIY-110) — the toy catalog's first entry, held in the right arm slot.
+// Anchored at bx=cx+38 (same x as drawTeddyHeld()'s right-arm position), by=cy+10 — moved
+// down twice now (first cy-8 -> cy+4, then +4 -> +10) per on-device feedback that it kept
+// reading too high; the shaft is also longer than the first cut (50px vs. 42px), so the
+// blade ends up lower still relative to where it first was. Leans inward (top tilted toward
+// the body, away from the paw) rather than standing straight up — also on-device feedback —
+// built from two slanted parallelogram bands (each a pair of fillTriangle() calls sharing an
+// edge, the same trick drawBirthdayBackground() uses for balloon knots) rather than
+// fillRoundRect(), which can only draw axis-aligned rects.
+//
+// Tape color: both taped regions (the grip wrap at the top and the blade wrap at the
+// bottom) share one contrast-against-background computation via zoneBgColor()/
+// colorReadsDark() above, rather than a fixed black — computed once and reused for both,
+// so they can never drift out of sync the way a second hardcoded color constant did before
+// (the blade wrap was left on the fixed C_HOCKEY_BLADE black and didn't flip with the grip
+// wrap; DIY-110 follow-up fix). This is a proxy for "what's behind the stick", not a true
+// read of the actual pixels there — real per-pixel framebuffer sampling isn't practical
+// here: the primary `cyd` board's platformio.ini never defines TFT_MISO at all (no readback
+// wiring on that SPI bus), and even on freenove-s3, where MISO is wired, several themes
+// (Starry Night, Clear Sky, Birthday) paint patterned art rather than a flat fill, so any
+// single sampled pixel wouldn't reliably represent the whole area behind the stick anyway.
+// zoneBgColor()'s per-theme representative color is already the same approximation the rest
+// of the file uses for cheap contrast decisions (e.g. text glyph background erasure), so
+// reusing it here stays consistent rather than reaching for a fragile, board-specific
+// readback path for a cosmetic tweak.
+static void drawHockeyStickHeld(int cx, int cy) {
+    int bx = cx + 38, by = cy + 10;
+    int topX = bx - 14, topY = by - 30;  // top of the shaft, leaning toward the body
+    int botX = bx,      botY = by + 20;  // bottom of the shaft, at the paw
+    int w = 7;
+    uint16_t tapeColor = colorReadsDark(zoneBgColor()) ? TFT_WHITE : C_HOCKEY_TAPE;
+    // Shaft
+    tft.fillTriangle(topX, topY, topX + w, topY, botX, botY, C_HOCKEY_SHAFT);
+    tft.fillTriangle(topX + w, topY, botX, botY, botX + w, botY, C_HOCKEY_SHAFT);
+    // Grip tape wrap — same slant, just the top ~9px band
+    int tapeX = topX + 3, tapeY = topY + 9;
+    tft.fillTriangle(topX, topY, topX + w, topY, tapeX, tapeY, tapeColor);
+    tft.fillTriangle(topX + w, topY, tapeX, tapeY, tapeX + w, tapeY, tapeColor);
+    // Blade tape wrap, at the paw end, angled out to the right
+    tft.fillRoundRect(botX - 2, botY - 4, 18, 6, 3, tapeColor);
+}
+
+// Right-arm toy slot (DIY-110) — shares drawRightArmStuffy()'s spot rather than getting its
+// own, since on-device feedback moved the toy from its originally-specced left arm to the
+// right arm, which a stuffy may already occupy (DIY-64). The two are mutually exclusive by
+// construction (equippedRightArmKind, see equippedStuffyRightIndex()/equippedToyIndex()) —
+// the user explicitly picks one or the other for the slot in the dressing room, rather than
+// this function needing to arbitrate a conflict at draw time. Called from both drawAnimal()
+// (day) and drawSleepingCat() (night), same as drawRightArmStuffy(), right after it so the
+// "same slot" relationship reads naturally in call order.
+static void drawRightArmToy(int cx, int cy) {
+    int toyIdx = equippedToyIndex();
+    if (toyIdx < 0) return;
+    TOYS[toyIdx].drawHeld(cx, cy);
+}
+
 // Right-arm slot (DIY-64) — called separately by each scene (day in drawAnimal(), night in
 // drawSleepingCat()), rather than unconditionally from inside drawCat(), because which pose
 // is correct depends on whether a blanket covers the body: drawHeld() is a full-size mirror
@@ -1637,6 +1771,7 @@ static void drawSleepingCat(int cx, int cy) {
     // hasBlanket) always ends up on top of it. See drawRightArmStuffy() for why the pose
     // choice depends on hasBlanket.
     drawRightArmStuffy(cx, cy, hasBlanket);
+    drawRightArmToy(cx, cy);  // mutually exclusive with the stuffy above — see its own comment
 }
 
 static void drawSparkles(int cx, int cy, uint8_t frame) {
@@ -1956,6 +2091,7 @@ static void drawAnimal() {
         int dy = (cat.mood == CatMood::Celebrate) ? ((cat.frame % 2 == 0) ? -3 : 3) : 0;
         drawCat(CAT_CX, CAT_CY + dy, cat.status, cat.boredom, cat.health, cat.thirst, cat.eyeOpen);
         drawRightArmStuffy(CAT_CX, CAT_CY + dy, /*hasBlanket=*/false);  // no blanket during the day
+        drawRightArmToy(CAT_CX, CAT_CY + dy);  // mutually exclusive with the stuffy above
         // Drawn after the stuffy above (DIY-109) so it's never covered by it — see
         // drawThirstyDroplet()'s comment.
         if (cat.thirst == CatThirst::Thirsty) {
@@ -2624,7 +2760,7 @@ static int64_t parseIso8601ToLocalStamp(const char* iso) {
 // construction (it's the same catalog counts summed here), but if a future catalog is added or
 // grown without updating it, this halts immediately instead of silently overrunning the
 // caller's stack buffer.
-static constexpr int STORE_ITEM_ID_COUNT = CAT_COLOR_COUNT + ACCESSORY_COUNT + GLASSES_COUNT + STUFFY_COUNT + BLANKET_COLOR_COUNT + ROOM_THEME_COUNT + 1;
+static constexpr int STORE_ITEM_ID_COUNT = CAT_COLOR_COUNT + ACCESSORY_COUNT + GLASSES_COUNT + STUFFY_COUNT + TOY_COUNT + BLANKET_COLOR_COUNT + ROOM_THEME_COUNT + 1;
 static int collectStoreItemIds(const char** ids, int cap) {
     int n = 0;
     auto push = [&](const char* id) {
@@ -2639,6 +2775,7 @@ static int collectStoreItemIds(const char** ids, int cap) {
     for (int i = 0; i < ACCESSORY_COUNT; i++) push(ACCESSORIES[i].id);
     for (int i = 0; i < GLASSES_COUNT; i++) push(GLASSES[i].id);
     for (int i = 0; i < STUFFY_COUNT; i++) push(STUFFIES[i].id);
+    for (int i = 0; i < TOY_COUNT; i++) push(TOYS[i].id);
     for (int i = 0; i < BLANKET_COLOR_COUNT; i++) push(BLANKET_COLORS[i].id);
     for (int i = 0; i < ROOM_THEME_COUNT; i++) push(ROOM_THEMES[i].id);
     push("right_arm_slot");
@@ -3593,7 +3730,10 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h3>Glasses</h3>
 %%GLASSES_ITEMS%%
 
-<h3>Right Arm Buddy (day &amp; night)</h3>
+<h3>Toys (for the Right Arm slot)</h3>
+%%TOY_ITEMS%%
+
+<h3>Right Arm Slot (day &amp; night — holds either a Buddy or a Toy)</h3>
 %%RIGHT_ARM_SLOT_ITEM%%
 
 <script>
@@ -3635,8 +3775,8 @@ static const char CONFIG_DRESS_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h3>Stuffies (night only)</h3>
 %%STUFFY_OPTIONS%%
 
-<h3>Right Arm Buddy (day &amp; night)</h3>
-%%STUFFY_RIGHT_OPTIONS%%
+<h3>Right Arm Slot (day &amp; night — pick a Buddy or a Toy)</h3>
+%%RIGHT_ARM_OPTIONS%%
 
 <h3>Blankets (night only)</h3>
 %%BLANKET_OPTIONS%%
@@ -3916,6 +4056,7 @@ static void handleConfigStoreGet() {
         configMgr.config().seenCatColorCount     = (uint8_t)CAT_COLOR_COUNT;
         configMgr.config().seenAccessoryCount    = (uint8_t)ACCESSORY_STORE_COUNT;
         configMgr.config().seenGlassesCount      = (uint8_t)GLASSES_STORE_COUNT;
+        configMgr.config().seenToyCount          = (uint8_t)TOY_COUNT;
         configMgr.config().seenRightArmSlot      = true;
         configMgr.save();
     }
@@ -3994,9 +4135,20 @@ static void handleConfigStoreGet() {
         glassesItems += "</div>\n";
     }
     page.replace("%%GLASSES_ITEMS%%", glassesItems);
+    String toyItems = "";
+    for (int i = 0; i < TOY_COUNT; i++) {
+        bool owned = configMgr.config().ownedToys & (1 << i);
+        uint32_t itemCost = flashSalePrice(TOYS[i].id, TOYS[i].cost);
+        bool onSale = itemCost != TOYS[i].cost;
+        toyItems += "<div class='item'><span>" + String(TOYS[i].label) + "</span>";
+        if (onSale) toyItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        toyItems += storeItemAction(TOYS[i].id, owned, itemCost, points);
+        toyItems += "</div>\n";
+    }
+    page.replace("%%TOY_ITEMS%%", toyItems);
     uint32_t rightArmSlotCost = flashSalePrice("right_arm_slot", STORE_COST_RIGHT_ARM_SLOT);
     bool rightArmOnSale = rightArmSlotCost != STORE_COST_RIGHT_ARM_SLOT;
-    String rightArmSlotItem = "<div class='item'><span>Right Arm Buddy Slot</span>";
+    String rightArmSlotItem = "<div class='item'><span>Right Arm Slot</span>";
     if (rightArmOnSale) rightArmSlotItem += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
     rightArmSlotItem += storeItemAction("right_arm_slot", configMgr.config().rightArmSlotUnlocked,
                                          rightArmSlotCost, points);
@@ -4423,7 +4575,7 @@ static void handleConfigStorePost() {
     String item = wm.server->arg("item");
     uint32_t cost;
     bool alreadyOwned;
-    int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1, catColorIdx = -1, accessoryIdx = -1, glassesIdx = -1;
+    int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1, catColorIdx = -1, accessoryIdx = -1, glassesIdx = -1, toyIdx = -1;
     bool rightArmSlotPurchase = false;  // not from a catalog array, so tracked as a plain flag
     // *_STORE_COUNT bounds throughout this lookup, not the full *_COUNT — the theme-week-
     // exclusive entries (DIY-108, appended at the end of ROOM_THEMES[]/ACCESSORIES[]/
@@ -4472,13 +4624,21 @@ static void handleConfigStorePost() {
                         if (glassesIdx >= 0) {
                             cost = flashSalePrice(GLASSES[glassesIdx].id, GLASSES[glassesIdx].cost);
                             alreadyOwned = configMgr.config().ownedGlasses & (1 << glassesIdx);
-                        } else if (item == "right_arm_slot") {
-                            rightArmSlotPurchase = true;
-                            cost = flashSalePrice("right_arm_slot", STORE_COST_RIGHT_ARM_SLOT);
-                            alreadyOwned = configMgr.config().rightArmSlotUnlocked;
                         } else {
-                            wm.server->send(400, "text/plain", "Unknown item");
-                            return;
+                            for (int i = 0; i < TOY_COUNT; i++) {
+                                if (item == TOYS[i].id) { toyIdx = i; break; }
+                            }
+                            if (toyIdx >= 0) {
+                                cost = flashSalePrice(TOYS[toyIdx].id, TOYS[toyIdx].cost);
+                                alreadyOwned = configMgr.config().ownedToys & (1 << toyIdx);
+                            } else if (item == "right_arm_slot") {
+                                rightArmSlotPurchase = true;
+                                cost = flashSalePrice("right_arm_slot", STORE_COST_RIGHT_ARM_SLOT);
+                                alreadyOwned = configMgr.config().rightArmSlotUnlocked;
+                            } else {
+                                wm.server->send(400, "text/plain", "Unknown item");
+                                return;
+                            }
                         }
                     }
                 }
@@ -4513,6 +4673,12 @@ static void handleConfigStorePost() {
     } else if (glassesIdx >= 0) {
         configMgr.config().ownedGlasses |= (1 << glassesIdx);
         configMgr.config().equippedGlasses = glassesIdx;  // newly bought glasses become equipped
+    } else if (toyIdx >= 0) {
+        // Doesn't auto-equip (unlike the other categories above) — a toy shares the
+        // right-arm slot with a stuffy (DIY-110), so buying one shouldn't silently switch
+        // the slot away from whatever's already equipped there. Same reasoning as why
+        // buying a stuffy never auto-equips it to the right arm either.
+        configMgr.config().ownedToys |= (1 << toyIdx);
     } else if (rightArmSlotPurchase) {
         configMgr.config().rightArmSlotUnlocked = true;  // starts empty — see equippedStuffyRightIndex()
     } else if (configMgr.config().ownedStuffies & (1 << stuffyIdx)) {
@@ -4532,6 +4698,7 @@ static void handleConfigStorePost() {
         else if (catColorIdx >= 0) configMgr.config().ownedCatColors &= ~(1 << catColorIdx);
         else if (accessoryIdx >= 0) configMgr.config().ownedAccessories &= ~(1 << accessoryIdx);
         else if (glassesIdx >= 0) configMgr.config().ownedGlasses &= ~(1 << glassesIdx);
+        else if (toyIdx >= 0) configMgr.config().ownedToys &= ~(1 << toyIdx);
         else if (rightArmSlotPurchase) configMgr.config().rightArmSlotUnlocked = false;
         else if (configMgr.config().ownedStuffiesSecond & (1 << stuffyIdx)) configMgr.config().ownedStuffiesSecond &= ~(1 << stuffyIdx);
         else configMgr.config().ownedStuffies &= ~(1 << stuffyIdx);
@@ -4583,6 +4750,54 @@ static String buildStuffyRadioOptions(const char* fieldName, int equippedIdx, in
     return options;
 }
 
+// Combined right-arm slot picker (DIY-110 restructure) — a single radio group covering both
+// sub-categories that can occupy the shared right-arm slot (equippedRightArmKind), so
+// picking one is an explicit either/or choice rather than the earlier priority-based
+// implicit hide. Values are prefixed ("stuffy:<id>" / "toy:<id>") so
+// handleConfigDressPost() can tell which sub-catalog a selection belongs to without having
+// to search both by id — store item ids are already globally unique (assertStoreIdsUnique())
+// but the prefix keeps the parsing explicit rather than relying on that. The stuffy half
+// reuses buildStuffyRadioOptions()'s left/right conflict logic (a stuffy already on the left
+// arm is disabled here unless a 2nd copy is owned, DIY-106); toys have no such conflict since
+// they have no left-arm slot to clash with.
+static String buildRightArmRadioOptions(int equippedLeftStuffyIdx) {
+    uint16_t ownedStuffies = configMgr.config().ownedStuffies;
+    uint16_t ownedStuffiesSecond = configMgr.config().ownedStuffiesSecond;
+    uint16_t ownedToys = configMgr.config().ownedToys;
+    uint8_t kind = configMgr.config().equippedRightArmKind;
+    int equippedStuffyRightIdx = equippedStuffyRightIndex();
+    int equippedToyIdx = equippedToyIndex();
+
+    String options = "<label class='pick'><input type='radio' name='rightArm' value='none'";
+    if (kind != RIGHT_ARM_KIND_STUFFY && kind != RIGHT_ARM_KIND_TOY) options += " checked";
+    options += "> None</label>";
+
+    for (int i = 0; i < STUFFY_COUNT; i++) {
+        if (!(ownedStuffies & (1 << i))) continue;
+        bool onLeftArm = (i == equippedLeftStuffyIdx);
+        bool conflicts = onLeftArm && !(ownedStuffiesSecond & (1 << i));
+        options += "<label class='pick";
+        if (conflicts) options += " disabled";
+        options += "'><input type='radio' name='rightArm' value='stuffy:";
+        options += STUFFIES[i].id;
+        options += "'";
+        if (kind == RIGHT_ARM_KIND_STUFFY && i == equippedStuffyRightIdx) options += " checked";
+        if (conflicts) options += " disabled";
+        options += "> " + String(STUFFIES[i].label);
+        if (onLeftArm) options += " (also on left arm)";
+        options += "</label>";
+    }
+    for (int i = 0; i < TOY_COUNT; i++) {
+        if (!(ownedToys & (1 << i))) continue;
+        options += "<label class='pick'><input type='radio' name='rightArm' value='toy:";
+        options += TOYS[i].id;
+        options += "'";
+        if (kind == RIGHT_ARM_KIND_TOY && i == equippedToyIdx) options += " checked";
+        options += "> " + String(TOYS[i].label) + "</label>";
+    }
+    return options;
+}
+
 static void handleConfigDressGet() {
     String page = String(FPSTR(CONFIG_DRESS_HTML));
     page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
@@ -4619,15 +4834,15 @@ static void handleConfigDressGet() {
     }
     page.replace("%%STUFFY_OPTIONS%%", stuffyOptions);
 
-    String stuffyRightOptions = "";
+    String rightArmOptions = "";
     if (!configMgr.config().rightArmSlotUnlocked) {
-        stuffyRightOptions = "<p style='color:#888'>Not unlocked yet — visit the Store.</p>";
-    } else if (ownedStuffies == 0) {
-        stuffyRightOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
+        rightArmOptions = "<p style='color:#888'>Not unlocked yet — visit the Store.</p>";
+    } else if (ownedStuffies == 0 && configMgr.config().ownedToys == 0) {
+        rightArmOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
     } else {
-        stuffyRightOptions = buildStuffyRadioOptions("stuffyRight", equippedStuffyRightIdx, equippedStuffyIdx, "left");
+        rightArmOptions = buildRightArmRadioOptions(equippedStuffyIdx);
     }
-    page.replace("%%STUFFY_RIGHT_OPTIONS%%", stuffyRightOptions);
+    page.replace("%%RIGHT_ARM_OPTIONS%%", rightArmOptions);
 
     uint16_t ownedThemes = configMgr.config().ownedRoomThemes;
     int equippedThemeIdx = equippedRoomThemeIndex();
@@ -4723,6 +4938,21 @@ static void handleConfigDressGet() {
 static void handleConfigDressPost() {
     bool changed = false;
 
+    // A dressing-room page loaded before the right-arm restructure still posts the old
+    // separate stuffyRight/toy field names, which no template generated after this update
+    // ever emits (CONFIG_DRESS_HTML only has the combined "rightArm" field now) — so either
+    // one present here can only mean a stale cached page. Checked first, before anything else
+    // in this function mutates configMgr.config() (e.g. blanketColor just below writes
+    // directly rather than through a local first) — a check placed after any such mutation
+    // would let a rejected submission still leave that earlier write live in memory even
+    // though the 400 skips configMgr.save(), the same in-memory/disk divergence the
+    // stuffy/right-arm locals below are already careful to avoid (see DIY-56 review).
+    if (wm.server->arg("rightArm").length() == 0 &&
+        (wm.server->hasArg("stuffyRight") || wm.server->hasArg("toy"))) {
+        wm.server->send(400, "text/plain", "Stale page — please reload the Dressing Room and try again");
+        return;
+    }
+
     // Validate every submitted name field up front, before any equip mutation below touches
     // configMgr.config() in memory, so a rejected name 400s atomically instead of leaving
     // in-memory equip state diverged from disk (see DIY-56 review).
@@ -4790,43 +5020,83 @@ static void handleConfigDressPost() {
         stuffyChanged = true;
     }
 
+    // The right-arm slot (DIY-64) holds exactly one of a stuffy or a toy (DIY-110 restructure)
+    // — a single combined field ("rightArm", values "none" / "stuffy:<id>" / "toy:<id>")
+    // rather than the separate stuffyRight/toy fields this replaced, so the two are a real
+    // either/or choice instead of two independently-settable fields that then needed a
+    // priority rule to reconcile at draw time. Resolved into locals first, same reasoning as
+    // newStuffy/stuffyChanged above — the same-stuffy-on-both-arms conflict check below must
+    // see the fully-resolved kind before anything is mutated.
     int newStuffyRight = configMgr.config().equippedStuffyRight;
-    bool stuffyRightChanged = false;
-    String stuffyRightId = wm.server->arg("stuffyRight");
-    if (stuffyRightId == "none") {
-        newStuffyRight = EQUIP_NONE;
-        stuffyRightChanged = true;
-    } else if (stuffyRightId.length() > 0) {
+    int newToy = configMgr.config().equippedToy;
+    int newRightArmKind = configMgr.config().equippedRightArmKind;
+    bool rightArmChanged = false;
+    String rightArmId = wm.server->arg("rightArm");
+    if (rightArmId == "none") {
+        newRightArmKind = RIGHT_ARM_KIND_NONE;
+        rightArmChanged = true;
+    } else if (rightArmId.startsWith("stuffy:")) {
         if (!configMgr.config().rightArmSlotUnlocked) {
             wm.server->send(400, "text/plain", "Right arm slot not unlocked");
             return;
         }
+        String id = rightArmId.substring(7);
         int idx = -1;
         for (int i = 0; i < STUFFY_COUNT; i++) {
-            if (stuffyRightId == STUFFIES[i].id) { idx = i; break; }
+            if (id == STUFFIES[i].id) { idx = i; break; }
         }
         if (idx < 0 || !(configMgr.config().ownedStuffies & (1 << idx))) {
             wm.server->send(400, "text/plain", "Invalid selection");
             return;
         }
         newStuffyRight = idx;
-        stuffyRightChanged = true;
+        newRightArmKind = RIGHT_ARM_KIND_STUFFY;
+        rightArmChanged = true;
+    } else if (rightArmId.startsWith("toy:")) {
+        if (!configMgr.config().rightArmSlotUnlocked) {
+            wm.server->send(400, "text/plain", "Right arm slot not unlocked");
+            return;
+        }
+        String id = rightArmId.substring(4);
+        int idx = -1;
+        for (int i = 0; i < TOY_COUNT; i++) {
+            if (id == TOYS[i].id) { idx = i; break; }
+        }
+        if (idx < 0 || !(configMgr.config().ownedToys & (1 << idx))) {
+            wm.server->send(400, "text/plain", "Invalid selection");
+            return;
+        }
+        newToy = idx;
+        newRightArmKind = RIGHT_ARM_KIND_TOY;
+        rightArmChanged = true;
+    } else if (rightArmId.length() > 0) {
+        wm.server->send(400, "text/plain", "Invalid selection");
+        return;
     }
 
-    // Only enforced when this request actually touched a stuffy slot — a config from before
-    // this guard existed could already have the same stuffy on both arms, and an unrelated
-    // field change (e.g. blanket color) shouldn't 400 out just because that pre-existing state
-    // happens to conflict. Owning a 2nd copy of the stuffy (DIY-106) lifts the conflict —
-    // there's genuinely one for each arm in that case.
-    if ((stuffyChanged || stuffyRightChanged) &&
+    // Only enforced when this request actually touched a stuffy slot and the right arm's
+    // resolved kind is a stuffy — a config from before this guard existed could already have
+    // the same stuffy on both arms, and an unrelated field change (e.g. blanket color)
+    // shouldn't 400 out just because that pre-existing state happens to conflict. Owning a
+    // 2nd copy of the stuffy (DIY-106) lifts the conflict — there's genuinely one for each arm
+    // in that case. The kind check matters now too: a stale equippedStuffyRight index that
+    // happens to equal newStuffy must never trip this once the slot actually holds a toy or
+    // nothing.
+    if ((stuffyChanged || rightArmChanged) &&
+        newRightArmKind == RIGHT_ARM_KIND_STUFFY &&
         newStuffy != EQUIP_NONE && newStuffy == newStuffyRight &&
         !(configMgr.config().ownedStuffiesSecond & (1 << newStuffy))) {
         wm.server->send(400, "text/plain", "Can't equip the same stuffy on both arms");
         return;
     }
 
-    if (stuffyChanged)      { configMgr.config().equippedStuffy      = newStuffy;      changed = true; }
-    if (stuffyRightChanged) { configMgr.config().equippedStuffyRight = newStuffyRight; changed = true; }
+    if (stuffyChanged) { configMgr.config().equippedStuffy = newStuffy; changed = true; }
+    if (rightArmChanged) {
+        configMgr.config().equippedRightArmKind = newRightArmKind;
+        if (newRightArmKind == RIGHT_ARM_KIND_STUFFY) configMgr.config().equippedStuffyRight = newStuffyRight;
+        else if (newRightArmKind == RIGHT_ARM_KIND_TOY) configMgr.config().equippedToy = newToy;
+        changed = true;
+    }
 
     String roomThemeId = wm.server->arg("roomTheme");
     if (roomThemeId == "none") {
