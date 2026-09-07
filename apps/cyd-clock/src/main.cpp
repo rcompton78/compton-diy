@@ -156,8 +156,10 @@ static constexpr uint16_t C_BALLOON_GLASSES_BLUE = 0x001F;      // the other bal
 
 // Toy catalog colors (DIY-110) — first entry is the mini hockey stick.
 static constexpr uint16_t C_HOCKEY_SHAFT = 0xA145;  // wood-tone shaft (tan/brown)
-static constexpr uint16_t C_HOCKEY_TAPE  = 0x0000;  // black grip tape wrap
-static constexpr uint16_t C_HOCKEY_BLADE = 0x0000;  // black blade, same as the tape
+static constexpr uint16_t C_HOCKEY_TAPE  = 0x0000;  // tape color on a light background (black);
+                                                     // flips to white on a dark background — see
+                                                     // drawHockeyStickHeld()'s tapeColor computation.
+                                                     // Shared by both taped regions (grip + blade).
 
 // Blanket color catalog — each color is purchased separately in the store and can be
 // equipped independently in the dressing room. `id` is the stable identifier used in
@@ -1635,32 +1637,36 @@ static bool colorReadsDark(uint16_t c) {
 // edge, the same trick drawBirthdayBackground() uses for balloon knots) rather than
 // fillRoundRect(), which can only draw axis-aligned rects.
 //
-// Grip tape color: picked for contrast against the equipped room theme's background via
-// zoneBgColor()/colorReadsDark() above, rather than a fixed black. This is a proxy for "what's
-// behind the stick", not a true read of the actual pixels there — real per-pixel framebuffer
-// sampling isn't practical here: the primary `cyd` board's platformio.ini never defines
-// TFT_MISO at all (no readback wiring on that SPI bus), and even on freenove-s3, where MISO
-// is wired, several themes (Starry Night, Clear Sky, Birthday) paint patterned art rather
-// than a flat fill, so any single sampled pixel wouldn't reliably represent the whole area
-// behind the stick anyway. zoneBgColor()'s per-theme representative color is already the
-// same approximation the rest of the file uses for cheap contrast decisions (e.g. text glyph
-// background erasure), so reusing it here stays consistent rather than reaching for a
-// fragile, board-specific readback path for a cosmetic tweak.
+// Tape color: both taped regions (the grip wrap at the top and the blade wrap at the
+// bottom) share one contrast-against-background computation via zoneBgColor()/
+// colorReadsDark() above, rather than a fixed black — computed once and reused for both,
+// so they can never drift out of sync the way a second hardcoded color constant did before
+// (the blade wrap was left on the fixed C_HOCKEY_BLADE black and didn't flip with the grip
+// wrap; DIY-110 follow-up fix). This is a proxy for "what's behind the stick", not a true
+// read of the actual pixels there — real per-pixel framebuffer sampling isn't practical
+// here: the primary `cyd` board's platformio.ini never defines TFT_MISO at all (no readback
+// wiring on that SPI bus), and even on freenove-s3, where MISO is wired, several themes
+// (Starry Night, Clear Sky, Birthday) paint patterned art rather than a flat fill, so any
+// single sampled pixel wouldn't reliably represent the whole area behind the stick anyway.
+// zoneBgColor()'s per-theme representative color is already the same approximation the rest
+// of the file uses for cheap contrast decisions (e.g. text glyph background erasure), so
+// reusing it here stays consistent rather than reaching for a fragile, board-specific
+// readback path for a cosmetic tweak.
 static void drawHockeyStickHeld(int cx, int cy) {
     int bx = cx + 38, by = cy + 10;
     int topX = bx - 14, topY = by - 30;  // top of the shaft, leaning toward the body
     int botX = bx,      botY = by + 20;  // bottom of the shaft, at the paw
     int w = 7;
+    uint16_t tapeColor = colorReadsDark(zoneBgColor()) ? TFT_WHITE : C_HOCKEY_TAPE;
     // Shaft
     tft.fillTriangle(topX, topY, topX + w, topY, botX, botY, C_HOCKEY_SHAFT);
     tft.fillTriangle(topX + w, topY, botX, botY, botX + w, botY, C_HOCKEY_SHAFT);
     // Grip tape wrap — same slant, just the top ~9px band
-    uint16_t tapeColor = colorReadsDark(zoneBgColor()) ? TFT_WHITE : C_HOCKEY_TAPE;
     int tapeX = topX + 3, tapeY = topY + 9;
     tft.fillTriangle(topX, topY, topX + w, topY, tapeX, tapeY, tapeColor);
     tft.fillTriangle(topX + w, topY, tapeX, tapeY, tapeX + w, tapeY, tapeColor);
-    // Blade, at the paw end, angled out to the right
-    tft.fillRoundRect(botX - 2, botY - 4, 18, 6, 3, C_HOCKEY_BLADE);
+    // Blade tape wrap, at the paw end, angled out to the right
+    tft.fillRoundRect(botX - 2, botY - 4, 18, 6, 3, tapeColor);
 }
 
 // Right-arm toy slot (DIY-110) — shares drawRightArmStuffy()'s spot rather than getting its
