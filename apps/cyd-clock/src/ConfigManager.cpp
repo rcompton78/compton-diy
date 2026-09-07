@@ -88,6 +88,7 @@ void ConfigManager::fromJson(JsonDocument& doc) {
     if (doc["toys"].is<uint16_t>()) _config.ownedToys = doc["toys"];
     _config.equippedToy      = doc["toyEquipped"] | _config.equippedToy;
     _config.seenToyCount     = doc["seenToys"]    | _config.seenToyCount;
+    _config.equippedRightArmKind = doc["rightArmKind"] | _config.equippedRightArmKind;
     _config.seenBlanketColorCount = doc["seenBlankets"]  | _config.seenBlanketColorCount;
     _config.ownedRoomThemes    = doc["roomThemes"]       | _config.ownedRoomThemes;
     _config.equippedRoomTheme  = doc["roomThemeEquipped"] | _config.equippedRoomTheme;
@@ -189,6 +190,7 @@ void ConfigManager::toJson(JsonDocument& doc) const {
     doc["toys"]            = _config.ownedToys;
     doc["toyEquipped"]     = _config.equippedToy;
     doc["seenToys"]        = _config.seenToyCount;
+    doc["rightArmKind"]    = _config.equippedRightArmKind;
     doc["seenBlankets"]    = _config.seenBlanketColorCount;
     doc["roomThemes"]        = _config.ownedRoomThemes;
     doc["roomThemeEquipped"] = _config.equippedRoomTheme;
