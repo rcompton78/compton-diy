@@ -4938,6 +4938,21 @@ static void handleConfigDressGet() {
 static void handleConfigDressPost() {
     bool changed = false;
 
+    // A dressing-room page loaded before the right-arm restructure still posts the old
+    // separate stuffyRight/toy field names, which no template generated after this update
+    // ever emits (CONFIG_DRESS_HTML only has the combined "rightArm" field now) — so either
+    // one present here can only mean a stale cached page. Checked first, before anything else
+    // in this function mutates configMgr.config() (e.g. blanketColor just below writes
+    // directly rather than through a local first) — a check placed after any such mutation
+    // would let a rejected submission still leave that earlier write live in memory even
+    // though the 400 skips configMgr.save(), the same in-memory/disk divergence the
+    // stuffy/right-arm locals below are already careful to avoid (see DIY-56 review).
+    if (wm.server->arg("rightArm").length() == 0 &&
+        (wm.server->hasArg("stuffyRight") || wm.server->hasArg("toy"))) {
+        wm.server->send(400, "text/plain", "Stale page — please reload the Dressing Room and try again");
+        return;
+    }
+
     // Validate every submitted name field up front, before any equip mutation below touches
     // configMgr.config() in memory, so a rejected name 400s atomically instead of leaving
     // in-memory equip state diverged from disk (see DIY-56 review).
@@ -5017,18 +5032,6 @@ static void handleConfigDressPost() {
     int newRightArmKind = configMgr.config().equippedRightArmKind;
     bool rightArmChanged = false;
     String rightArmId = wm.server->arg("rightArm");
-    // A dressing-room page loaded before this restructure still posts the old separate
-    // stuffyRight/toy field names, which no template generated after this update ever emits
-    // (CONFIG_DRESS_HTML only has the combined "rightArm" field now) — so either one present
-    // here can only mean a stale cached page. Without this check the submission would
-    // silently no-op the right-arm change (rightArmId comes back empty) while every other
-    // field still saves and the redirect still shows "Saved.", making a real edit look like
-    // it took effect when it didn't.
-    if (rightArmId.length() == 0 &&
-        (wm.server->hasArg("stuffyRight") || wm.server->hasArg("toy"))) {
-        wm.server->send(400, "text/plain", "Stale page — please reload the Dressing Room and try again");
-        return;
-    }
     if (rightArmId == "none") {
         newRightArmKind = RIGHT_ARM_KIND_NONE;
         rightArmChanged = true;
