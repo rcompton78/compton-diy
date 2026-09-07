@@ -5017,6 +5017,18 @@ static void handleConfigDressPost() {
     int newRightArmKind = configMgr.config().equippedRightArmKind;
     bool rightArmChanged = false;
     String rightArmId = wm.server->arg("rightArm");
+    // A dressing-room page loaded before this restructure still posts the old separate
+    // stuffyRight/toy field names, which no template generated after this update ever emits
+    // (CONFIG_DRESS_HTML only has the combined "rightArm" field now) — so either one present
+    // here can only mean a stale cached page. Without this check the submission would
+    // silently no-op the right-arm change (rightArmId comes back empty) while every other
+    // field still saves and the redirect still shows "Saved.", making a real edit look like
+    // it took effect when it didn't.
+    if (rightArmId.length() == 0 &&
+        (wm.server->hasArg("stuffyRight") || wm.server->hasArg("toy"))) {
+        wm.server->send(400, "text/plain", "Stale page — please reload the Dressing Room and try again");
+        return;
+    }
     if (rightArmId == "none") {
         newRightArmKind = RIGHT_ARM_KIND_NONE;
         rightArmChanged = true;
