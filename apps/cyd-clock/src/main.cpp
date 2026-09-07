@@ -410,16 +410,16 @@ static_assert(STUFFY_COUNT <= 16, "ownedStuffies bitmask is uint16_t");
 // directly, same as the stuffy draw-function forward declarations above.
 static void drawHockeyStickHeld(int cx, int cy);
 
-// Toy catalog (DIY-110) — a category parallel to STUFFIES[] above, but worn in the left
-// arm slot rather than wherever a stuffy currently attaches: stuffies occupy that same
-// left position at night (drawFull/drawPeeking, the sleep scene) and the right arm both
-// day and night (drawRightArmStuffy, DIY-64), so a toy renders only during the day, using
-// the left position that's otherwise empty then. `id` is the stable identifier used in
-// store/dressing-room form requests; ConfigManager persists ownership as an `ownedToys`
-// bitmask and the equipped selection as a numeric `equippedToy` index (both keyed by
-// catalog position), not the string id. Only one toy is ever equipped at a time (see
-// equippedToyIndex()) — unlike stuffies there's no second slot/second-copy purchase, since
-// toys only ever occupy the one left-arm spot.
+// Toy catalog (DIY-110) — a category parallel to STUFFIES[] above, sharing the right arm
+// slot with the right-arm stuffy (drawRightArmStuffy(), DIY-64) rather than getting a slot
+// of its own: on-device testing showed the toy read better held in the same right-arm spot
+// than the originally-specced left arm, but that spot is already a held item's home, so the
+// two share it rather than overlapping — see drawRightArmToy()'s comment for exactly how.
+// `id` is the stable identifier used in store/dressing-room form requests; ConfigManager
+// persists ownership as an `ownedToys` bitmask and the equipped selection as a numeric
+// `equippedToy` index (both keyed by catalog position), not the string id. Only one toy is
+// ever equipped at a time (see equippedToyIndex()) — unlike stuffies there's no second
+// slot/second-copy purchase, since a toy only ever occupies the one right-arm spot.
 struct Toy {
     const char* id;
     const char* label;
@@ -1596,23 +1596,38 @@ static void drawBirthdayBackground(int x, int y, int w, int h) {
     tft.resetViewport();
 }
 
-// Mini hockey stick (DIY-110) — the toy catalog's first entry, held in the left arm slot.
-// Anchored at the same bx/by as drawTeddyFull()'s left position (cx-38, cy-8), tucked under
-// the arm at an angle: shaft running up-and-out from the paw, black tape wrap where the
-// (imaginary) hand grips it, blade angled out at the bottom.
+// Mini hockey stick (DIY-110) — the toy catalog's first entry, held in the right arm slot.
+// Anchored at bx=cx+38 (same x as drawTeddyHeld()'s right-arm position), by=cy+4 — moved
+// ~12px lower than the first cut's cy-8, per on-device feedback that it read too high. Leans
+// inward (top tilted toward the body, away from the paw) rather than standing straight up —
+// also on-device feedback — built from two slanted parallelogram bands (each a pair of
+// fillTriangle() calls sharing an edge, the same trick drawBirthdayBackground() uses for
+// balloon knots) rather than fillRoundRect(), which can only draw axis-aligned rects.
 static void drawHockeyStickHeld(int cx, int cy) {
-    int bx = cx - 38, by = cy - 8;
-    tft.fillRoundRect(bx - 3, by - 28, 7, 46, 3, C_HOCKEY_SHAFT);  // shaft
-    tft.fillRect(bx - 3, by - 28, 7, 9, C_HOCKEY_TAPE);            // grip tape, near the top
-    tft.fillRoundRect(bx - 3, by + 14, 18, 6, 3, C_HOCKEY_BLADE);  // blade, angled out to the right
+    int bx = cx + 38, by = cy + 4;
+    int topX = bx - 12, topY = by - 26;  // top of the shaft, leaning toward the body
+    int botX = bx,      botY = by + 16;  // bottom of the shaft, at the paw
+    int w = 7;
+    // Shaft
+    tft.fillTriangle(topX, topY, topX + w, topY, botX, botY, C_HOCKEY_SHAFT);
+    tft.fillTriangle(topX + w, topY, botX, botY, botX + w, botY, C_HOCKEY_SHAFT);
+    // Grip tape wrap — same slant, just the top ~9px band
+    int tapeX = topX + 3, tapeY = topY + 9;
+    tft.fillTriangle(topX, topY, topX + w, topY, tapeX, tapeY, C_HOCKEY_TAPE);
+    tft.fillTriangle(topX + w, topY, tapeX, tapeY, tapeX + w, tapeY, C_HOCKEY_TAPE);
+    // Blade, at the paw end, angled out to the right
+    tft.fillRoundRect(botX - 2, botY - 4, 18, 6, 3, C_HOCKEY_BLADE);
 }
 
-// Left-arm toy slot (DIY-110) — parallel to drawRightArmStuffy() below, but day-only: stuffies
-// already occupy the left position at night (drawFull()/drawPeeking() in drawSleepingCat())
-// and the right arm both day and night (drawRightArmStuffy()), so this is the one spot left
-// free for a toy without ever overlapping either. Called only from drawAnimal()'s day branch,
-// never from drawSleepingCat().
-static void drawLeftArmToy(int cx, int cy) {
+// Right-arm toy slot (DIY-110) — shares drawRightArmStuffy()'s spot rather than getting its
+// own, since on-device feedback moved the toy from its originally-specced left arm to the
+// right arm, which a stuffy may already occupy (DIY-64). The right-arm stuffy takes priority
+// when both are equipped (it's the older, paid-unlock feature) — the toy only draws into the
+// gap left when no stuffy is equipped there, rather than drawing on top of and overlapping
+// it. Called from both drawAnimal() (day) and drawSleepingCat() (night), same as
+// drawRightArmStuffy(), immediately after it so the priority check reads naturally in order.
+static void drawRightArmToy(int cx, int cy) {
+    if (equippedStuffyRightIndex() >= 0) return;  // right-arm stuffy takes priority
     int toyIdx = equippedToyIndex();
     if (toyIdx < 0) return;
     TOYS[toyIdx].drawHeld(cx, cy);
@@ -1706,6 +1721,7 @@ static void drawSleepingCat(int cx, int cy) {
     // hasBlanket) always ends up on top of it. See drawRightArmStuffy() for why the pose
     // choice depends on hasBlanket.
     drawRightArmStuffy(cx, cy, hasBlanket);
+    drawRightArmToy(cx, cy);  // only draws if the slot above is empty — see its own comment
 }
 
 static void drawSparkles(int cx, int cy, uint8_t frame) {
@@ -2024,8 +2040,8 @@ static void drawAnimal() {
     } else {
         int dy = (cat.mood == CatMood::Celebrate) ? ((cat.frame % 2 == 0) ? -3 : 3) : 0;
         drawCat(CAT_CX, CAT_CY + dy, cat.status, cat.boredom, cat.health, cat.thirst, cat.eyeOpen);
-        drawLeftArmToy(CAT_CX, CAT_CY + dy);  // day only — see drawLeftArmToy()'s comment
         drawRightArmStuffy(CAT_CX, CAT_CY + dy, /*hasBlanket=*/false);  // no blanket during the day
+        drawRightArmToy(CAT_CX, CAT_CY + dy);  // only draws if the slot above is empty
         // Drawn after the stuffy above (DIY-109) so it's never covered by it — see
         // drawThirstyDroplet()'s comment.
         if (cat.thirst == CatThirst::Thirsty) {
@@ -3664,7 +3680,7 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h3>Glasses</h3>
 %%GLASSES_ITEMS%%
 
-<h3>Toys (day only)</h3>
+<h3>Toys (right arm — hidden if a Right Arm Buddy is equipped)</h3>
 %%TOY_ITEMS%%
 
 <h3>Right Arm Buddy (day &amp; night)</h3>
@@ -3724,7 +3740,7 @@ static const char CONFIG_DRESS_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h3>Glasses</h3>
 %%GLASSES_OPTIONS%%
 
-<h3>Toys (day only)</h3>
+<h3>Toys (right arm — hidden if a Right Arm Buddy is equipped)</h3>
 %%TOY_OPTIONS%%
 
 <button type="submit" style="width:100%;margin-top:8px">Save</button>
