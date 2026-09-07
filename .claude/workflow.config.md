@@ -25,3 +25,7 @@
 ## Open Code Review Gate
 
 - **Enabled:** no — replaced by the revbot GitHub App (self-hosted on the homelab)
+
+## Bot Thread Resolution
+
+- **pr-revbot[bot]:** auto-resolves
