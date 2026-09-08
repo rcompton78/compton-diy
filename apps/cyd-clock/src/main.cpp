@@ -1678,7 +1678,7 @@ static void drawHockeyStickHeld(int cx, int cy) {
 
 // Magic wand (DIY-111) — slim shaft like the hockey stick, with a four-point star tip.
 static void drawMagicWandHeld(int cx, int cy) {
-    int bx = cx + 38, by = cy + 10;
+    int bx = cx + 38, by = cy + 22;
     int topX = bx - 14, topY = by - 30;  // top of the shaft, leaning toward the body
     int botX = bx,      botY = by + 20;  // bottom of the shaft, at the paw
     int w = 5;
