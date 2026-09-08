@@ -91,6 +91,7 @@ static constexpr uint32_t STORE_COST_ACCESSORY_BOW = 50;
 static constexpr uint32_t STORE_COST_ACCESSORY_GLASSES = 50;  // matches bow pricing — same "flat recolor-tier" accessory
 static constexpr uint32_t STORE_COST_RIGHT_ARM_SLOT = 200;  // one-time unlock, not per-stuffy
 static constexpr uint32_t STORE_COST_HOCKEY_STICK = 100;
+static constexpr uint32_t STORE_COST_MAGIC_WAND = 100;
 
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
@@ -160,6 +161,8 @@ static constexpr uint16_t C_HOCKEY_TAPE  = 0x0000;  // tape color on a light bac
                                                      // flips to white on a dark background — see
                                                      // drawHockeyStickHeld()'s tapeColor computation.
                                                      // Shared by both taped regions (grip + blade).
+static constexpr uint16_t C_WAND_SHAFT = 0xA145;    // same wood-tone shaft as the hockey stick
+static constexpr uint16_t C_WAND_TIP   = 0xFEA0;    // star tip (gold/yellow)
 
 // Blanket color catalog — each color is purchased separately in the store and can be
 // equipped independently in the dressing room. `id` is the stable identifier used in
@@ -411,6 +414,9 @@ static_assert(STUFFY_COUNT <= 16, "ownedStuffies bitmask is uint16_t");
 // drawTeddyHead() and friends. Declared here so the TOYS[] catalog can reference it
 // directly, same as the stuffy draw-function forward declarations above.
 static void drawHockeyStickHeld(int cx, int cy);
+// Forward declaration: the magic wand's art (DIY-111), same reasoning as drawHockeyStickHeld()
+// above — declared here so the TOYS[] catalog can reference it directly.
+static void drawMagicWandHeld(int cx, int cy);
 
 // Toy catalog (DIY-110) — a category parallel to STUFFIES[] above, sharing the right-arm
 // slot (rightArmSlotUnlocked, DIY-64) with the right-arm stuffy rather than getting a slot of
@@ -434,6 +440,7 @@ struct Toy {
 };
 static constexpr Toy TOYS[] = {
     {"hockey_stick", "Mini Hockey Stick", STORE_COST_HOCKEY_STICK, drawHockeyStickHeld},
+    {"magic_wand", "Magic Wand", STORE_COST_MAGIC_WAND, drawMagicWandHeld},
 };
 static constexpr int TOY_COUNT = sizeof(TOYS) / sizeof(TOYS[0]);
 static_assert(TOY_COUNT <= 16, "ownedToys bitmask is uint16_t");
@@ -1667,6 +1674,21 @@ static void drawHockeyStickHeld(int cx, int cy) {
     tft.fillTriangle(topX + w, topY, tapeX, tapeY, tapeX + w, tapeY, tapeColor);
     // Blade tape wrap, at the paw end, angled out to the right
     tft.fillRoundRect(botX - 2, botY - 4, 18, 6, 3, tapeColor);
+}
+
+// Magic wand (DIY-111) — slim shaft like the hockey stick, with a four-point star tip.
+static void drawMagicWandHeld(int cx, int cy) {
+    int bx = cx + 38, by = cy + 10;
+    int topX = bx - 14, topY = by - 30;  // top of the shaft, leaning toward the body
+    int botX = bx,      botY = by + 20;  // bottom of the shaft, at the paw
+    int w = 5;
+    // Shaft
+    tft.fillTriangle(topX, topY, topX + w, topY, botX, botY, C_WAND_SHAFT);
+    tft.fillTriangle(topX + w, topY, botX, botY, botX + w, botY, C_WAND_SHAFT);
+    // Star tip — two overlapping triangles centered above the shaft's top end
+    int sx = topX + w / 2, sy = topY - 8;
+    tft.fillTriangle(sx - 8, sy + 3, sx + 8, sy + 3, sx, sy - 9, C_WAND_TIP);
+    tft.fillTriangle(sx - 6, sy - 4, sx + 6, sy - 4, sx, sy + 8, C_WAND_TIP);
 }
 
 // Right-arm toy slot (DIY-110) — shares drawRightArmStuffy()'s spot rather than getting its
