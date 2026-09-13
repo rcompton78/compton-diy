@@ -1,0 +1,212 @@
+# =============================================================================
+# BRING-UP TEST - Waveshare ESP32-S3-Touch-LCD-7 (Rev1.2, 800x480)
+# =============================================================================
+# Standalone, throwaway firmware for validating the RGB parallel display bus
+# and GT911 touch controller on real hardware, in isolation from the full
+# espframe app/screens/common-addon system. Not part of the packages.yaml /
+# product-contract device system -- delete once display+touch are confirmed
+# working and the real device/device.yaml + screens are wired in (CJS-216).
+#
+# Pinout/timing sourced and cross-checked from:
+#  - Official Waveshare wiki pin table (ESP32-S3-Touch-LCD-7)
+#  - https://github.com/inytar/waveshare-esp32-s3-touch-lcd-7-esphome
+#  - https://github.com/jimmyeao/waveshare-esp32-s3-7inch-esphome
+# =============================================================================
+
+esphome:
+  name: waveshare-bringup
+  friendly_name: Waveshare Bring-up
+  platformio_options:
+    board_upload.maximum_ram_size: 524288
+
+esp32:
+  variant: ESP32S3
+  # ESP32-S3-WROOM-1-N16R8 is 16MB flash / 8MB PSRAM -- esptool's
+  # auto-detect on real hardware confirmed 16MB. The Waveshare wiki's own
+  # "Onboard Resources" section agrees (16MB Flash, 8MB PSRAM), even though
+  # the community ESPHome package this pinout/timing came from used 8MB.
+  flash_size: 16MB
+  cpu_frequency: 240MHz
+  framework:
+    type: esp-idf
+    advanced:
+      enable_idf_experimental_features: true
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+logger:
+  level: VERY_VERBOSE
+  # /dev/ttyACM0 on this board is the CH340-style USB-UART bridge port (the
+  # "USB TO UART" Type-C, separate from the native ESP32-S3 USB port), so
+  # logs need to go out UART0, not USB_SERIAL_JTAG.
+  hardware_uart: UART0
+
+i2c:
+  - id: bus_a
+    sda: GPIO8
+    scl: GPIO9
+    scan: true
+    frequency: 400kHz
+    sda_pullup_enabled: false
+    scl_pullup_enabled: false
+
+ch422g:
+  - id: ch422g_hub
+
+output:
+  - platform: gpio
+    id: backlight_output
+    pin:
+      ch422g: ch422g_hub
+      number: 2
+      mode:
+        output: true
+      inverted: false
+
+light:
+  - platform: binary
+    output: backlight_output
+    id: backlight
+    name: Backlight
+    restore_mode: ALWAYS_ON
+
+display:
+  - platform: mipi_rgb
+    model: ESP32-S3-TOUCH-LCD-7-800X480
+    id: tft_display
+    update_interval: never
+    auto_clear_enabled: false
+    color_order: RGB
+    pclk_frequency: 16MHz
+    pclk_inverted: true
+    de_pin:
+      number: 5
+    hsync_pin:
+      number: 46
+      ignore_strapping_warning: true
+    vsync_pin:
+      number: 3
+      ignore_strapping_warning: true
+    pclk_pin: 7
+    reset_pin:
+      ch422g: ch422g_hub
+      number: 3
+    hsync_back_porch: 8
+    hsync_front_porch: 8
+    hsync_pulse_width: 4
+    vsync_back_porch: 16
+    vsync_front_porch: 16
+    vsync_pulse_width: 4
+    dimensions:
+      width: 800
+      height: 480
+    data_pins:
+      red:
+        - 1 # r3
+        - 2 # r4
+        - 42 # r5
+        - 41 # r6
+        - 40 # r7
+      blue:
+        - 14 # b3
+        - 38 # b4
+        - 18 # b5
+        - 17 # b6
+        - 10 # b7
+      green:
+        - 39 # g2
+        - 0 # g3
+        - 45 # g4
+        - 48 # g5
+        - 47 # g6
+        - 21 # g7
+
+touchscreen:
+  - platform: gt911
+    id: tft_touch
+    display: tft_display
+    interrupt_pin: GPIO4
+    reset_pin:
+      ch422g: ch422g_hub
+      number: 1
+      mode: OUTPUT
+    on_touch:
+      - logger.log:
+          format: "TOUCH x=%d y=%d"
+          args: ["touch.x", "touch.y"]
+          tag: bringup
+
+lvgl:
+  displays:
+    - tft_display
+  buffer_size: 25%
+  widgets:
+    - obj:
+        width: 100%
+        height: 100%
+        bg_color: 0x000000
+        pad_all: 0
+        border_width: 0
+        widgets:
+          # Colour bar strip: a wrong red/green/blue pin mapping shows up
+          # here immediately as the wrong colours or wrong order.
+          - obj:
+              x: 0
+              y: 0
+              width: 100%
+              height: 60
+              pad_all: 0
+              border_width: 0
+              layout:
+                type: FLEX
+                flex_flow: ROW
+              widgets:
+                - obj: {width: 114, height: 100%, bg_color: 0xFF0000, border_width: 0, radius: 0}
+                - obj: {width: 114, height: 100%, bg_color: 0x00FF00, border_width: 0, radius: 0}
+                - obj: {width: 114, height: 100%, bg_color: 0x0000FF, border_width: 0, radius: 0}
+                - obj: {width: 114, height: 100%, bg_color: 0xFFFFFF, border_width: 0, radius: 0}
+                - obj: {width: 114, height: 100%, bg_color: 0xFFFF00, border_width: 0, radius: 0}
+                - obj: {width: 114, height: 100%, bg_color: 0x00FFFF, border_width: 0, radius: 0}
+                - obj: {width: 116, height: 100%, bg_color: 0xFF00FF, border_width: 0, radius: 0}
+          - label:
+              id: status_label
+              align: CENTER
+              text: "WAVESHARE 800x480 -- tap to test touch"
+              text_color: 0xFFFFFF
+              text_font: montserrat_24
+          - obj:
+              id: touch_target
+              align: BOTTOM_MID
+              y: -20
+              width: 220
+              height: 70
+              radius: 8
+              bg_color: 0x2244AA
+              widgets:
+                - label:
+                    id: touch_count_label
+                    align: CENTER
+                    text: "taps: 0"
+                    text_color: 0xFFFFFF
+
+globals:
+  - id: tap_count
+    type: int
+    initial_value: '0'
+
+binary_sensor:
+  - platform: touchscreen
+    id: touch_target_sensor
+    x_min: 290
+    x_max: 510
+    y_min: 390
+    y_max: 460
+    on_press:
+      - globals.set:
+          id: tap_count
+          value: !lambda 'return id(tap_count) + 1;'
+      - lvgl.label.update:
+          id: touch_count_label
+          text: !lambda 'return "taps: " + to_string(id(tap_count));'

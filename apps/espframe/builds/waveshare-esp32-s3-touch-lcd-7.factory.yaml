@@ -1,0 +1,30 @@
+# =============================================================================
+# FACTORY FIRMWARE - Waveshare ESP32-S3-Touch-LCD-7
+# =============================================================================
+# Secrets-free config for the ESPHome web installer. Boots into AP mode
+# for WiFi setup via captive portal.
+#
+# Compiled by CI (see .github/workflows/release.yml) — not used locally.
+# For local development, see devices/waveshare-esp32-s3-touch-lcd-7/esphome.yaml.
+# =============================================================================
+
+substitutions:
+  name: "immich-frame-waveshare-s3"
+  friendly_name: "Immich Frame Waveshare S3 Touch LCD 7"
+  firmware_version: "0.0.0"
+
+packages:
+  espframe: !include ../devices/waveshare-esp32-s3-touch-lcd-7/packages.yaml
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [remote_image, espframe]
+
+web_server:
+  port: 80
+  version: 3
+  js_url: ""
+  css_include: "../docs/public/webserver/style.css"
+  js_include: "../docs/public/webserver/app.js"

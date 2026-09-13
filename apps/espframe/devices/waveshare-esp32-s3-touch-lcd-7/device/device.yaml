@@ -1,0 +1,277 @@
+# =============================================================================
+# HARDWARE CONFIGURATION - Waveshare ESP32-S3-Touch-LCD-7 (Rev1.2)
+# =============================================================================
+# Base device config: ESP32-S3 (native WiFi/BT, no coprocessor needed), octal
+# PSRAM, display (RGB parallel bus, 800x480 IPS panel), touch (GT911, I2C),
+# backlight, I2C. A CH422G I2C GPIO expander drives LCD backlight-enable, LCD
+# reset, and touch reset -- the 800x480 RGB bus alone uses 16 GPIOs plus
+# hsync/vsync/de/pclk, leaving no native GPIOs free for those signals. Also
+# API, logger, web server, OTA, and espframe external components. Display is
+# 800x480 logical, no rotation.
+#
+# Pinout/timing sourced and cross-checked from the official Waveshare wiki pin
+# table plus two independent working ESPHome configs for this exact board
+# (inytar/waveshare-esp32-s3-touch-lcd-7-esphome and
+# jimmyeao/waveshare-esp32-s3-7inch-esphome), then confirmed on real Rev1.2
+# hardware. PSRAM at the community configs' 120MHz octal speed crash-looped
+# on this physical board (ESPHome itself flags 120MHz octal as experimental);
+# 80MHz is stable.
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Build and log
+# -----------------------------------------------------------------------------
+substitutions:
+  espframe_component_url: "https://github.com/rcompton78/espframe"
+  # No dedicated upstream branch for this device exists (unlike freenove-s3's
+  # "add-freenove-s3-device") -- this repo's fork of espframe is fully
+  # vendored here with no more upstream sync, and the remote_image/espframe
+  # components themselves aren't board-specific, so "main" is the honest
+  # choice rather than inventing a branch name that doesn't exist.
+  espframe_component_ref: "main"
+  log_level: "INFO"
+
+esp32:
+  variant: ESP32S3
+  # ESP32-S3-WROOM-1-N16R8: 16MB flash / 8MB PSRAM. The community ESPHome
+  # package this pinout/timing is based on used 8MB, but esptool's
+  # auto-detect on real hardware (and Waveshare's own wiki spec table) both
+  # confirm 16MB.
+  flash_size: 16MB
+  cpu_frequency: 240MHz
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_HTTPD_MAX_REQ_HDR_LEN: "8192"
+      CONFIG_HTTPD_MAX_URI_LEN: "128"
+      CONFIG_ESP_TASK_WDT_TIMEOUT_S: "30"
+    advanced:
+      enable_idf_experimental_features: true
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  platformio_options:
+    board_upload.maximum_ram_size: 524288
+    board_build.flash_mode: dio
+    build_flags:
+      - "-DCONFIG_COMPILER_OPTIMIZATION_PERF=y"
+      - "-DLV_USE_BIDI=1"
+      - "-DLV_USE_ARABIC_PERSIAN_CHARS=1"
+
+# -----------------------------------------------------------------------------
+# PSRAM (octal mode) -- 120MHz (the community-config default) crash-looped on
+# real hardware; 80MHz is stable. See header note.
+# -----------------------------------------------------------------------------
+psram:
+  mode: octal
+  speed: 80MHz
+
+# -----------------------------------------------------------------------------
+# API, logger, JSON, web server, OTA, debug (reset reason for crash diagnosis)
+# -----------------------------------------------------------------------------
+api:
+  reboot_timeout: 0s
+
+logger:
+  level: ${log_level}
+  # This board's USB-C "USB TO UART" port is a CH340-style bridge wired to
+  # UART0, not the ESP32-S3's native USB peripheral -- USB_SERIAL_JTAG (used
+  # by freenove-s3) produces no output on that port.
+  hardware_uart: UART0
+  logs:
+    component: WARN
+    remote_image: WARN
+    immich: INFO
+    warm: WARN
+    accent: WARN
+
+debug:
+  update_interval: 60s
+
+text_sensor:
+  - platform: debug
+    reset_reason:
+      id: reset_reason_sensor
+      name: "Reset Reason"
+      entity_category: diagnostic
+      on_value:
+        then:
+          - if:
+              condition:
+                lambda: 'return x.find("esphome.ota") != std::string::npos;'
+              then:
+                - script.execute: firmware_update_recover_display
+
+json:
+
+web_server:
+  port: 80
+  version: 3
+  include_internal: true
+  # Keep the control panel on the frame so setup and settings still work if
+  # GitHub Pages or the wider internet is unavailable.
+  js_url: ""
+  css_include: "../../../docs/public/webserver/style.css"
+  js_include: "../../../docs/public/webserver/app.js"
+  sorting_groups:
+    - id: sg_connection
+      name: "Connection"
+      sorting_weight: 10
+    - id: sg_photos
+      name: "Photos"
+      sorting_weight: 20
+    - id: sg_device
+      name: "Device"
+      sorting_weight: 25
+    - id: sg_screen
+      name: "Screen"
+      sorting_weight: 30
+    - id: sg_clock
+      name: "Clock"
+      sorting_weight: 35
+    - id: sg_firmware
+      name: "Firmware"
+      sorting_weight: 40
+    - id: sg_wifi
+      name: "WiFi"
+      sorting_weight: 45
+    - id: sg_developer
+      name: "Developer"
+      sorting_weight: 90
+
+ota:
+  - platform: esphome
+    on_begin:
+      then:
+        - lambda: |-
+            id(firmware_update_reboot_pending) = true;
+            global_preferences->sync();
+
+# -----------------------------------------------------------------------------
+# External components (espframe: remote_image, espframe)
+# -----------------------------------------------------------------------------
+external_components:
+  - source:
+      type: git
+      url: ${espframe_component_url}
+      ref: ${espframe_component_ref}
+      path: components
+    components: [remote_image, espframe]
+    refresh: 0s
+
+espframe:
+  id: espframe_core
+
+# -----------------------------------------------------------------------------
+# I2C (CH422G expander, GT911 touch), CH422G GPIO expander
+# -----------------------------------------------------------------------------
+i2c:
+  - id: i2c_bus_a
+    sda: GPIO8
+    scl: GPIO9
+    scan: true
+    frequency: 400kHz
+    sda_pullup_enabled: false
+    scl_pullup_enabled: false
+
+ch422g:
+  - id: ch422g_hub
+
+# -----------------------------------------------------------------------------
+# Backlight (CH422G EXIO2 -- on/off enable only, no PWM dimming available).
+# common/addon/backlight.yaml's shared `light: platform: monochromatic`
+# requires a FloatOutput-typed id(backlight_output); the CH422G expander pin
+# is a plain binary GPIOBinaryOutput, so a float `template` output wraps it,
+# collapsing any brightness > 0 to "on" (there is no real PWM to drive here).
+# -----------------------------------------------------------------------------
+output:
+  - platform: gpio
+    id: backlight_gpio
+    pin:
+      ch422g: ch422g_hub
+      number: 2
+      mode:
+        output: true
+      inverted: false
+  - platform: template
+    id: backlight_output
+    type: float
+    write_action:
+      - if:
+          condition:
+            lambda: 'return state > 0.0f;'
+          then:
+            - output.turn_on: backlight_gpio
+          else:
+            - output.turn_off: backlight_gpio
+
+# -----------------------------------------------------------------------------
+# RGB parallel-bus display (800x480, CH422G EXIO3 reset)
+# -----------------------------------------------------------------------------
+display:
+  - platform: mipi_rgb
+    model: ESP32-S3-TOUCH-LCD-7-800X480
+    id: tft_display
+    reset_pin:
+      ch422g: ch422g_hub
+      number: 3
+    auto_clear_enabled: false
+    update_interval: never
+    color_order: RGB
+    pclk_frequency: 16MHz
+    pclk_inverted: true
+    de_pin:
+      number: 5
+    hsync_pin:
+      number: 46
+      ignore_strapping_warning: true
+    vsync_pin:
+      number: 3
+      ignore_strapping_warning: true
+    pclk_pin: 7
+    hsync_back_porch: 8
+    hsync_front_porch: 8
+    hsync_pulse_width: 4
+    vsync_back_porch: 16
+    vsync_front_porch: 16
+    vsync_pulse_width: 4
+    dimensions:
+      width: 800
+      height: 480
+    data_pins:
+      red:
+        - 1 # r3
+        - 2 # r4
+        - 42 # r5
+        - 41 # r6
+        - 40 # r7
+      blue:
+        - 14 # b3
+        - 38 # b4
+        - 18 # b5
+        - 17 # b6
+        - 10 # b7
+      green:
+        - 39 # g2
+        - 0 # g3
+        - 45 # g4
+        - 48 # g5
+        - 47 # g6
+        - 21 # g7
+
+# -----------------------------------------------------------------------------
+# Touch (GT911, CH422G EXIO1 reset)
+# -----------------------------------------------------------------------------
+touchscreen:
+  - platform: gt911
+    id: tft_touch
+    display: tft_display
+    i2c_id: i2c_bus_a
+    interrupt_pin: GPIO4
+    reset_pin:
+      ch422g: ch422g_hub
+      number: 1
+      mode: OUTPUT
+    on_touch:
+      - script.execute: backlight_wake
