@@ -220,27 +220,20 @@ UI. Root cause and fix, found in a later session:
 
 ## What's NOT done yet
 
-1. Delete the throwaway `builds/waveshare-esp32-s3-touch-lcd-7-bringup.yaml`
-   once the real device is fully signed off (it's not part of the
-   contract/packages system and was only for isolating the display/touch
-   bring-up from the full UI).
-2. This is a first-pass proportional UI port (scaled from the P4's screens)
+1. This is a first-pass proportional UI port (scaled from the P4's screens)
    — user should be shown the actual layout/spacing live and asked whether
    anything needs visual polish beyond what plain scaling produced.
-3. Decide on PR: this repo has the `wf` plugin configured
-   (`.claude/workflow.config.md` present), so opening the PR should go
-   through `wf:create-pr`, not a bare `git push` + `gh pr create` — not yet
-   done. If a Jira card is involved and this ends up merged, `wf:post-merge-cleanup`
-   must also run.
-4. README/docs were **not** updated to mention the new board — checked, and
-   `freenove-s3` didn't update them either when it was added (repo
-   precedent), so this wasn't treated as a gap, but flag it if the user
-   wants it done differently this time.
-5. Haven't run the full `npm run check:pr` gate — only ran the individual
+2. Root `README.md`'s device table now lists this board; `apps/espframe/README.md`
+   and `docs/manual-setup.md` were left P4-focused, matching the precedent
+   set when `freenove-s3` was added (neither was fully updated for it either).
+3. Haven't run the full `npm run check:pr` gate — only ran the individual
    `check:*` scripts relevant to devices (see "What's done" #6 above).
-6. Screen rotation (90°/270°) touch-alignment validation — see above.
-7. Only a few minutes of soak testing on the tearing fix — worth watching
+4. Screen rotation (90°/270°) touch-alignment validation — tracked as
+   Jira CJS-217, not blocking this PR.
+5. Only a few minutes of soak testing on the tearing fix — worth watching
    for recurrence over longer real-world use.
+6. PR opened via `wf:create-pr` (github.com/rcompton78/compton-diy/pull/82)
+   — see that PR for review/CI/merge status if picking this up mid-flight.
 
 ## How to continue
 
