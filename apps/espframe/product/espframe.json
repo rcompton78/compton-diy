@@ -2005,6 +2005,214 @@
       "device_yaml": "devices/freenove-s3/device/device.yaml",
       "public_manifest": "firmware/manifest.json",
       "public_beta_manifest": "firmware/beta/manifest.json"
+    },
+    {
+      "slug": "waveshare-esp32-s3-touch-lcd-7",
+      "name": "Waveshare ESP32-S3-Touch-LCD-7",
+      "esphome_name": "immich-frame-waveshare-s3",
+      "friendly_name": "Immich Frame Waveshare S3 Touch LCD 7",
+      "chip": "ESP32-S3",
+      "model": "Waveshare ESP32-S3-Touch-LCD-7 (Rev1.2)",
+      "esp32_variant": "ESP32S3",
+      "flash_size": "16MB",
+      "framework_type": "esp-idf",
+      "sdkconfig_options": {
+        "CONFIG_HTTPD_MAX_URI_LEN": "128",
+        "CONFIG_ESP_TASK_WDT_TIMEOUT_S": "30"
+      },
+      "platformio_flash_mode": "dio",
+      "platformio_build_flags": [
+        "-DCONFIG_COMPILER_OPTIMIZATION_PERF=y",
+        "-DLV_USE_BIDI=1",
+        "-DLV_USE_ARABIC_PERSIAN_CHARS=1"
+      ],
+      "psram_mode": "octal",
+      "psram_speed": "80MHz",
+      "display_panel": "ESP32-S3-TOUCH-LCD-7-800X480",
+      "display_native_width": 800,
+      "display_native_height": 480,
+      "display_ui_width": 800,
+      "display_ui_height": 480,
+      "lvgl_buffer_size": "15%",
+      "lvgl_byte_order": "big_endian",
+      "lvgl_rotation_substitution": "screen_rotation_0",
+      "lvgl_resume_on_input": true,
+      "touch_platform": "gt911",
+      "hardware_pins": {
+        "i2c_sda": "GPIO8",
+        "i2c_scl": "GPIO9",
+        "touch_interrupt": "GPIO4",
+        "display_de": "GPIO5",
+        "display_pclk": "GPIO7",
+        "display_hsync": "GPIO46",
+        "display_vsync": "GPIO3"
+      },
+      "i2c_frequency": "400kHz",
+      "package_includes": [
+        {
+          "alias": "device",
+          "path": "device/device.yaml"
+        },
+        {
+          "alias": "fonts",
+          "path": "assets/fonts.yaml"
+        },
+        {
+          "alias": "icons",
+          "path": "assets/icons.yaml"
+        },
+        {
+          "alias": "lvgl_base",
+          "path": "device/lvgl_base.yaml"
+        },
+        {
+          "alias": "screen_rotation",
+          "path": "../../common/addon/screen_rotation.yaml"
+        },
+        {
+          "alias": "connectivity",
+          "path": "../../common/addon/connectivity.yaml"
+        },
+        {
+          "alias": "immich_config",
+          "path": "../../common/addon/immich_config.yaml"
+        },
+        {
+          "alias": "immich_filter",
+          "path": "../../common/addon/immich_filter.yaml"
+        },
+        {
+          "alias": "backlight",
+          "path": "../../common/addon/backlight.yaml"
+        },
+        {
+          "alias": "backlight_sched",
+          "path": "../../common/addon/backlight_schedule.yaml"
+        },
+        {
+          "alias": "time_sync",
+          "path": "../../common/addon/time.yaml"
+        },
+        {
+          "alias": "accent_color",
+          "path": "../../common/addon/accent_color.yaml"
+        },
+        {
+          "alias": "warm_tones",
+          "path": "../../common/addon/warm_tones.yaml"
+        },
+        {
+          "alias": "screen_loading",
+          "path": "device/screen_loading.yaml"
+        },
+        {
+          "alias": "screen_wifi",
+          "path": "device/screen_wifi_setup.yaml"
+        },
+        {
+          "alias": "screen_setup",
+          "path": "device/screen_immich_setup.yaml"
+        },
+        {
+          "alias": "immich_api",
+          "path": "../../common/addon/immich_api.yaml"
+        },
+        {
+          "alias": "immich_slide",
+          "path": "../../common/addon/immich_slideshow.yaml"
+        },
+        {
+          "alias": "screen_slide",
+          "path": "device/screen_slideshow.yaml"
+        },
+        {
+          "alias": "fw_update",
+          "path": "../../common/addon/firmware_update.yaml"
+        },
+        {
+          "alias": "dev_features",
+          "path": "../../common/addon/developer_features.yaml"
+        },
+        {
+          "alias": "network",
+          "path": "../../common/addon/network.yaml"
+        }
+      ],
+      "package_substitutions": {
+        "display_width": "800",
+        "display_height": "480",
+        "portrait_display_width": "480",
+        "portrait_display_height": "800",
+        "portrait_metadata_width": "426",
+        "portrait_half_width": "400",
+        "screen_rotation": "0",
+        "screen_rotation_0": "0",
+        "screen_rotation_90": "90",
+        "screen_rotation_180": "180",
+        "screen_rotation_270": "270",
+        "captive_portal_ip": "192.168.4.1",
+        "firmware_manifest_url": "https://rcompton78.github.io/compton-diy/espframe/manifest.json"
+      },
+      "font_assets": [
+        {
+          "id": "noto_325_90_font",
+          "file": "gfonts://Noto Sans@325",
+          "size": 90,
+          "bpp": 4
+        },
+        {
+          "id": "noto_400_28_font",
+          "file": "gfonts://Noto Sans@400",
+          "size": 28,
+          "bpp": 4
+        },
+        {
+          "id": "noto_400_18_font",
+          "file": "gfonts://Noto Sans@400",
+          "size": 18,
+          "bpp": 4
+        },
+        {
+          "id": "noto_400_17_font",
+          "file": "gfonts://Noto Sans@400",
+          "size": 17,
+          "bpp": 4
+        },
+        {
+          "id": "noto_400_19_font",
+          "file": "gfonts://Noto Sans@400",
+          "size": 19,
+          "bpp": 4
+        },
+        {
+          "id": "noto_location_400_22_font",
+          "file": "gfonts://Noto Sans@400",
+          "size": 22,
+          "bpp": 4
+        }
+      ],
+      "location_font_extra_files": [
+        "gfonts://Noto Sans Arabic@400",
+        "gfonts://Noto Sans Hebrew@400"
+      ],
+      "icon_font": {
+        "id": "icon_font_setup",
+        "file": "https://github.com/Templarian/MaterialDesign-Webfont/raw/v7.4.47/fonts/materialdesignicons-webfont.ttf",
+        "size": 40,
+        "bpp": 4
+      },
+      "icon_substitutions": {
+        "icon_wifi": "\\U000F05A9",
+        "icon_cog": "\\U000F0493",
+        "icon_cloud_off": "\\U000F0164"
+      },
+      "panel_url": "https://www.waveshare.com/wiki/ESP32-S3-Touch-LCD-7",
+      "build_yaml": "builds/waveshare-esp32-s3-touch-lcd-7.factory.yaml",
+      "package_yaml": "devices/waveshare-esp32-s3-touch-lcd-7/packages.yaml",
+      "local_yaml": "devices/waveshare-esp32-s3-touch-lcd-7/esphome.yaml",
+      "device_yaml": "devices/waveshare-esp32-s3-touch-lcd-7/device/device.yaml",
+      "public_manifest": "firmware/manifest.json",
+      "public_beta_manifest": "firmware/beta/manifest.json"
     }
   ],
   "settings": [

@@ -1,0 +1,20 @@
+# =============================================================================
+# LVGL BASE - Shared display config and styles
+# =============================================================================
+# Defines the LVGL top-level configuration shared by all screens.
+# Individual screens add their own pages via separate files.
+# =============================================================================
+
+lvgl:
+  # Like the P4's mipi_dsi driver (and unlike freenove-s3's plain SPI
+  # ili9xxx), this display's mipi_rgb driver keeps its own full-frame buffer
+  # in PSRAM for continuous RGB-bus scanout -- LVGL only needs a smaller
+  # draw/flush buffer on top of that, not a full second copy. Starting
+  # conservative (15%, ~115KB at 800x480 RGB565); tune up if flush rate
+  # looks like a bottleneck once the real slideshow UI is running.
+  buffer_size: 15%
+  byte_order: big_endian
+  rotation: ${screen_rotation_0}
+  resume_on_input: true
+  displays:
+    - tft_display

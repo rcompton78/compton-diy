@@ -1,0 +1,17 @@
+# Waveshare ESP32-S3-Touch-LCD-7 Immich Frame
+substitutions:
+  name: "immich-frame-waveshare-s3"
+  friendly_name: "Immich Frame Waveshare S3 Touch LCD 7"
+
+# Wifi Setup
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+# Packages
+packages:
+  espframe:
+    url: https://github.com/rcompton78/espframe
+    files: [devices/waveshare-esp32-s3-touch-lcd-7/packages.yaml]
+    ref: main
+    refresh: 1s

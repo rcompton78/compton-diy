@@ -1,0 +1,94 @@
+# =============================================================================
+# FONTS - Clock, UI, and slideshow text
+# =============================================================================
+# Noto Sans at multiple sizes. The clock font uses a minimal glyph set for
+# digits; smaller sizes include broader glyphs for setup screens and text.
+# Location metadata uses broad Noto glyph coverage for Immich place names.
+# Middle East scripts use script-specific Noto extras so the main location
+# font can keep its existing European coverage.
+#
+# Sized at ~0.6x the guition-esp32-p4-jc8012p4a1 device's point sizes to
+# match this device's 480px logical height vs the P4's 800px (both devices
+# are landscape widescreen, so height is the more relevant scaling axis).
+# =============================================================================
+
+substitutions:
+  latin_extended_glyphs: >-
+    !"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~
+    ¡¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖ×ØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõö÷øùúûüýþÿĀāĂăĄąĆćĈĉĊċČčĎďĐđĒēĔĕĖėĘęĚěĜĝĞğĠġĢģĤĥĦħĨĩĪīĬĭĮįİıĲĳĴĵĶķĸĹĺĻļĽľĿŀŁłŃńŅņŇňŉŊŋŌōŎŏŐőŒœŔŕŖŗŘřŚśŜŝŞşŠšŢţŤťŦŧŨũŪūŬŭŮůŰűŲųŴŵŶŷŸŹźŻżŽž—–‐…·µ©®™«»°•€£¥¢ªº†
+  greek_cyrillic_vietnamese_glyphs: >-
+    ΆΈΉΊΌΎΏΐΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩΪΫάέήίΰαβγδεζηθικλμνξοπρςστυφχψωϊϋόύώЁЂЃЄЅІЇЈЉЊЋЌЍЎЏАБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюяёђѓєѕіїјљњћќѝўџҐґƠơƯưẠạẢảẤấẦầẨẩẪẫẬậẮắẰằẲẳẴẵẶặẸẹẺẻẼẽẾếỀềỂểỄễỆệỈỉỊịỌọỎỏỐốỒồỔổỖỗỘộỚớỜờỞởỠỡỢợỤụỦủỨứỪừỬửỮữỰựỲỳỴỵỶỷỸỹ
+  arabic_location_glyphs: "؉،؍ؕ؛؟ءآأؤإئابةتثجحخدذرزسشصضطظعغـفقكلمنهوىيًٌٍَُِّْٕٖٓٔ٘٠١٢٣٤٥٦٧٨٩٪٫٬٭ٮٯٰٱٹٺٻټٽپٿڀځڃڄڅچڇڈډڊڌڍڏڑړڕږژڙښڡڤڦکڪګڭگڱڳڵںڻڼھہۆۇۈۋیۍێېے۔ەۛۯ۰۱۲۳۴۵۶۷۸۹۽۾ݣ‘’“”‹›⁏−◌⹁ﭖﭗﭘﭙﭺﭻﭼﭽﮊﮋﮎﮏﮐﮑﮒﮓﮔﮕﯼﯽﯾﯿ﴾﴿ﺁﺃﺄﺅﺆﺇﺈﺉﺊﺋﺌﺍﺎﺏﺐﺑﺒﺓﺔﺕﺖﺗﺘﺙﺚﺛﺜﺝﺞﺟﺠﺡﺢﺣﺤﺥﺦﺧﺨﺩﺪﺫﺬﺭﺮﺯﺰﺱﺲﺳﺴﺵﺶﺷﺸﺹﺺﺻﺼﺽﺾﺿﻀﻁﻂﻃﻄﻅﻆﻇﻈﻉﻊﻋﻌﻍﻎﻏﻐﻑﻒﻓﻔﻕﻖﻗﻘﻙﻚﻛﻜﻝﻞﻟﻠﻡﻢﻣﻤﻥﻦﻧﻨﻩﻪﻫﻬﻭﻮﻯﻰﻱﻲﻳﻴﻵﻶﻷﻸﻹﻺﻻﻼ"
+  hebrew_location_glyphs: "ְֱֲֳִֵֶַָֹֺֻּֽֿ֑֖֛֢֣֤֥֦֧֪֚֭֮֒֓֔֕֗֘֙֜֝֞֟֠֡֨֩֫֬֯׀ׁׂ׃ׇׅׄאבגדהוזחטיךכלםמןנסעףפץצקרשתׯװױײ׳״"
+  # Device-independent clock font names, resolved per device. Referenced by
+  # id() from common/addon/time.yaml's update_clock_display script, which
+  # is shared across devices and can't hardcode a device-specific font size.
+  clock_font_small_id: noto_325_60_font
+  clock_font_medium_id: noto_325_90_font
+  clock_font_large_id: noto_325_120_font
+
+# -----------------------------------------------------------------------------
+# Clock and numeric (minimal glyph set for lower memory)
+# -----------------------------------------------------------------------------
+font:
+  - file: "gfonts://Noto Sans@325"
+    id: noto_325_60_font
+    size: 60
+    bpp: 4
+    glyphs: " 0123456789:"
+
+  - file: "gfonts://Noto Sans@325"
+    id: noto_325_90_font
+    size: 90
+    bpp: 4
+    glyphs: " 0123456789:"
+
+  - file: "gfonts://Noto Sans@325"
+    id: noto_325_120_font
+    size: 120
+    bpp: 4
+    glyphs: " 0123456789:"
+
+# -----------------------------------------------------------------------------
+# UI and setup text (full Latin + extended glyphs)
+# -----------------------------------------------------------------------------
+  - file: "gfonts://Noto Sans@400"
+    id: noto_400_28_font
+    size: 28
+    bpp: 4
+    glyphs: "${latin_extended_glyphs}"
+
+  - file: "gfonts://Noto Sans@400"
+    id: noto_400_18_font
+    size: 18
+    bpp: 4
+    glyphs: "${latin_extended_glyphs}"
+
+  - file: "gfonts://Noto Sans@400"
+    id: noto_400_17_font
+    size: 17
+    bpp: 4
+    glyphs: "${latin_extended_glyphs}"
+
+  - file: "gfonts://Noto Sans@400"
+    id: noto_400_19_font
+    size: 19
+    bpp: 4
+    glyphs: "${latin_extended_glyphs}${greek_cyrillic_vietnamese_glyphs}"
+
+  - file: "gfonts://Noto Sans@400"
+    id: noto_location_400_22_font
+    size: 22
+    bpp: 4
+    glyphsets:
+      - GF_Latin_Core
+      - GF_Latin_Beyond
+      - GF_Latin_Vietnamese
+      - GF_Greek_Core
+      - GF_Cyrillic_Plus
+    glyphs: "${latin_extended_glyphs}${greek_cyrillic_vietnamese_glyphs}"
+    extras:
+      - file: "gfonts://Noto Sans Arabic@400"
+        glyphs: "${arabic_location_glyphs}"
+      - file: "gfonts://Noto Sans Hebrew@400"
+        glyphs: "${hebrew_location_glyphs}"
