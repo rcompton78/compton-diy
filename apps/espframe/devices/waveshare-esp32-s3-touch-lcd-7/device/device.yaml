@@ -45,6 +45,14 @@ esp32:
       CONFIG_HTTPD_MAX_REQ_HDR_LEN: "8192"
       CONFIG_HTTPD_MAX_URI_LEN: "128"
       CONFIG_ESP_TASK_WDT_TIMEOUT_S: "30"
+      # Espressif's documented mitigation for ESP32-S3 RGB-parallel-LCD
+      # "screen drift" (PSRAM/GDMA bandwidth contention with flash reads,
+      # visible as tearing): larger data cache line size, tried alone here
+      # (without execute_from_psram, which ate enough PSRAM heap headroom to
+      # cause an OOM abort in http_request after ~40-70s of slideshow
+      # cycling -- see HANDOFF.md).
+      # https://docs.espressif.com/projects/esp-faq/en/latest/software-framework/peripherals/lcd.html
+      CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
     advanced:
       enable_idf_experimental_features: true
 

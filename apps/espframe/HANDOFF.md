@@ -130,85 +130,117 @@ ESPHome 2026.6.4, matches `product/contract/project.json`'s pinned version).
    either — it already fails identically for the existing `freenove-s3`
    device on `master`.
 
-## Open issue — screen tearing (NOT yet resolved)
+## Screen tearing — RESOLVED
 
-User reports **intermittent screen tearing** on real hardware once in the
-full UI (not seen on the earlier bring-up test, though that only showed a
-static test pattern with no periodic re-renders, so it may not have been a
-fair test either way).
+User reported **intermittent screen tearing** on real hardware in the full
+UI. Root cause and fix, found in a later session:
 
-Was mid-investigation when this session paused. Findings so far, from
-reading the actual installed ESPHome `mipi_rgb` component source
-(`apps/espframe/.venv/lib/python3.12/site-packages/esphome/components/mipi_rgb/mipi_rgb.cpp`):
+- `mipi_rgb`'s `num_fbs = 1` (hardcoded, no YAML knob — see
+  `mipi_rgb.cpp`/`display.py`) has been ESPHome's design for RGB-parallel
+  displays since its predecessor `rpi_dpi_rgb`; no upstream fix exists and
+  no other ESPHome component exposes double-buffering for this bus type.
+  This turned out to be a red herring, though — the actual symptom matches
+  a *different*, well-documented ESP32-S3 issue.
+- Espressif's own FAQ documents "screen drift" on ESP32-S3 RGB-parallel LCDs:
+  PSRAM/flash bus contention starves the RGB DMA engine's bandwidth, which
+  reads as tearing/shearing even though it's not a classic write-during-scan
+  race. See
+  <https://docs.espressif.com/projects/esp-faq/en/latest/software-framework/peripherals/lcd.html>.
+  Waveshare's own official Arduino reference board config for this exact
+  panel (`esp-arduino-libs/ESP32_Display_Panel`,
+  `BOARD_WAVESHARE_ESP32_S3_TOUCH_LCD_7.h`) uses the identical bounce-buffer
+  setup, confirming this is a generic platform issue, not an ESPHome/this-repo
+  bug.
+- Espressif's documented fix bundle: `SPIRAM_FETCH_INSTRUCTIONS` +
+  `SPIRAM_RODATA` (exposed in ESPHome as `esp32: framework: advanced:
+  execute_from_psram: true`) plus `CONFIG_ESP32S3_DATA_CACHE_LINE_64B`.
+  (`CONFIG_FREERTOS_HZ=1000`, the other item in the bundle, is already
+  ESPHome's default regardless.)
+- **`execute_from_psram: true` alone fixed the visible tearing** but
+  introduced a new problem: it eats enough PSRAM headroom that the device
+  now hits an **out-of-memory abort** (`abort()` inside
+  `HttpRequestSendAction::play()` → `std::string` allocation, per the
+  decoded serial backtrace) roughly 40–70 seconds into slideshow operation
+  — a hard crash-loop, confirmed via `esptool`/serial monitor with a
+  MAC-address cross-check to rule out a stale-ARP/wrong-device mixup during
+  debugging. **Do not re-enable `execute_from_psram` on this device without
+  also addressing the heap-pressure issue** (e.g. a heap sensor + real
+  investigation into what's consuming/fragmenting PSRAM, likely the
+  image-fetch/JSON buffers in the shared `immich_api`/`http_request` code
+  paths — that's shared across all devices, so any real fix there needs
+  care).
+- **`CONFIG_ESP32S3_DATA_CACHE_LINE_64B` tried alone** (no
+  `execute_from_psram`) — user confirms **no tearing observed**, and the
+  device survived multiple soak tests (several minutes of continuous
+  slideshow cycling, well past the 40–70s crash window) with no crash. This
+  is the fix that's actually in the device.yaml now:
 
-```cpp
-esp_lcd_rgb_panel_config_t config{};
-config.flags.fb_in_psram = 1;
-config.bounce_buffer_size_px = this->width_ * 10;
-config.num_fbs = 1;
-```
+  ```yaml
+  esp32:
+    framework:
+      sdkconfig_options:
+        CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
+  ```
 
-- **`num_fbs = 1`** — single frame buffer, hardcoded, not exposed as a YAML
-  option anywhere in this component's schema (checked `display.py` in the
-  same directory — no buffer-count/double-buffer config key at all). LVGL
-  draws directly into the one buffer that the RGB peripheral is
-  continuously scanning out via DMA — a write landing mid-scanout is a
-  textbook tearing cause, and there's no config knob in this ESPHome
-  component to add a second buffer.
-- **`bounce_buffer_size_px = width * 10`** — a small (10-row) PSRAM→internal-RAM
-  bounce buffer ESP-IDF's RGB LCD driver uses internally for DMA bandwidth
-  reasons; this is separate from LVGL's own draw buffer (`lvgl_base.yaml`'s
-  `buffer_size: 15%`) and not something we control from YAML either.
-- A peer (relaying the user) suggested the likely causes are (a) missing
-  double/triple buffering vs. panel refresh, or (b) PCLK/porch timing
-  slightly off so the panel free-runs out of sync with LVGL's flush timing,
-  and flagged that PSRAM bandwidth is tighter now at 80MHz vs. the
-  community configs' 120MHz (which crash-looped on this board — see above).
-  Given `num_fbs` is hardcoded to 1 with no exposed alternative, (a) as
-  literally "add a second full frame buffer" isn't available through this
-  component as-is; the more promising angles are:
-  - Whether `pclk_frequency` (currently `16MHz`, matching both community
-    configs) can be tuned — a mismatch between PCLK and the actual PSRAM
-    read bandwidth at 80MHz could plausibly cause the RGB DMA engine to
-    occasionally underrun/tear. Worth trying a lower PCLK (e.g. 10-12MHz)
-    as a quick experiment, or checking if raising it changes the symptom.
-  - Whether ESPHome's `rpi_dpi_rgb` sibling component (imported from in
-    `mipi_rgb/display.py` for `CONF_PCLK_FREQUENCY`/`CONF_PCLK_INVERTED`)
-    has a materially different/more mature buffering implementation worth
-    comparing against.
-  - Whether this is a known upstream ESPHome/esp-idf issue for `mipi_rgb`
-    on ESP32-S3 (worth a quick search of ESPHome's GitHub issues) rather
-    than something fixable purely from this repo's YAML.
-  - LVGL's `lvgl_base.yaml` `buffer_size: 15%` was picked as "a conservative
-    starting point" without real tuning — worth trying larger/smaller
-    values to see if it affects tearing frequency, even though the
-    single-`num_fbs` issue above seems like the more likely root cause.
+- Caveat: this has had a few minutes of soak testing, not extended
+  real-world use. If tearing or instability resurfaces, this is the exact
+  fork point to revisit — either try other pieces of Espressif's bundle in
+  isolation, or dig into the PSRAM-pressure issue properly so
+  `execute_from_psram` can be re-added safely.
 
-**This is the next thing to pick up.** Not resolved, needs either an ESPHome
-component-level workaround, a timing tweak, or accepting it as a known
-limitation to document.
+## Other features added this round
+
+- **Tap-to-show-IP overlay** on the slideshow screen
+  (`device/screen_slideshow.yaml`): a single (non-double) tap briefly shows
+  the device's IP address in a small top-center overlay for 5 seconds, then
+  auto-hides. Ported from `freenove-s3`'s existing `ip_address_overlay`
+  widget + `show_ip_overlay` script (same mechanism, just using this
+  device's `noto_400_18_font` instead of freenove's smaller 12px font,
+  since this panel is much larger). Wired into the same tap handler as the
+  existing double-tap-to-advance gesture, so it doesn't add a new gesture.
+  Confirmed working on real hardware (tap reveals correct IP, touch not
+  affected).
+- **Portrait-only/landscape-only photo filtering** — turned out to already
+  exist as a shared, fully-wired feature (`common/addon/immich_filter.yaml`'s
+  "Photos: Orientation" select), not something added this round. No action
+  needed; documented here only because it came up as a question.
+- **Screen rotation (physically turning the panel 90°/270°)** — also
+  already exists as a shared feature
+  (`common/addon/screen_rotation.yaml`, gated behind a "Developer Features"
+  switch for 90°/270°) and is wired into this device's build already. **Not
+  fully validated**: testing hit a false alarm (the "Developer Features"
+  switch reverted to OFF after a reflash, causing the rotation script's
+  safety gate to silently snap back to 0° — not an LVGL bug) and then the
+  investigation was cut short by the tearing/crash work above. If revisited:
+  turn "Developer Features" ON, set "Screen: Rotation" to 90, and check both
+  visual orientation *and* touch alignment (GT911 touch-rotation coupling
+  was never actually confirmed working on this device — P4's precedent
+  uses a different touch chip with a static, non-rotation-reactive
+  transform, so it doesn't prove GT911 will behave the same way).
 
 ## What's NOT done yet
 
-1. Resolve the tearing issue above.
-2. Delete the throwaway `builds/waveshare-esp32-s3-touch-lcd-7-bringup.yaml`
+1. Delete the throwaway `builds/waveshare-esp32-s3-touch-lcd-7-bringup.yaml`
    once the real device is fully signed off (it's not part of the
    contract/packages system and was only for isolating the display/touch
    bring-up from the full UI).
-3. This is a first-pass proportional UI port (scaled from the P4's screens)
+2. This is a first-pass proportional UI port (scaled from the P4's screens)
    — user should be shown the actual layout/spacing live and asked whether
    anything needs visual polish beyond what plain scaling produced.
-4. Decide on PR: this repo has the `wf` plugin configured
+3. Decide on PR: this repo has the `wf` plugin configured
    (`.claude/workflow.config.md` present), so opening the PR should go
    through `wf:create-pr`, not a bare `git push` + `gh pr create` — not yet
    done. If a Jira card is involved and this ends up merged, `wf:post-merge-cleanup`
    must also run.
-5. README/docs were **not** updated to mention the new board — checked, and
+4. README/docs were **not** updated to mention the new board — checked, and
    `freenove-s3` didn't update them either when it was added (repo
    precedent), so this wasn't treated as a gap, but flag it if the user
    wants it done differently this time.
-6. Haven't run the full `npm run check:pr` gate — only ran the individual
+5. Haven't run the full `npm run check:pr` gate — only ran the individual
    `check:*` scripts relevant to devices (see "What's done" #6 above).
+6. Screen rotation (90°/270°) touch-alignment validation — see above.
+7. Only a few minutes of soak testing on the tearing fix — worth watching
+   for recurrence over longer real-world use.
 
 ## How to continue
 
@@ -217,8 +249,14 @@ limitation to document.
 2. Physical board should still be connected (check `/dev/ttyACM0`,
    `ls -la /dev/ttyACM0`) — if this is a fresh machine/session, may need to
    ask the user to reconnect it.
-3. Pick up the tearing investigation (see above) — that's the one real
-   open technical question. Everything else is either done or is
-   process/cleanup (bring-up file deletion, PR workflow).
+3. Tearing is believed resolved (see above) — the next real open items are
+   the 90°/270° rotation touch-alignment validation, and general
+   PR/cleanup process items. Everything else is done.
 4. `scripts/espframe-esphome.sh compile apps/espframe/builds/waveshare-esp32-s3-touch-lcd-7.factory.yaml`
    then `... upload ... --device /dev/ttyACM0` to test changes.
+5. **Caution for future debugging sessions**: don't leave a debug-log-level
+   or other diagnostic-only firmware flashed and walk away — one session
+   this round temporarily bumped `log_level` to DEBUG to trace an issue,
+   which briefly meant the physically-connected device was running a
+   throwaway diagnostic build instead of the last known-good one. Revert
+   diagnostic-only changes and reflash the real config promptly.
