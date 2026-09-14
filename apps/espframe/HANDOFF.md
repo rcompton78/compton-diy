@@ -207,16 +207,21 @@ UI. Root cause and fix, found in a later session:
 - **Screen rotation (physically turning the panel 90°/270°)** — also
   already exists as a shared feature
   (`common/addon/screen_rotation.yaml`, gated behind a "Developer Features"
-  switch for 90°/270°) and is wired into this device's build already. **Not
-  fully validated**: testing hit a false alarm (the "Developer Features"
-  switch reverted to OFF after a reflash, causing the rotation script's
-  safety gate to silently snap back to 0° — not an LVGL bug) and then the
-  investigation was cut short by the tearing/crash work above. If revisited:
-  turn "Developer Features" ON, set "Screen: Rotation" to 90, and check both
-  visual orientation *and* touch alignment (GT911 touch-rotation coupling
-  was never actually confirmed working on this device — P4's precedent
-  uses a different touch chip with a static, non-rotation-reactive
-  transform, so it doesn't prove GT911 will behave the same way).
+  switch for 90°/270°) and is wired into this device's build already.
+  **CJS-217: validated and confirmed working, no code changes needed.**
+  Tested all four rotations (0°/90°/180°/270°) on real hardware via the
+  device's web UI (`http://<device-ip>/select/screen__rotation`): visual
+  orientation was correct at every angle, and touch (tested via the
+  tap-to-show-IP gesture on the slideshow screen) tracked correctly too.
+  This confirms ESPHome's generic `LVTouchListener`/`rotate_coordinates()`
+  coupling (`lvgl_esphome.cpp`) — which applies the same rotation transform
+  to touch input that LVGL applies to the rendered frame, independent of
+  touch chip — works correctly for GT911 out of the box. The P4's static
+  `swap_xy` transform on its `gsl3680` touch config is an unrelated, fixed
+  physical-mounting-orientation correction (that panel's native orientation
+  differs from its as-mounted orientation), not evidence the generic path
+  needed chip-specific handling — this device's GT911 is mounted flush with
+  the panel's native orientation and needed no transform at all.
 
 ## What's NOT done yet
 
@@ -228,8 +233,8 @@ UI. Root cause and fix, found in a later session:
    set when `freenove-s3` was added (neither was fully updated for it either).
 3. Haven't run the full `npm run check:pr` gate — only ran the individual
    `check:*` scripts relevant to devices (see "What's done" #6 above).
-4. Screen rotation (90°/270°) touch-alignment validation — tracked as
-   Jira CJS-217, not blocking this PR.
+4. ~~Screen rotation (90°/270°) touch-alignment validation~~ — done, see
+   CJS-217 note above.
 5. Only a few minutes of soak testing on the tearing fix — worth watching
    for recurrence over longer real-world use.
 6. PR opened via `wf:create-pr` (github.com/rcompton78/compton-diy/pull/82)
