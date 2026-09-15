@@ -146,10 +146,10 @@ static constexpr uint16_t C_SNOWMAN        = 0xDEFB;  // snowman peeking out bes
 static constexpr uint16_t C_SNOWMAN_COAL   = 0x0000;  // snowman hat/eyes/buttons (coal black)
 static constexpr uint16_t C_SNOWMAN_CARROT = 0xFD20;  // snowman nose (orange) — same hex as C_FISH/C_PENGUIN_BEAK by
                                                        // coincidence, not intentional reuse; kept as its own constant
+                                                       // so retuning one doesn't silently shift the other two
 static constexpr uint16_t C_PIKACHU        = 0xFFE0;  // pikachu peeking out beside the head (bright yellow)
 static constexpr uint16_t C_PIKACHU_CHEEK  = 0xF800;  // pikachu's red cheek patches — fixed, not accent-colored, since it's the character's signature feature
 static constexpr uint16_t C_PIKACHU_MARK   = 0x0000;  // pikachu ear tips and tail-bolt tip (black)
-                                                       // so retuning one doesn't silently shift the other two
 static constexpr uint16_t C_PARTY_HAT      = 0x939B;  // party hat cone — same purple as C_BOW_PURPLE
 static constexpr uint16_t C_PARTY_HAT_TRIM = 0xF6CB;  // party hat base band/pompom — same yellow as C_BOW_LEMON_YELLOW
 // Bold, saturated colors rather than pastels — the birthday theme's own room-theme backdrop
