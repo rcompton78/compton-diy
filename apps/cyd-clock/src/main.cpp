@@ -1444,9 +1444,10 @@ static void drawPikachuHead(int bx, int by, uint16_t chinColor) {
 
 // Lightning-bolt tail zigzag shared by the full-body pikachu poses below — drawn as two
 // offset triangles for the bolt's angular kink, with a black tip mirroring the ear tips.
-// `dir` is -1 for the left-slot poses (bolt kinks leftward, over the near shoulder) and +1
-// for the right-arm slot (kinks rightward), matching drawSquirrelHeld()'s sign-flip approach
-// so the tail always pokes toward the cat's body rather than away from it.
+// `dir` is -1 for the left-slot poses (bolt kinks leftward, away from the cat) and +1 for
+// the right-arm slot (kinks rightward, also away from the cat, off its own far shoulder).
+// Unlike drawSquirrelHeld()'s tail, which pokes toward the cat's body, pikachu's tail points
+// away by design — a deliberate visual call made after checking the render on-device (DIY-112).
 static void drawPikachuTail(int bx, int by, int dir) {
     tft.fillTriangle(bx + dir * 10, by + 20, bx + dir * 20, by + 13, bx + dir * 14, by + 8, C_PIKACHU);       // tail lower half
     tft.fillTriangle(bx + dir * 14, by + 8,  bx + dir * 23, by + 3,  bx + dir * 16, by - 8, C_PIKACHU);       // tail upper half
@@ -1458,7 +1459,7 @@ static void drawPikachuTail(int bx, int by, int dir) {
 // pokes over the shoulder, matching drawSquirrelPeeking()'s partial-tail treatment.
 static void drawPikachuPeeking(int cx, int cy, uint16_t accentColor) {
     int bx = cx - 40, by = cy - 6;
-    tft.fillTriangle(bx - 13, by + 5, bx - 20, by - 3, bx - 14, by - 8, C_PIKACHU);      // bit of tail poking over the shoulder
+    tft.fillTriangle(bx - 13, by + 5, bx - 20, by - 3, bx - 14, by - 8, C_PIKACHU);      // bit of tail poking out, away from the cat (see drawPikachuTail())
     tft.fillTriangle(bx - 16, by - 5, bx - 20, by - 3, bx - 14, by - 8, C_PIKACHU_MARK); // dark tip
     drawPikachuHead(bx, by, accentColor);
 }
@@ -1476,7 +1477,7 @@ static void drawPikachuFull(int cx, int cy, uint16_t accentColor) {
 }
 
 // Right-arm slot pose (DIY-64) — an exact mirror of drawPikachuFull(), with the tail's `dir`
-// flipped (see drawPikachuTail()) so it still pokes toward the cat's body on this side.
+// flipped (see drawPikachuTail()) so it kinks the mirror direction, still away from the cat.
 static void drawPikachuHeld(int cx, int cy, uint16_t accentColor) {
     int bx = cx + 38, by = cy - 8;
     drawPikachuTail(bx, by, 1);
@@ -1488,11 +1489,11 @@ static void drawPikachuHeld(int cx, int cy, uint16_t accentColor) {
 }
 
 // Night-only right-arm variant (DIY-64) — see drawTeddyHeldPeeking() for rationale. Tail bit
-// mirrored to poke toward the body (rightward) rather than drawPikachuPeeking()'s leftward
-// poke, keeping the same "over the near shoulder" silhouette on this side.
+// mirrored rightward — the mirror image of drawPikachuPeeking()'s leftward poke, same
+// away-from-the-cat direction by design (see drawPikachuTail()).
 static void drawPikachuHeldPeeking(int cx, int cy, uint16_t accentColor) {
     int bx = cx + 40, by = cy - 6;
-    tft.fillTriangle(bx + 13, by + 5, bx + 20, by - 3, bx + 14, by - 8, C_PIKACHU);      // bit of tail poking over the shoulder
+    tft.fillTriangle(bx + 13, by + 5, bx + 20, by - 3, bx + 14, by - 8, C_PIKACHU);      // bit of tail poking out, away from the cat
     tft.fillTriangle(bx + 16, by - 5, bx + 20, by - 3, bx + 14, by - 8, C_PIKACHU_MARK); // dark tip
     drawPikachuHead(bx, by, accentColor);
 }
