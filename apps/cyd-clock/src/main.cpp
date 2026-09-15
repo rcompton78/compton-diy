@@ -80,6 +80,7 @@ static constexpr uint32_t STORE_COST_SQUIRREL = 150;
 static constexpr uint32_t STORE_COST_PENGUIN  = 150;
 static constexpr uint32_t STORE_COST_UNICORN  = 150;
 static constexpr uint32_t STORE_COST_SNOWMAN  = 150;
+static constexpr uint32_t STORE_COST_PIKACHU  = 300;  // top tier: licensed-character premium, priced above the squirrel/penguin/unicorn/snowman 150 tier
 static constexpr uint32_t STORE_COST_BLANKET  = 40;  // per blanket color
 static constexpr uint32_t STORE_COST_ROOM_THEME = 40;  // per flat-color room theme, matches blanket pricing
 static constexpr uint32_t STORE_COST_STARRY_NIGHT = 200;  // premium: has real art (moon + stars), not just a flat fill
@@ -146,6 +147,9 @@ static constexpr uint16_t C_SNOWMAN_COAL   = 0x0000;  // snowman hat/eyes/button
 static constexpr uint16_t C_SNOWMAN_CARROT = 0xFD20;  // snowman nose (orange) — same hex as C_FISH/C_PENGUIN_BEAK by
                                                        // coincidence, not intentional reuse; kept as its own constant
                                                        // so retuning one doesn't silently shift the other two
+static constexpr uint16_t C_PIKACHU        = 0xFFE0;  // pikachu peeking out beside the head (bright yellow)
+static constexpr uint16_t C_PIKACHU_CHEEK  = 0xF800;  // pikachu's red cheek patches — fixed, not accent-colored, since it's the character's signature feature
+static constexpr uint16_t C_PIKACHU_MARK   = 0x0000;  // pikachu ear tips and tail-bolt tip (black)
 static constexpr uint16_t C_PARTY_HAT      = 0x939B;  // party hat cone — same purple as C_BOW_PURPLE
 static constexpr uint16_t C_PARTY_HAT_TRIM = 0xF6CB;  // party hat base band/pompom — same yellow as C_BOW_LEMON_YELLOW
 // Bold, saturated colors rather than pastels — the birthday theme's own room-theme backdrop
@@ -362,18 +366,22 @@ static void drawUnicornPeeking(int cx, int cy, uint16_t accentColor);
 static void drawUnicornFull(int cx, int cy, uint16_t accentColor);
 static void drawSnowmanPeeking(int cx, int cy, uint16_t accentColor);
 static void drawSnowmanFull(int cx, int cy, uint16_t accentColor);
+static void drawPikachuPeeking(int cx, int cy, uint16_t accentColor);
+static void drawPikachuFull(int cx, int cy, uint16_t accentColor);
 static void drawTeddyHeld(int cx, int cy, uint16_t accentColor);
 static void drawBunnyHeld(int cx, int cy, uint16_t accentColor);
 static void drawSquirrelHeld(int cx, int cy, uint16_t accentColor);
 static void drawPenguinHeld(int cx, int cy, uint16_t accentColor);
 static void drawUnicornHeld(int cx, int cy, uint16_t accentColor);
 static void drawSnowmanHeld(int cx, int cy, uint16_t accentColor);
+static void drawPikachuHeld(int cx, int cy, uint16_t accentColor);
 static void drawTeddyHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawBunnyHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawSquirrelHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawPenguinHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawUnicornHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawSnowmanHeldPeeking(int cx, int cy, uint16_t accentColor);
+static void drawPikachuHeldPeeking(int cx, int cy, uint16_t accentColor);
 
 // Stuffy catalog — same purchase/equip model as blanket colors, so more stuffies can be
 // added later without changing the store/dressing-room plumbing. `id` is the stable
@@ -406,6 +414,7 @@ static constexpr Stuffy STUFFIES[] = {
     {"penguin",  "Penguin",      STORE_COST_PENGUIN,  drawPenguinPeeking,  drawPenguinFull,  drawPenguinHeld,  drawPenguinHeldPeeking},
     {"unicorn",  "White Unicorn", STORE_COST_UNICORN, drawUnicornPeeking,  drawUnicornFull,  drawUnicornHeld, drawUnicornHeldPeeking},
     {"snowman",  "Snowman",      STORE_COST_SNOWMAN,  drawSnowmanPeeking,  drawSnowmanFull,  drawSnowmanHeld, drawSnowmanHeldPeeking},
+    {"pikachu",  "Pikachu",      STORE_COST_PIKACHU,  drawPikachuPeeking,  drawPikachuFull,  drawPikachuHeld, drawPikachuHeldPeeking},
 };
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
 static_assert(STUFFY_COUNT <= 16, "ownedStuffies bitmask is uint16_t");
@@ -1412,6 +1421,81 @@ static void drawSnowmanHeld(int cx, int cy, uint16_t accentColor) {
 static void drawSnowmanHeldPeeking(int cx, int cy, uint16_t accentColor) {
     int bx = cx + 40, by = cy - 6;
     drawSnowmanHead(bx, by, accentColor);
+}
+
+// Shared ear/head/cheek/eyes/nose art reused by both pikachu variants below (DIY-112). Ears
+// are pointed triangles with black tips rather than the round/oval ears the other stuffies
+// use, and the red cheek patches are pikachu's signature feature so they stay fixed to
+// C_PIKACHU_CHEEK rather than taking the accent color — only the small chin patch takes
+// `chinColor` (accentColor), matching the other stuffies' one-accented-detail convention.
+static void drawPikachuHead(int bx, int by, uint16_t chinColor) {
+    tft.fillTriangle(bx - 11, by - 8, bx - 4, by - 8, bx - 8, by - 25, C_PIKACHU);       // left ear
+    tft.fillTriangle(bx - 9,  by - 18, bx - 6, by - 18, bx - 8, by - 25, C_PIKACHU_MARK); // left ear tip
+    tft.fillTriangle(bx + 4,  by - 8, bx + 11, by - 8, bx + 8, by - 25, C_PIKACHU);       // right ear
+    tft.fillTriangle(bx + 6,  by - 18, bx + 9, by - 18, bx + 8, by - 25, C_PIKACHU_MARK); // right ear tip
+    tft.fillCircle(bx,     by,     10, C_PIKACHU);        // head
+    tft.fillCircle(bx - 8, by + 3, 4, C_PIKACHU_CHEEK);   // left cheek
+    tft.fillCircle(bx + 8, by + 3, 4, C_PIKACHU_CHEEK);   // right cheek
+    tft.fillCircle(bx,     by + 5, 3, chinColor);         // chin patch
+    tft.fillCircle(bx - 4, by - 3, 1, C_DARK);   // left eye
+    tft.fillCircle(bx + 4, by - 3, 1, C_DARK);   // right eye
+    tft.fillCircle(bx,     by + 2, 1, C_DARK);   // nose
+}
+
+// Lightning-bolt tail zigzag shared by the full-body pikachu poses below — drawn as two
+// offset triangles for the bolt's angular kink, with a black tip mirroring the ear tips.
+// `dir` is +1 for the left-slot poses (bolt kinks rightward, over the near shoulder) and -1
+// for the right-arm slot (kinks leftward), matching drawSquirrelHeld()'s sign-flip approach
+// so the tail always pokes toward the cat's body rather than away from it — needed to stay
+// inside drawAnimal()'s CAT_CX ± 50 redraw clear rect, which an away-pointing tail overshoots.
+static void drawPikachuTail(int bx, int by, int dir) {
+    tft.fillTriangle(bx + dir * 10, by + 20, bx + dir * 20, by + 13, bx + dir * 14, by + 8, C_PIKACHU);       // tail lower half
+    tft.fillTriangle(bx + dir * 14, by + 8,  bx + dir * 23, by + 3,  bx + dir * 16, by - 8, C_PIKACHU);       // tail upper half
+    tft.fillTriangle(bx + dir * 19, by - 3,  bx + dir * 23, by + 3,  bx + dir * 16, by - 8, C_PIKACHU_MARK);  // dark tip
+}
+
+// Pikachu peeking out beside the head, tucked into the blanket's top edge — only reads
+// correctly when the blanket is also owned to tuck behind. A bit of the lightning-bolt tail
+// pokes over the shoulder, matching drawSquirrelPeeking()'s partial-tail treatment.
+static void drawPikachuPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 40, by = cy - 6;
+    tft.fillTriangle(bx + 13, by + 5, bx + 20, by - 3, bx + 14, by - 8, C_PIKACHU);      // bit of tail poking over the shoulder
+    tft.fillTriangle(bx + 16, by - 5, bx + 20, by - 3, bx + 14, by - 8, C_PIKACHU_MARK); // dark tip
+    drawPikachuHead(bx, by, accentColor);
+}
+
+// Full-body pikachu sitting beside the cat — used when pikachu is owned without the
+// blanket, since there's no blanket edge to tuck a lone head behind.
+static void drawPikachuFull(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 38, by = cy - 8;
+    drawPikachuTail(bx, by, 1);
+    drawPikachuHead(bx, by, accentColor);
+    tft.fillRoundRect(bx - 10, by + 8, 20, 30, 10, C_PIKACHU);  // body
+    tft.fillCircle(bx, by + 21, 5, accentColor);                // chest patch
+    tft.fillCircle(bx - 6, by + 39, 5, C_PIKACHU);              // left foot
+    tft.fillCircle(bx + 6, by + 39, 5, C_PIKACHU);              // right foot
+}
+
+// Right-arm slot pose (DIY-64) — an exact mirror of drawPikachuFull(), with the tail's `dir`
+// flipped (see drawPikachuTail()) so it still pokes toward the cat's body on this side.
+static void drawPikachuHeld(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 38, by = cy - 8;
+    drawPikachuTail(bx, by, -1);
+    drawPikachuHead(bx, by, accentColor);
+    tft.fillRoundRect(bx - 10, by + 8, 20, 30, 10, C_PIKACHU);  // body
+    tft.fillCircle(bx, by + 21, 5, accentColor);                // chest patch
+    tft.fillCircle(bx - 6, by + 39, 5, C_PIKACHU);              // left foot
+    tft.fillCircle(bx + 6, by + 39, 5, C_PIKACHU);              // right foot
+}
+
+// Night-only right-arm variant (DIY-64) — see drawTeddyHeldPeeking() for rationale. Tail bit
+// mirrored to poke toward the body (leftward) rather than drawPikachuPeeking()'s rightward
+// poke, keeping the same "over the near shoulder" silhouette on this side.
+static void drawPikachuHeldPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 40, by = cy - 6;
+    tft.fillTriangle(bx - 13, by + 5, bx - 20, by - 3, bx - 14, by - 8, C_PIKACHU);      // bit of tail poking over the shoulder
+    tft.fillTriangle(bx - 16, by - 5, bx - 20, by - 3, bx - 14, by - 8, C_PIKACHU_MARK); // dark tip
+    drawPikachuHead(bx, by, accentColor);
 }
 
 // Deeply-closed, sleepy eyes for the sleep-window peek — thinner and gently curled at
@@ -3737,7 +3821,7 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h3>Cat Colors</h3>
 %%CAT_COLOR_ITEMS%%
 
-<h3>Stuffies (night only)</h3>
+<h3>Stuffies</h3>
 %%STUFFY_ITEMS%%
 
 <h3>Blankets (night only)</h3>
@@ -3794,7 +3878,7 @@ static const char CONFIG_DRESS_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h3>Cat Colors</h3>
 %%CAT_COLOR_OPTIONS%%
 
-<h3>Stuffies (night only)</h3>
+<h3>Stuffies</h3>
 %%STUFFY_OPTIONS%%
 
 <h3>Right Arm Slot (day &amp; night — pick a Buddy or a Toy)</h3>
