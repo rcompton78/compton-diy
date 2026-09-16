@@ -81,6 +81,7 @@ static constexpr uint32_t STORE_COST_PENGUIN  = 150;
 static constexpr uint32_t STORE_COST_UNICORN  = 150;
 static constexpr uint32_t STORE_COST_SNOWMAN  = 150;
 static constexpr uint32_t STORE_COST_PIKACHU  = 300;  // top tier: licensed-character premium, priced above the squirrel/penguin/unicorn/snowman 150 tier
+static constexpr uint32_t STORE_COST_EEVEE    = 300;  // same top tier as Pikachu — also a licensed-character premium
 static constexpr uint32_t STORE_COST_BLANKET  = 40;  // per blanket color
 static constexpr uint32_t STORE_COST_ROOM_THEME = 40;  // per flat-color room theme, matches blanket pricing
 static constexpr uint32_t STORE_COST_STARRY_NIGHT = 200;  // premium: has real art (moon + stars), not just a flat fill
@@ -150,6 +151,9 @@ static constexpr uint16_t C_SNOWMAN_CARROT = 0xFD20;  // snowman nose (orange) �
 static constexpr uint16_t C_PIKACHU        = 0xFFE0;  // pikachu peeking out beside the head (bright yellow)
 static constexpr uint16_t C_PIKACHU_CHEEK  = 0xF800;  // pikachu's red cheek patches — fixed, not accent-colored, since it's the character's signature feature
 static constexpr uint16_t C_PIKACHU_MARK   = 0x0000;  // pikachu ear tips and tail-bolt tip (black)
+static constexpr uint16_t C_EEVEE       = 0xC4AC;  // eevee peeking out beside the head (warm tan/brown fur, ~#c4966a)
+static constexpr uint16_t C_EEVEE_DARK  = 0x8AE7;  // eevee's ear tips and eyes — a noticeably darker brown than the body fur, not near-black (~#8c5d3c)
+static constexpr uint16_t C_EEVEE_LIGHT = 0xEED7;  // eevee's neck ruff, inner ears, and tail tip — light beige, brightened further (~#eeddc0) so it reads as clearly distinct from the C_EEVEE body brown on-device rather than blending in; fixed like pikachu's cheeks, not accent-colored
 static constexpr uint16_t C_PARTY_HAT      = 0x939B;  // party hat cone — same purple as C_BOW_PURPLE
 static constexpr uint16_t C_PARTY_HAT_TRIM = 0xF6CB;  // party hat base band/pompom — same yellow as C_BOW_LEMON_YELLOW
 // Bold, saturated colors rather than pastels — the birthday theme's own room-theme backdrop
@@ -368,6 +372,8 @@ static void drawSnowmanPeeking(int cx, int cy, uint16_t accentColor);
 static void drawSnowmanFull(int cx, int cy, uint16_t accentColor);
 static void drawPikachuPeeking(int cx, int cy, uint16_t accentColor);
 static void drawPikachuFull(int cx, int cy, uint16_t accentColor);
+static void drawEeveePeeking(int cx, int cy, uint16_t accentColor);
+static void drawEeveeFull(int cx, int cy, uint16_t accentColor);
 static void drawTeddyHeld(int cx, int cy, uint16_t accentColor);
 static void drawBunnyHeld(int cx, int cy, uint16_t accentColor);
 static void drawSquirrelHeld(int cx, int cy, uint16_t accentColor);
@@ -375,6 +381,7 @@ static void drawPenguinHeld(int cx, int cy, uint16_t accentColor);
 static void drawUnicornHeld(int cx, int cy, uint16_t accentColor);
 static void drawSnowmanHeld(int cx, int cy, uint16_t accentColor);
 static void drawPikachuHeld(int cx, int cy, uint16_t accentColor);
+static void drawEeveeHeld(int cx, int cy, uint16_t accentColor);
 static void drawTeddyHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawBunnyHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawSquirrelHeldPeeking(int cx, int cy, uint16_t accentColor);
@@ -382,6 +389,7 @@ static void drawPenguinHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawUnicornHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawSnowmanHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawPikachuHeldPeeking(int cx, int cy, uint16_t accentColor);
+static void drawEeveeHeldPeeking(int cx, int cy, uint16_t accentColor);
 
 // Stuffy catalog — same purchase/equip model as blanket colors, so more stuffies can be
 // added later without changing the store/dressing-room plumbing. `id` is the stable
@@ -415,6 +423,7 @@ static constexpr Stuffy STUFFIES[] = {
     {"unicorn",  "White Unicorn", STORE_COST_UNICORN, drawUnicornPeeking,  drawUnicornFull,  drawUnicornHeld, drawUnicornHeldPeeking},
     {"snowman",  "Snowman",      STORE_COST_SNOWMAN,  drawSnowmanPeeking,  drawSnowmanFull,  drawSnowmanHeld, drawSnowmanHeldPeeking},
     {"pikachu",  "Pikachu",      STORE_COST_PIKACHU,  drawPikachuPeeking,  drawPikachuFull,  drawPikachuHeld, drawPikachuHeldPeeking},
+    {"eevee",    "Eevee",        STORE_COST_EEVEE,    drawEeveePeeking,    drawEeveeFull,    drawEeveeHeld,   drawEeveeHeldPeeking},
 };
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
 static_assert(STUFFY_COUNT <= 16, "ownedStuffies bitmask is uint16_t");
@@ -1496,6 +1505,100 @@ static void drawPikachuHeldPeeking(int cx, int cy, uint16_t accentColor) {
     tft.fillTriangle(bx - 13, by + 5, bx - 20, by - 3, bx - 14, by - 8, C_PIKACHU);      // bit of tail poking over the shoulder
     tft.fillTriangle(bx - 16, by - 5, bx - 20, by - 3, bx - 14, by - 8, C_PIKACHU_MARK); // dark tip
     drawPikachuHead(bx, by, accentColor);
+}
+
+// Shared ear/head/ruff/eyes/nose art reused by both eevee variants (DIY-113). Scaled to
+// match Pikachu's proportions (10px head) rather than the smaller teddy/bunny/squirrel
+// scale. Ears are large and pointed with a dark-brown outer tip and cream inner sliver near
+// the base (fox-like, per reference — not Pikachu's plain black-tipped ear), and the cream
+// neck ruff is a wide fluffy collar (several overlapping circles), not a small chest patch —
+// both fixed to C_EEVEE_DARK/C_EEVEE_CREAM, pikachu-cheeks-style, since they're breed-defining
+// traits, not customizable — so unlike drawTeddyHead()/drawPikachuHead() this helper takes no
+// accent parameter; the accent color is applied only to the body belly patch in the full-body
+// poses below. Eyes are bigger/rounder than the other stuffies' single-pixel dots, matching
+// Eevee's big-eyed reference look.
+static void drawEeveeHead(int bx, int by) {
+    tft.fillTriangle(bx - 13, by - 6, bx - 3, by - 6, bx - 9, by - 28, C_EEVEE);        // left ear
+    tft.fillTriangle(bx - 10, by - 19, bx - 6, by - 19, bx - 9, by - 28, C_EEVEE_DARK); // left ear darker-brown tip
+    tft.fillTriangle(bx - 9,  by - 8,  bx - 5, by - 8,  bx - 7, by - 16, C_EEVEE_LIGHT); // left ear inner
+    tft.fillTriangle(bx + 3,  by - 6, bx + 13, by - 6, bx + 9, by - 28, C_EEVEE);       // right ear
+    tft.fillTriangle(bx + 6,  by - 19, bx + 10, by - 19, bx + 9, by - 28, C_EEVEE_DARK); // right ear darker-brown tip
+    tft.fillTriangle(bx + 5,  by - 8,  bx + 9, by - 8,  bx + 7, by - 16, C_EEVEE_LIGHT); // right ear inner
+    tft.fillCircle(bx,      by,      10, C_EEVEE);        // head
+    // Neck ruff — a U-shaped collar sitting below the jawline, dipping lowest at the center,
+    // rather than a solid blob against the chin — keeps it from reading as a beard covering
+    // the muzzle. Drawn before the face features below, which sit on top of/above it.
+    tft.fillCircle(bx - 9, by + 9,  4, C_EEVEE_LIGHT);  // neck ruff, left jaw
+    tft.fillCircle(bx + 9, by + 9,  4, C_EEVEE_LIGHT);  // neck ruff, right jaw
+    tft.fillCircle(bx - 4, by + 12, 4, C_EEVEE_LIGHT);  // neck ruff, left dip connector
+    tft.fillCircle(bx + 4, by + 12, 4, C_EEVEE_LIGHT);  // neck ruff, right dip connector
+    tft.fillCircle(bx,     by + 15, 5, C_EEVEE_LIGHT);  // neck ruff, lowest center point
+    // Face — eyes, nose, and a small smile on the muzzle, clearly above the ruff.
+    tft.fillCircle(bx - 4, by - 2, 2, C_EEVEE_DARK);   // left eye (brown, big and round)
+    tft.fillCircle(bx + 4, by - 2, 2, C_EEVEE_DARK);   // right eye (brown, big and round)
+    tft.fillCircle(bx,     by + 3, 1, C_DARK);         // nose
+    tft.drawLine(bx - 2, by + 5, bx,     by + 6, C_DARK);  // mouth, left half of smile
+    tft.drawLine(bx,     by + 6, bx + 2, by + 5, C_DARK);  // mouth, right half of smile
+}
+
+// Tapered fox-tail shape shared by the full-body eevee poses below — a 3-triangle strip
+// (base outer/inner, a shared mid edge, then a single triangle collapsing to a point) rather
+// than pikachu's zigzag-bolt geometry, which left the light-beige tip as a near-degenerate
+// sliver (barely visible) not reliably joined to the brown segment (a visible gap at the
+// bend, from the two pieces only sharing a single vertex rather than a full edge). Here the
+// beige tip triangle shares its entire base edge (O1-I1) with the brown trapezoid's last
+// triangle, guaranteeing no gap, and tapers from that full-width edge down to a single point,
+// giving the tip real visible area instead of a sliver. `dir` is +1 for the left-slot poses
+// (tail kinks rightward, over the near shoulder) and -1 for the right-arm slot.
+static void drawEeveeTail(int bx, int by, int dir) {
+    tft.fillTriangle(bx + dir * 11, by + 20, bx + dir * 6,  by + 16, bx + dir * 20, by + 10, C_EEVEE);       // tail base, outer half
+    tft.fillTriangle(bx + dir * 6,  by + 16, bx + dir * 20, by + 10, bx + dir * 14, by + 7,  C_EEVEE);       // tail base, inner half — shares the O1-I1 edge below with the tip
+    tft.fillTriangle(bx + dir * 20, by + 10, bx + dir * 14, by + 7,  bx + dir * 23, by - 6,  C_EEVEE_LIGHT); // tapered light-beige tip, joined along the full O1-I1 edge
+}
+
+// Eevee peeking out beside the head, tucked into the blanket's top edge — only reads
+// correctly when the blanket is also owned to tuck behind. A bit of the bushy tail pokes
+// over the shoulder, matching drawSquirrelPeeking()'s/drawPikachuPeeking()'s partial-tail
+// treatment.
+static void drawEeveePeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 40, by = cy - 6;
+    tft.fillTriangle(bx + 13, by + 3, bx + 9,  by,     bx + 19, by - 5,  C_EEVEE);       // bit of tail poking over the shoulder
+    tft.fillTriangle(bx + 9,  by,     bx + 19, by - 5,  bx + 22, by - 10, C_EEVEE_LIGHT); // tapered light-beige tip, joined along the shared edge above
+    drawEeveeHead(bx, by);
+}
+
+// Full-body eevee sitting beside the cat — used when eevee is owned without the blanket,
+// since there's no blanket edge to tuck a lone head behind. No belly patch — unlike the
+// other stuffies, Eevee's real silhouette has no separate lighter patch on the stomach, so
+// the body is a plain, uninterrupted fur color (accentColor goes unused here).
+static void drawEeveeFull(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 38, by = cy - 8;
+    drawEeveeTail(bx, by, 1);
+    drawEeveeHead(bx, by);
+    tft.fillRoundRect(bx - 10, by + 8, 20, 30, 10, C_EEVEE);  // body
+    tft.fillCircle(bx - 6, by + 39, 5, C_EEVEE);              // left foot
+    tft.fillCircle(bx + 6, by + 39, 5, C_EEVEE);              // right foot
+}
+
+// Right-arm slot pose (DIY-64) — an exact mirror of drawEeveeFull(), with the tail's `dir`
+// flipped (see drawEeveeTail()) so it still pokes toward the cat's body on this side.
+static void drawEeveeHeld(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 38, by = cy - 8;
+    drawEeveeTail(bx, by, -1);
+    drawEeveeHead(bx, by);
+    tft.fillRoundRect(bx - 10, by + 8, 20, 30, 10, C_EEVEE);  // body
+    tft.fillCircle(bx - 6, by + 39, 5, C_EEVEE);              // left foot
+    tft.fillCircle(bx + 6, by + 39, 5, C_EEVEE);              // right foot
+}
+
+// Night-only right-arm variant (DIY-64) — see drawTeddyHeldPeeking() for rationale. Tail bit
+// mirrored to poke toward the body (leftward) rather than drawEeveePeeking()'s rightward poke,
+// keeping the same "over the near shoulder" silhouette on this side.
+static void drawEeveeHeldPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 40, by = cy - 6;
+    tft.fillTriangle(bx - 13, by + 3, bx - 9,  by,     bx - 19, by - 5,  C_EEVEE);       // bit of tail poking over the shoulder
+    tft.fillTriangle(bx - 9,  by,     bx - 19, by - 5,  bx - 22, by - 10, C_EEVEE_LIGHT); // tapered light-beige tip, joined along the shared edge above
+    drawEeveeHead(bx, by);
 }
 
 // Deeply-closed, sleepy eyes for the sleep-window peek — thinner and gently curled at
