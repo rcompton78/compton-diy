@@ -1507,16 +1507,17 @@ static void drawPikachuHeldPeeking(int cx, int cy, uint16_t accentColor) {
     drawPikachuHead(bx, by, accentColor);
 }
 
-// Shared ear/head/ruff/eyes/nose art reused by both eevee variants (DIY-113). Scaled to
-// match Pikachu's proportions (10px head) rather than the smaller teddy/bunny/squirrel
-// scale. Ears are large and pointed with a dark-brown outer tip and cream inner sliver near
-// the base (fox-like, per reference — not Pikachu's plain black-tipped ear), and the cream
-// neck ruff is a wide fluffy collar (several overlapping circles), not a small chest patch —
-// both fixed to C_EEVEE_DARK/C_EEVEE_CREAM, pikachu-cheeks-style, since they're breed-defining
-// traits, not customizable — so unlike drawTeddyHead()/drawPikachuHead() this helper takes no
-// accent parameter; the accent color is applied only to the body belly patch in the full-body
-// poses below. Eyes are bigger/rounder than the other stuffies' single-pixel dots, matching
-// Eevee's big-eyed reference look.
+// Shared ear/head/ruff/face art reused by both eevee variants (DIY-113). Scaled to match
+// Pikachu's proportions (10px head) rather than the smaller teddy/bunny/squirrel scale. Ears
+// are large and pointed with a darker-brown outer tip and light-beige inner sliver near the
+// base (fox-like, per reference — not Pikachu's plain black-tipped ear), and the light-beige
+// neck ruff is a wide U-shaped collar below the jaw (several overlapping circles), not a
+// small chest patch. Both C_EEVEE_DARK/C_EEVEE_LIGHT are fixed, pikachu-cheeks-style, since
+// they're breed-defining traits, not customizable — so unlike drawTeddyHead()/
+// drawPikachuHead() this helper takes no accent parameter, and Eevee's full-body poses have
+// no accent-colored belly patch at all (see drawEeveeFull()). Eyes are bigger/rounder than
+// the other stuffies' single-pixel dots and brown rather than black, matching Eevee's
+// reference look; a small smile is added below the nose, unlike any other stuffy.
 static void drawEeveeHead(int bx, int by) {
     tft.fillTriangle(bx - 13, by - 6, bx - 3, by - 6, bx - 9, by - 28, C_EEVEE);        // left ear
     tft.fillTriangle(bx - 10, by - 19, bx - 6, by - 19, bx - 9, by - 28, C_EEVEE_DARK); // left ear darker-brown tip
