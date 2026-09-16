@@ -1571,14 +1571,18 @@ static void drawEeveePeeking(int cx, int cy, uint16_t accentColor) {
 // Full-body eevee sitting beside the cat — used when eevee is owned without the blanket,
 // since there's no blanket edge to tuck a lone head behind. No belly patch — unlike the
 // other stuffies, Eevee's real silhouette has no separate lighter patch on the stomach, so
-// the body is a plain, uninterrupted fur color (accentColor goes unused here).
+// the body is a plain, uninterrupted fur color (accentColor goes unused here). Body/feet are
+// drawn *before* the head so the head's neck ruff isn't overpainted — the body's corner
+// radius (10) is half its width, so its top is a full semicircle that would otherwise cover
+// most of the ruff. Drawing it first still leaves no gap, since the head circle's bottom
+// (by+10) overlaps the body dome's apex (by+8).
 static void drawEeveeFull(int cx, int cy, uint16_t accentColor) {
     int bx = cx - 38, by = cy - 8;
     drawEeveeTail(bx, by, 1);
-    drawEeveeHead(bx, by);
     tft.fillRoundRect(bx - 10, by + 8, 20, 30, 10, C_EEVEE);  // body
     tft.fillCircle(bx - 6, by + 39, 5, C_EEVEE);              // left foot
     tft.fillCircle(bx + 6, by + 39, 5, C_EEVEE);              // right foot
+    drawEeveeHead(bx, by);
 }
 
 // Right-arm slot pose (DIY-64) — an exact mirror of drawEeveeFull(), with the tail's `dir`
@@ -1586,10 +1590,10 @@ static void drawEeveeFull(int cx, int cy, uint16_t accentColor) {
 static void drawEeveeHeld(int cx, int cy, uint16_t accentColor) {
     int bx = cx + 38, by = cy - 8;
     drawEeveeTail(bx, by, -1);
-    drawEeveeHead(bx, by);
     tft.fillRoundRect(bx - 10, by + 8, 20, 30, 10, C_EEVEE);  // body
     tft.fillCircle(bx - 6, by + 39, 5, C_EEVEE);              // left foot
     tft.fillCircle(bx + 6, by + 39, 5, C_EEVEE);              // right foot
+    drawEeveeHead(bx, by);
 }
 
 // Night-only right-arm variant (DIY-64) — see drawTeddyHeldPeeking() for rationale. Tail bit
