@@ -152,8 +152,9 @@ static constexpr uint16_t C_PIKACHU        = 0xFFE0;  // pikachu peeking out bes
 static constexpr uint16_t C_PIKACHU_CHEEK  = 0xF800;  // pikachu's red cheek patches — fixed, not accent-colored, since it's the character's signature feature
 static constexpr uint16_t C_PIKACHU_MARK   = 0x0000;  // pikachu ear tips and tail-bolt tip (black)
 static constexpr uint16_t C_EEVEE       = 0xC4AC;  // eevee peeking out beside the head (warm tan/brown fur, ~#c4966a)
-static constexpr uint16_t C_EEVEE_DARK  = 0x8AE7;  // eevee's ear tips and eyes — a noticeably darker brown than the body fur, not near-black (~#8c5d3c)
+static constexpr uint16_t C_EEVEE_DARK  = 0x8AE7;  // eevee's ear tips — a noticeably darker brown than the body fur (~#8c5d3c)
 static constexpr uint16_t C_EEVEE_LIGHT = 0xEED7;  // eevee's neck ruff, inner ears, and tail tip — light beige, brightened further (~#eeddc0) so it reads as clearly distinct from the C_EEVEE body brown on-device rather than blending in; fixed like pikachu's cheeks, not accent-colored
+static constexpr uint16_t C_EEVEE_BLACK = 0x0000;  // eevee's eyes, nose, and mouth (COM-266) — pure black like C_PIKACHU_MARK, distinct from the C_EEVEE_DARK ear-tip brown and from the shared charcoal C_DARK used for other stuffies' faces
 static constexpr uint16_t C_PARTY_HAT      = 0x939B;  // party hat cone — same purple as C_BOW_PURPLE
 static constexpr uint16_t C_PARTY_HAT_TRIM = 0xF6CB;  // party hat base band/pompom — same yellow as C_BOW_LEMON_YELLOW
 // Bold, saturated colors rather than pastels — the birthday theme's own room-theme backdrop
@@ -1516,8 +1517,8 @@ static void drawPikachuHeldPeeking(int cx, int cy, uint16_t accentColor) {
 // they're breed-defining traits, not customizable — so unlike drawTeddyHead()/
 // drawPikachuHead() this helper takes no accent parameter, and Eevee's full-body poses have
 // no accent-colored belly patch at all (see drawEeveeFull()). Eyes are bigger/rounder than
-// the other stuffies' single-pixel dots and brown rather than black, matching Eevee's
-// reference look; a small smile is added below the nose, unlike any other stuffy.
+// the other stuffies' single-pixel dots; eyes, nose, and mouth are all black (COM-266),
+// distinct from the ear-tip brown; a small smile is added below the nose, unlike any other stuffy.
 static void drawEeveeHead(int bx, int by) {
     tft.fillTriangle(bx - 13, by - 6, bx - 3, by - 6, bx - 9, by - 28, C_EEVEE);        // left ear
     tft.fillTriangle(bx - 10, by - 19, bx - 6, by - 19, bx - 9, by - 28, C_EEVEE_DARK); // left ear darker-brown tip
@@ -1535,11 +1536,11 @@ static void drawEeveeHead(int bx, int by) {
     tft.fillCircle(bx + 4, by + 12, 4, C_EEVEE_LIGHT);  // neck ruff, right dip connector
     tft.fillCircle(bx,     by + 15, 5, C_EEVEE_LIGHT);  // neck ruff, lowest center point
     // Face — eyes, nose, and a small smile on the muzzle, clearly above the ruff.
-    tft.fillCircle(bx - 4, by - 2, 2, C_EEVEE_DARK);   // left eye (brown, big and round)
-    tft.fillCircle(bx + 4, by - 2, 2, C_EEVEE_DARK);   // right eye (brown, big and round)
-    tft.fillCircle(bx,     by + 3, 1, C_DARK);         // nose
-    tft.drawLine(bx - 2, by + 5, bx,     by + 6, C_DARK);  // mouth, left half of smile
-    tft.drawLine(bx,     by + 6, bx + 2, by + 5, C_DARK);  // mouth, right half of smile
+    tft.fillCircle(bx - 4, by - 2, 2, C_EEVEE_BLACK);   // left eye (black, big and round)
+    tft.fillCircle(bx + 4, by - 2, 2, C_EEVEE_BLACK);   // right eye (black, big and round)
+    tft.fillCircle(bx,     by + 3, 1, C_EEVEE_BLACK);   // nose
+    tft.drawLine(bx - 2, by + 5, bx,     by + 6, C_EEVEE_BLACK);  // mouth, left half of smile
+    tft.drawLine(bx,     by + 6, bx + 2, by + 5, C_EEVEE_BLACK);  // mouth, right half of smile
 }
 
 // Tapered fox-tail shape shared by the full-body eevee poses below — a 3-triangle strip
