@@ -85,7 +85,20 @@ update:
     update_interval: 6h
     on_update_available:
       then:
-        - update.perform: firmware_update
+        # firmware_version is never substituted with the real RELEASE_VERSION
+        # at build time (generate_release.py's --version only feeds
+        # manifest.json, not the compiled binary), so every "dev" build
+        # always mismatches the published manifest version and would
+        # otherwise auto-install on every boot forever, including a fresh
+        # ota.perform right after the one that just ran (since the OTA'd
+        # binary is also always "dev"). Skip auto-install entirely for
+        # unversioned/local builds -- matches libs/ota-update-client's
+        # existing currentVersion=="dev" skip for the same reason.
+        - if:
+            condition:
+              lambda: 'return strcmp("${firmware_version}", "dev") != 0;'
+            then:
+              - update.perform: firmware_update
 
 text_sensor:
   - platform: template

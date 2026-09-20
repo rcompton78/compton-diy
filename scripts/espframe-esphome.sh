@@ -12,8 +12,21 @@ VENV_ESPHOME="$REPO_ROOT/apps/espframe/.venv/bin/esphome"
 # versions again.
 export PLATFORMIO_CORE_DIR="${PLATFORMIO_CORE_DIR:-$REPO_ROOT/apps/espframe/.platformio-core}"
 
+# ESPHome equivalent of scripts/pio.sh's `-D NAME="${sysenv.NAME}"` build-flag
+# pattern: threads RELEASE_VERSION into the compiled firmware's own
+# `firmware_version` substitution (esphome.project.version) via ESPHome's
+# top-level `-s`/--substitution flag, which must precede the subcommand. When
+# unset (local dev builds), each project's yaml keeps defaulting
+# firmware_version to "dev" -- unlike pio.sh's exported-var pattern, there's
+# no .env override here since RELEASE_VERSION is only ever meant to carry a
+# real value in CI release builds.
+SUBSTITUTION_ARGS=()
+if [ -n "${RELEASE_VERSION:-}" ]; then
+    SUBSTITUTION_ARGS=(-s firmware_version "$RELEASE_VERSION")
+fi
+
 if [ -x "$VENV_ESPHOME" ]; then
-    exec "$VENV_ESPHOME" "$@"
+    exec "$VENV_ESPHOME" "${SUBSTITUTION_ARGS[@]}" "$@"
 else
-    exec esphome "$@"
+    exec esphome "${SUBSTITUTION_ARGS[@]}" "$@"
 fi
