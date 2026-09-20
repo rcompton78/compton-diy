@@ -33,7 +33,7 @@
       },
       "dependsOn": ["generate"],
       "cache": true,
-      "inputs": ["default", { "env": "RELEASE_VERSION" }],
+      "inputs": ["default", "{workspaceRoot}/scripts/espframe-esphome.sh", { "env": "RELEASE_VERSION" }],
       "outputs": ["{projectRoot}/builds/.esphome/build/immich-frame-freenove-s3"]
     },
     "flash-freenove-s3": {
@@ -59,7 +59,7 @@
       },
       "dependsOn": ["generate"],
       "cache": true,
-      "inputs": ["default", { "env": "RELEASE_VERSION" }],
+      "inputs": ["default", "{workspaceRoot}/scripts/espframe-esphome.sh", { "env": "RELEASE_VERSION" }],
       "outputs": ["{projectRoot}/builds/.esphome/build/immich-frame-10inch"]
     },
     "flash-guition-esp32-p4-jc8012p4a1": {
@@ -85,7 +85,7 @@
       },
       "dependsOn": ["generate"],
       "cache": true,
-      "inputs": ["default", { "env": "RELEASE_VERSION" }],
+      "inputs": ["default", "{workspaceRoot}/scripts/espframe-esphome.sh", { "env": "RELEASE_VERSION" }],
       "outputs": ["{projectRoot}/builds/.esphome/build/immich-frame-waveshare-s3"]
     },
     "flash-waveshare-esp32-s3-touch-lcd-7": {
