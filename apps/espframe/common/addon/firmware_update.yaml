@@ -116,9 +116,14 @@ update:
     update_interval: never
     on_update_available:
       then:
+        # firmware_version defaults to "dev" unless scripts/espframe-esphome.sh
+        # threads a real RELEASE_VERSION in via -s (see COM-279) -- an
+        # unversioned/local build always mismatches the published manifest, so
+        # skip auto-install entirely for one rather than looping forever if
+        # auto-update is left on against a real manifest during dev testing.
         - if:
             condition:
-              lambda: 'return id(auto_update_switch).state && !id(manual_check_only);'
+              lambda: 'return strcmp("${firmware_version}", "dev") != 0 && id(auto_update_switch).state && !id(manual_check_only);'
             then:
               - lambda: |-
                   id(firmware_update_reboot_pending) = true;

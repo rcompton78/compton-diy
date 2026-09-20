@@ -238,6 +238,49 @@ touch are two separate unsolved problems; touch is done, display is not.
   living in `docs/diy-102-bringup/`. That directory is scratch/diagnostic
   only.
 
+## Update, 2026-09-20
+
+Picked the board back up (still `/dev/ttyUSB0`) without a seller reply yet.
+Two findings, one useful, one a repeat dead end:
+
+- **Fixed a real bug in `display-touch-test.yaml` itself**: the sweep was
+  boot-looping on candidate 1 (CS=GPIO15) every ~5s and never reaching any
+  other candidate. Cause: the per-candidate `delay(5000)` between fills
+  blocks the main loop task for the full 5s without feeding the watchdog,
+  which trips ESP-IDF's 5s task watchdog and reboots. Fixed by chunking it
+  into `50x delay(100) + App.feed_wdt()`. With the fix, all 9 candidates
+  now run to completion in one pass (confirmed via serial log, ~5.7s/each,
+  ~52s total) instead of crash-looping on candidate 1 forever.
+- **Re-ran the full sweep twice** (via hardware reset and via
+  `esptool.py --after hard_reset chip_id`, which resets without
+  reflashing). Both times, the screen was black for a while, then at some
+  point flipped to white-with-a-black-top-strip and **stayed that way**
+  for the rest of the sweep (rather than changing per-candidate). User's
+  best estimate placed the flip ~30-40s into the sweep, i.e. around
+  candidate 6 (GPIO17) or 7 (GPIO16).
+  - **Isolated retest**: flashed two single-candidate builds (just GPIO17,
+    then just GPIO16, each held indefinitely with no other candidate to
+    move to). **Neither reproduced the flip in isolation** — both stayed
+    solid black.
+  - **Conclusion: this is the same non-reproducible transient the
+    "First run"/"Re-ran slower" entries above already documented**, not a
+    real CS match — don't chase it further, and don't assume the flip
+    means GPIO17 or GPIO16 (or any swept candidate) is correct. Most
+    likely a reset/brownout artifact from repeated hardware-reset toggling
+    across a full sweep pass, not present when only one candidate (one
+    reset pulse) runs.
+- `cs_candidates`/`num_candidates` in `display-touch-test.yaml` have been
+  restored to the full 9-candidate sweep (`{15, 5, 27, 26, 25, 17, 16, 22,
+  19}`) — it was temporarily narrowed to single candidates for the
+  isolated retest above.
+- Net effect: still no confirmed CS pin. The watchdog fix means the sweep
+  tool itself is now usable for future attempts, but blind sweeping has
+  now failed to produce a repeatable signal on two separate occasions.
+  **Recommend not resuming blind GPIO sweeping again** — check for a
+  seller reply first, or get a real ground-truth pin via multimeter
+  continuity trace from the ESP32 module's labeled pins to the display
+  ribbon connector (per "How to continue" #1 below).
+
 ## How to continue
 
 **Session paused pending a reply from the AliExpress seller** (message

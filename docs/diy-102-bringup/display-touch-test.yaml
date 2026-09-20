@@ -109,8 +109,14 @@ esphome:
             digitalWrite(cs, HIGH);
 
             ESP_LOGI("sweep", "[%d/%d] Filled with CS=GPIO%d", idx + 1, num_candidates, cs);
-            App.feed_wdt();
-            delay(5000);
+            // A single delay(5000) blocks the main loop task for the full
+            // 5s without feeding the watchdog, tripping ESP-IDF's 5s task
+            // watchdog and rebooting before ever reaching later candidates.
+            // Chunk it into short slices with feed_wdt() between each.
+            for (int w = 0; w < 50; w++) {
+              delay(100);
+              App.feed_wdt();
+            }
           }
           ESP_LOGI("sweep", "Sweep complete -- note which GPIO (if any) showed white");
 
