@@ -6,6 +6,7 @@
 - **Remote:** git@github.com:rcompton78/compton-diy.git
 - **Base branch:** master
 - **Branch prefix:** feature/
+- **Tracker:** linear
 
 ## Package Manager
 
@@ -15,6 +16,14 @@
 
 - **Cloud ID:** 7af7e2fb-5718-4894-983e-8b4b396a52e8
 - **Default project key:** DIY
+
+## Linear
+
+- **Team key:** COM
+- **Team ID:** f1e10efe-5164-4d71-a8b2-b16d93f1447f
+- **Default label:** compton-diy
+- **Area mappings:**
+  - cyd-clock: COM / Cyd Clock
 
 ## Commands
 
