@@ -24,6 +24,7 @@
 - **Default label:** compton-diy
 - **Area mappings:**
   - cyd-clock: COM / Cyd Clock
+  - tamogatchi-plus: COM / Tamogatchi+
 
 ## Commands
 
