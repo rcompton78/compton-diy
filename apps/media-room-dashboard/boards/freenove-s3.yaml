@@ -36,6 +36,18 @@
 # setup() runs) stand in for it. interrupt_pin is also left unset (polling
 # mode) since it's optional and this isolates the fix to the one thing that
 # was actually broken.
+#
+# GPIO17 (touch INT) doubles as the deep-sleep wake source below (COM-214,
+# battery-power option 1: idle-timeout deep sleep) -- this is independent of
+# the interrupt_pin/polling decision above: ext1 wake is a raw RTC-domain
+# level watch on the pin, unrelated to whether ESPHome's touchscreen driver
+# is using it for interrupt-driven reads. It works because the FT6336U's
+# INT pin still pulses low on every touch (~1ms pulses while held) whenever
+# the chip's G_MODE register (0xA4) is in "trigger" mode, regardless of
+# ESPHome's interrupt_pin setting -- see the on_boot lambda below, which
+# writes that register explicitly rather than relying on it defaulting to
+# trigger mode out of reset (true for this chip family per its datasheet,
+# but not worth depending on across chip revisions/batches).
 # =============================================================================
 
 esp32:
@@ -55,6 +67,21 @@ esphome:
         - output.set_level:
             id: backlight_output
             level: 100%
+        - lambda: |-
+            id(tft_touch).write_byte(0xA4, 0x01);  // G_MODE = trigger, see note above
+
+# Idle-timeout deep sleep (COM-214 option 1): entered from common/dashboard.yaml
+# via LVGL's own on_idle trigger, woken by a touch pulling GPIO17 (FT6336U
+# INT) low. No sleep_duration/run_duration is set here -- this component only
+# provides the wakeup-source config; deep_sleep.enter is called explicitly by
+# app logic, never on a timer of its own. ANY_LOW (not ALL_LOW) because ALL_LOW
+# is ESP32-classic-only; ESP32-S3 uses ANY_LOW/ANY_HIGH.
+deep_sleep:
+  id: deep_sleep_1
+  esp32_ext1_wakeup:
+    pins:
+      - GPIO17
+    mode: ANY_LOW
 
 output:
   - platform: ledc
