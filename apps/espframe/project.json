@@ -23,7 +23,8 @@
       "options": {
         "command": "scripts/espframe-build-devices.sh",
         "cwd": "."
-      }
+      },
+      "parallelism": false
     },
     "build-freenove-s3": {
       "executor": "nx:run-commands",
@@ -33,6 +34,7 @@
       },
       "dependsOn": ["generate"],
       "cache": true,
+      "parallelism": false,
       "inputs": ["default", "{workspaceRoot}/scripts/espframe-esphome.sh", { "env": "RELEASE_VERSION" }],
       "outputs": ["{projectRoot}/builds/.esphome/build/immich-frame-freenove-s3"]
     },
@@ -59,6 +61,7 @@
       },
       "dependsOn": ["generate"],
       "cache": true,
+      "parallelism": false,
       "inputs": ["default", "{workspaceRoot}/scripts/espframe-esphome.sh", { "env": "RELEASE_VERSION" }],
       "outputs": ["{projectRoot}/builds/.esphome/build/immich-frame-10inch"]
     },
@@ -85,6 +88,7 @@
       },
       "dependsOn": ["generate"],
       "cache": true,
+      "parallelism": false,
       "inputs": ["default", "{workspaceRoot}/scripts/espframe-esphome.sh", { "env": "RELEASE_VERSION" }],
       "outputs": ["{projectRoot}/builds/.esphome/build/immich-frame-waveshare-s3"]
     },
