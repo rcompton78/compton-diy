@@ -8,8 +8,8 @@
 
 #define DEVICE_NAME "Tamagotchi+"
 
-// Display (portrait, USB at the bottom). The panel has rounded corners, so keep
-// anything important at least ~20px in from each corner.
+// Display (portrait, with the USB-C port on the left edge of the screen). The panel has
+// rounded corners, so keep anything important at least ~20px in from each corner.
 #define SCREEN_WIDTH  240
 #define SCREEN_HEIGHT 280
 
