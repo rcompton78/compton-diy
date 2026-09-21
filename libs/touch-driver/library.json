@@ -2,7 +2,7 @@
   "name": "touch-driver",
   "version": "1.0.0",
   "description": "Touch controller abstraction for ESP32 Arduino projects, with swappable backends per board",
-  "keywords": ["touch", "esp32", "xpt2046", "ft6336u"],
+  "keywords": ["touch", "esp32", "xpt2046", "ft6336u", "cst816"],
   "frameworks": ["arduino"],
   "platforms": ["espressif32"],
   "dependencies": {

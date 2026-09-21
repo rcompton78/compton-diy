@@ -1,6 +1,6 @@
 #include "Xpt2046Touch.h"
 
-#if !defined(BOARD_FREENOVE_S3)
+#if defined(BOARD_CYD)
 
 Xpt2046Touch::Xpt2046Touch(uint8_t csPin, uint8_t irqPin, uint8_t clkPin, uint8_t misoPin, uint8_t mosiPin,
                            int screenWidth, int screenHeight,
@@ -27,4 +27,4 @@ bool Xpt2046Touch::read(TouchPoint& out) {
     return true;
 }
 
-#endif  // !BOARD_FREENOVE_S3
+#endif  // BOARD_CYD

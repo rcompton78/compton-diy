@@ -1,5 +1,5 @@
 #pragma once
-#if !defined(BOARD_FREENOVE_S3)
+#if defined(BOARD_CYD)
 #include <SPI.h>
 #include <XPT2046_Touchscreen.h>
 
@@ -25,4 +25,4 @@ private:
     SPIClass _spi;
     XPT2046_Touchscreen _touch;
 };
-#endif  // !BOARD_FREENOVE_S3
+#endif  // BOARD_CYD
