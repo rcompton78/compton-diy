@@ -51,6 +51,8 @@ Currently documented hardware:
 | 10" Guition ESP32-P4 panel (`JC8012P4A1`) | [AliExpress](https://s.click.aliexpress.com/e/_c4LLo3rH) |
 | 10" printable stand | [MakerWorld](https://makerworld.com/en/models/2490049-guition-p4-10inch-screen-stand#profileId-2736046) |
 
+The same board is also sold as the **"10.1-inch ESP32P4 development board supports Xiaozhi ESP32 C6 capacitive touch screen"** ([AliExpress](https://www.aliexpress.com/item/1005009147577522.html)), panel `JC8012P4A1C_I_W_Y`. It has the same JD9365 MIPI-DSI panel, GSL3680 touch, ESP32-C6 WiFi co-processor and pinout, so use the `JC8012P4A1` firmware. Its ESP32-C6 WiFi module has no built-in antenna, so make sure the included external antenna is clipped onto the C6 module's U.FL connector — without it, WiFi signal is too weak to connect.
+
 ## Getting Started
 
 The easiest way to install Espframe is with the web installer. You do not need to install developer tools or build firmware yourself.
