@@ -23,9 +23,10 @@ the AliExpress board's pinout is known) doesn't require touching the button
 UI or HA wiring:
 
 - `boards/<name>.yaml` — hardware only: chip/PSRAM, backlight, SPI display
-  + touch controller + pins. Must define `tft_display`, `tft_touch`, and
-  `backlight_output` component ids — nothing else in the app depends on
-  board-specific detail beyond those three ids.
+  + touch controller + pins. Must define `tft_display`, `tft_touch`,
+  `backlight_output`, and `deep_sleep_1` (with its wake source configured)
+  component ids — nothing else in the app depends on board-specific detail
+  beyond those four ids.
 - `common/dashboard.yaml` — everything else: wifi/api/ota, the 6-button LVGL
   UI, and the HA service calls. Board-agnostic.
 - `builds/<name>.yaml` — thin entrypoint combining the two as ESPHome
@@ -35,6 +36,25 @@ To add a board: write `boards/<new-name>.yaml`, copy `builds/freenove-s3.yaml`
 to `builds/<new-name>.yaml` swapping the `board:` package include, then add
 matching `build-<new-name>`/`flash-<new-name>`/`monitor-<new-name>` targets
 to `project.json` (see the `freenove-s3` ones for the pattern).
+
+## Battery power (COM-214)
+
+Testing **option 1** from COM-214: idle-timeout deep sleep. The dashboard
+stays fully awake and instantly responsive during active use — any touch
+resets an idle timer (LVGL's own inactivity tracking) — and only drops into
+deep sleep after `idle_timeout` (5 minutes by default, see the substitution
+in `common/dashboard.yaml`) of no touches. A touch wakes it via ext1 on the
+FT6336U's INT pin (GPIO17, RTC-capable on the ESP32-S3), which is a full
+reboot (WiFi + HA reconnect, a few seconds), not an instant resume — that
+reboot cost is paid once per idle stretch, not per tap. Sleep is skipped
+entirely while the device isn't connected to WiFi, so it won't drop the
+fallback AP mid-setup.
+
+If this doesn't feel good in practice (reboot-on-wake too laggy for a
+"remote control"), COM-214 has two fallback options to try instead:
+backlight-off-only (no reboot, but WiFi/CPU stay on so real battery life is
+closer to "charge nightly"), or true ESP-IDF light sleep (no reboot, real
+power savings, but needs a custom ESPHome component — more effort).
 
 ## Setup
 

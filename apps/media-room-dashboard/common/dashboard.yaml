@@ -7,13 +7,20 @@
 # over the native API (`homeassistant.service`) — no local entities, this
 # device is a remote control, not a sensor.
 #
-# Requires a board package to have already defined `tft_display` (display)
-# and `tft_touch` (touchscreen) — see boards/freenove-s3.yaml.
+# Requires a board package to have already defined `tft_display` (display),
+# `tft_touch` (touchscreen), and `deep_sleep_1` (deep_sleep, with its wake
+# source configured) — see boards/freenove-s3.yaml.
 # =============================================================================
 
 substitutions:
   firmware_version: "dev"
   firmware_manifest_url: "https://rcompton78.github.io/compton-diy/media-room-dashboard/manifest.json"
+  # COM-214 option 1: idle-timeout deep sleep. How long the screen sits
+  # untouched before dropping into deep sleep -- any touch resets this via
+  # LVGL's own inactivity tracking (lv_display_get_inactive_time), so this
+  # only bounds *idle* time, not active-use time. Tune this once you've felt
+  # out the wake latency in practice.
+  idle_timeout: "5min"
 
 esphome:
   project:
@@ -127,6 +134,20 @@ lvgl:
   displays: [tft_display]
   touchscreens: [tft_touch]
   byte_order: big_endian
+  # wifi.connected guards against sleeping mid-setup: idle time here is
+  # measured on THIS device's touchscreen, but during first-time wifi
+  # provisioning the actual activity happens on the user's phone filling out
+  # the captive portal form, not on this screen -- without the guard, a slow
+  # phone-side form fill could outlast idle_timeout and drop the fallback AP
+  # mid-setup.
+  on_idle:
+    - timeout: ${idle_timeout}
+      then:
+        - if:
+            condition:
+              wifi.connected:
+            then:
+              - deep_sleep.enter: deep_sleep_1
   pages:
     - id: setup_page
       bg_color: 0x000000
