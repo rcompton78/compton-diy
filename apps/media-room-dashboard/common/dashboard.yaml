@@ -8,24 +8,26 @@
 # device is a remote control, not a sensor.
 #
 # Requires a board package to have already defined `tft_display` (display),
-# `tft_touch` (touchscreen), and `deep_sleep_1` (deep_sleep, with its wake
-# source configured) — see boards/freenove-s3.yaml. deep_sleep_1 is currently
-# unused (see the COM-214 note below) but left defined on the board so
-# switching back to option 1 doesn't require re-adding it.
+# `tft_touch` (touchscreen), `deep_sleep_1` (deep_sleep, with its wake source
+# configured), and `light_sleep_1`-equivalent automatic light sleep (the
+# light_sleep external component) — see boards/freenove-s3.yaml.
 # =============================================================================
 
 substitutions:
   firmware_version: "dev"
   firmware_manifest_url: "https://rcompton78.github.io/compton-diy/media-room-dashboard/manifest.json"
-  # COM-214 option 2: backlight-off-on-idle (swapped from option 1's
-  # idle-timeout deep sleep -- reboot-on-wake felt too slow for a "remote
-  # control" in testing). CPU/WiFi never sleep, so this doesn't touch
-  # deep_sleep_1; only the backlight turns off after idle_timeout, and back
-  # on instantly on the next touch (see the touchscreen on_touch extend and
-  # lvgl on_idle below). Real battery savings are much smaller than option 1
-  # since WiFi/CPU stay awake the whole time -- this is testing the "feel"
-  # tradeoff, not final-tuning the timeout for battery life yet.
-  idle_timeout: "25s"
+  # COM-214: options 2 and 3 layered as idle tiers off the same LVGL
+  # inactivity clock (lvgl's on_idle trigger below):
+  #  - option 3 (automatic light sleep) runs continuously, no timeout of its
+  #    own -- see boards/freenove-s3.yaml's light_sleep component.
+  #  - option 2 (backlight off) kicks in after idle_timeout: screen goes
+  #    dark, everything else (WiFi/API/light sleep) keeps running, so wake
+  #    is instant, no reboot.
+  # option 1 (deep sleep, a third tier off deep_sleep_timeout) is disabled --
+  # see the on_idle comment below for why. deep_sleep_timeout is left
+  # defined, unused, so re-enabling it later is a one-line change.
+  idle_timeout: "20s"
+  deep_sleep_timeout: "120min"
 
 esphome:
   project:
@@ -133,9 +135,7 @@ text_sensor:
 touchscreen:
   - id: !extend tft_touch
     on_touch:
-      - output.set_level:
-          id: backlight_output
-          level: 100%
+      - output.turn_on: backlight_output
 
 # -----------------------------------------------------------------------------
 # Two LVGL pages, switched by the wifi on_connect/on_disconnect handlers
@@ -157,15 +157,35 @@ lvgl:
   displays: [tft_display]
   touchscreens: [tft_touch]
   byte_order: big_endian
-  # Backlight-off idle (COM-214 option 2). No wifi.connected guard needed
-  # here (unlike option 1's deep-sleep version) -- blanking the backlight
-  # doesn't reboot or drop the fallback AP, so it's harmless even mid-setup.
+  # Tier 2 (deep sleep after deep_sleep_timeout) is DISABLED -- see
+  # deep_sleep_1's comment in boards/freenove-s3.yaml and
+  # light_sleep_component.h. THREE separate fixes attempted and confirmed
+  # NOT to work on-device (each verified via a genuine USB re-enumeration,
+  # not a log/cache artifact): rtc_gpio_pullup_en alone; adding
+  # esp_sleep_pd_config to keep it powered through deep sleep; removing
+  # deep_sleep_1's esp32_ext1_wakeup entirely to eliminate a suspected
+  # conflict with light_sleep's own gpio wakeup registration. All three
+  # still self-wake within seconds of entering deep sleep, no touch
+  # involved. Plain deep sleep alone, before the light_sleep component
+  # existed, was reliable -- so this is specifically a light_sleep +
+  # deep_sleep interaction, root cause still unconfirmed. Needs real
+  # investigation (e.g. known esp_pm-auto-light-sleep +
+  # esp_deep_sleep_start interactions in ESP-IDF's own issue tracker) before
+  # trying a fourth fix blind. Only tier 1 (backlight off) is active below;
+  # light sleep (COM-214 option 3) keeps running regardless, unaffected.
   on_idle:
     - timeout: ${idle_timeout}
       then:
-        - output.set_level:
-            id: backlight_output
-            level: 0%
+        - output.turn_off: backlight_output
+    # Tier 2, disabled -- see the comment above. To re-enable once the root
+    # cause is actually fixed, uncomment this block:
+    # - timeout: ${deep_sleep_timeout}
+    #   then:
+    #     - if:
+    #         condition:
+    #           wifi.connected:
+    #         then:
+    #           - deep_sleep.enter: deep_sleep_1
   pages:
     - id: setup_page
       bg_color: 0x000000

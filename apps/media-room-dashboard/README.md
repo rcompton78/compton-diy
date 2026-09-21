@@ -39,22 +39,27 @@ to `project.json` (see the `freenove-s3` ones for the pattern).
 
 ## Battery power (COM-214)
 
-Testing **option 1** from COM-214: idle-timeout deep sleep. The dashboard
-stays fully awake and instantly responsive during active use — any touch
-resets an idle timer (LVGL's own inactivity tracking) — and only drops into
-deep sleep after `idle_timeout` (5 minutes by default, see the substitution
-in `common/dashboard.yaml`) of no touches. A touch wakes it via ext1 on the
-FT6336U's INT pin (GPIO17, RTC-capable on the ESP32-S3), which is a full
-reboot (WiFi + HA reconnect, a few seconds), not an instant resume — that
-reboot cost is paid once per idle stretch, not per tap. Sleep is skipped
-entirely while the device isn't connected to WiFi, so it won't drop the
-fallback AP mid-setup.
+Two of COM-214's three options are active, layered together:
 
-If this doesn't feel good in practice (reboot-on-wake too laggy for a
-"remote control"), COM-214 has two fallback options to try instead:
-backlight-off-only (no reboot, but WiFi/CPU stay on so real battery life is
-closer to "charge nightly"), or true ESP-IDF light sleep (no reboot, real
-power savings, but needs a custom ESPHome component — more effort).
+- **Automatic light sleep** (option 3, `components/light_sleep/`): ESP-IDF
+  power management drops the CPU/WiFi into light sleep during idle gaps.
+  No reboot and no dropped HA connection, so wake is instant. Requires the
+  backlight to be a plain `gpio` output (light sleep stops LEDC PWM, which
+  flickered the screen) and `CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION` (keeps the
+  USB serial console alive while a host is attached).
+- **Backlight off on idle** (option 2): after `idle_timeout` (20s) with no
+  touches the backlight turns off; the next touch turns it straight back on.
+
+**Deep sleep (option 1) is disabled.** On its own it worked, but a
+120-minute deep-sleep tier on top of light sleep self-wakes within seconds of
+sleeping, with no touch. Three GPIO17 fixes didn't help; details are in the
+commented-out tier in `common/dashboard.yaml` and in
+`components/light_sleep/light_sleep_component.h`. Untested theory: every test
+ran with USB attached, so try again on battery with USB unplugged.
+
+Battery voltage and a rough LiPo percentage come from the board's GPIO9
+divider (`boards/freenove-s3.yaml`). The percentage is only an estimate from
+voltage; a MAX17048 fuel gauge would be more accurate.
 
 ## Setup
 

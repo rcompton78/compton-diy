@@ -37,24 +37,46 @@
 # mode) since it's optional and this isolates the fix to the one thing that
 # was actually broken.
 #
-# GPIO17 (touch INT) doubles as the deep-sleep wake source below (COM-214,
-# battery-power option 1: idle-timeout deep sleep) -- this is independent of
-# the interrupt_pin/polling decision above: ext1 wake is a raw RTC-domain
-# level watch on the pin, unrelated to whether ESPHome's touchscreen driver
-# is using it for interrupt-driven reads. It works because the FT6336U's
-# INT pin still pulses low on every touch (~1ms pulses while held) whenever
-# the chip's G_MODE register (0xA4) is in "trigger" mode, regardless of
-# ESPHome's interrupt_pin setting -- see the on_boot lambda below, which
-# writes that register explicitly rather than relying on it defaulting to
-# trigger mode out of reset (true for this chip family per its datasheet,
-# but not worth depending on across chip revisions/batches).
+# GPIO17 (touch INT) doubles as a wake source for two of COM-214's
+# battery-power prototypes below -- independent of the interrupt_pin/polling
+# decision above: both wake mechanisms are raw hardware-level pin watches,
+# unrelated to whether ESPHome's touchscreen driver is using this pin for
+# interrupt-driven reads. They work because the FT6336U's INT pin still
+# pulses low on every touch (~1ms pulses while held) whenever the chip's
+# G_MODE register (0xA4) is in "trigger" mode, regardless of ESPHome's
+# interrupt_pin setting -- see the on_boot lambda below, which writes that
+# register explicitly rather than relying on it defaulting to trigger mode
+# out of reset (true for this chip family per its datasheet, but not worth
+# depending on across chip revisions/batches).
+#
+# backlight_output is a plain gpio output (on/off only), not ledc/PWM, even
+# though it's never dimmed to anything but 0%/100% either way -- this
+# matters for COM-214 option 3 (see components/light_sleep/): light sleep
+# clock-gates APB, which stops LEDC's PWM waveform generation entirely and
+# showed up as the backlight visibly flickering in testing. A static GPIO
+# level doesn't need a running clock to hold its state, so it isn't affected.
 # =============================================================================
 
 esp32:
   variant: ESP32S3
   flash_size: 16MB
+  # 160MHz (down from the board's default 240MHz) plus the sdkconfig options
+  # below are ESP-IDF's own documented reference config for automatic light
+  # sleep (COM-214 option 3, see components/light_sleep/) --
+  # https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/low-power-mode/low-power-mode-wifi.html
+  # CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION keeps the native USB-Serial/JTAG
+  # console usable while a host is attached (light sleep otherwise gates the
+  # USB PHY clock too and drops the serial connection on every sleep cycle,
+  # per https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/usb-serial-jtag-console.html)
+  # -- dev/debugging aid only, irrelevant once running standalone on battery
+  # with nothing plugged into USB.
+  cpu_frequency: 160MHZ
   framework:
     type: esp-idf
+    sdkconfig_options:
+      CONFIG_PM_ENABLE: "y"
+      CONFIG_FREERTOS_USE_TICKLESS_IDLE: "y"
+      CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION: "y"
 
 psram:
   mode: octal
@@ -64,27 +86,98 @@ esphome:
   on_boot:
     - priority: -100
       then:
-        - output.set_level:
-            id: backlight_output
-            level: 100%
+        - output.turn_on: backlight_output
         - lambda: |-
             id(tft_touch).write_byte(0xA4, 0x01);  // G_MODE = trigger, see note above
 
-# Idle-timeout deep sleep (COM-214 option 1): entered from common/dashboard.yaml
-# via LVGL's own on_idle trigger, woken by a touch pulling GPIO17 (FT6336U
-# INT) low. No sleep_duration/run_duration is set here -- this component only
-# provides the wakeup-source config; deep_sleep.enter is called explicitly by
-# app logic, never on a timer of its own. ANY_LOW (not ALL_LOW) because ALL_LOW
-# is ESP32-classic-only; ESP32-S3 uses ANY_LOW/ANY_HIGH.
+# Idle-timeout deep sleep (COM-214 option 1, currently dormant as a tier --
+# see common/dashboard.yaml). No sleep_duration/run_duration is set here --
+# deep_sleep.enter is called explicitly by app logic, never on a timer of
+# its own.
+#
+# Deliberately NO esp32_ext1_wakeup config here (removed after on-device
+# testing showed repeated spurious wakes within seconds of entering deep
+# sleep, once light_sleep's own gpio_wakeup_enable/esp_sleep_enable_gpio_wakeup
+# was also active on the same GPIO17). ESP-IDF documents
+# esp_sleep_enable_gpio_wakeup() and esp_sleep_enable_ext1_wakeup() as
+# alternatives, not something meant to run together on one pin --
+# https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-reference/system/sleep_modes.html.
+# deep_sleep_1 now relies entirely on the GPIO wake source light_sleep
+# already registers at boot (valid for deep sleep too on an RTC-capable pin
+# like GPIO17, confirmed in the same doc) -- esp_deep_sleep_start() just
+# uses whatever wake sources are currently enabled, so deep_sleep_1 doesn't
+# need to configure its own.
 deep_sleep:
   id: deep_sleep_1
-  esp32_ext1_wakeup:
-    pins:
-      - GPIO17
-    mode: ANY_LOW
+
+# COM-214 option 3: automatic light sleep, additive to option 2's
+# backlight-off-on-idle logic in common/dashboard.yaml (not a replacement --
+# that logic still turns the backlight off/on; this separately lets the
+# CPU/WiFi themselves drop into low-power light sleep during idle gaps,
+# something backlight control alone can't do). See
+# components/light_sleep/light_sleep_component.h for what this does and its
+# current caveats -- first attempt flickered the backlight and dropped the
+# USB serial connection, both addressed above (gpio backlight output,
+# CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION).
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [light_sleep]
+
+light_sleep:
+  wakeup_pin: 17
+
+# Battery voltage/percentage (COM-214): this exact board (Freenove ESP32-S3
+# CYD 2.8", product fnk0104) has a built-in BAT JST connector wired through a
+# factory 2:1 voltage divider into GPIO9, scaling the battery's up-to-4.2V
+# range down to a safe 0-2.1V for the ADC -- confirmed via Freenove's own docs
+# for this board: https://docs.freenove.com/projects/fnk0104/en/latest/fnk0104/codes/MAIN/5_Battery_Voltage.html
+# (their own example reads raw millivolts and multiplies by 2.0 to undo the
+# divider, matched here via the `multiply: 2.0` filter). The percentage below
+# is a standard 1S LiPo discharge-curve approximation (calibrate_linear) --
+# it isn't calibrated to any specific cell and will drift under load or at
+# temperature extremes; a real fuel-gauge IC (e.g. MAX17048) would be
+# meaningfully more accurate if this needs to be trustworthy rather than
+# roughly-indicative.
+sensor:
+  - platform: adc
+    pin: GPIO9
+    id: battery_voltage
+    name: "Battery Voltage"
+    entity_category: diagnostic
+    device_class: voltage
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+    update_interval: 60s
+    attenuation: 12db
+    filters:
+      - multiply: 2.0
+  - platform: copy
+    source_id: battery_voltage
+    name: "Battery Level"
+    id: battery_level
+    entity_category: diagnostic
+    device_class: battery
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    filters:
+      - calibrate_linear:
+          - 3.30 -> 0.0
+          - 3.50 -> 10.0
+          - 3.66 -> 25.0
+          - 3.79 -> 45.0
+          - 3.87 -> 60.0
+          - 3.95 -> 72.0
+          - 4.02 -> 82.0
+          - 4.11 -> 92.0
+          - 4.20 -> 100.0
+      - clamp:
+          min_value: 0.0
+          max_value: 100.0
 
 output:
-  - platform: ledc
+  - platform: gpio
     id: backlight_output
     pin: GPIO45
 
