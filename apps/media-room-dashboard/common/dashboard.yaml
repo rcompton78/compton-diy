@@ -9,18 +9,23 @@
 #
 # Requires a board package to have already defined `tft_display` (display),
 # `tft_touch` (touchscreen), and `deep_sleep_1` (deep_sleep, with its wake
-# source configured) — see boards/freenove-s3.yaml.
+# source configured) — see boards/freenove-s3.yaml. deep_sleep_1 is currently
+# unused (see the COM-214 note below) but left defined on the board so
+# switching back to option 1 doesn't require re-adding it.
 # =============================================================================
 
 substitutions:
   firmware_version: "dev"
   firmware_manifest_url: "https://rcompton78.github.io/compton-diy/media-room-dashboard/manifest.json"
-  # COM-214 option 1: idle-timeout deep sleep. How long the screen sits
-  # untouched before dropping into deep sleep -- any touch resets this via
-  # LVGL's own inactivity tracking (lv_display_get_inactive_time), so this
-  # only bounds *idle* time, not active-use time. Tune this once you've felt
-  # out the wake latency in practice.
-  idle_timeout: "5min"
+  # COM-214 option 2: backlight-off-on-idle (swapped from option 1's
+  # idle-timeout deep sleep -- reboot-on-wake felt too slow for a "remote
+  # control" in testing). CPU/WiFi never sleep, so this doesn't touch
+  # deep_sleep_1; only the backlight turns off after idle_timeout, and back
+  # on instantly on the next touch (see the touchscreen on_touch extend and
+  # lvgl on_idle below). Real battery savings are much smaller than option 1
+  # since WiFi/CPU stay awake the whole time -- this is testing the "feel"
+  # tradeoff, not final-tuning the timeout for battery life yet.
+  idle_timeout: "25s"
 
 esphome:
   project:
@@ -35,6 +40,13 @@ esphome:
 # mechanism as apps/espframe's factory image (apps/espframe/builds/
 # freenove-s3.yaml).
 wifi:
+  # Skips the AP scan on connect, going straight for the BSSID+channel saved
+  # from the last successful connection (persisted to NVS, survives
+  # reboots) -- shaves a meaningful chunk off the deep-sleep wake reconnect
+  # (COM-214 option 1), which is a full ESP32 reboot each time. Falls back
+  # to a normal scan if the saved AP can't be reached (e.g. router reboot
+  # changed channel), so this doesn't add a new failure mode.
+  fast_connect: true
   # No AP password: it's a short, physically-supervised setup window, and an
   # open network is one less thing to type on a phone.
   ap:
@@ -114,6 +126,17 @@ text_sensor:
     update_interval: never
     lambda: 'return {"${firmware_version}"};'
 
+# Instant wake for COM-214 option 2's backlight-off idle, below: extends the
+# board's tft_touch (rather than adding a second touchscreen device) so the
+# backlight snaps back on the moment a touch lands, without waiting on
+# lvgl's on_idle to notice activity resumed.
+touchscreen:
+  - id: !extend tft_touch
+    on_touch:
+      - output.set_level:
+          id: backlight_output
+          level: 100%
+
 # -----------------------------------------------------------------------------
 # Two LVGL pages, switched by the wifi on_connect/on_disconnect handlers
 # above: `setup_page` (shown by default, i.e. at boot before wifi connects --
@@ -134,20 +157,15 @@ lvgl:
   displays: [tft_display]
   touchscreens: [tft_touch]
   byte_order: big_endian
-  # wifi.connected guards against sleeping mid-setup: idle time here is
-  # measured on THIS device's touchscreen, but during first-time wifi
-  # provisioning the actual activity happens on the user's phone filling out
-  # the captive portal form, not on this screen -- without the guard, a slow
-  # phone-side form fill could outlast idle_timeout and drop the fallback AP
-  # mid-setup.
+  # Backlight-off idle (COM-214 option 2). No wifi.connected guard needed
+  # here (unlike option 1's deep-sleep version) -- blanking the backlight
+  # doesn't reboot or drop the fallback AP, so it's harmless even mid-setup.
   on_idle:
     - timeout: ${idle_timeout}
       then:
-        - if:
-            condition:
-              wifi.connected:
-            then:
-              - deep_sleep.enter: deep_sleep_1
+        - output.set_level:
+            id: backlight_output
+            level: 0%
   pages:
     - id: setup_page
       bg_color: 0x000000
