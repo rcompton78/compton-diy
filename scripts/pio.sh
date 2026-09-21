@@ -41,6 +41,13 @@ fi
 # shared framework/tool packages out from under this one. A dedicated core
 # dir means the two can never clobber each other's package versions again.
 export PLATFORMIO_CORE_DIR="${PLATFORMIO_CORE_DIR:-$REPO_ROOT/.platformio-core}"
+# Pre-create it: PlatformIO's own first-run init uses os.makedirs without exist_ok, so two
+# builds started in parallel on a cold core dir (nx running several PlatformIO projects at
+# once, e.g. in pr-build.yml) race to create it and one crashes with FileExistsError.
+# readlink -f so a dangling symlink (the self-hosted runner's .platformio-core ->
+# /hdd/... link) gets its target created rather than tripping mkdir on the link itself.
+# Package installs inside the dir are already serialized by PlatformIO's own lockfile.
+[ -d "$PLATFORMIO_CORE_DIR" ] || mkdir -p "$(readlink -f "$PLATFORMIO_CORE_DIR")"
 if [ -x "$VENV_PYTHON" ]; then
     exec "$VENV_PYTHON" -m platformio "$@"
 else
