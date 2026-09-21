@@ -1,0 +1,65 @@
+{
+  "name": "tamagotchi-plus",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "tags": ["platform:esp32", "type:firmware"],
+  "implicitDependencies": ["touch-driver", "ota-update-client"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/build-boards.sh apps/tamagotchi-plus",
+        "cwd": "."
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**",
+        "{projectRoot}/include/**",
+        "{projectRoot}/platformio.ini",
+        "{workspaceRoot}/libs/touch-driver/src/**",
+        "{workspaceRoot}/libs/ota-update-client/src/**",
+        { "env": "RELEASE_VERSION" }
+      ],
+      "outputs": ["{projectRoot}/.pio/build/waveshare-s3-169"]
+    },
+    "build-waveshare-s3-169": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/pio.sh run -d apps/tamagotchi-plus -e waveshare-s3-169",
+        "cwd": "."
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/src/**",
+        "{projectRoot}/include/**",
+        "{projectRoot}/platformio.ini",
+        "{workspaceRoot}/libs/touch-driver/src/**",
+        "{workspaceRoot}/libs/ota-update-client/src/**",
+        { "env": "RELEASE_VERSION" }
+      ],
+      "outputs": ["{projectRoot}/.pio/build/waveshare-s3-169"]
+    },
+    "flash-waveshare-s3-169": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/pio.sh run -d apps/tamagotchi-plus -e waveshare-s3-169 -t upload",
+        "cwd": "."
+      }
+    },
+    "monitor": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/pio.sh device monitor -d apps/tamagotchi-plus",
+        "cwd": "."
+      }
+    },
+    "release": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "python3 tools/esp-flasher/generate_release.py --project-dir apps/tamagotchi-plus --name \"Tamagotchi+\" --build waveshare-s3-169:ESP32-S3 --version ${RELEASE_VERSION:-dev}",
+        "cwd": "."
+      },
+      "dependsOn": ["build-waveshare-s3-169"]
+    }
+  }
+}
