@@ -29,6 +29,8 @@ Unlike a tablet dashboard or cloud photo frame, Espframe runs firmware built wit
 | Chrome or Edge | Required on a desktop computer for browser flashing with Web Serial |
 | Immich API key | Read-only permissions are recommended |
 
+The same board is also sold as the **"10.1-inch ESP32P4 development board supports Xiaozhi ESP32 C6 capacitive touch screen"** ([AliExpress](https://www.aliexpress.com/item/1005009147577522.html)), panel `JC8012P4A1C_I_W_Y`. It has the same JD9365 MIPI-DSI panel, GSL3680 touch, ESP32-C6 WiFi co-processor and pinout, so use the `JC8012P4A1` firmware. Its ESP32-C6 WiFi module has no built-in antenna, so make sure the included external antenna is clipped onto the C6 module's U.FL connector — without it, WiFi signal is too weak to connect.
+
 ## How Setup Works
 
 1. Flash the firmware from the [Install Espframe on a Guition ESP32-P4 Display](/install) page.

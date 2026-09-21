@@ -208,6 +208,13 @@ touchscreen:
     display: tft_display
     reset_pin: GPIO22
     interrupt_pin: GPIO21
+    # The GSL3680's lift interrupt can be missed while the main loop is busy
+    # decoding a photo, leaving the touch stuck "down" until the next tap --
+    # long enough for the 3s hold-to-sleep timer to fire on a plain
+    # double-tap. touch_timeout re-reads the chip after each touch report, so
+    # a missed lift is still seen within ~100ms; a real hold keeps reporting
+    # one finger and stays pressed.
+    touch_timeout: 100ms
     transform:
       swap_xy: true
       mirror_x: false
