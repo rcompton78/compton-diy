@@ -39,6 +39,8 @@
 // (a lone --build variant has no -<env> suffix).
 #define OTA_ASSET_NAME "tamagotchi-plus-ota.bin"
 
+#else
+#error "No board selected: define BOARD_WAVESHARE_S3_169 (see platformio.ini)"
 #endif
 
 // Wi-Fi provisioning. First boot (or saved network unreachable) opens a WiFiManager

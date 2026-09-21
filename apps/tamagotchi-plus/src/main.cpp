@@ -256,7 +256,12 @@ void loop() {
 
     if (WiFi.status() == WL_CONNECTED) {
         // Getting onto the network is the bar for "this build boots fine" — confirm it
-        // before the first OTA check can overwrite the other slot.
+        // before the first OTA check can overwrite the other slot. Deliberately gated on
+        // Wi-Fi rather than local display/touch init: a pending-verify image only ever
+        // arrives via OTA (so the device was online before), and an update that breaks
+        // Wi-Fi should roll back, since a device that can't get online can never receive
+        // the fix OTA. (No-op today: PlatformIO's prebuilt Arduino core doesn't enable
+        // CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE, but this keeps the intent right.)
         if (!appMarkedValid) {
             appMarkedValid = true;
             esp_ota_mark_app_valid_cancel_rollback();
@@ -265,6 +270,7 @@ void loop() {
             otaCheckedOnce  = true;
             lastUpdateCheck = now;
             checkForUpdate();  // reboots if an update was applied
+            now = millis();    // the check/download blocks, so refresh the timer snapshot
         }
     }
 

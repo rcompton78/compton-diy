@@ -32,7 +32,9 @@ void Cst816Touch::begin() {
     Wire.beginTransmission(CST816_ADDR);
     Wire.write(REG_DIS_AUTO_SLEEP);
     Wire.write(0x01);
-    Wire.endTransmission();
+    if (Wire.endTransmission() != 0) {
+        Serial.println("[Cst816Touch] failed to disable auto-sleep; polling reads may fail intermittently");
+    }
 }
 
 bool Cst816Touch::read(TouchPoint& out) {
