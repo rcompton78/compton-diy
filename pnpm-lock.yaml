@@ -14,8 +14,6 @@ importers:
 
   apps/cyd-clock: {}
 
-  apps/tamagotchi-plus: {}
-
 packages:
 
   '@emnapi/core@1.4.5':
