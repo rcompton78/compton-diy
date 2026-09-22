@@ -84,6 +84,7 @@ void FrameRenderer::uiChanged() {
     // straight through for the (majority of) rows with nothing on top.
     memset(_uiRows, 0, sizeof(_uiRows));
     const uint8_t* px = (const uint8_t*)_ui.getPointer();
+    if (!px) return;  // begin() failed to allocate the UI layer: nothing to overlay
     const int stride = PHYS_W / 2;
     for (int y = 0; y < PHYS_H; y++) {
         const uint32_t* row = (const uint32_t*)(px + y * stride);  // stride is a multiple of 4
