@@ -15,6 +15,9 @@ pet features (stats, care, evolution) are coming in later updates.
 | IMU | QMI8658 6-axis, I2C 0x6B on the same bus (INT1 38). Not used yet |
 | RTC | PCF85063, I2C 0x51 (INT 39). Not used yet |
 | Power | SYS_EN (GPIO41) power-hold latch, driven HIGH at boot so the board stays on when running from battery |
+| Battery sense | BAT_ADC (GPIO1, ADC1_CH0) reads B+ through a 200K/100K divider (B+ = 3 × pin voltage) |
+| Charger | ETA6098 (U9). Its STAT charge-status pin (pin 9) is **not routed**: no net, no pull-up. So firmware can't tell whether the battery is charging |
+| USB | Native ESP32-S3 USB (no USB-UART bridge). No GPIO senses VBUS |
 
 Pin source: [Waveshare docs](https://docs.waveshare.com/ESP32-S3-Touch-LCD-1.69).
 
@@ -42,13 +45,46 @@ Either way, the credentials are saved to flash and the device reconnects on ever
 
 ## Main screen
 
-An animated pixel-art pet on a small scene, with the name, firmware version and live
-Wi-Fi status (network name + IP, connecting, or setup mode) along the top.
+An animated pixel-art pet on a small scene. Along the top are the name, the firmware
+version with the power status next to it (e.g. `v1.2.3   USB  87%`), and live Wi-Fi status
+(network name + IP, connecting, or setup mode).
 
 - **Tap** the screen: the pet plays its happy animation and a heart floats up, then it
   goes back to idling.
 - **Hold** for about a second: swaps the scene to the "sick" colour palette (hold again to
   swap back). This is a demo of palette swapping for now, not a real pet state.
+
+### Battery and USB status
+
+- **Battery %** is read from the battery voltage every 2 seconds and smoothed. It is
+  mapped along a LiPo discharge curve, not a straight line from 3.0V to 4.2V, because a
+  LiPo holds around 3.7–3.9V for most of its charge and then drops quickly. The number on
+  screen moves at most one point every 15 seconds, so it eases up or down rather than
+  jumping when you plug in or unplug.
+- **`USB`** appears when a USB *host* (computer or hub) is connected, within about half
+  a second of plugging in or unplugging.
+
+Limits of the unmodified board (see the hardware table):
+
+- **No "charging" indicator.** The charger's STAT pin isn't connected, so there's no
+  way to tell "charging" from "plugged in, battery already full". Adding one would need
+  a bodge wire from STAT to a spare GPIO plus a pull-up.
+- **Wall chargers and power banks don't show `USB`.** The ESP32-S3 has no VBUS sense
+  here. `USB` means the chip is seeing USB start-of-frame packets from a host
+  (`Serial.isPlugged()` on the native USB CDC), and a charge-only supply never sends
+  any. The board still charges from one; only the indicator doesn't know about it.
+- **The % is an estimate from voltage alone.** The curve is for a battery at rest, but
+  the battery is always either powering the board or charging:
+  - On battery, the screen and Wi-Fi pull it down about 0.15V (measured: a nearly full
+    cell reads 4.02V running vs. ~4.17V at rest). On the steep part of the curve that's
+    worth ~20 points, so the firmware adds it back (`BAT_LOAD_SAG_V` in `Config.h`).
+  - While charging, the charger pushes the battery up towards its 4.2V charge voltage,
+    so the target reads high (100% once it reaches 4.2V) however full the battery really
+    is. The on-screen % climbs towards it one point at a time, so you see a rising
+    number, but it isn't a measure of the actual charge going in.
+- Each reading is also logged to serial every 5 seconds
+  (`power: 3.912 V, target 50.4%, shown 51%, usb host no`), which is handy for checking
+  the curve against a multimeter.
 
 ## Staying up to date
 

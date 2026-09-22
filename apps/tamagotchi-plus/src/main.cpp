@@ -1,9 +1,10 @@
 // Tamagotchi+ — base firmware (COM-295) + graphics engine spike (COM-296).
 //
 // Brings up the display, touch, Wi-Fi provisioning and OTA self-update. The main screen
-// is a pixel-art pet scene (see FrameRenderer/PetScene) with the name, version and Wi-Fi
-// status drawn on a UI layer above it. Tap the pet to make it happy; hold to swap to the
-// "sick" palette. Real pet features land on top of this in later cards.
+// is a pixel-art pet scene (see FrameRenderer/PetScene) with the name, version, battery/USB
+// status (COM-298) and Wi-Fi status drawn on a UI layer above it. Tap the pet to make it
+// happy; hold to swap to the "sick" palette. Real pet features land on top of this in
+// later cards.
 
 #include <Arduino.h>
 #include <TFT_eSPI.h>
@@ -12,6 +13,7 @@
 #include <ImprovWiFiLibrary.h>
 #include <esp_ota_ops.h>
 
+#include "Battery.h"
 #include "Config.h"
 #include "Cst816Touch.h"
 #include "FrameRenderer.h"
@@ -25,7 +27,8 @@ static constexpr int CX = SCREEN_WIDTH / 2;
 
 // UI layer (physical px). The pet scene fills the whole screen underneath.
 static constexpr int TITLE_Y        = 14;
-static constexpr int VERSION_Y      = 42;
+static constexpr int VERSION_Y      = 42;   // version + power status share this line
+static constexpr int VERSION_H      = 16;
 static constexpr int STATUS_Y       = 58;   // two lines of font 2, 16px apart
 static constexpr int STATUS_H       = 34;
 static constexpr int HINT_Y         = 262;
@@ -48,6 +51,7 @@ Cst816Touch     touchDriver(I2C_SDA, I2C_SCL, TOUCH_RST, SCREEN_WIDTH, SCREEN_HE
 WiFiManager     wm;
 ImprovWiFi      improvSerial(&Serial);
 OtaUpdateClient otaClient;
+Battery         battery;
 
 static bool          rendererReady  = false;
 static bool          sceneDirty     = true;
@@ -55,6 +59,7 @@ static unsigned long lastFrameAt    = 0;
 static unsigned long lastStatsLog   = 0;
 
 static String        statusLine1, statusLine2;   // last-drawn Wi-Fi status
+static String        powerText;                  // last-drawn battery/USB status
 static unsigned long lastStatusPoll = 0;
 
 static bool          pressed        = false;  // debounced: survives single dropped touch reads
@@ -83,6 +88,16 @@ static void drawStatus() {
     sceneDirty = true;
 }
 
+static void drawVersionLine() {
+    if (!rendererReady) return;
+    TFT_eSprite& ui = renderer.ui();
+    ui.fillRect(0, VERSION_Y, SCREEN_WIDTH, VERSION_H, PAL_TRANSPARENT);
+    ui.setTextColor(PAL_LIGHT_GREY);
+    ui.drawCentreString(String("v") + FIRMWARE_VERSION + "   " + powerText, CX, VERSION_Y, 2);
+    renderer.uiChanged();
+    sceneDirty = true;
+}
+
 static void drawHint() {
     if (!rendererReady) return;
     TFT_eSprite& ui = renderer.ui();
@@ -105,8 +120,7 @@ static void drawMainScreen() {
     ui.fillSprite(PAL_TRANSPARENT);
     ui.setTextColor(PAL_BLUE);
     ui.drawCentreString(DEVICE_NAME, CX, TITLE_Y, 4);
-    ui.setTextColor(PAL_LIGHT_GREY);
-    ui.drawCentreString(String("v") + FIRMWARE_VERSION, CX, VERSION_Y, 2);
+    drawVersionLine();
     drawStatus();
     drawHint();
 }
@@ -147,6 +161,23 @@ static void pollWifiStatus() {
     statusLine1 = line1;
     statusLine2 = line2;
     drawStatus();
+}
+
+// ── Power ─────────────────────────────────────────────────────────────────────
+// "USB" = a USB host (computer/hub) is connected; a plain wall charger isn't detectable
+// on this board (see Battery.h). The shown % is rate-limited, so it ramps rather than jumps
+// when the cable goes in or out.
+static String computePowerText() {
+    String s = battery.usbConnected() ? "USB  " : "";
+    return s + battery.percent() + "%";
+}
+
+static void pollPowerStatus(unsigned long now) {
+    battery.update(now);
+    String text = computePowerText();
+    if (text == powerText) return;
+    powerText = text;
+    drawVersionLine();
 }
 
 // WiFiManager's portal-save path leaves WiFi.persistent(false) behind on ESP32 (it
@@ -254,10 +285,12 @@ void setup() {
     }
 
     touchDriver.begin();
+    battery.begin();
 
     setupWifi();
 
     computeWifiStatus(statusLine1, statusLine2);
+    powerText = computePowerText();
     drawMainScreen();
 }
 
@@ -294,7 +327,8 @@ static void renderFrame(unsigned long now) {
     renderer.present();
 }
 
-// Rough performance numbers for the COM-296 spike, logged to serial.
+// Rough performance numbers for the COM-296 spike plus the raw power readings (handy for
+// checking the battery curve against a multimeter), logged to serial.
 static void logStats(unsigned long now) {
     if (!rendererReady || now - lastStatsLog < STATS_LOG_MS) return;
     float secs = (now - lastStatsLog) / 1000.0f;
@@ -307,6 +341,8 @@ static void logStats(unsigned long now) {
                       st.composeUs / 1000.0f / st.frames, (unsigned)ESP.getFreeHeap(),
                       (unsigned)ESP.getFreePsram(), (unsigned)assets::TOTAL_PIXEL_BYTES);
     }
+    Serial.printf("power: %.3f V, target %.1f%%, shown %d%%, usb host %s\n", battery.volts(),
+                  battery.targetPercent(), battery.percent(), battery.usbConnected() ? "yes" : "no");
     renderer.resetStats();
 }
 
@@ -319,6 +355,7 @@ void loop() {
     if (now - lastStatusPoll >= STATUS_POLL_MS) {
         lastStatusPoll = now;
         pollWifiStatus();
+        pollPowerStatus(now);
     }
 
     if (WiFi.status() == WL_CONNECTED) {

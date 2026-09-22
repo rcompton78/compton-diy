@@ -32,6 +32,14 @@
 #define SYS_EN_PIN  41
 #define SYS_OUT_PIN 40
 
+// Battery sense: B+ through a 200K/100K divider into ADC1_CH0 (so B+ = 3 × pin voltage).
+// The ETA6098 charger's STAT output is not routed anywhere, so there is no charge-status pin.
+#define BAT_ADC_PIN       1
+#define BAT_DIVIDER_RATIO 3.0f
+// How far B+ sags below its resting voltage under the normal running load (backlight +
+// Wi-Fi). Measured on hardware (COM-298): ~4.17V resting cell read 4.02V running on battery.
+#define BAT_LOAD_SAG_V    0.15f
+
 // Passive buzzer (not used yet). Held LOW so it doesn't idle-drain/heat the board.
 #define BUZZER_PIN 42
 
