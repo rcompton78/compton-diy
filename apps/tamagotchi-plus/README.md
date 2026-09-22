@@ -142,12 +142,20 @@ The firmware logs rough numbers to serial every 5 seconds while the scene is ani
 gfx: <fps> fps (redraw-on-change), frame <avg> ms avg / <max> ms max, compose <ms> ms avg | heap <n> free, psram <n> free | assets <n> B
 ```
 
+Measured on the Waveshare board (40 MHz SPI):
+
 | Metric | Value |
 |---|---|
+| Full frame (compose + DMA push, 240×280) | 27.7 ms avg, 27.8 ms max → ~36 fps ceiling |
+| CPU compose time per frame | 1.5 ms: the rest is the SPI transfer itself (26.9 ms minimum at 40 MHz) |
+| Redraw rate while idling | ~3.4 fps: it only redraws when the frame changes |
 | Sprite pixel data (flash) | 8,040 B for 11 frames (4bpp) |
 | Canvas + DMA strips (internal RAM) | 4.2KB + 19.2KB |
 | UI layer (PSRAM) | 33.6KB |
-| Full-frame time / fps | _pending on-device measurement_ |
+| Free heap / PSRAM at runtime | ~255KB / ~8.3MB |
+
+The frame time is bound by the SPI clock, not the CPU. If faster motion is ever needed, raising
+`SPI_FREQUENCY` to 80 MHz (the ST7789 usually tolerates it) would roughly halve it.
 
 ## Sprite workflow
 
@@ -199,6 +207,32 @@ the frames under `assets/src/<name>/<tag>/NN.png`.
 `tools/sprites/png-to-aseprite.lua` builds a `.aseprite` from a folder of frames and a
 `manifest.json` (tags, per-frame durations). It maps every frame onto the locked palette
 (which also cleans up stray colours in AI output) and saves a normal, hand-editable file.
+From the repo root:
+
+```bash
+aseprite -b \
+  --script-param manifest=apps/tamagotchi-plus/assets/src/pet/manifest.json \
+  --script-param palette=apps/tamagotchi-plus/assets/palette.hex \
+  --script-param out=apps/tamagotchi-plus/assets/pet.aseprite \
+  --script tools/sprites/png-to-aseprite.lua
+```
+
+`manifest.json` lists the tags in play order, each with its frames (paths relative to the
+manifest) and per-frame durations. `direction` is optional (`forward`, `reverse` or
+`pingpong`):
+
+```json
+{
+  "tags": [
+    { "name": "idle", "direction": "forward",
+      "frames": [ { "file": "idle/00.png", "ms": 400 }, { "file": "idle/01.png", "ms": 200 } ] },
+    { "name": "happy", "frames": [ { "file": "happy/00.png", "ms": 80 } ] }
+  ]
+}
+```
+
+Importing **overwrites** the target `.aseprite`, so hand touch-ups made there since the
+last import are lost. That's why import is a one-off command per sprite rather than an Nx target.
 
 ### 3. Export sheet + JSON
 
@@ -221,4 +255,11 @@ what the device will draw. It's handy for reviewing art in a chat before flashin
 
 Aseprite is paid: buy it on Steam or itch.io (both include a Linux build), or compile it
 from source ([instructions](https://github.com/aseprite/aseprite/blob/main/INSTALL.md)).
-Put the `aseprite` binary on your `PATH`, or set `ASEPRITE=/path/to/aseprite`.
+Put the `aseprite` binary on your `PATH`, or set `ASEPRITE=/path/to/aseprite` for
+`export-sprites`. Tested with Aseprite 1.3.18.
+
+**Headless / WSL:** both scripts run Aseprite with `-b` (batch mode), which never opens a
+window, so they work in WSL, over SSH, or with `DISPLAY` unset. Use the **Linux** build
+inside WSL, not the Windows `.exe` through interop: the scripts pass Linux paths.
+Opening the editor UI for hand touch-ups does need a display (WSLg provides one on Windows
+11), or edit the `.aseprite` in Aseprite on Windows directly.

@@ -1,0 +1,56 @@
+{
+  "tags": [
+    {
+      "name": "idle",
+      "direction": "forward",
+      "frames": [
+        {
+          "file": "idle/00.png",
+          "ms": 400
+        },
+        {
+          "file": "idle/01.png",
+          "ms": 200
+        },
+        {
+          "file": "idle/02.png",
+          "ms": 400
+        },
+        {
+          "file": "idle/03.png",
+          "ms": 200
+        }
+      ]
+    },
+    {
+      "name": "happy",
+      "direction": "forward",
+      "frames": [
+        {
+          "file": "happy/00.png",
+          "ms": 80
+        },
+        {
+          "file": "happy/01.png",
+          "ms": 100
+        },
+        {
+          "file": "happy/02.png",
+          "ms": 140
+        },
+        {
+          "file": "happy/03.png",
+          "ms": 100
+        },
+        {
+          "file": "happy/04.png",
+          "ms": 80
+        },
+        {
+          "file": "happy/05.png",
+          "ms": 200
+        }
+      ]
+    }
+  ]
+}
