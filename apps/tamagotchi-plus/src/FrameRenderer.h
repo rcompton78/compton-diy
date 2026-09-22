@@ -36,11 +36,17 @@ public:
     };
 
     explicit FrameRenderer(TFT_eSPI& tft);
+    ~FrameRenderer() { release(); }
+
+    // Owns DMA buffers and a sprite: copying would alias (and double-free) them.
+    FrameRenderer(const FrameRenderer&) = delete;
+    FrameRenderer& operator=(const FrameRenderer&) = delete;
 
     // Allocates the DMA strips + UI layer and starts the SPI DMA engine. Call after tft.init().
+    // On failure everything already allocated is freed again and false is returned.
     bool begin();
 
-    // ── Logical canvas (palette indices) ──
+    // ── Logical canvas (palette indices 0..15; higher bits are masked off) ──
     void clear(uint8_t index);
     void fillRect(int x, int y, int w, int h, uint8_t index);
     // Draws one frame of a sheet with its cell's top-left at (x, y). Index 0 = transparent.
@@ -66,10 +72,11 @@ public:
 
 private:
     void composeStrip(int strip, uint16_t* out);
+    void release();
 
     TFT_eSPI&   _tft;
     TFT_eSprite _ui;
-    uint8_t     _canvas[LOGICAL_W * LOGICAL_H];
+    uint8_t     _canvas[LOGICAL_W * LOGICAL_H];  // always 0..15: indexes the 16-entry LUTs
     uint16_t*   _strips[2] = {nullptr, nullptr};
     uint16_t    _sceneLut[16];   // RGB565, byte-swapped for the panel (DMA sends memory order)
     uint16_t    _uiLut[16];

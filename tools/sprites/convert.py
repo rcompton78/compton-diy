@@ -205,7 +205,7 @@ class Report:
 def convert_sheet(name, png_path, json_path, palette, report):
     """Converts one Aseprite sheet export into 4bpp frame data, frame rects/durations and
     tags. Records off-palette and partially transparent pixels in report."""
-    _, _, pixels = read_png(png_path)
+    sheet_w, sheet_h, pixels = read_png(png_path)
     meta = json.loads(Path(json_path).read_text())
     frames_json = meta["frames"]
     if isinstance(frames_json, dict):
@@ -223,6 +223,9 @@ def convert_sheet(name, png_path, json_path, palette, report):
         if (src["w"], src["h"]) != size:
             raise ValueError(f"{json_path}: frames have different source sizes")
         ox, oy = f["spriteSourceSize"]["x"], f["spriteSourceSize"]["y"]
+        if fx + fw > sheet_w or fy + fh > sheet_h:
+            raise ValueError(f"{json_path}: frame {f.get('filename', '?')} at {fx},{fy} {fw}x{fh} lies "
+                             f"outside the {sheet_w}x{sheet_h} sheet {png_path.name} (stale export?)")
 
         offset = len(blob)
         for y in range(fh):
@@ -257,7 +260,9 @@ def convert_sheet(name, png_path, json_path, palette, report):
 # ── Header emission ──────────────────────────────────────────────────────────────────────
 
 def c_ident(name):
-    ident = re.sub(r"\W", "_", name).upper()
+    ident = re.sub(r"[^0-9A-Za-z_]", "_", name).upper()  # ASCII only: \W keeps non-ASCII letters
+    if not ident:
+        raise ValueError(f"asset name {name!r} yields an empty C identifier")
     return ident if not ident[0].isdigit() else "_" + ident
 
 

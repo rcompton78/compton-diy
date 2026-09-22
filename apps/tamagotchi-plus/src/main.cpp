@@ -33,6 +33,7 @@ static constexpr int HINT_Y         = 262;
 static constexpr unsigned long TOUCH_POLL_MS  = 20;
 static constexpr unsigned long STATUS_POLL_MS = 500;
 static constexpr unsigned long HOLD_MS        = 700;   // press this long to swap palettes
+static constexpr int           RELEASE_SAMPLES = 3;    // consecutive no-touch polls (60ms) = real release
 static constexpr unsigned long MIN_FRAME_MS   = 16;    // cap redraws at ~60 fps
 static constexpr unsigned long STATS_LOG_MS   = 5000;
 
@@ -56,7 +57,8 @@ static unsigned long lastStatsLog   = 0;
 static String        statusLine1, statusLine2;   // last-drawn Wi-Fi status
 static unsigned long lastStatusPoll = 0;
 
-static bool          wasTouched     = false;
+static bool          pressed        = false;  // debounced: survives single dropped touch reads
+static int           untouchedPolls = 0;
 static bool          holdHandled    = false;
 static unsigned long pressStart     = 0;
 static unsigned long lastTouchPoll  = 0;
@@ -70,6 +72,7 @@ static unsigned long lastUpdateCheck = 0;
 // layer (colours are locked-palette indices, index 0 = see-through) and composed over the
 // pet scene on the next present().
 static void drawStatus() {
+    if (!rendererReady) return;
     TFT_eSprite& ui = renderer.ui();
     ui.fillRect(0, STATUS_Y, SCREEN_WIDTH, STATUS_H, PAL_TRANSPARENT);
     ui.setTextColor(PAL_WHITE);
@@ -81,6 +84,7 @@ static void drawStatus() {
 }
 
 static void drawHint() {
+    if (!rendererReady) return;
     TFT_eSprite& ui = renderer.ui();
     ui.fillRect(0, HINT_Y, SCREEN_WIDTH, 8, PAL_TRANSPARENT);
     ui.setTextColor(PAL_LIGHT_GREY);
@@ -89,7 +93,14 @@ static void drawHint() {
     sceneDirty = true;
 }
 
+static void drawMessage(const char* title, const String& detail);
+
 static void drawMainScreen() {
+    if (!rendererReady) {
+        // No frame buffer (out of memory at boot): say so on the raw panel instead.
+        drawMessage("Display error", "renderer init failed");
+        return;
+    }
     TFT_eSprite& ui = renderer.ui();
     ui.fillSprite(PAL_TRANSPARENT);
     ui.setTextColor(PAL_BLUE);
@@ -235,9 +246,12 @@ void setup() {
     tft.fillScreen(TFT_BLACK);
 
     rendererReady = renderer.begin();
-    if (!rendererReady) Serial.println("gfx: renderer init failed (out of DMA/PSRAM memory?)");
-    renderer.setUiPalette(assets::PALETTE_NORMAL);
-    pet.begin(millis());
+    if (rendererReady) {
+        renderer.setUiPalette(assets::PALETTE_NORMAL);
+        pet.begin(millis());
+    } else {
+        Serial.println("gfx: renderer init failed (out of DMA/PSRAM memory?)");
+    }
 
     touchDriver.begin();
 
@@ -248,21 +262,27 @@ void setup() {
 }
 
 // Tap = press shorter than HOLD_MS (fires on release so a hold doesn't also count as a
-// tap). Hold = fires once, as soon as the press reaches HOLD_MS.
+// tap). Hold = fires once, as soon as the press reaches HOLD_MS. The CST816T read can
+// drop an occasional sample mid-press (I2C NACK), so a release only counts after
+// RELEASE_SAMPLES no-touch polls in a row. Otherwise one glitch would restart the hold
+// timer (double palette swap) or end the press as a spurious tap.
 static void pollTouch(unsigned long now) {
     TouchPoint p;
-    bool touched = touchDriver.read(p);
-    if (touched && !wasTouched) {
-        pressStart  = now;
-        holdHandled = false;
-    } else if (touched && !holdHandled && now - pressStart >= HOLD_MS) {
-        holdHandled = true;
-        pet.toggleSick();
-        drawHint();
-    } else if (!touched && wasTouched && !holdHandled) {
-        pet.onTap(now);
+    if (touchDriver.read(p)) {
+        untouchedPolls = 0;
+        if (!pressed) {
+            pressed     = true;
+            pressStart  = now;
+            holdHandled = false;
+        } else if (!holdHandled && now - pressStart >= HOLD_MS) {
+            holdHandled = true;
+            pet.toggleSick();
+            drawHint();
+        }
+    } else if (pressed && ++untouchedPolls >= RELEASE_SAMPLES) {
+        pressed = false;
+        if (!holdHandled) pet.onTap(now);
     }
-    wasTouched = touched;
 }
 
 static void renderFrame(unsigned long now) {
@@ -276,7 +296,7 @@ static void renderFrame(unsigned long now) {
 
 // Rough performance numbers for the COM-296 spike, logged to serial.
 static void logStats(unsigned long now) {
-    if (now - lastStatsLog < STATS_LOG_MS) return;
+    if (!rendererReady || now - lastStatsLog < STATS_LOG_MS) return;
     float secs = (now - lastStatsLog) / 1000.0f;
     lastStatsLog = now;
     const FrameRenderer::Stats& st = renderer.stats();

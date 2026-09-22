@@ -1,5 +1,7 @@
 #include "PetScene.h"
 
+#include <algorithm>
+
 #include "PaletteIndex.h"
 #include "generated/sprite_assets.h"
 
@@ -44,8 +46,8 @@ bool AnimPlayer::update(uint32_t now) {
     bool changed = false;
     // Catch up on every elapsed frame (the loop may have been blocked, e.g. by an OTA check),
     // keeping the authored timing rather than drifting by one frame per stall.
-    while (now - _stepStart >= max<uint32_t>(_sheet->frames[_frame].durationMs, 1)) {
-        _stepStart += max<uint32_t>(_sheet->frames[_frame].durationMs, 1);
+    while (now - _stepStart >= std::max<uint32_t>(_sheet->frames[_frame].durationMs, 1)) {
+        _stepStart += std::max<uint32_t>(_sheet->frames[_frame].durationMs, 1);
         if (_step + 1 >= stepCount()) {
             if (!_loop) { _finished = true; return changed; }
             _step = 0;
@@ -70,8 +72,8 @@ void PetScene::enter(State s, uint32_t now) {
     _state = s;
     const char* tagName = s == State::Happy ? "happy" : "idle";
     const SpriteTag* tag = assets::PET.findTag(tagName);
-    if (!tag) tag = &assets::PET.tags[0];
-    _pet.play(assets::PET, *tag, s == State::Idle, now);
+    if (!tag && assets::PET.tagCount > 0) tag = &assets::PET.tags[0];
+    if (tag) _pet.play(assets::PET, *tag, s == State::Idle, now);  // untagged sheet: frame 0 stays up
     _dirty = true;
 }
 

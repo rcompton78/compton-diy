@@ -7,6 +7,7 @@ static constexpr int PHYS_W = FrameRenderer::LOGICAL_W * FrameRenderer::SCALE;
 static constexpr int PHYS_H = FrameRenderer::LOGICAL_H * FrameRenderer::SCALE;
 static_assert(PHYS_H % FrameRenderer::STRIP_H == 0, "strips must tile the screen");
 static_assert(FrameRenderer::STRIP_H % FrameRenderer::SCALE == 0, "strips must hold whole logical rows");
+static_assert(FrameRenderer::SCALE == 4, "composeStrip expands each logical pixel to exactly 4 physical pixels");
 
 static inline uint16_t swap16(uint16_t c) { return (c << 8) | (c >> 8); }
 
@@ -36,22 +37,33 @@ FrameRenderer::FrameRenderer(TFT_eSPI& tft) : _tft(tft), _ui(&tft) {
 bool FrameRenderer::begin() {
     for (auto& s : _strips) {
         s = (uint16_t*)heap_caps_malloc(PHYS_W * STRIP_H * sizeof(uint16_t), MALLOC_CAP_DMA | MALLOC_CAP_INTERNAL);
-        if (!s) return false;
+        if (!s) { release(); return false; }
     }
     // 4bpp full-screen UI layer; TFT_eSprite puts it in PSRAM when available.
     _ui.setColorDepth(4);
-    if (!_ui.createSprite(PHYS_W, PHYS_H)) return false;
+    if (!_ui.createSprite(PHYS_W, PHYS_H)) { release(); return false; }
     _ui.fillSprite(0);
-    return _tft.initDMA();
+    if (!_tft.initDMA()) { release(); return false; }
+    return true;
 }
 
-void FrameRenderer::clear(uint8_t index) { memset(_canvas, index, sizeof(_canvas)); }
+// Frees the strips and UI layer. The internal DMA-capable RAM they hold is scarce (Wi-Fi
+// and OTA need it too), so a failed begin() must not leave any of it allocated.
+void FrameRenderer::release() {
+    for (auto& s : _strips) {
+        heap_caps_free(s);
+        s = nullptr;
+    }
+    _ui.deleteSprite();
+}
+
+void FrameRenderer::clear(uint8_t index) { memset(_canvas, index & 0x0F, sizeof(_canvas)); }
 
 void FrameRenderer::fillRect(int x, int y, int w, int h, uint8_t index) {
     int x0 = max(x, 0), y0 = max(y, 0);
     int x1 = min(x + w, LOGICAL_W), y1 = min(y + h, LOGICAL_H);
     for (int yy = y0; yy < y1; yy++) {
-        if (x1 > x0) memset(&_canvas[yy * LOGICAL_W + x0], index, x1 - x0);
+        if (x1 > x0) memset(&_canvas[yy * LOGICAL_W + x0], index & 0x0F, x1 - x0);
     }
 }
 

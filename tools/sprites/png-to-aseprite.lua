@@ -11,6 +11,9 @@
 --     --script-param out=apps/tamagotchi-plus/assets/pet.aseprite \
 --     --script tools/sprites/png-to-aseprite.lua
 --
+-- An existing `out` file is never overwritten unless you also pass --script-param force=true,
+-- since re-importing throws away any hand touch-ups made in that .aseprite.
+--
 -- manifest.json (frame paths are relative to the manifest's folder; tags play in order):
 --   {
 --     "tags": [
@@ -28,9 +31,9 @@
 -- check. Pixels with alpha < 128 become transparent and everything else becomes opaque,
 -- since the device has no alpha blending.
 
+-- Aseprite's Lua has no os.exit; a raised error aborts the batch run with a non-zero exit code.
 local function fail(msg)
-  io.stderr:write("png-to-aseprite: error: " .. msg .. "\n")
-  os.exit(1)
+  error("png-to-aseprite: " .. msg, 0)
 end
 
 local params = app.params
@@ -63,7 +66,14 @@ palette:setColor(0, Color{ r = 0, g = 0, b = 0, a = 0 })
 for i, c in ipairs(colours) do palette:setColor(i, c) end
 
 -- ── Manifest ────────────────────────────────────────────────────────────────────────
-local manifest = json.decode(readFile(params.manifest))
+if app.fs.isFile(params.out) and params.force ~= "true" then
+  fail(params.out .. " already exists; pass --script-param force=true to regenerate it "
+       .. "(this discards any hand edits made in it)")
+end
+
+-- Aseprite's json.decode returns userdata (not Lua tables) and raises on malformed input.
+local okJson, manifest = pcall(json.decode, readFile(params.manifest))
+if not okJson or manifest == nil then fail(params.manifest .. ": invalid JSON (" .. tostring(manifest) .. ")") end
 local baseDir = app.fs.filePath(params.manifest)
 if not manifest.tags or #manifest.tags == 0 then fail(params.manifest .. ": no tags") end
 
@@ -73,7 +83,8 @@ for t, tag in ipairs(manifest.tags) do
   for _, f in ipairs(tag.frames) do
     local path = app.fs.joinPath(baseDir, f.file)
     if not app.fs.isFile(path) then fail("missing frame " .. path) end
-    local img = Image{ fromFile = path }
+    local okImg, img = pcall(function() return Image{ fromFile = path } end)
+    if not okImg or not img then fail("can't decode frame " .. path) end
     if img.colorMode ~= ColorMode.RGB then
       -- Normalise indexed/greyscale PNGs to RGBA so the alpha threshold below applies uniformly.
       local rgb = Image(img.width, img.height, ColorMode.RGB)

@@ -243,8 +243,10 @@ manifest) and per-frame durations. `direction` is optional (`forward`, `reverse`
 }
 ```
 
-Importing **overwrites** the target `.aseprite`, so hand touch-ups made there since the
-last import are lost. That's why import is a one-off command per sprite rather than an Nx target.
+Re-importing replaces the target `.aseprite` and loses any hand touch-ups made there since
+the last import. So the script refuses to overwrite an existing file unless you add
+`--script-param force=true`, and import is a one-off command per sprite rather than an Nx
+target. For example, `heart.aseprite` has a hand recolour that a forced re-import would undo.
 
 ### 3. Export sheet + JSON
 
