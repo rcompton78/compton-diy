@@ -30,6 +30,7 @@ BACKDROP = (0x83, 0x76, 0x9C)  # the scene's lavender sky, so outlines read as o
 
 
 def frame_image(sheet, frame, colours, scale):
+    """Renders one converted frame on the scene backdrop, upscaled by scale."""
     im = Image.new("RGB", (sheet["w"], sheet["h"]), BACKDROP)
     px = im.load()
     blob, stride = sheet["blob"], (frame["w"] + 1) // 2
