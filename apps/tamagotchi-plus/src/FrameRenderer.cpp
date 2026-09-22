@@ -1,6 +1,7 @@
 #include "FrameRenderer.h"
 
 #include <esp_heap_caps.h>
+#include <soc/spi_reg.h>
 
 static constexpr int PHYS_W = FrameRenderer::LOGICAL_W * FrameRenderer::SCALE;
 static constexpr int PHYS_H = FrameRenderer::LOGICAL_H * FrameRenderer::SCALE;
@@ -8,6 +9,22 @@ static_assert(PHYS_H % FrameRenderer::STRIP_H == 0, "strips must tile the screen
 static_assert(FrameRenderer::STRIP_H % FrameRenderer::SCALE == 0, "strips must hold whole logical rows");
 
 static inline uint16_t swap16(uint16_t c) { return (c << 8) | (c >> 8); }
+
+// Waits for the in-flight DMA strip, then takes the SPI peripheral back out of DMA mode.
+//
+// TFT_eSPI 2.5.43 is meant to do the second part itself (its dma_end_callback clears
+// SPI_DMA_CONF_REG(spi_host)), but on the ESP32-S3 with this Arduino core it clears the
+// wrong peripheral: spi_host is SPI3_HOST (== 2), and the core's own REG_SPI_BASE(2),
+// which wins over TFT_eSPI's #ifndef-guarded copy, is GPSPI2, while the display bus is
+// GPSPI3. Left in DMA-TX mode, GPSPI3 then sends TFT_eSPI's direct register writes (the
+// CASET/RASET/RAMWR before each strip, and any plain tft.draw*() afterwards) from the
+// empty DMA FIFO instead of the command buffer. The panel never sees a valid write, so it
+// just keeps showing whatever was on it before the first DMA transfer. SPI_PORT is the
+// exact port TFT_eSPI's direct writes use, so this clears the right one.
+static void finishDma(TFT_eSPI& tft) {
+    tft.dmaWait();
+    CLEAR_PERI_REG_MASK(SPI_DMA_CONF_REG(SPI_PORT), SPI_DMA_TX_ENA | SPI_DMA_RX_ENA);
+}
 
 FrameRenderer::FrameRenderer(TFT_eSPI& tft) : _tft(tft), _ui(&tft) {
     memset(_canvas, 0, sizeof(_canvas));
@@ -118,10 +135,12 @@ void FrameRenderer::present() {
         uint32_t c0 = micros();
         composeStrip(s, buf);  // the other buffer may still be in flight — this one isn't
         composeUs += micros() - c0;
-        // Waits for the previous strip's DMA to finish, then queues this one and returns.
+        // Previous strip must be fully sent (and DMA mode cleared) before pushImageDMA's
+        // direct-register setAddrWindow; it then queues this strip and returns right away.
+        finishDma(_tft);
         _tft.pushImageDMA(0, s * STRIP_H, PHYS_W, STRIP_H, (const uint16_t*)buf);
     }
-    _tft.dmaWait();
+    finishDma(_tft);
     _tft.endWrite();
 
     uint32_t total = micros() - t0;
