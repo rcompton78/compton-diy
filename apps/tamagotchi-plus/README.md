@@ -71,8 +71,8 @@ Limits of the unmodified board (see the hardware table):
   a bodge wire from STAT to a spare GPIO plus a pull-up.
 - **Wall chargers and power banks don't show `USB`.** The ESP32-S3 has no VBUS sense
   here. `USB` means the chip is seeing USB start-of-frame packets from a host
-  (`HWCDC::isPlugged()`), and a charge-only supply never sends any. The board still
-  charges from one; only the indicator doesn't know about it.
+  (`Serial.isPlugged()` on the native USB CDC), and a charge-only supply never sends
+  any. The board still charges from one; only the indicator doesn't know about it.
 - **The % is an estimate from voltage alone.** The curve is for a battery at rest, but
   the battery is always either powering the board or charging:
   - On battery, the screen and Wi-Fi pull it down about 0.15V (measured: a nearly full

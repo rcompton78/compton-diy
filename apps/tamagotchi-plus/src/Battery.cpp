@@ -24,6 +24,8 @@ float Battery::voltsToPercent(float v) {
         const CurvePoint& lo = LIPO_CURVE[i];
         if (v >= lo.v) return lo.pct + (v - lo.v) * (hi.pct - lo.pct) / (hi.v - lo.v);
     }
+    // Unreachable: the last segment ends at the 0% floor handled above. Kept so the
+    // function visibly returns on every path (-Wreturn-type).
     return 0.0f;
 }
 
@@ -62,5 +64,8 @@ void Battery::update(unsigned long now) {
 
 bool Battery::usbConnected() const {
     // SOF-based (see Battery.h): true only while a USB host is actually talking to us.
-    return HWCDC::isPlugged();
+    // With ARDUINO_USB_MODE=1 + ARDUINO_USB_CDC_ON_BOOT=1, Serial is the HWCDC instance.
+    // isPlugged() is static on arduino-esp32 2.x but a member on 3.x; calling it through
+    // the object works on both.
+    return Serial.isPlugged();
 }

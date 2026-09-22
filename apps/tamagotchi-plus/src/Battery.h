@@ -19,7 +19,7 @@
 // or discharge is far slower than that, but plugging in/out no longer makes it jump.
 //
 // USB: the S3's USB-Serial/JTAG controller has no VBUS sense, so "USB" here means a USB
-// *host* is sending start-of-frame packets (HWCDC::isPlugged()). A plain wall charger or
+// *host* is sending start-of-frame packets (HWCDC isPlugged()). A plain wall charger or
 // power bank powers the board without being detected. The ETA6098 charger's STAT pin is
 // unrouted, so there's no "charging" signal either (see the README).
 class Battery {
