@@ -1,0 +1,14 @@
+{
+  "tags": [
+    {
+      "name": "float",
+      "direction": "forward",
+      "frames": [
+        {
+          "file": "float/00.png",
+          "ms": 100
+        }
+      ]
+    }
+  ]
+}

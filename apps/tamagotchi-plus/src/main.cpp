@@ -1,8 +1,9 @@
-// Tamagotchi+ — base firmware scaffold (COM-295).
+// Tamagotchi+ — base firmware (COM-295) + graphics engine spike (COM-296).
 //
-// Brings up the display, touch, Wi-Fi provisioning and OTA self-update, and shows a
-// placeholder main screen (name, version, Wi-Fi status, tap feedback). Pet features
-// land on top of this in later cards.
+// Brings up the display, touch, Wi-Fi provisioning and OTA self-update. The main screen
+// is a pixel-art pet scene (see FrameRenderer/PetScene) with the name, version and Wi-Fi
+// status drawn on a UI layer above it. Tap the pet to make it happy; hold to swap to the
+// "sick" palette. Real pet features land on top of this in later cards.
 
 #include <Arduino.h>
 #include <TFT_eSPI.h>
@@ -13,81 +14,101 @@
 
 #include "Config.h"
 #include "Cst816Touch.h"
+#include "FrameRenderer.h"
 #include "OtaUpdateClient.h"
+#include "PaletteIndex.h"
+#include "PetScene.h"
+#include "generated/sprite_assets.h"
 
 // ── Layout ────────────────────────────────────────────────────────────────────
 static constexpr int CX = SCREEN_WIDTH / 2;
 
-static constexpr int TITLE_Y        = 28;
-static constexpr int VERSION_Y      = 58;
-static constexpr int STATUS_Y       = 80;   // two lines of font 2, 16px apart
+// UI layer (physical px). The pet scene fills the whole screen underneath.
+static constexpr int TITLE_Y        = 14;
+static constexpr int VERSION_Y      = 42;
+static constexpr int STATUS_Y       = 58;   // two lines of font 2, 16px apart
 static constexpr int STATUS_H       = 34;
-static constexpr int DIVIDER_Y      = 118;
-static constexpr int TAP_ZONE_TOP   = 122;
-static constexpr int TAP_ZONE_BOT   = 246;
-static constexpr int TAP_COUNT_Y    = 252;
+static constexpr int HINT_Y         = 262;
 
-static constexpr int RING_RADIUS    = 18;
-static constexpr unsigned long RING_VISIBLE_MS = 350;
-static constexpr unsigned long TOUCH_POLL_MS   = 20;
-static constexpr unsigned long STATUS_POLL_MS  = 500;
+static constexpr unsigned long TOUCH_POLL_MS  = 20;
+static constexpr unsigned long STATUS_POLL_MS = 500;
+static constexpr unsigned long HOLD_MS        = 700;   // press this long to swap palettes
+static constexpr int           RELEASE_SAMPLES = 3;    // consecutive no-touch polls (60ms) = real release
+static constexpr unsigned long MIN_FRAME_MS   = 16;    // cap redraws at ~60 fps
+static constexpr unsigned long STATS_LOG_MS   = 5000;
 
-static constexpr uint16_t C_DIM    = 0x8410;  // mid grey
+static constexpr uint16_t C_DIM    = 0x8410;  // mid grey (direct-to-tft message screens)
 static constexpr uint16_t C_ACCENT = TFT_CYAN;
 
 // ── Globals ───────────────────────────────────────────────────────────────────
 TFT_eSPI        tft;
+FrameRenderer   renderer(tft);
+PetScene        pet(renderer);
 Cst816Touch     touchDriver(I2C_SDA, I2C_SCL, TOUCH_RST, SCREEN_WIDTH, SCREEN_HEIGHT);
 WiFiManager     wm;
 ImprovWiFi      improvSerial(&Serial);
 OtaUpdateClient otaClient;
 
+static bool          rendererReady  = false;
+static bool          sceneDirty     = true;
+static unsigned long lastFrameAt    = 0;
+static unsigned long lastStatsLog   = 0;
+
 static String        statusLine1, statusLine2;   // last-drawn Wi-Fi status
 static unsigned long lastStatusPoll = 0;
 
-static bool          wasTouched      = false;
-static unsigned long lastTouchPoll   = 0;
-static bool          ringVisible     = false;
-static unsigned long ringShownAt     = 0;
-static uint32_t      tapCount        = 0;
+static bool          pressed        = false;  // debounced: survives single dropped touch reads
+static int           untouchedPolls = 0;
+static bool          holdHandled    = false;
+static unsigned long pressStart     = 0;
+static unsigned long lastTouchPoll  = 0;
 
 static bool          appMarkedValid  = false;
 static bool          otaCheckedOnce  = false;
 static unsigned long lastUpdateCheck = 0;
 
 // ── Drawing ───────────────────────────────────────────────────────────────────
-static void drawTapCount() {
-    tft.fillRect(0, TAP_COUNT_Y, SCREEN_WIDTH, 16, TFT_BLACK);
-    tft.setTextColor(C_DIM, TFT_BLACK);
-    char buf[24];
-    snprintf(buf, sizeof(buf), "Taps: %lu", (unsigned long)tapCount);
-    tft.drawCentreString(buf, CX, TAP_COUNT_Y, 2);
-}
-
-static void drawTapZoneIdle() {
-    tft.fillRect(0, TAP_ZONE_TOP, SCREEN_WIDTH, TAP_ZONE_BOT - TAP_ZONE_TOP, TFT_BLACK);
-    tft.setTextColor(C_DIM, TFT_BLACK);
-    tft.drawCentreString("Tap anywhere", CX, (TAP_ZONE_TOP + TAP_ZONE_BOT) / 2 - 8, 2);
-}
-
+// Everything on the main screen goes through the renderer: text is drawn onto its UI
+// layer (colours are locked-palette indices, index 0 = see-through) and composed over the
+// pet scene on the next present().
 static void drawStatus() {
-    tft.fillRect(0, STATUS_Y, SCREEN_WIDTH, STATUS_H, TFT_BLACK);
-    tft.setTextColor(TFT_WHITE, TFT_BLACK);
-    tft.drawCentreString(statusLine1, CX, STATUS_Y, 2);
-    tft.setTextColor(C_DIM, TFT_BLACK);
-    tft.drawCentreString(statusLine2, CX, STATUS_Y + 16, 2);
+    if (!rendererReady) return;
+    TFT_eSprite& ui = renderer.ui();
+    ui.fillRect(0, STATUS_Y, SCREEN_WIDTH, STATUS_H, PAL_TRANSPARENT);
+    ui.setTextColor(PAL_WHITE);
+    ui.drawCentreString(statusLine1, CX, STATUS_Y, 2);
+    ui.setTextColor(PAL_LIGHT_GREY);
+    ui.drawCentreString(statusLine2, CX, STATUS_Y + 16, 2);
+    renderer.uiChanged();
+    sceneDirty = true;
 }
+
+static void drawHint() {
+    if (!rendererReady) return;
+    TFT_eSprite& ui = renderer.ui();
+    ui.fillRect(0, HINT_Y, SCREEN_WIDTH, 8, PAL_TRANSPARENT);
+    ui.setTextColor(PAL_LIGHT_GREY);
+    ui.drawCentreString(pet.isSick() ? "tap: pet  hold: normal" : "tap: pet  hold: sick", CX, HINT_Y, 1);
+    renderer.uiChanged();
+    sceneDirty = true;
+}
+
+static void drawMessage(const char* title, const String& detail);
 
 static void drawMainScreen() {
-    tft.fillScreen(TFT_BLACK);
-    tft.setTextColor(C_ACCENT, TFT_BLACK);
-    tft.drawCentreString(DEVICE_NAME, CX, TITLE_Y, 4);
-    tft.setTextColor(C_DIM, TFT_BLACK);
-    tft.drawCentreString(String("v") + FIRMWARE_VERSION, CX, VERSION_Y, 2);
+    if (!rendererReady) {
+        // No frame buffer (out of memory at boot): say so on the raw panel instead.
+        drawMessage("Display error", "renderer init failed");
+        return;
+    }
+    TFT_eSprite& ui = renderer.ui();
+    ui.fillSprite(PAL_TRANSPARENT);
+    ui.setTextColor(PAL_BLUE);
+    ui.drawCentreString(DEVICE_NAME, CX, TITLE_Y, 4);
+    ui.setTextColor(PAL_LIGHT_GREY);
+    ui.drawCentreString(String("v") + FIRMWARE_VERSION, CX, VERSION_Y, 2);
     drawStatus();
-    tft.drawFastHLine(20, DIVIDER_Y, SCREEN_WIDTH - 40, 0x2104);
-    drawTapZoneIdle();
-    drawTapCount();
+    drawHint();
 }
 
 // Full-screen message used before the main screen exists (boot/connecting) and while
@@ -100,17 +121,6 @@ static void drawMessage(const char* title, const String& detail) {
     tft.drawCentreString(title, CX, 135, 2);
     tft.setTextColor(C_DIM, TFT_BLACK);
     tft.drawCentreString(detail, CX, 155, 2);
-}
-
-// Ring + dot at the touch point, clamped so it stays inside the tap zone. Cleared by
-// loop() after RING_VISIBLE_MS.
-static void drawTapRing(const TouchPoint& p) {
-    int x = constrain(p.x, RING_RADIUS + 2, SCREEN_WIDTH - RING_RADIUS - 3);
-    int y = constrain(p.y, TAP_ZONE_TOP + RING_RADIUS + 2, TAP_ZONE_BOT - RING_RADIUS - 3);
-    tft.fillRect(0, TAP_ZONE_TOP, SCREEN_WIDTH, TAP_ZONE_BOT - TAP_ZONE_TOP, TFT_BLACK);
-    tft.drawCircle(x, y, RING_RADIUS, C_ACCENT);
-    tft.drawCircle(x, y, RING_RADIUS - 1, C_ACCENT);
-    tft.fillCircle(x, y, 4, TFT_WHITE);
 }
 
 // ── Wi-Fi ─────────────────────────────────────────────────────────────────────
@@ -235,12 +245,69 @@ void setup() {
     tft.setRotation(0);
     tft.fillScreen(TFT_BLACK);
 
+    rendererReady = renderer.begin();
+    if (rendererReady) {
+        renderer.setUiPalette(assets::PALETTE_NORMAL);
+        pet.begin(millis());
+    } else {
+        Serial.println("gfx: renderer init failed (out of DMA/PSRAM memory?)");
+    }
+
     touchDriver.begin();
 
     setupWifi();
 
     computeWifiStatus(statusLine1, statusLine2);
     drawMainScreen();
+}
+
+// Tap = press shorter than HOLD_MS (fires on release so a hold doesn't also count as a
+// tap). Hold = fires once, as soon as the press reaches HOLD_MS. The CST816T read can
+// drop an occasional sample mid-press (I2C NACK), so a release only counts after
+// RELEASE_SAMPLES no-touch polls in a row. Otherwise one glitch would restart the hold
+// timer (double palette swap) or end the press as a spurious tap.
+static void pollTouch(unsigned long now) {
+    TouchPoint p;  // position unused for now: the whole screen is one tap target
+    if (touchDriver.read(p)) {
+        untouchedPolls = 0;
+        if (!pressed) {
+            pressed     = true;
+            pressStart  = now;
+            holdHandled = false;
+        } else if (!holdHandled && now - pressStart >= HOLD_MS) {
+            holdHandled = true;
+            pet.toggleSick();
+            drawHint();
+        }
+    } else if (pressed && ++untouchedPolls >= RELEASE_SAMPLES) {
+        pressed = false;
+        if (!holdHandled) pet.onTap(now);
+    }
+}
+
+static void renderFrame(unsigned long now) {
+    if (pet.update(now)) sceneDirty = true;
+    if (!rendererReady || !sceneDirty || now - lastFrameAt < MIN_FRAME_MS) return;
+    lastFrameAt = now;
+    sceneDirty  = false;
+    pet.draw(now);
+    renderer.present();
+}
+
+// Rough performance numbers for the COM-296 spike, logged to serial.
+static void logStats(unsigned long now) {
+    if (!rendererReady || now - lastStatsLog < STATS_LOG_MS) return;
+    float secs = (now - lastStatsLog) / 1000.0f;
+    lastStatsLog = now;
+    const FrameRenderer::Stats& st = renderer.stats();
+    if (st.frames) {
+        Serial.printf("gfx: %.1f fps (redraw-on-change), frame %.2f ms avg / %.2f ms max, "
+                      "compose %.2f ms avg | heap %u free, psram %u free | assets %u B\n",
+                      st.frames / secs, st.totalUs / 1000.0f / st.frames, st.maxTotalUs / 1000.0f,
+                      st.composeUs / 1000.0f / st.frames, (unsigned)ESP.getFreeHeap(),
+                      (unsigned)ESP.getFreePsram(), (unsigned)assets::TOTAL_PIXEL_BYTES);
+    }
+    renderer.resetStats();
 }
 
 void loop() {
@@ -276,20 +343,9 @@ void loop() {
 
     if (now - lastTouchPoll >= TOUCH_POLL_MS) {
         lastTouchPoll = now;
-        TouchPoint p;
-        bool touched = touchDriver.read(p);
-        if (touched && !wasTouched) {  // count the press edge, not every polled frame
-            tapCount++;
-            drawTapRing(p);
-            drawTapCount();
-            ringVisible = true;
-            ringShownAt = now;
-        }
-        wasTouched = touched;
+        pollTouch(now);
     }
 
-    if (ringVisible && now - ringShownAt >= RING_VISIBLE_MS) {
-        ringVisible = false;
-        drawTapZoneIdle();
-    }
+    renderFrame(now);
+    logStats(now);
 }

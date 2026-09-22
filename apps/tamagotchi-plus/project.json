@@ -5,16 +5,44 @@
   "tags": ["platform:esp32", "type:firmware"],
   "implicitDependencies": ["touch-driver", "ota-update-client"],
   "targets": {
+    "gen-assets": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "python3 tools/sprites/convert.py --assets apps/tamagotchi-plus/assets --out apps/tamagotchi-plus/include/generated/sprite_assets.h --strict",
+        "cwd": "."
+      },
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/assets/*.png",
+        "{projectRoot}/assets/*.json",
+        "{projectRoot}/assets/*.hex",
+        "{workspaceRoot}/tools/sprites/convert.py"
+      ],
+      "outputs": ["{projectRoot}/include/generated"]
+    },
+    "export-sprites": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tools/sprites/export-sprites.sh apps/tamagotchi-plus/assets",
+        "cwd": "."
+      }
+    },
     "build": {
       "executor": "nx:run-commands",
       "options": {
         "command": "scripts/build-boards.sh apps/tamagotchi-plus",
         "cwd": "."
       },
+      "dependsOn": ["gen-assets"],
       "cache": true,
       "inputs": [
         "{projectRoot}/src/**",
         "{projectRoot}/include/**",
+        "!{projectRoot}/include/generated/**",
+        "{projectRoot}/assets/*.png",
+        "{projectRoot}/assets/*.json",
+        "{projectRoot}/assets/*.hex",
+        "{workspaceRoot}/tools/sprites/convert.py",
         "{projectRoot}/platformio.ini",
         "{workspaceRoot}/libs/touch-driver/src/**",
         "{workspaceRoot}/libs/ota-update-client/src/**",
@@ -28,10 +56,16 @@
         "command": "scripts/pio.sh run -d apps/tamagotchi-plus -e waveshare-s3-169",
         "cwd": "."
       },
+      "dependsOn": ["gen-assets"],
       "cache": true,
       "inputs": [
         "{projectRoot}/src/**",
         "{projectRoot}/include/**",
+        "!{projectRoot}/include/generated/**",
+        "{projectRoot}/assets/*.png",
+        "{projectRoot}/assets/*.json",
+        "{projectRoot}/assets/*.hex",
+        "{workspaceRoot}/tools/sprites/convert.py",
         "{projectRoot}/platformio.ini",
         "{workspaceRoot}/libs/touch-driver/src/**",
         "{workspaceRoot}/libs/ota-update-client/src/**",
@@ -44,7 +78,8 @@
       "options": {
         "command": "scripts/pio.sh run -d apps/tamagotchi-plus -e waveshare-s3-169 -t upload",
         "cwd": "."
-      }
+      },
+      "dependsOn": ["gen-assets"]
     },
     "monitor": {
       "executor": "nx:run-commands",
