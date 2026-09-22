@@ -108,12 +108,12 @@ int PetScene::heartY(const Heart& h, uint32_t now) const {
 
 bool PetScene::update(uint32_t now) {
     bool dirty = _pet.update(now) || _dirty;
-    _dirty = false;
 
     if (_state == State::Happy && _pet.finished()) {
         enter(State::Idle, now);
         dirty = true;
     }
+    _dirty = false;  // consumed as `dirty` above, including enter()'s, so it isn't redrawn twice
 
     // Effects move far more often than the pet animates, so only redraw when a heart
     // has actually moved/blinked by a whole logical pixel.

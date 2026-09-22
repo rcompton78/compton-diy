@@ -1,5 +1,6 @@
 #pragma once
 
+#include <assert.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -47,8 +48,10 @@ struct SpriteSheet {
     }
 };
 
-// Palette index of pixel (x, y) within a frame.
+// Palette index of pixel (x, y) within a frame. x/y are frame-relative (0..w-1, 0..h-1),
+// not relative to the sheet's cell (which would also need the frame's x/y offset).
 inline uint8_t framePixel(const SpriteFrame& f, int x, int y) {
+    assert(x >= 0 && y >= 0 && x < f.w && y < f.h);
     uint8_t b = f.pixels[y * ((f.w + 1) / 2) + (x >> 1)];
     return (x & 1) ? (b & 0x0F) : (b >> 4);
 }

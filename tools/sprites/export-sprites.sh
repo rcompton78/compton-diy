@@ -10,6 +10,10 @@
 set -euo pipefail
 
 assets_dir="${1:?usage: export-sprites.sh <assets-dir>}"
+if [ ! -d "$assets_dir" ]; then
+    echo "export-sprites: $assets_dir is not a directory" >&2
+    exit 1
+fi
 aseprite="${ASEPRITE:-aseprite}"
 
 if ! command -v "$aseprite" >/dev/null 2>&1; then

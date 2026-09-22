@@ -77,10 +77,13 @@ if not okJson or manifest == nil then fail(params.manifest .. ": invalid JSON ("
 local baseDir = app.fs.filePath(params.manifest)
 if not manifest.tags or #manifest.tags == 0 then fail(params.manifest .. ": no tags") end
 
-local frames = {}  -- { image, ms, tagIndex }
+local frames = {}  -- { image, ms }
 for t, tag in ipairs(manifest.tags) do
   if not tag.name or not tag.frames or #tag.frames == 0 then fail("tag #" .. t .. " needs a name and frames") end
   for _, f in ipairs(tag.frames) do
+    if not f.file or f.file == "" then fail("tag " .. tag.name .. ": every frame needs a \"file\"") end
+    local ms = f.ms or 100  -- manifest "ms" is optional; Aseprite's own default frame duration
+    if type(ms) ~= "number" or ms <= 0 then fail("tag " .. tag.name .. ": bad frame duration " .. tostring(ms)) end
     local path = app.fs.joinPath(baseDir, f.file)
     if not app.fs.isFile(path) then fail("missing frame " .. path) end
     local okImg, img = pcall(function() return Image{ fromFile = path } end)
@@ -91,7 +94,7 @@ for t, tag in ipairs(manifest.tags) do
       rgb:drawImage(img)
       img = rgb
     end
-    frames[#frames + 1] = { image = img, ms = f.ms or 100, tag = t }
+    frames[#frames + 1] = { image = img, ms = ms }
   end
 end
 
@@ -107,7 +110,7 @@ local sprite = Sprite(w, h, ColorMode.RGB)
 app.activeSprite = sprite
 sprite:setPalette(palette)
 local layer = sprite.layers[1]
-layer.name = "pet"
+layer.name = app.fs.fileTitle(params.out)  -- e.g. "pet" for pet.aseprite
 
 local pc = app.pixelColor
 for i, f in ipairs(frames) do

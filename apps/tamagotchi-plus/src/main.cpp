@@ -267,7 +267,7 @@ void setup() {
 // RELEASE_SAMPLES no-touch polls in a row. Otherwise one glitch would restart the hold
 // timer (double palette swap) or end the press as a spurious tap.
 static void pollTouch(unsigned long now) {
-    TouchPoint p;
+    TouchPoint p;  // position unused for now: the whole screen is one tap target
     if (touchDriver.read(p)) {
         untouchedPolls = 0;
         if (!pressed) {
