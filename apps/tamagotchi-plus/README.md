@@ -148,7 +148,7 @@ Measured on the Waveshare board (40 MHz SPI):
 |---|---|
 | Full frame (compose + DMA push, 240×280) | 27.7 ms avg, 27.8 ms max → ~36 fps ceiling |
 | CPU compose time per frame | 1.5 ms: the rest is the SPI transfer itself (26.9 ms minimum at 40 MHz) |
-| Redraw rate while idling | ~3.4 fps: it only redraws when the frame changes |
+| Redraw rate while idling | 5 fps: 5 idle frames per 1s loop, and it only redraws when the frame changes |
 | Sprite pixel data (flash) | 8,860 B for 12 frames (4bpp: 11 pet frames at 40×40 + a 12×10 heart) |
 | Canvas + DMA strips (internal RAM) | 4.2KB + 19.2KB |
 | UI layer (PSRAM) | 33.6KB |
