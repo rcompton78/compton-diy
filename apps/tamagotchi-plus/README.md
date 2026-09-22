@@ -149,7 +149,7 @@ Measured on the Waveshare board (40 MHz SPI):
 | Full frame (compose + DMA push, 240×280) | 27.7 ms avg, 27.8 ms max → ~36 fps ceiling |
 | CPU compose time per frame | 1.5 ms: the rest is the SPI transfer itself (26.9 ms minimum at 40 MHz) |
 | Redraw rate while idling | ~3.4 fps: it only redraws when the frame changes |
-| Sprite pixel data (flash) | 8,040 B for 11 frames (4bpp) |
+| Sprite pixel data (flash) | 8,860 B for 12 frames (4bpp: 11 pet frames at 40×40 + a 12×10 heart) |
 | Canvas + DMA strips (internal RAM) | 4.2KB + 19.2KB |
 | UI layer (PSRAM) | 33.6KB |
 | Free heap / PSRAM at runtime | ~255KB / ~8.3MB |
@@ -192,15 +192,27 @@ python3 tools/sprites/convert.py --assets apps/tamagotchi-plus/assets --out /tmp
 
 ### 1. Generate frames with PixelLab
 
-Add the PixelLab MCP to Claude Code once (the key is in Bitwarden as `shared/PIXELLAB_SECRET`):
+The repo's `.mcp.json` registers the PixelLab MCP for Claude Code sessions in this repo. It
+reads the API key from the `PIXELLAB_SECRET` environment variable (stored in Bitwarden as
+`shared/PIXELLAB_SECRET`), so export that before starting Claude Code.
+
+What worked for the current pet (4 generations total):
+
+1. `create_image_pixflux`: a 40×40 base frame, `no_background`, with the locked palette
+   passed as `color_image_base64` (a 15×1 PNG of `palette.hex`) so it's already close to
+   on-palette.
+2. `animate_image` on that frame, once per tag (`idle` 4 frames, `happy` 6 frames).
+3. `create_image_pixen` (16×16) for the heart, cropped to its content.
+
+Download finished images with the API key (`?index=N` picks an animation frame; index 0
+is the input frame):
 
 ```bash
-claude mcp add -s user pixellab https://api.pixellab.ai/mcp -t http -H "Authorization: Bearer <key>"
+curl -f -H "Authorization: Bearer $PIXELLAB_SECRET" -o frame.png \
+  "https://api.pixellab.ai/mcp/images/<job_id>/download?index=1"
 ```
 
-Restart Claude Code afterwards so the tools load. Then ask for a character and its
-animations, e.g. a 40×40 front-facing pet with `idle` and `happy` animations, and save
-the frames under `assets/src/<name>/<tag>/NN.png`.
+Save the frames as `assets/src/<name>/<tag>/NN.png` and write the `manifest.json` (below).
 
 ### 2. Import into Aseprite
 

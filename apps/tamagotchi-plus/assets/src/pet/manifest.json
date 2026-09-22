@@ -6,19 +6,23 @@
       "frames": [
         {
           "file": "idle/00.png",
-          "ms": 400
+          "ms": 700
         },
         {
           "file": "idle/01.png",
-          "ms": 200
+          "ms": 90
         },
         {
           "file": "idle/02.png",
-          "ms": 400
+          "ms": 90
         },
         {
           "file": "idle/03.png",
-          "ms": 200
+          "ms": 300
+        },
+        {
+          "file": "idle/04.png",
+          "ms": 500
         }
       ]
     },
@@ -28,11 +32,11 @@
       "frames": [
         {
           "file": "happy/00.png",
-          "ms": 80
+          "ms": 110
         },
         {
           "file": "happy/01.png",
-          "ms": 100
+          "ms": 110
         },
         {
           "file": "happy/02.png",
@@ -40,15 +44,15 @@
         },
         {
           "file": "happy/03.png",
-          "ms": 100
+          "ms": 120
         },
         {
           "file": "happy/04.png",
-          "ms": 80
+          "ms": 160
         },
         {
           "file": "happy/05.png",
-          "ms": 200
+          "ms": 320
         }
       ]
     }
