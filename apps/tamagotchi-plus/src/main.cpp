@@ -2,8 +2,9 @@
 //
 // Brings up the display, touch, Wi-Fi provisioning and OTA self-update. The main screen
 // is a pixel-art pet scene (see FrameRenderer/PetScene) with the name, version, battery/USB
-// status (COM-298) and Wi-Fi status drawn on a UI layer above it. Tap the pet to make it happy; hold to swap to the
-// "sick" palette. Real pet features land on top of this in later cards.
+// status (COM-298) and Wi-Fi status drawn on a UI layer above it. Tap the pet to make it
+// happy; hold to swap to the "sick" palette. Real pet features land on top of this in
+// later cards.
 
 #include <Arduino.h>
 #include <TFT_eSPI.h>

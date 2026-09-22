@@ -2,9 +2,9 @@
 
 #include "Config.h"
 
-static constexpr int   ADC_SAMPLES = 16;
-static constexpr float EMA_ALPHA   = 0.2f;   // per 2s sample → ~10s to settle after a step
-static constexpr float PCT_DEADBAND = 0.75f; // shown % only moves once it's clearly changed
+static constexpr int   ADC_SAMPLES  = 16;
+static constexpr float EMA_ALPHA    = 0.2f;   // per 2s sample → ~10s to settle after a step
+static constexpr float PCT_DEADBAND = 0.75f;  // shown % only moves once it's clearly changed
 
 // Single-cell LiPo, resting (open-circuit) voltage → state of charge. Typical curve for a
 // small pouch cell; interpolated linearly between points.

@@ -13,8 +13,8 @@
 // The curve is for a *resting* cell, but B+ is always read under load or while charging:
 //  - On battery, the running load sags B+ ~0.15V (BAT_LOAD_SAG_V), which on the steep
 //    part of the curve is worth ~20 points, so it's added back before the lookup.
-//  - On USB, the charger holds B+ at its 4.2V charge voltage, so it reads ~100% no matter
-//    how full the cell really is.
+//  - While charging, the charger pushes B+ up towards its 4.2V charge voltage, so it reads
+//    high (~100% once it gets there) no matter how full the cell really is.
 // So the shown % moves at most one point per PCT_STEP_MS towards the target. Real charge
 // or discharge is far slower than that, but plugging in/out no longer makes it jump.
 //
