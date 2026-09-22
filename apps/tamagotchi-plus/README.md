@@ -1,9 +1,9 @@
 # Tamagotchi+
 
 A virtual-pet firmware for the **Waveshare ESP32-S3-Touch-LCD-1.69** (1.69" 240×280
-touch display with onboard accelerometer/gyroscope). This is the base scaffold: it
-brings up the display and touch, handles Wi-Fi setup and self-updates, and shows a
-placeholder main screen. Pet features are coming in later updates.
+touch display with onboard accelerometer/gyroscope). It brings up the display and
+touch, handles Wi-Fi setup and self-updates, and shows an animated pixel-art pet. Real
+pet features (stats, care, evolution) are coming in later updates.
 
 ## Hardware
 
@@ -42,9 +42,13 @@ Either way, the credentials are saved to flash and the device reconnects on ever
 
 ## Main screen
 
-Shows the name, firmware version, and live Wi-Fi status (network name + IP, connecting,
-or setup mode). Tapping anywhere draws a ring at the touch point and increments a tap
-counter, which confirms the display and touch are working.
+An animated pixel-art pet on a small scene, with the name, firmware version and live
+Wi-Fi status (network name + IP, connecting, or setup mode) along the top.
+
+- **Tap** the screen: the pet plays its happy animation and a heart floats up, then it
+  goes back to idling.
+- **Hold** for about a second: swaps the scene to the "sick" colour palette (hold again to
+  swap back). This is a demo of palette swapping for now, not a real pet state.
 
 ## Staying up to date
 
@@ -65,3 +69,156 @@ pnpm nx run tamagotchi-plus:monitor                  # serial monitor
 ```
 
 The serial port also carries Improv, so you may see Improv frames in the monitor.
+
+Sprite assets are generated from the committed exports in `assets/` before every build
+(the `gen-assets` target, which `build*`/`flash*` depend on), so there's no extra step.
+
+## Graphics
+
+### How a frame is drawn
+
+The scene is pixel art at a low **logical resolution of 60×70**, and every logical pixel
+is drawn as a crisp 4×4 block to fill the 240×280 panel. Rendering happens in
+`src/FrameRenderer.cpp`:
+
+1. **Scene layers, in palette indices.** Background → pet → effects (the heart) are drawn
+   into a 60×70 canvas of 4-bit palette indices (4KB, internal RAM). Nothing is RGB yet.
+2. **UI layer, full resolution.** Text is drawn with the normal TFT_eSPI calls onto a
+   full-screen 4bpp `TFT_eSprite` (33KB, PSRAM), using the same locked palette. Index 0 is
+   see-through, so text sits on top of the scene at full sharpness rather than 4× blocky.
+3. **Compose + DMA in strips.** `present()` builds the frame 20 rows at a time: palette
+   lookup, 4× horizontal/vertical expand, UI overlay (skipped entirely for rows with no
+   UI pixels), and hands each strip to SPI DMA. It double-buffers: the next strip is
+   composed while the previous one is still being sent.
+
+The whole frame is always composed off-screen, so nothing is ever cleared and redrawn
+where you can see it: no flicker. The pet only redraws when something changed (a new
+animation frame, a heart moving by a logical pixel, a status update), capped at ~60fps.
+
+**Why strips instead of one full-screen framebuffer in PSRAM:** a 240×280 RGB565 frame is
+134KB, too big to keep in internal RAM next to Wi-Fi. On this Arduino core (ESP-IDF 4.4),
+SPI DMA can't read PSRAM directly: the driver would bounce-copy the whole thing through
+internal RAM anyway. Two 240×20 strips are 19KB of DMA-capable internal RAM and give the
+same on-screen result. The full-screen state that does exist (the canvas and the UI
+layer) stays in compact index form.
+
+### Palettes and palette swaps
+
+Every colour on the main screen comes from a **locked 16-entry palette**:
+`assets/palette.hex`, 15 colours (the PICO-8 palette minus black) plus index 0 =
+transparent. Sprites store 4-bit indices, not colours. `assets/palette-<name>.hex` files
+recolour the same 15 slots. The "sick" palette (`palette-sick.hex`) turns the whole scene
+olive and washed-out with no extra pixel data, just a different 16-entry lookup table.
+`include/PaletteIndex.h` names the slots for code (background, UI text).
+
+The sprites' outline colour is slot 1 (navy), so keep backgrounds off navy or outlines vanish.
+
+### Library choice: TFT_eSPI (kept) vs LovyanGFX
+
+Both drive this ST7789 over SPI with DMA on the ESP32-S3. We kept **TFT_eSPI**:
+
+- **DMA works for what we need.** `initDMA()` + `pushImageDMA()` stream a strip while
+  the CPU composes the next one, which is all the renderer asks of the library.
+- **Scaling isn't needed from the library.** LovyanGFX's big win is sprite
+  zoom/rotate (`pushRotateZoom`) plus palette sprites with nicer ergonomics. But integer
+  4× scaling of a 60×70 index canvas is a trivial inner loop (4 stores per logical
+  pixel), and doing it ourselves during compose avoids an intermediate full-size
+  buffer. A generic zoom would be slower and would need that buffer.
+- **Already set up and verified.** The panel's BGR order, 20px CGRAM offset and pins were
+  verified on hardware in COM-295, and the OTA/Wi-Fi screens, touch driver and
+  `libs/*` code all use TFT_eSPI (as does cyd-clock). Switching would mean re-deriving the
+  panel config in LovyanGFX's format and porting all of that for no rendering gain.
+- **What would change the decision:** if we later want rotation/scaling of large
+  sprites at runtime, parallel-bus panels, or tearing-free output via the panel's TE
+  signal (this board doesn't expose TE, so neither library can sync to it here),
+  LovyanGFX is the stronger library. The renderer only touches the library in
+  `present()`, so swapping later is contained.
+
+### Performance
+
+The firmware logs rough numbers to serial every 5 seconds while the scene is animating:
+
+```
+gfx: <fps> fps (redraw-on-change), frame <avg> ms avg / <max> ms max, compose <ms> ms avg | heap <n> free, psram <n> free | assets <n> B
+```
+
+| Metric | Value |
+|---|---|
+| Sprite pixel data (flash) | 8,040 B for 11 frames (4bpp) |
+| Canvas + DMA strips (internal RAM) | 4.2KB + 19.2KB |
+| UI layer (PSRAM) | 33.6KB |
+| Full-frame time / fps | _pending on-device measurement_ |
+
+## Sprite workflow
+
+Art is authored as Aseprite files, and the firmware is built from committed exports of them:
+
+```
+PixelLab MCP  →  PNG frames + manifest  →  png-to-aseprite.lua  →  <name>.aseprite
+                                                                      │ (hand touch-ups)
+                                                   export-sprites     ▼
+firmware  ←  gen-assets (tools/sprites/convert.py)  ←  <name>.png + <name>.json (committed)
+```
+
+Layout of `assets/`:
+
+| Path | What it is |
+|---|---|
+| `palette.hex`, `palette-*.hex` | Locked palette + alternates (one `RRGGBB` per line) |
+| `<name>.aseprite` | Editable source of truth |
+| `<name>.png` + `<name>.json` | Aseprite sheet export (`json-array`, with tags). **These are what the build reads.** |
+| `src/<name>/` | Raw PNG frames + `manifest.json` that the `.aseprite` was imported from |
+
+**Aseprite never runs in CI or the firmware build.** Its license doesn't allow
+redistributing the binary, so it's a local-only tool. `gen-assets` reads only the
+committed `.png` + `.json`, with a small standard-library-only Python script (no Pillow).
+Always re-export and commit the sheet + JSON after editing a `.aseprite`.
+
+The converter enforces the **palette lock**: in the Nx target (`--strict`), any
+off-palette or partially transparent pixel fails the build. Run it by hand without
+`--strict` to see every offending colour, snapped to the nearest palette colour:
+
+```bash
+python3 tools/sprites/convert.py --assets apps/tamagotchi-plus/assets --out /tmp/sprites.h
+```
+
+### 1. Generate frames with PixelLab
+
+Add the PixelLab MCP to Claude Code once (the key is in Bitwarden as `shared/PIXELLAB_SECRET`):
+
+```bash
+claude mcp add -s user pixellab https://api.pixellab.ai/mcp -t http -H "Authorization: Bearer <key>"
+```
+
+Restart Claude Code afterwards so the tools load. Then ask for a character and its
+animations, e.g. a 40×40 front-facing pet with `idle` and `happy` animations, and save
+the frames under `assets/src/<name>/<tag>/NN.png`.
+
+### 2. Import into Aseprite
+
+`tools/sprites/png-to-aseprite.lua` builds a `.aseprite` from a folder of frames and a
+`manifest.json` (tags, per-frame durations). It maps every frame onto the locked palette
+(which also cleans up stray colours in AI output) and saves a normal, hand-editable file.
+
+### 3. Export sheet + JSON
+
+```bash
+pnpm nx run tamagotchi-plus:export-sprites   # every assets/*.aseprite → <name>.png + <name>.json
+```
+
+### 4. Preview, build, flash
+
+```bash
+python3 tools/sprites/preview.py --assets apps/tamagotchi-plus/assets --out build/sprite-preview
+pnpm nx run tamagotchi-plus:flash-waveshare-s3-169
+```
+
+`preview.py` (needs Pillow) writes an 8× PNG of every frame (one row per palette) and a
+GIF per tag at the authored timings, rendered through the converter so it shows exactly
+what the device will draw. It's handy for reviewing art in a chat before flashing.
+
+### Installing Aseprite (for steps 2–3 only)
+
+Aseprite is paid: buy it on Steam or itch.io (both include a Linux build), or compile it
+from source ([instructions](https://github.com/aseprite/aseprite/blob/main/INSTALL.md)).
+Put the `aseprite` binary on your `PATH`, or set `ASEPRITE=/path/to/aseprite`.

@@ -70,6 +70,10 @@ Select the board-specific implementation (e.g. touch/display driver backend) at 
 
 `apps/tamagotchi-plus` runs a WiFiManager captive portal in **non-blocking** mode (`setConfigPortalBlocking(false)` + `wm.process()` in `loop()`) so Improv serial (`improvSerial.handleSerial()`) can be serviced at the same time. That's what lets the ESP Web Tools flasher's post-install "Connect to Wi-Fi" step work, since ESP Web Tools auto-detects Improv and needs no manifest/template change. One gotcha: on ESP32, WiFiManager's portal-save path leaves `WiFi.persistent(false)` set afterwards, so Improv's connect is wrapped with `setCustomConnectWiFi()` to force `WiFi.persistent(true)` around `WiFi.begin`. Without that, credentials provisioned via Improv after a portal save wouldn't survive a reboot.
 
+### Sprite assets (tamagotchi-plus)
+
+`apps/tamagotchi-plus/assets/<name>.aseprite` is the editable source, but the firmware is built from the committed Aseprite exports next to it (`<name>.png` sheet + `<name>.json` json-array data). The `gen-assets` target (`tools/sprites/convert.py`, stdlib-only Python) turns them into the gitignored `include/generated/sprite_assets.h`, and `build`/`build-<board>`/`flash-<board>` all `dependsOn` it. Aseprite must never run in CI or in any build-path target: its license forbids redistributing the binary. Only the local-only `export-sprites` target calls it. So whenever a `.aseprite` changes, re-export and commit the sheet + JSON. The converter runs `--strict` in the target, so any pixel outside the locked `assets/palette.hex` fails the build. The build targets' `inputs` list `assets/*` and `convert.py` directly, and exclude `include/generated/**`, so an export change invalidates the Nx cache for the firmware too.
+
 ### Release workflow
 
 `.github/workflows/release.yml` runs on every push to `master`. A project's `release` target (see `apps/cyd-clock/project.json`) wraps `tools/esp-flasher/generate_release.py`, producing a merged `.bin`, an OTA `.bin`, and an ESP Web Tools manifest entry per board under `dist/<project>/`. Two modes, one per board flag each:
