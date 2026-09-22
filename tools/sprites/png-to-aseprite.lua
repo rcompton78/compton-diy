@@ -71,9 +71,14 @@ if app.fs.isFile(params.out) and params.force ~= "true" then
        .. "(this discards any hand edits made in it)")
 end
 
--- Aseprite's json.decode returns userdata (not Lua tables) and raises on malformed input.
+-- Aseprite's json.decode raises on malformed input, and returns objects/arrays as userdata
+-- (not Lua tables) but scalars as plain Lua values. So the root must be userdata (or a
+-- table, should a future Aseprite return one) before it can be indexed at all.
 local okJson, manifest = pcall(json.decode, readFile(params.manifest))
-if not okJson or manifest == nil then fail(params.manifest .. ": invalid JSON (" .. tostring(manifest) .. ")") end
+if not okJson then fail(params.manifest .. ": invalid JSON (" .. tostring(manifest) .. ")") end
+if type(manifest) ~= "userdata" and type(manifest) ~= "table" then
+  fail(params.manifest .. ": root must be a JSON object, got " .. type(manifest))
+end
 local baseDir = app.fs.filePath(params.manifest)
 if not manifest.tags or #manifest.tags == 0 then fail(params.manifest .. ": no tags") end
 
