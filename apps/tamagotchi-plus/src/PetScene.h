@@ -58,7 +58,10 @@ public:
 
     State   state() const { return _state; }
     uint8_t stage() const { return _stage; }
-    // True once the hatch animation has finished, so main can persist "hatched".
+    // True whenever the egg is past hatching — which includes a boot that began already
+    // hatched, where no animation ran. It is a state test, not a just-finished edge, so a
+    // caller wanting the moment of hatching must track the transition itself (main.cpp
+    // does, via its own persisted eggHatched flag).
     bool hatchDone() const { return _state == State::Baby; }
 
     // Advances animations/effects. Returns true if the scene needs redrawing.

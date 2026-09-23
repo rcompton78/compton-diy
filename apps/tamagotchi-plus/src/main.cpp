@@ -277,7 +277,7 @@ static void checkForUpdate() {
 // to NVS periodically, so time spent powered off never advances the egg.
 static_assert(HATCH_MAX_MS > HATCH_MIN_MS,
               "HATCH_MAX_MS must exceed HATCH_MIN_MS: rollHatchTarget() takes a modulo of the "
-              "difference, and %0 is undefined behaviour (it traps on ESP32).");
+              "difference, and a modulo by zero is undefined behaviour (it traps on ESP32).");
 
 static unsigned long rollHatchTarget() {
 #if HATCH_TEST_MODE
