@@ -68,7 +68,7 @@
 // Test mode: one fixed, short window so the six crack stages and the pop can be watched
 // end to end without waiting minutes per flash. MUST be 0 for a real build.
 #define HATCH_TEST_MODE 1
-#define HATCH_TEST_MS   (60UL * 1000)
+#define HATCH_TEST_MS   (30UL * 1000)
 
 #if HATCH_TEST_MODE
 #warning "HATCH_TEST_MODE is ON: the egg hatches in HATCH_TEST_MS, not the real 3-5 minutes. Set it to 0 before releasing."

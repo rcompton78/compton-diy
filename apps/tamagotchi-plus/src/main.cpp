@@ -300,6 +300,15 @@ static void loadEggState() {
         eggElapsedMs = 0;
         saveEggState();
     }
+#if HATCH_TEST_MODE
+    // In test mode the constant always wins, so editing HATCH_TEST_MS takes effect on the
+    // next boot instead of waiting for a reset to roll a fresh target.
+    if (eggTargetMs != HATCH_TEST_MS) {
+        eggTargetMs = HATCH_TEST_MS;
+        if (eggElapsedMs > eggTargetMs) eggElapsedMs = 0;
+        saveEggState();
+    }
+#endif
     Serial.printf("egg: %s, %lu/%lu ms elapsed (powered-on)\n",
                   eggHatched ? "hatched" : "incubating", eggElapsedMs, eggTargetMs);
 }
