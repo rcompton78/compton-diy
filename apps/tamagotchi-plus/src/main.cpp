@@ -112,8 +112,8 @@ static void drawHint() {
     TFT_eSprite& ui = renderer.ui();
     ui.fillRect(0, HINT_Y, SCREEN_WIDTH, 8, PAL_TRANSPARENT);
     ui.setTextColor(PAL_LIGHT_GREY);
-    ui.drawCentreString(pet.state() == PetScene::State::Egg ? "tap: rock egg   hold 5s: reset"
-                                                             : "tap: heart   hold 5s: reset egg",
+    String hold = String("   hold ") + (EGG_RESET_HOLD_MS / 1000) + "s: reset";
+    ui.drawCentreString((pet.state() == PetScene::State::Egg ? "tap: rock egg" : "tap: heart") + hold,
                         CX, HINT_Y, 1);
     renderer.uiChanged();
     sceneDirty = true;
@@ -275,6 +275,10 @@ static void checkForUpdate() {
 // ── Hatch timer ───────────────────────────────────────────────────────────────
 // Counts powered-on time only: the elapsed total is accumulated while running and flushed
 // to NVS periodically, so time spent powered off never advances the egg.
+static_assert(HATCH_MAX_MS > HATCH_MIN_MS,
+              "HATCH_MAX_MS must exceed HATCH_MIN_MS: rollHatchTarget() takes a modulo of the "
+              "difference, and %0 is undefined behaviour (it traps on ESP32).");
+
 static unsigned long rollHatchTarget() {
 #if HATCH_TEST_MODE
     return HATCH_TEST_MS;
@@ -366,11 +370,15 @@ void setup() {
     tft.setRotation(0);
     tft.fillScreen(TFT_BLACK);
 
+    // Load the hatch state unconditionally: tickHatch()/resetEgg() run from loop() and
+    // pollTouch() whether or not the renderer came up, and an unopened Preferences plus a
+    // zero eggTargetMs would divide by zero and hatch on the first loop.
+    loadEggState();
+    lastEggTick = lastEggSave = millis();
+
     rendererReady = renderer.begin();
     if (rendererReady) {
         renderer.setUiPalette(assets::PALETTE_NORMAL);
-        loadEggState();
-        lastEggTick = lastEggSave = millis();
         pet.begin(millis(), eggHatched);
     } else {
         Serial.println("gfx: renderer init failed (out of DMA/PSRAM memory?)");

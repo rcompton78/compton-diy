@@ -79,6 +79,9 @@ private:
     void scheduleIdleRock(uint32_t now);
     // Lid position during/after the hatch, in logical px relative to the egg sprite.
     void lidOffset(uint32_t now, int& dx, int& dy, uint8_t& frame) const;
+    // Where the arc leaves the lid once it reaches the ground. Solved from the same
+    // constants the arc uses, so the landing and a post-reboot restore cannot drift apart.
+    void lidRestPose(int& dx, int& dy) const;
     bool heartVisible(const Heart& h, uint32_t now) const;
     int  heartY(const Heart& h, uint32_t now) const;
 

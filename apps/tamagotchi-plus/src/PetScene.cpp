@@ -33,6 +33,7 @@ static const int ROCK_SHAKE[] = {1, -1, 1, -1, 2, -2, 1, 0};
 static constexpr float LID_VX   =  12.0f;   // logical px / s
 static constexpr float LID_VY0  = -43.0f;
 static constexpr float LID_GRAV =  82.0f;   // px / s²
+static constexpr uint8_t LID_REST_FRAME = 2;  // the fully-tilted frame it comes to rest on
 
 // ── AnimPlayer ───────────────────────────────────────────────────────────────────────
 
@@ -89,8 +90,7 @@ void PetScene::begin(uint32_t now, bool hatched) {
         _lidReleased = true;
         // Rest the lid where the arc would have left it, so a reboot after hatching looks
         // the same as the moment the hatch ended.
-        _lidRestX = 19;
-        _lidRestY = GROUND_Y + 1 - EGG_Y - (assets::EGGSHELL.frames[2].y + assets::EGGSHELL.frames[2].h - 1);
+        lidRestPose(_lidRestX, _lidRestY);
         const SpriteTag* open = assets::EGG.findTag("open");
         if (open) _egg.play(assets::EGG, *open, true, now);
     } else {
@@ -163,9 +163,19 @@ int PetScene::rockOffset(uint32_t now) const {
     return i < n ? pat[i] : 0;
 }
 
+void PetScene::lidRestPose(int& dx, int& dy) const {
+    const SpriteFrame& lf = assets::EGGSHELL.frames[LID_REST_FRAME];
+    float targetDy = (float)(GROUND_Y + 1 - EGG_Y - (lf.y + lf.h - 1));
+    // dy(t) = LID_VY0·t + ½·LID_GRAV·t², taking the descending root.
+    float disc = LID_VY0 * LID_VY0 + 2.0f * LID_GRAV * targetDy;
+    float t    = disc > 0.0f ? (-LID_VY0 + sqrtf(disc)) / LID_GRAV : 0.0f;
+    dx = (int)lroundf(LID_VX * t);
+    dy = (int)lroundf(targetDy);
+}
+
 void PetScene::lidOffset(uint32_t now, int& dx, int& dy, uint8_t& frame) const {
     if (_state == State::Baby) {
-        dx = _lidRestX; dy = _lidRestY; frame = 2;
+        dx = _lidRestX; dy = _lidRestY; frame = LID_REST_FRAME;
         return;
     }
     // Signed: now - _hatchStart is unsigned, so subtracting HATCH_SHAKE_MS before the
@@ -231,9 +241,8 @@ bool PetScene::update(uint32_t now) {
         const SpriteFrame& lf = assets::EGGSHELL.frames[f];
         int bottom = EGG_Y + dy + lf.y + lf.h - 1;
         if (bottom >= GROUND_Y + 1) {
-            _lidRestX = dx;
-            _lidRestY = GROUND_Y + 1 - EGG_Y - (lf.y + lf.h - 1);
-            _state    = State::Baby;   // hatched: main persists this
+            lidRestPose(_lidRestX, _lidRestY);
+            _state = State::Baby;   // hatched: main persists this
         }
         uint32_t sig = (uint32_t)(dx + 128) * 4096 + (uint32_t)(dy + 128) * 8 + f;
         if (sig != _lastLidSig) { _lastLidSig = sig; dirty = true; }

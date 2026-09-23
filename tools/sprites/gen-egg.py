@@ -54,7 +54,12 @@ STAGES = [(0.00, 0, False, False),   # 0 pristine
           (1.00, 3, True,  False),   # 4 a piece breaks away
           (1.00, 3, True,  True)]    # 5 the creature looks out
 
-HOLE_W, HOLE_H, HOLE_FX, HOLE_FY, EYE_DX = 9, 5, 0.46, 0.30, (-2, 2)
+HOLE_W, HOLE_H, HOLE_FX, HOLE_FY = 9, 5, 0.46, 0.30
+EYE_DX      = (-2, 2)   # eyes seen through the 9px hole at stage 5
+EYE_DX_OPEN = (-3, 3)   # eyes inside the wider opening once the lid is off
+# Slightly over 1 so the ellipse keeps its corner pixels: an exact unit test drops them
+# and the hole reads as a diamond rather than an oval at this size.
+HOLE_TOLERANCE = 1.05
 CUT_FY = 0.42          # where the lid breaks off
 LID_CROP_H = 26        # lid frames are cropped to this many rows
 
@@ -162,7 +167,7 @@ def _image(sh, px):
     return im
 
 
-def stage_image(sh, stage, eye=CREAM):
+def stage_image(sh, stage, eye=None):
     reveal, branches, hole, eyes = STAGES[stage]
     px = sh.shaded()
     master = _path(sh, MASTER)
@@ -178,7 +183,7 @@ def stage_image(sh, stage, eye=CREAM):
         cells = []
         for dy in range(-(HOLE_H // 2), HOLE_H - HOLE_H // 2):
             for dx in range(-(HOLE_W // 2), HOLE_W - HOLE_W // 2):
-                if (dx / (HOLE_W / 2.0)) ** 2 + (dy / (HOLE_H / 2.0)) ** 2 <= 1.05:
+                if (dx / (HOLE_W / 2.0)) ** 2 + (dy / (HOLE_H / 2.0)) ** 2 <= HOLE_TOLERANCE:
                     x, y = hx + dx, hy + dy
                     if sh.interior(x, y):
                         px[y][x] = NAVY; cells.append((x, y))
@@ -228,7 +233,7 @@ def opened_base(base, eye=CREAM, depth=3):
                 d[x, y] = NAVY + (255,)
     if eye is not None and tops:
         cx = (min(tops) + max(tops)) // 2
-        for dx in (-3, 3):
+        for dx in EYE_DX_OPEN:
             if cx + dx in tops:
                 y = tops[cx + dx] + 3
                 if 0 <= y < H and d[cx + dx, y][3]:
