@@ -1,0 +1,90 @@
+{
+  "tags": [
+    {
+      "name": "stage0",
+      "direction": "forward",
+      "frames": [
+        {
+          "file": "stage0/00.png",
+          "ms": 1000
+        }
+      ]
+    },
+    {
+      "name": "stage1",
+      "direction": "forward",
+      "frames": [
+        {
+          "file": "stage1/00.png",
+          "ms": 1000
+        }
+      ]
+    },
+    {
+      "name": "stage2",
+      "direction": "forward",
+      "frames": [
+        {
+          "file": "stage2/00.png",
+          "ms": 1000
+        }
+      ]
+    },
+    {
+      "name": "stage3",
+      "direction": "forward",
+      "frames": [
+        {
+          "file": "stage3/00.png",
+          "ms": 1000
+        }
+      ]
+    },
+    {
+      "name": "stage4",
+      "direction": "forward",
+      "frames": [
+        {
+          "file": "stage4/00.png",
+          "ms": 1000
+        }
+      ]
+    },
+    {
+      "name": "stage5",
+      "direction": "pingpong",
+      "frames": [
+        {
+          "file": "stage5/00.png",
+          "ms": 4200
+        },
+        {
+          "file": "stage5/01.png",
+          "ms": 70
+        },
+        {
+          "file": "stage5/02.png",
+          "ms": 130
+        }
+      ]
+    },
+    {
+      "name": "open",
+      "direction": "pingpong",
+      "frames": [
+        {
+          "file": "open/00.png",
+          "ms": 4200
+        },
+        {
+          "file": "open/01.png",
+          "ms": 70
+        },
+        {
+          "file": "open/02.png",
+          "ms": 130
+        }
+      ]
+    }
+  ]
+}

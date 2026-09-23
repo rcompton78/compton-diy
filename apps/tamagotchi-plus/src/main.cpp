@@ -12,6 +12,7 @@
 #include <WiFiManager.h>
 #include <ImprovWiFiLibrary.h>
 #include <esp_ota_ops.h>
+#include <Preferences.h>
 
 #include "Battery.h"
 #include "Config.h"
@@ -35,7 +36,7 @@ static constexpr int HINT_Y         = 262;
 
 static constexpr unsigned long TOUCH_POLL_MS  = 20;
 static constexpr unsigned long STATUS_POLL_MS = 500;
-static constexpr unsigned long HOLD_MS        = 700;   // press this long to swap palettes
+static constexpr unsigned long HOLD_MS        = EGG_RESET_HOLD_MS;  // hold this long to reset the egg
 static constexpr int           RELEASE_SAMPLES = 3;    // consecutive no-touch polls (60ms) = real release
 static constexpr unsigned long MIN_FRAME_MS   = 16;    // cap redraws at ~60 fps
 static constexpr unsigned long STATS_LOG_MS   = 5000;
@@ -67,6 +68,14 @@ static int           untouchedPolls = 0;
 static bool          holdHandled    = false;
 static unsigned long pressStart     = 0;
 static unsigned long lastTouchPoll  = 0;
+
+// Hatch state, persisted so the egg keeps its age across reboots (see Config.h).
+Preferences          eggPrefs;
+static unsigned long eggElapsedMs = 0;   // powered-on time so far, NOT wall clock
+static unsigned long eggTargetMs  = 0;   // rolled once, when the egg is created
+static bool          eggHatched   = false;
+static unsigned long lastEggSave  = 0;
+static unsigned long lastEggTick  = 0;
 
 static bool          appMarkedValid  = false;
 static bool          otaCheckedOnce  = false;
@@ -103,7 +112,9 @@ static void drawHint() {
     TFT_eSprite& ui = renderer.ui();
     ui.fillRect(0, HINT_Y, SCREEN_WIDTH, 8, PAL_TRANSPARENT);
     ui.setTextColor(PAL_LIGHT_GREY);
-    ui.drawCentreString(pet.isSick() ? "tap: pet  hold: normal" : "tap: pet  hold: sick", CX, HINT_Y, 1);
+    String hold = String("   hold ") + (EGG_RESET_HOLD_MS / 1000) + "s: reset";
+    ui.drawCentreString((pet.state() == PetScene::State::Egg ? "tap: rock egg" : "tap: heart") + hold,
+                        CX, HINT_Y, 1);
     renderer.uiChanged();
     sceneDirty = true;
 }
@@ -261,6 +272,89 @@ static void checkForUpdate() {
     drawMainScreen();
 }
 
+// ── Hatch timer ───────────────────────────────────────────────────────────────
+// Counts powered-on time only: the elapsed total is accumulated while running and flushed
+// to NVS periodically, so time spent powered off never advances the egg.
+static_assert(HATCH_MAX_MS > HATCH_MIN_MS,
+              "HATCH_MAX_MS must exceed HATCH_MIN_MS: rollHatchTarget() takes a modulo of the "
+              "difference, and a modulo by zero is undefined behaviour (it traps on ESP32).");
+
+static unsigned long rollHatchTarget() {
+#if HATCH_TEST_MODE
+    return HATCH_TEST_MS;
+#else
+    return HATCH_MIN_MS + (esp_random() % (HATCH_MAX_MS - HATCH_MIN_MS));
+#endif
+}
+
+static void saveEggState() {
+    eggPrefs.putULong("elapsed", eggElapsedMs);
+    eggPrefs.putULong("target", eggTargetMs);
+    eggPrefs.putBool("hatched", eggHatched);
+}
+
+static void loadEggState() {
+    eggPrefs.begin("tamagotchi", false);
+    eggElapsedMs = eggPrefs.getULong("elapsed", 0);
+    eggTargetMs  = eggPrefs.getULong("target", 0);
+    eggHatched   = eggPrefs.getBool("hatched", false);
+    // A fresh device (or one whose target predates a test-mode change) rolls a new window.
+    if (eggTargetMs == 0) {
+        eggTargetMs  = rollHatchTarget();
+        eggElapsedMs = 0;
+        saveEggState();
+    }
+#if HATCH_TEST_MODE
+    // In test mode the constant always wins, so editing HATCH_TEST_MS takes effect on the
+    // next boot instead of waiting for a reset to roll a fresh target.
+    if (eggTargetMs != HATCH_TEST_MS) {
+        eggTargetMs = HATCH_TEST_MS;
+        if (eggElapsedMs > eggTargetMs) eggElapsedMs = 0;
+        saveEggState();
+    }
+#endif
+    Serial.printf("egg: %s, %lu/%lu ms elapsed (powered-on)\n",
+                  eggHatched ? "hatched" : "incubating", eggElapsedMs, eggTargetMs);
+}
+
+static void resetEgg(unsigned long now) {
+    eggElapsedMs = 0;
+    eggTargetMs  = rollHatchTarget();
+    eggHatched   = false;
+    saveEggState();
+    lastEggTick = now;
+    lastEggSave = now;
+    pet.resetToEgg(now);
+    sceneDirty = true;
+    drawHint();
+    Serial.printf("egg: reset, new target %lu ms\n", eggTargetMs);
+}
+
+static void tickHatch(unsigned long now) {
+    unsigned long delta = now - lastEggTick;
+    lastEggTick = now;
+    if (eggHatched) return;
+
+    if (pet.state() == PetScene::State::Egg) {
+        eggElapsedMs += delta;
+        pet.setEggProgress((float)eggElapsedMs / (float)eggTargetMs, now);
+        if (eggElapsedMs >= eggTargetMs) {
+            Serial.println("egg: hatching");
+            pet.startHatch(now);
+            drawHint();
+        }
+        if (now - lastEggSave >= HATCH_SAVE_MS) {
+            lastEggSave = now;
+            saveEggState();
+        }
+    } else if (pet.hatchDone()) {
+        eggHatched = true;       // once hatched, always hatched
+        saveEggState();
+        drawHint();
+        Serial.println("egg: hatched");
+    }
+}
+
 // ── Setup / loop ──────────────────────────────────────────────────────────────
 void setup() {
     pinMode(SYS_EN_PIN, OUTPUT);
@@ -276,10 +370,16 @@ void setup() {
     tft.setRotation(0);
     tft.fillScreen(TFT_BLACK);
 
+    // Load the hatch state unconditionally: tickHatch()/resetEgg() run from loop() and
+    // pollTouch() whether or not the renderer came up, and an unopened Preferences plus a
+    // zero eggTargetMs would divide by zero and hatch on the first loop.
+    loadEggState();
+    lastEggTick = lastEggSave = millis();
+
     rendererReady = renderer.begin();
     if (rendererReady) {
         renderer.setUiPalette(assets::PALETTE_NORMAL);
-        pet.begin(millis());
+        pet.begin(millis(), eggHatched);
     } else {
         Serial.println("gfx: renderer init failed (out of DMA/PSRAM memory?)");
     }
@@ -295,7 +395,7 @@ void setup() {
 }
 
 // Tap = press shorter than HOLD_MS (fires on release so a hold doesn't also count as a
-// tap). Hold = fires once, as soon as the press reaches HOLD_MS. The CST816T read can
+// tap). Hold = fires once, as soon as the press reaches HOLD_MS, and resets the egg. The CST816T read can
 // drop an occasional sample mid-press (I2C NACK), so a release only counts after
 // RELEASE_SAMPLES no-touch polls in a row. Otherwise one glitch would restart the hold
 // timer (double palette swap) or end the press as a spurious tap.
@@ -309,8 +409,7 @@ static void pollTouch(unsigned long now) {
             holdHandled = false;
         } else if (!holdHandled && now - pressStart >= HOLD_MS) {
             holdHandled = true;
-            pet.toggleSick();
-            drawHint();
+            resetEgg(now);
         }
     } else if (pressed && ++untouchedPolls >= RELEASE_SAMPLES) {
         pressed = false;
@@ -377,6 +476,8 @@ void loop() {
             now = millis();    // the check/download blocks, so refresh the timer snapshot
         }
     }
+
+    tickHatch(now);
 
     if (now - lastTouchPoll >= TOUCH_POLL_MS) {
         lastTouchPoll = now;
