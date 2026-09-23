@@ -168,8 +168,10 @@ void PetScene::lidOffset(uint32_t now, int& dx, int& dy, uint8_t& frame) const {
         dx = _lidRestX; dy = _lidRestY; frame = 2;
         return;
     }
-    float t = (float)(now - _hatchStart - HATCH_SHAKE_MS) / 1000.0f;
-    if (t < 0.0f) t = 0.0f;
+    // Signed: now - _hatchStart is unsigned, so subtracting HATCH_SHAKE_MS before the
+    // shake ends would underflow to ~4.29e9 and sail straight past a `t < 0` guard.
+    int32_t sinceRelease = (int32_t)(now - _hatchStart) - (int32_t)HATCH_SHAKE_MS;
+    float t = sinceRelease > 0 ? (float)sinceRelease / 1000.0f : 0.0f;
     dx = (int)lroundf(LID_VX * t);
     dy = (int)lroundf(LID_VY0 * t + 0.5f * LID_GRAV * t * t);
     frame = t < 0.42f ? 0 : (t < 0.84f ? 1 : 2);
