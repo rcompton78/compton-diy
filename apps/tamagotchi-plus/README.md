@@ -2,8 +2,9 @@
 
 A virtual-pet firmware for the **Waveshare ESP32-S3-Touch-LCD-1.69** (1.69" 240×280
 touch display with onboard accelerometer/gyroscope). It brings up the display and
-touch, handles Wi-Fi setup and self-updates, and shows an animated pixel-art pet. Real
-pet features (stats, care, evolution) are coming in later updates.
+touch, handles Wi-Fi setup and self-updates, and boots to an egg that cracks open over a
+few minutes and hatches. Real pet features (stats, care, evolution) are coming in later
+updates.
 
 ## Hardware
 
@@ -45,14 +46,42 @@ Either way, the credentials are saved to flash and the device reconnects on ever
 
 ## Main screen
 
-An animated pixel-art pet on a small scene. Along the top are the name, the firmware
-version with the power status next to it (e.g. `v1.2.3   USB  87%`), and live Wi-Fi status
-(network name + IP, connecting, or setup mode).
+A pixel-art scene. Along the top are the name, the firmware version with the power status
+next to it (e.g. `v1.2.3   USB  87%`), and live Wi-Fi status (network name + IP,
+connecting, or setup mode).
 
-- **Tap** the screen: the pet plays its happy animation and a heart floats up, then it
-  goes back to idling.
-- **Hold** for about a second: swaps the scene to the "sick" colour palette (hold again to
-  swap back). This is a demo of palette swapping for now, not a real pet state.
+### The egg
+
+A fresh device starts as an egg and hatches after a **random 3–5 minutes**. The shell
+cracks progressively through six stages as that time passes, so you can tell at a glance
+how close it is:
+
+| Stage | |
+|---|---|
+| 0 | pristine |
+| 1 | a hairline crack near the crown |
+| 2 | the crack spreads, and branches |
+| 3 | a second branch |
+| 4 | a piece breaks away, leaving a hole |
+| 5 | two eyes appear in the hole and blink, about once every 4.5 seconds |
+
+Then it hatches: the egg shakes, the top breaks off along a ragged line and tumbles onto
+the grass, and the creature is left blinking inside the opened shell. (The creature itself
+is still to come — right now you only see its eyes.)
+
+The timer counts **powered-on time only**, like Tamagotchi Paradise: switch the device off
+and the egg stops ageing, picking up where it left off next boot rather than jumping
+ahead. Once hatched it stays hatched across reboots.
+
+- **Tap** the screen: the egg rocks. After hatching, a heart floats up instead.
+- **Hold for 5 seconds**: wipes the hatch state and starts a brand-new egg, with a freshly
+  rolled 3–5 minute timer. Handy for watching the whole sequence again without reflashing.
+
+The egg also rocks on its own every few seconds, so it looks alive in there.
+
+To watch the whole thing quickly while developing, set `HATCH_TEST_MODE` to `1` in
+`include/Config.h`: the wait becomes a fixed `HATCH_TEST_MS` (60 seconds by default, so
+about 10 seconds per stage). **It must be `0` for a real build.**
 
 ### Battery and USB status
 
@@ -212,6 +241,17 @@ Layout of `assets/`:
 | `<name>.aseprite` | Editable source of truth |
 | `<name>.png` + `<name>.json` | Aseprite sheet export (`json-array`, with tags). **These are what the build reads.** |
 | `src/<name>/` | Raw PNG frames + `manifest.json` that the `.aseprite` was imported from |
+
+The egg (`egg.aseprite`, `eggshell.aseprite`) is **generated** rather than hand-drawn or
+AI-generated, by `tools/sprites/gen-egg.py`. Every crack stage has to sit on a
+pixel-identical shell — if the shell differs even slightly between stages the egg appears
+to breathe as it cracks — and that is far easier to guarantee from a script than by hand.
+Re-run it (then re-import and re-export) to change the shell:
+
+```bash
+python3 tools/sprites/gen-egg.py --assets apps/tamagotchi-plus/assets
+python3 tools/sprites/gen-egg.py --assets apps/tamagotchi-plus/assets --special  # rounder variant shell
+```
 
 **Aseprite never runs in CI or the firmware build.** Its license doesn't allow
 redistributing the binary, so it's a local-only tool. `gen-assets` reads only the

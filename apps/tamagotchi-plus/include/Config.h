@@ -57,6 +57,30 @@
 #define WIFI_SETUP_AP_NAME "Tamagotchi+ Setup"
 #define WIFI_CONNECT_TIMEOUT_S 20
 
+// ── Hatch timer (COM-299) ─────────────────────────────────────────────────────
+// The egg hatches after a random 3–5 minutes of POWERED-ON time. Elapsed time is
+// accumulated and persisted; powering the device off pauses the egg rather than ageing it
+// (same as Tamagotchi Paradise), so never store a wall-clock deadline. This is also why
+// the PCF85063 RTC isn't needed here — there is nothing to measure across a power-off.
+#define HATCH_MIN_MS (3UL * 60 * 1000)
+#define HATCH_MAX_MS (5UL * 60 * 1000)
+
+// Test mode: one fixed, short window so the six crack stages and the pop can be watched
+// end to end without waiting minutes per flash. MUST be 0 for a real build.
+#define HATCH_TEST_MODE 1
+#define HATCH_TEST_MS   (60UL * 1000)
+
+#if HATCH_TEST_MODE
+#warning "HATCH_TEST_MODE is ON: the egg hatches in HATCH_TEST_MS, not the real 3-5 minutes. Set it to 0 before releasing."
+#endif
+
+// How often the accumulated hatch time is flushed to NVS. Long enough to keep flash
+// writes to a handful per hatch, short enough that a reset loses almost nothing.
+#define HATCH_SAVE_MS (10UL * 1000)
+
+// Press and hold this long to wipe the hatch state and start a fresh egg.
+#define EGG_RESET_HOLD_MS 5000
+
 // Firmware auto-update. Polls this app's own manifest.json on GitHub Pages
 // (regenerated fresh on every push regardless of what else changed) rather
 // than the GitHub Releases API — see libs/ota-update-client.

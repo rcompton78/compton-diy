@@ -1,19 +1,38 @@
 #include "PetScene.h"
 
 #include <algorithm>
+#include <math.h>
+#include <esp_system.h>
 
+#include "Config.h"
 #include "PaletteIndex.h"
 #include "generated/sprite_assets.h"
 
 // ── Layout (logical pixels; ×4 on screen) ────────────────────────────────────────────
 static constexpr int GROUND_Y = 60;  // first row of the ground strip
-static const int     PET_X    = (FrameRenderer::LOGICAL_W - assets::PET.w) / 2;
-static const int     PET_Y    = GROUND_Y - assets::PET.h + 2;  // sprite has ~2px empty below its feet
+static const int     EGG_X    = (FrameRenderer::LOGICAL_W - assets::EGG.w) / 2;
+static const int     EGG_Y    = GROUND_Y - assets::EGG.h + 2;  // sprite has ~2px empty below
 
 // Floating heart: rises HEART_RISE px over HEART_LIFE_MS, blinking out over the last part.
 static constexpr uint32_t HEART_LIFE_MS  = 1200;
 static constexpr uint32_t HEART_BLINK_MS = 350;
 static constexpr int      HEART_RISE     = 22;
+
+// Rocking. A whole-sprite horizontal nudge rather than extra sprite frames: six stages ×
+// a few wobble frames each would have cost more flash than the crack stages themselves,
+// and this way any stage rocks for free.
+static constexpr uint32_t ROCK_STEP_MS = 60;
+static const int ROCK_TAP[]  = {1, 2, 1, -1, -2, -1, 1, 0};  // tap: a proper shove
+static const int ROCK_IDLE[] = {1, 1, 0, -1, -1, 0};         // on its own: a gentle lean
+static constexpr uint32_t IDLE_ROCK_MIN_MS = 4000;
+static constexpr uint32_t IDLE_ROCK_MAX_MS = 9000;
+
+// Hatch: shake for anticipation, then the lid leaves on a ballistic arc.
+static constexpr uint32_t HATCH_SHAKE_MS = 420;
+static const int ROCK_SHAKE[] = {1, -1, 1, -1, 2, -2, 1, 0};
+static constexpr float LID_VX   =  12.0f;   // logical px / s
+static constexpr float LID_VY0  = -43.0f;
+static constexpr float LID_GRAV =  82.0f;   // px / s²
 
 // ── AnimPlayer ───────────────────────────────────────────────────────────────────────
 
@@ -63,37 +82,114 @@ bool AnimPlayer::update(uint32_t now) {
 
 // ── PetScene ─────────────────────────────────────────────────────────────────────────
 
-void PetScene::begin(uint32_t now) {
+void PetScene::begin(uint32_t now, bool hatched) {
     _r.setScenePalette(assets::PALETTE_NORMAL);
-    enter(State::Idle, now);
-}
-
-void PetScene::enter(State s, uint32_t now) {
-    _state = s;
-    const char* tagName = s == State::Happy ? "happy" : "idle";
-    const SpriteTag* tag = assets::PET.findTag(tagName);
-    if (!tag && assets::PET.tagCount > 0) tag = &assets::PET.tags[0];
-    if (tag) _pet.play(assets::PET, *tag, s == State::Idle, now);  // untagged sheet: frame 0 stays up
+    if (hatched) {
+        _state = State::Baby;
+        _lidReleased = true;
+        // Rest the lid where the arc would have left it, so a reboot after hatching looks
+        // the same as the moment the hatch ended.
+        _lidRestX = 19;
+        _lidRestY = GROUND_Y + 1 - EGG_Y - (assets::EGGSHELL.frames[2].y + assets::EGGSHELL.frames[2].h - 1);
+        const SpriteTag* open = assets::EGG.findTag("open");
+        if (open) _egg.play(assets::EGG, *open, true, now);
+    } else {
+        _state = State::Egg;
+        playStage(0, now);
+    }
+    scheduleIdleRock(now);
     _dirty = true;
 }
 
-void PetScene::onTap(uint32_t now) {
-    enter(State::Happy, now);  // re-tapping mid-animation restarts it
+void PetScene::playStage(uint8_t stage, uint32_t now) {
+    _stage = std::min<uint8_t>(stage, STAGE_COUNT - 1);
+    char name[8];
+    snprintf(name, sizeof(name), "stage%u", (unsigned)_stage);
+    const SpriteTag* tag = assets::EGG.findTag(name);
+    if (!tag && assets::EGG.tagCount > 0) tag = &assets::EGG.tags[0];
+    if (tag) _egg.play(assets::EGG, *tag, true, now);
+    _dirty = true;
+}
 
+void PetScene::setEggProgress(float progress, uint32_t now) {
+    if (_state != State::Egg) return;
+    if (progress < 0.0f) progress = 0.0f;
+    if (progress > 1.0f) progress = 1.0f;
+    uint8_t want = (uint8_t)(progress * STAGE_COUNT);
+    if (want >= STAGE_COUNT) want = STAGE_COUNT - 1;
+    if (want != _stage) playStage(want, now);
+}
+
+void PetScene::startHatch(uint32_t now) {
+    if (_state != State::Egg) return;
+    _state       = State::Hatching;
+    _hatchStart  = now;
+    _rockStart   = 0;
+    _lidReleased = false;
+    playStage(STAGE_COUNT - 1, now);   // still whole while it shakes
+    _dirty = true;
+}
+
+void PetScene::resetToEgg(uint32_t now) {
+    _state = State::Egg;
+    _lidReleased = false;
+    for (auto& h : _hearts) h.active = false;
+    _rockStart = 0;
+    _lastRock  = 0;
+    playStage(0, now);
+    scheduleIdleRock(now);
+}
+
+void PetScene::scheduleIdleRock(uint32_t now) {
+    _nextIdleRock = now + IDLE_ROCK_MIN_MS + (esp_random() % (IDLE_ROCK_MAX_MS - IDLE_ROCK_MIN_MS));
+}
+
+void PetScene::startRock(uint32_t now, bool strong) {
+    _rockStart  = now ? now : 1;  // 0 means "not rocking"
+    _rockStrong = strong;
+}
+
+int PetScene::rockOffset(uint32_t now) const {
+    if (_state == State::Hatching && now - _hatchStart < HATCH_SHAKE_MS) {
+        size_t n = sizeof(ROCK_SHAKE) / sizeof(ROCK_SHAKE[0]);
+        size_t i = (now - _hatchStart) / (HATCH_SHAKE_MS / n);
+        return i < n ? ROCK_SHAKE[i] : 0;
+    }
+    if (!_rockStart || _state != State::Egg) return 0;
+    const int* pat = _rockStrong ? ROCK_TAP : ROCK_IDLE;
+    size_t n = _rockStrong ? sizeof(ROCK_TAP) / sizeof(ROCK_TAP[0])
+                           : sizeof(ROCK_IDLE) / sizeof(ROCK_IDLE[0]);
+    size_t i = (now - _rockStart) / ROCK_STEP_MS;
+    return i < n ? pat[i] : 0;
+}
+
+void PetScene::lidOffset(uint32_t now, int& dx, int& dy, uint8_t& frame) const {
+    if (_state == State::Baby) {
+        dx = _lidRestX; dy = _lidRestY; frame = 2;
+        return;
+    }
+    float t = (float)(now - _hatchStart - HATCH_SHAKE_MS) / 1000.0f;
+    if (t < 0.0f) t = 0.0f;
+    dx = (int)lroundf(LID_VX * t);
+    dy = (int)lroundf(LID_VY0 * t + 0.5f * LID_GRAV * t * t);
+    frame = t < 0.42f ? 0 : (t < 0.84f ? 1 : 2);
+}
+
+void PetScene::onTap(uint32_t now) {
+    if (_state == State::Egg) {
+        startRock(now, true);            // a shove: something in there notices
+        scheduleIdleRock(now);
+        return;
+    }
+    if (_state != State::Baby) return;
     for (auto& h : _hearts) {
         if (h.active) continue;
         h.active = true;
         h.start  = now;
-        h.x = PET_X + (assets::PET.w - assets::HEART.w) / 2 + (int)(now % 9) - 4;  // a little jitter
-        h.y = PET_Y + 2;
+        h.x = EGG_X + (assets::EGG.w - assets::HEART.w) / 2 + (int)(now % 9) - 4;
+        h.y = EGG_Y + 6;
         break;
     }
-}
-
-void PetScene::toggleSick() {
-    _sick = !_sick;
-    _r.setScenePalette(_sick ? assets::PALETTE_SICK : assets::PALETTE_NORMAL);
-    _dirty = true;
 }
 
 bool PetScene::heartVisible(const Heart& h, uint32_t now) const {
@@ -107,15 +203,41 @@ int PetScene::heartY(const Heart& h, uint32_t now) const {
 }
 
 bool PetScene::update(uint32_t now) {
-    bool dirty = _pet.update(now) || _dirty;
+    bool dirty = _egg.update(now) || _dirty;
+    _dirty = false;
 
-    if (_state == State::Happy && _pet.finished()) {
-        enter(State::Idle, now);
+    // Rocking: only redraw when the offset actually changed by a whole logical pixel.
+    int rock = rockOffset(now);
+    if (rock != _lastRock) { _lastRock = rock; dirty = true; }
+    if (_rockStart && !rock && now - _rockStart > 1000) _rockStart = 0;
+    if (_state == State::Egg && (int32_t)(now - _nextIdleRock) >= 0) {
+        startRock(now, false);
+        scheduleIdleRock(now);
         dirty = true;
     }
-    _dirty = false;  // consumed as `dirty` above, including enter()'s, so it isn't redrawn twice
 
-    // Effects move far more often than the pet animates, so only redraw when a heart
+    if (_state == State::Hatching && !_lidReleased && now - _hatchStart >= HATCH_SHAKE_MS) {
+        _lidReleased = true;
+        const SpriteTag* open = assets::EGG.findTag("open");
+        if (open) _egg.play(assets::EGG, *open, true, now);
+        dirty = true;
+    }
+
+    if (_state == State::Hatching && _lidReleased) {
+        int dx, dy; uint8_t f;
+        lidOffset(now, dx, dy, f);
+        const SpriteFrame& lf = assets::EGGSHELL.frames[f];
+        int bottom = EGG_Y + dy + lf.y + lf.h - 1;
+        if (bottom >= GROUND_Y + 1) {
+            _lidRestX = dx;
+            _lidRestY = GROUND_Y + 1 - EGG_Y - (lf.y + lf.h - 1);
+            _state    = State::Baby;   // hatched: main persists this
+        }
+        uint32_t sig = (uint32_t)(dx + 128) * 4096 + (uint32_t)(dy + 128) * 8 + f;
+        if (sig != _lastLidSig) { _lastLidSig = sig; dirty = true; }
+    }
+
+    // Effects move far more often than the shell animates, so only redraw when a heart
     // has actually moved/blinked by a whole logical pixel.
     uint32_t sig = 0;
     for (auto& h : _hearts) {
@@ -133,8 +255,16 @@ void PetScene::draw(uint32_t now) {
     _r.fillRect(0, GROUND_Y + 2, FrameRenderer::LOGICAL_W, FrameRenderer::LOGICAL_H - GROUND_Y - 2, PAL_BROWN);
     for (int x = 1; x < FrameRenderer::LOGICAL_W; x += 6) _r.fillRect(x, GROUND_Y + 4 + (x % 4), 1, 1, PAL_DARK_GREY);
 
-    // Pet layer
-    _r.drawSprite(assets::PET, _pet.frame(), PET_X, PET_Y);
+    // Shell layer. During the shake the whole egg is still intact, so it keeps rocking;
+    // once the lid is away the base stays put and only the lid moves.
+    int rock = rockOffset(now);
+    _r.drawSprite(assets::EGG, _egg.frame(), EGG_X + rock, EGG_Y);
+
+    if ((_state == State::Hatching && _lidReleased) || _state == State::Baby) {
+        int dx, dy; uint8_t f;
+        lidOffset(now, dx, dy, f);
+        _r.drawSprite(assets::EGGSHELL, f, EGG_X + dx, EGG_Y + dy);
+    }
 
     // Effect layer
     for (auto& h : _hearts) {

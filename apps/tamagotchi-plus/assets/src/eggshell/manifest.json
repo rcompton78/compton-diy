@@ -1,0 +1,22 @@
+{
+  "tags": [
+    {
+      "name": "tumble",
+      "direction": "forward",
+      "frames": [
+        {
+          "file": "tumble/00.png",
+          "ms": 70
+        },
+        {
+          "file": "tumble/01.png",
+          "ms": 70
+        },
+        {
+          "file": "tumble/02.png",
+          "ms": 70
+        }
+      ]
+    }
+  ]
+}
