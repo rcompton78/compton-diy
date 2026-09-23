@@ -4,8 +4,11 @@
 # WiFi/API/logger, OTA + auto-update checking (same http_request-manifest
 # mechanism as espframe, see apps/espframe/common/addon/firmware_update.yaml),
 # and the 6-button LVGL touch UI calling Home Assistant services directly
-# over the native API (`homeassistant.service`) — no local entities, this
-# device is a remote control, not a sensor.
+# over the native API (`homeassistant.service`). Button state (TV power,
+# active HDMI input, light on/off) comes back down the same connection via
+# `homeassistant` text sensors subscribed to exactly the entities the buttons
+# control -- all `internal: true`, so the device still exposes no entities of
+# its own to HA. It's a remote with feedback, not a general HA dashboard.
 #
 # Requires a board package to have already defined `tft_display` (display)
 # and `tft_touch` (touchscreen) — see boards/freenove-s3.yaml.
@@ -14,6 +17,16 @@
 substitutions:
   firmware_version: "dev"
   firmware_manifest_url: "https://rcompton78.github.io/compton-diy/media-room-dashboard/manifest.json"
+  # Roku TV entities. remote.* carries power (on/off, "off" in standby);
+  # the media_player's `app_id` attribute carries the active input as
+  # `tvinput.hdmiN` -- used instead of `source`, which is the user-editable
+  # input name and would break if an input got renamed on the TV (both
+  # already are: hdmi1 shows as "PlayStation 5", hdmi3 as "Fire TV"). While
+  # the TV is off HA drops the `app_id` attribute entirely.
+  tv_remote: "remote.living_room_tv"
+  tv_media_player: "media_player.living_room_tv"
+  tv_game_app_id: "tvinput.hdmi1"
+  tv_watch_app_id: "tvinput.hdmi3"
 
 esphome:
   project:
@@ -67,6 +80,20 @@ logger:
 api:
   encryption:
     key: !secret api_encryption_key
+  # Once HA is gone the imported states below are frozen at whatever they
+  # last were, so drop every button back to neutral rather than show state
+  # that may no longer be true. HA re-sends every subscribed state when it
+  # reconnects, which repaints them. Only reset when no state-subscribed
+  # client remains, so an `esphome logs` session disconnecting doesn't
+  # blank the buttons while HA is still connected.
+  on_client_disconnected:
+    - if:
+        condition:
+          not:
+            api.connected:
+              state_subscription_only: true
+        then:
+          - script.execute: reset_button_states
 
 # -----------------------------------------------------------------------------
 # OTA + auto-update check against the GitHub Pages manifest (see CLAUDE.md's
@@ -107,6 +134,95 @@ text_sensor:
     update_interval: never
     lambda: 'return {"${firmware_version}"};'
 
+  # ---------------------------------------------------------------------------
+  # Button state imported from HA. Text sensors rather than `homeassistant`
+  # binary sensors so "unavailable"/"unknown" are visible as their own
+  # values instead of collapsing into off. None of these need the "Allow the
+  # device to perform Home Assistant actions" toggle -- HA pushes subscribed
+  # states to any paired device. The buttons are deliberately not
+  # `checkable`, so a tap never flips the highlight by itself: it only
+  # changes once HA confirms the new state.
+  # ---------------------------------------------------------------------------
+  - platform: homeassistant
+    id: tv_power
+    entity_id: ${tv_remote}
+    internal: true
+    on_value:
+      # Label names the action a tap performs; the checked (lit) style shows
+      # the current state. Anything other than on/off (unavailable, unknown)
+      # falls back to the neutral pre-feedback label.
+      - lvgl.label.update:
+          id: lbl_roku_power
+          text: !lambda 'return std::string(x == "on" ? "Power\nOff" : (x == "off" ? "Power\nOn" : "Roku\nPower"));'
+      - lvgl.widget.update:
+          id: btn_roku_power
+          state:
+            checked: !lambda 'return x == "on";'
+      - script.execute: refresh_input_buttons
+
+  - platform: homeassistant
+    id: tv_app_id
+    entity_id: ${tv_media_player}
+    attribute: app_id
+    internal: true
+    on_value:
+      - script.execute: refresh_input_buttons
+
+  - platform: homeassistant
+    id: window_lamp_state
+    entity_id: light.media_room_window_lamp_2
+    internal: true
+    on_value:
+      - lvgl.widget.update:
+          id: btn_window_lamp
+          state:
+            checked: !lambda 'return x == "on";'
+
+  - platform: homeassistant
+    id: window_lights_state
+    entity_id: light.window_lights
+    internal: true
+    on_value:
+      - lvgl.widget.update:
+          id: btn_window_lights
+          state:
+            checked: !lambda 'return x == "on";'
+
+  - platform: homeassistant
+    id: standing_lamp_state
+    entity_id: switch.media_room_plug
+    internal: true
+    on_value:
+      - lvgl.widget.update:
+          id: btn_standing_lamp
+          state:
+            checked: !lambda 'return x == "on";'
+
+script:
+  # The Roku can keep reporting its last input's app_id while in standby, so
+  # the input buttons are gated on power as well -- re-run whenever either
+  # changes.
+  - id: refresh_input_buttons
+    then:
+      - lvgl.widget.update:
+          id: btn_roku_play_game
+          state:
+            checked: !lambda 'return id(tv_power).state == "on" && id(tv_app_id).state == "${tv_game_app_id}";'
+      - lvgl.widget.update:
+          id: btn_roku_watch_tv
+          state:
+            checked: !lambda 'return id(tv_power).state == "on" && id(tv_app_id).state == "${tv_watch_app_id}";'
+
+  - id: reset_button_states
+    then:
+      - lvgl.label.update:
+          id: lbl_roku_power
+          text: "Roku\nPower"
+      - lvgl.widget.update:
+          id: [btn_roku_power, btn_roku_play_game, btn_roku_watch_tv, btn_window_lamp, btn_window_lights, btn_standing_lamp]
+          state:
+            checked: false
+
 # -----------------------------------------------------------------------------
 # Two LVGL pages, switched by the wifi on_connect/on_disconnect handlers
 # above: `setup_page` (shown by default, i.e. at boot before wifi connects --
@@ -117,7 +233,8 @@ text_sensor:
 # -- is a 2 column x 3 row grid over the full 240x320 portrait panel (this
 # board's native, already-confirmed-working orientation, no rotation
 # transform). Button -> HA service mapping is the finalized list from Jira
-# DIY-102.
+# DIY-102. Every button shares one theme: dim grey by default, lit amber
+# when `checked` -- which only the imported HA state above ever sets.
 # -----------------------------------------------------------------------------
 # byte_order: big_endian avoids a known LVGL+ili9xxx grey-screen bug hit on
 # this same panel in apps/espframe (see project memory project_diy44_espframe
@@ -127,6 +244,13 @@ lvgl:
   displays: [tft_display]
   touchscreens: [tft_touch]
   byte_order: big_endian
+  theme:
+    button:
+      bg_color: 0x303030
+      text_color: 0xFFFFFF
+      checked:
+        bg_color: 0xF5A623
+        text_color: 0x000000
   pages:
     - id: setup_page
       bg_color: 0x000000
@@ -171,13 +295,14 @@ lvgl:
             height: 96
             widgets:
               - label:
+                  id: lbl_roku_power
                   text: "Roku\nPower"
                   align: CENTER
             on_click:
               - homeassistant.service:
                   service: remote.toggle
                   data:
-                    entity_id: remote.living_room_tv
+                    entity_id: ${tv_remote}
         - button:
             id: btn_roku_play_game
             x: 124
@@ -192,7 +317,7 @@ lvgl:
               - homeassistant.service:
                   service: remote.send_command
                   data:
-                    entity_id: remote.living_room_tv
+                    entity_id: ${tv_remote}
                     device: cc6a35ae75dc995d71981ff3e2a4a3ae
                     command: input_hdmi1
         - button:
@@ -209,7 +334,7 @@ lvgl:
               - homeassistant.service:
                   service: remote.send_command
                   data:
-                    entity_id: remote.living_room_tv
+                    entity_id: ${tv_remote}
                     device: cc6a35ae75dc995d71981ff3e2a4a3ae
                     command: input_hdmi3
         - button:
@@ -243,14 +368,14 @@ lvgl:
                   data:
                     entity_id: light.window_lights
         - button:
-            id: btn_lamp
+            id: btn_standing_lamp
             x: 124
             y: 216
             width: 108
             height: 96
             widgets:
               - label:
-                  text: "Lamp"
+                  text: "Standing\nLamp"
                   align: CENTER
             on_click:
               - homeassistant.service:

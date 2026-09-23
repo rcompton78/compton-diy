@@ -1,10 +1,12 @@
 # media-room-dashboard
 
 ESPHome-based 6-button touchscreen remote for the media room. Each button
-calls a Home Assistant service directly over the native API — this device
-has no local entities of its own, it's purely a remote control.
+calls a Home Assistant service directly over the native API, and lights up
+to reflect the real state of what it controls (TV power, active HDMI input,
+light on/off). The device has no entities of its own in HA: it's a remote
+with feedback, not a general dashboard.
 
-Tracks Jira DIY-102.
+Tracks Jira DIY-102 (buttons) and DIY-104 / COM-196 (state feedback).
 
 ## Board
 
@@ -68,8 +70,18 @@ before attempting that split again.
 
 `scripts/write-secrets.sh` generates `builds/secrets.yaml` if it doesn't
 already exist (so it never clobbers a real local file), substituting each
-key in `secrets.yaml.example` with a same-named env var when set. It's run
-automatically as a dependency of the `build-freenove-s3` nx target.
+key in `secrets.yaml.example` with an env var when set: `HA_<KEY>` first
+(e.g. `HA_API_ENCRYPTION_KEY`), then plain `<KEY>` (`API_ENCRYPTION_KEY`),
+then the example's placeholder. It's run automatically as a dependency of
+the `build-freenove-s3` nx target.
+
+For local builds that will actually talk to HA, export
+`HA_API_ENCRYPTION_KEY` (the real key lives in bws as
+`shared/HA_API_ENCRYPTION_KEY`). Without it the firmware gets the public
+placeholder key, HA can't complete the native API handshake, and the device
+shows as unavailable with every button silently doing nothing. If a
+placeholder `secrets.yaml` was already generated, delete it first; the
+script never overwrites an existing file.
 
 In `release.yml` (push-to-master builds), `API_ENCRYPTION_KEY` is exported
 from a GitHub Actions repo secret before the build, so the published/OTA
@@ -109,11 +121,37 @@ ESPHome venv — no separate install needed).
 
 ## Button mapping
 
-| Button | Action |
-|---|---|
-| Roku Power | `remote.toggle` on `remote.living_room_tv` |
-| Play Game | `remote.send_command` (HDMI1) on `remote.living_room_tv` |
-| Watch TV | `remote.send_command` (HDMI3) on `remote.living_room_tv` |
-| Window Lamp | `light.toggle` on `light.media_room_window_lamp_2` |
-| Window Lights | `light.toggle` on `light.window_lights` |
-| Lamp | `switch.toggle` on `switch.media_room_plug` |
+| Button | Action | Lit (amber) when |
+|---|---|---|
+| Power On / Power Off | `remote.toggle` on `remote.living_room_tv` | TV is on (label names the action a tap performs) |
+| Play Game | `remote.send_command` (HDMI1) on `remote.living_room_tv` | TV on and `media_player.living_room_tv`'s `app_id` is `tvinput.hdmi1` |
+| Watch TV | `remote.send_command` (HDMI3) on `remote.living_room_tv` | TV on and `app_id` is `tvinput.hdmi3` |
+| Window Lamp | `light.toggle` on `light.media_room_window_lamp_2` | light is on |
+| Window Lights | `light.toggle` on `light.window_lights` | light is on |
+| Standing Lamp | `switch.toggle` on `switch.media_room_plug` | switch is on |
+
+## State feedback
+
+Button state comes back down the same native API connection the service
+calls go out on: `common/dashboard.yaml` declares one `homeassistant` text
+sensor per controlled entity (plus the Roku media_player's `app_id`
+attribute for the active input), and each one's `on_value` sets the
+matching button's LVGL `checked` state. All of them are `internal: true`,
+so they don't show up as entities on the device in HA. Unlike the service
+calls, these subscriptions don't need the "Allow the device to perform Home
+Assistant actions" option: HA pushes subscribed states to any paired
+device.
+
+- **No optimistic toggling.** The buttons aren't LVGL-`checkable`, so a tap
+  never changes the highlight by itself. It only changes once HA reports the
+  new state, usually well under a second later.
+- **Input buttons are gated on power.** The Roku can keep reporting its
+  last input's `app_id` while in standby, so Play Game / Watch TV only
+  light up while the TV is on.
+- **`app_id`, not `source`.** `source` is the input's user-editable name on
+  the TV, while `app_id` stays `tvinput.hdmiN`. The entity id and the two
+  app ids are substitutions at the top of `common/dashboard.yaml`, in case
+  they ever change.
+- **Stale state is cleared.** When the last state-subscribed API client (i.e.
+  HA) disconnects, every button drops back to neutral and the power button
+  shows "Roku Power" again. HA re-sends all subscribed states on reconnect.

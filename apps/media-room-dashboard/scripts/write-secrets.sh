@@ -1,11 +1,19 @@
 #!/usr/bin/env bash
 # Generates builds/secrets.yaml from builds/secrets.yaml.example, substituting
-# each key with a same-named (upper-cased) environment variable when set --
-# e.g. `wifi_ssid` picks up $WIFI_SSID -- and falling back to the placeholder
-# value from the .example file otherwise.
+# each key with an environment variable when set and falling back to the
+# placeholder value from the .example file otherwise. Each key is looked up
+# as HA_<UPPERCASED_KEY> first, then <UPPERCASED_KEY> -- e.g.
+# `api_encryption_key` picks up $HA_API_ENCRYPTION_KEY, else
+# $API_ENCRYPTION_KEY.
 #
-# In CI (release.yml), the real secrets are exported as env vars from GitHub
-# Actions repo secrets before this runs, so the published/OTA binary gets
+# The HA_ prefix is the local-dev name: it matches how the real key is kept
+# on dev machines (bws `shared/HA_API_ENCRYPTION_KEY`), so a host that
+# exports it builds firmware HA can actually connect to. Without it, a local
+# build silently bakes in the example's public placeholder key, HA's native
+# API handshake fails, and every button's service call is dropped.
+#
+# In CI (release.yml), the real secrets are exported as the unprefixed env
+# vars from GitHub Actions repo secrets before this runs, so the published/OTA binary gets
 # real credentials baked in. In PR builds (pr-build.yml) and any other
 # context where those env vars aren't set, every key falls back to its
 # placeholder and the config still compiles cleanly.
@@ -37,7 +45,8 @@ while IFS= read -r line; do
     if [[ "$line" =~ ^([A-Za-z0-9_]+):.*$ ]]; then
         key="${BASH_REMATCH[1]}"
         env_name="$(echo "$key" | tr '[:lower:]' '[:upper:]')"
-        env_value="${!env_name:-}"
+        ha_env_name="HA_$env_name"
+        env_value="${!ha_env_name:-${!env_name:-}}"
         if [ -n "$env_value" ]; then
             escaped="$(printf '%s' "$env_value" | sed 's/\\/\\\\/g; s/"/\\"/g; s/\t/\\t/g' | sed ':a;N;$!ba;s/\n/\\n/g')"
             printf '%s: "%s"\n' "$key" "$escaped" >> "$TMP"
