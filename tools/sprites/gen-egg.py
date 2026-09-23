@@ -55,8 +55,10 @@ STAGES = [(0.00, 0, False, False),   # 0 pristine
           (1.00, 3, True,  True)]    # 5 the creature looks out
 
 HOLE_W, HOLE_H, HOLE_FX, HOLE_FY = 9, 5, 0.46, 0.30
-EYE_DX      = (-2, 2)   # eyes seen through the 9px hole at stage 5
-EYE_DX_OPEN = (-3, 3)   # eyes inside the wider opening once the lid is off
+# One creature, one face: the eyes keep the same spacing whether they are seen through
+# the stage-5 hole or the wider opening after the lid comes off. Widening them for the
+# bigger opening made the face appear to grow at the moment of hatching.
+EYE_DX = (-2, 2)
 # Slightly over 1 so the ellipse keeps its corner pixels: an exact unit test drops them
 # and the hole reads as a diamond rather than an oval at this size.
 HOLE_TOLERANCE = 1.05
@@ -233,11 +235,20 @@ def opened_base(base, eye=CREAM, depth=3):
                 d[x, y] = NAVY + (255,)
     if eye is not None and tops:
         cx = (min(tops) + max(tops)) // 2
-        for dx in EYE_DX_OPEN:
-            if cx + dx in tops:
-                y = tops[cx + dx] + 3
-                if 0 <= y < H and d[cx + dx, y][3]:
-                    d[cx + dx, y] = eye + (255,)
+        xs = [cx + dx for dx in EYE_DX if cx + dx in tops]
+        if len(xs) == len(EYE_DX):
+            # Both eyes share one row. Keying each off its own column's rim would follow
+            # the ragged break line and leave them on different rows — a diagonal streak
+            # rather than a face. Sit just under the deeper of the two rim points, and
+            # carry each column's dark interior down to meet it so the eyes read as being
+            # inside the shell rather than painted on it.
+            row = max(tops[x] for x in xs) + 1
+            for x in xs:
+                for y in range(tops[x] + 1, row + 1):
+                    if 0 <= y < H and d[x, y][3]:
+                        d[x, y] = NAVY + (255,)
+                if 0 <= row < H and d[x, row][3]:
+                    d[x, row] = eye + (255,)
     return b
 
 
