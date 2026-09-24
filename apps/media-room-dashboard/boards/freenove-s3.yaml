@@ -114,6 +114,17 @@ display:
       - [0x2A, 0x00, 0x00, 0x00, 0xEF]                                                     # CASET (cols 0-239)
       - [0x11]                                                                             # SLPOUT
       - [0x29]                                                                             # DISPON
+      # Terminator -- REQUIRED. ESPHome packs init_sequence into a vector of
+      # [cmd, len, args...] without the trailing 0 that the driver's init
+      # loop (ILI9XXXDisplay::init_lcd_, `while ((cmd = *addr++) != 0)`)
+      # stops on, so without this entry it reads past the end of the vector
+      # and sends whatever heap bytes follow to the panel as more commands.
+      # What follows depends on the heap layout, so the panel comes up fine in
+      # one build and black in the next after an unrelated config change
+      # (confirmed on-device in COM-213: 0xCE/0x72/0xD2/0x2C/0x20 garbage
+      # commands after DISPON, black screen, backlight and LVGL still
+      # running). A [0x00] entry emits the 0 byte the loop needs.
+      - [0x00]
 
 touchscreen:
   - platform: ft63x6

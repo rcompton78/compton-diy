@@ -51,20 +51,25 @@ join a network) it raises its own open fallback AP (`<friendly_name> Setup`,
 no password — a short, physically-supervised setup window, so skipping a
 password is one less thing to type on a phone) with a captive portal;
 connect to it from a phone once and submit your real wifi credentials
-there. The device's own screen shows the device name plus "if setup is
-needed, join '...' wifi" (with the 6 dashboard buttons hidden) whenever
-it isn't connected, so there's an on-device hint this step is needed.
+there. While it isn't connected, the device's own screen (with the 6
+dashboard buttons hidden) shows "Connecting to WiFi" while it retries its
+saved network, then switches to "Connect to WiFi: '<friendly_name> Setup'"
+once it gives up and the fallback AP is actually up, so there's an
+on-device hint that setup is needed and which network to join.
 ESPHome persists the credentials you submit to the ESP32's NVS flash
 partition, separate from the OTA app partition, so they survive firmware
 updates without ever needing to be baked into a build. Same mechanism as
 espframe's factory image.
 
-This screen intentionally shows one combined message rather than a
-distinct "still connecting" vs. "join the setup AP" page — every attempt
-to split those into two separate LVGL pages (switched once the fallback
-AP is confirmed active) reliably hung the device solid the moment the
-switch happened, across four different trigger mechanisms. See DIY-105
-before attempting that split again.
+### Display init terminator
+
+`boards/freenove-s3.yaml`'s custom `init_sequence` must end with a
+`- [0x00]` entry. ESPHome doesn't terminate the sequence itself, so without
+it the display driver sends whatever heap bytes follow as extra panel
+commands, and an unrelated config change can leave the screen black while
+the firmware keeps running normally (COM-213). This was the real cause of
+the "device hangs switching to setup_page" failures once blamed on
+captive_portal (DIY-105).
 
 ### Secrets in CI
 
