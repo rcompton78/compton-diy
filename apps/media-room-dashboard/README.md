@@ -3,8 +3,11 @@
 ESPHome-based 6-button touchscreen remote for the media room. Each button
 calls a Home Assistant service directly over the native API, and lights up
 to reflect the real state of what it controls (TV power, active HDMI input,
-light on/off). The device has no entities of its own in HA: it's a remote
-with feedback, not a general dashboard.
+light on/off). Apart from a few diagnostics (IP address, firmware version,
+firmware update), the device has no entities of its own in HA: it's a
+remote with feedback, not a general dashboard. Its IP is always on screen,
+and it serves an admin portal with a firmware upload page at that address
+(see "IP address and admin portal").
 
 Tracks Jira DIY-102 (buttons) and DIY-104 / COM-196 (state feedback).
 
@@ -112,6 +115,64 @@ paired ESPHome devices; with it off, `homeassistant.service` calls are
 silently dropped — no error on the device or in HA, the buttons just do
 nothing. This is easy to mistake for a touch/firmware bug (it was, during
 this app's initial bring-up) since nothing in the logs points to it.
+
+## IP address and admin portal
+
+The device's current IP is always on its own screen, so you never need the
+router or HA to find it:
+
+- **Main page:** a grey footer under the buttons shows `http://<ip>`, which
+  is also the admin portal's address. It's blanked the moment wifi drops, so
+  it never shows a stale address.
+- **Connecting page:** "Not connected", plus "Last IP: <ip>" once the device
+  has had one this boot.
+- **Setup page (fallback AP):** adds "Then open http://192.168.4.1", the
+  AP's own address, for phones that don't pop the captive portal up
+  themselves.
+
+The same address is also an `IP Address` diagnostic text sensor
+(`wifi_info`), visible in HA and in the portal.
+
+### Admin portal
+
+ESPHome's stock `web_server` (v3, port 80) at `http://<device-ip>/`. It
+lists the diagnostic entities (IP, firmware version), the `Firmware Update`
+entity's state (checked against the GitHub Pages manifest every 6 hours),
+**Check for Firmware Update** / **Install Firmware Update** buttons (the
+stock UI has no install control on the update entity itself; Install is a
+no-op unless an update is available, and does run on "dev" builds since it's
+a deliberate press), and an **OTA Update** upload form (`ota: platform:
+web_server`). To flash a local build without USB, upload
+`builds/.esphome/build/media-room-dash-freenove-s3/.pioenvs/media-room-dash-freenove-s3/firmware.ota.bin`
+(or a release's `*-ota.bin`); the device flashes and reboots. `ota:
+platform: esphome` is enabled too, so `scripts/espframe-esphome.sh upload
+apps/media-room-dashboard/builds/freenove-s3.yaml --device <ip>` works over
+the network. `local: true` embeds the UI's JS/CSS in the firmware, so the
+portal works with no internet (e.g. from a phone on the setup AP).
+
+**The portal is unprotected.** There's no login on the web UI or on either
+OTA path, same as cyd-clock's and espframe's portals. Anyone on the LAN, or
+on the open setup AP while it's up, can reflash the device. That's a
+deliberate choice for a home-LAN remote. A protected design would put
+`web_server: auth:` and an `ota:` password behind a build secret passed
+through `write-secrets.sh` and `release.yml`.
+
+How this compares to the other two apps:
+
+| | cyd-clock | espframe | media-room-dashboard |
+|---|---|---|---|
+| Portal | WiFiManager (Arduino) custom pages | ESPHome `web_server` v3 + custom generated JS UI | ESPHome `web_server` v3, stock UI |
+| Manual upload | WiFiManager's `/update` | none (manifest only) | `ota: platform: web_server` form |
+| Manifest update | `libs/ota-update-client` | `update: http_request` | `update: http_request` |
+| Auth | none | none | none |
+
+`libs/ota-update-client` is Arduino C++, so it can't be used from ESPHome.
+The `update: http_request` entity is the ESPHome equivalent, polling the
+same `dist/<project>/manifest.json`.
+
+`captive_portal` works alongside `web_server`. It only takes over requests
+while the fallback AP is active, so the wifi setup form still comes up on
+the AP, and the full portal is served at the station IP once connected.
 
 ## Build / flash / monitor
 

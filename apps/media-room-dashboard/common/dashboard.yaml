@@ -9,6 +9,9 @@
 # `homeassistant` text sensors subscribed to exactly the entities the buttons
 # control -- all `internal: true`, so the device still exposes no entities of
 # its own to HA. It's a remote with feedback, not a general HA dashboard.
+# The only entities it does expose are diagnostics (firmware version, IP
+# address) and firmware update controls, also shown in the unprotected web
+# portal at http://<device-ip>/ (see web_server below).
 #
 # Requires a board package to have already defined `tft_display` (display)
 # and `tft_touch` (touchscreen) — see boards/freenove-s3.yaml.
@@ -65,6 +68,11 @@ wifi:
     - globals.set:
         id: setup_page_shown
         value: "false"
+    # Never leave a stale address in the footer; the ip_address sensor
+    # repaints it on the next connect.
+    - lvgl.label.update:
+        id: lbl_ip_footer
+        text: ""
     - lvgl.page.show: connecting_page
 
 globals:
@@ -91,6 +99,26 @@ interval:
             - lvgl.page.show: setup_page
 
 captive_portal:
+
+# -----------------------------------------------------------------------------
+# Admin portal: ESPHome's stock web UI at http://<device-ip>/ (the address
+# the main page footer shows). It lists the diagnostic entities (IP,
+# firmware version), the Firmware Update entity and its Check/Install
+# buttons (see `button:` below), and `ota: platform: web_server` adds an upload form
+# for flashing a local build without USB. `local: true` embeds the UI's
+# JS/CSS in the firmware instead of loading it from oi.esphome.io, so it also
+# works from a phone on the setup AP with no internet.
+#
+# Deliberately unprotected, same as cyd-clock's and espframe's portals:
+# anyone on the LAN -- or on the open setup AP while it's up -- can flash the
+# device. captive_portal keeps working alongside it: it only claims requests
+# while the fallback AP is active, so the wifi setup form never needs a login
+# either way.
+# -----------------------------------------------------------------------------
+web_server:
+  port: 80
+  version: 3
+  local: true
 
 logger:
   level: INFO
@@ -121,6 +149,10 @@ http_request:
 
 ota:
   - platform: http_request
+  # Upload form in the web portal above.
+  - platform: web_server
+  # `esphome upload --device <ip>` from a laptop, same as espframe's devices.
+  - platform: esphome
 
 update:
   - platform: http_request
@@ -145,12 +177,56 @@ update:
             then:
               - update.perform: firmware_update
 
+# Manual check/install from the web portal. The stock web_server v3 UI shows
+# the update entity's state but has no install control for it (HA's own
+# update card does), so these buttons are the portal's way to act on an
+# "UPDATE AVAILABLE" without waiting for the 6-hourly check. Install is a
+# deliberate press, so unlike on_update_available above it isn't skipped on
+# "dev" builds -- pressing it on a local build replaces it with the
+# published release.
+button:
+  - platform: template
+    name: "Check for Firmware Update"
+    icon: "mdi:update"
+    entity_category: config
+    on_press:
+      - component.update: firmware_update
+  - platform: template
+    name: "Install Firmware Update"
+    icon: "mdi:download"
+    entity_category: config
+    on_press:
+      - update.perform: firmware_update
+
 text_sensor:
   - platform: template
     name: "Firmware Version"
     entity_category: diagnostic
-    update_interval: never
+    # Not `never`: a template sensor with no interval never publishes at all,
+    # so this showed blank in HA and the web portal. The value is a
+    # compile-time constant, so an hourly re-publish costs nothing.
+    update_interval: 1h
     lambda: 'return {"${firmware_version}"};'
+
+  # Current station IP, shown on-screen (main page footer / connecting page)
+  # so the device and its web portal can be found without the router or HA.
+  # Only reports the station address -- in fallback AP mode the device is at
+  # 192.168.4.1, which setup_page states instead.
+  - platform: wifi_info
+    ip_address:
+      name: "IP Address"
+      entity_category: diagnostic
+      on_value:
+        - if:
+            condition:
+              lambda: 'return !x.empty() && x != "0.0.0.0";'
+            then:
+              - lvgl.label.update:
+                  id: lbl_ip_footer
+                  text: !lambda 'return "http://" + x;'
+              - lvgl.label.update:
+                  id: lbl_connecting_ip
+                  text: !lambda 'return "Not connected\nLast IP: " + x;'
 
   # ---------------------------------------------------------------------------
   # Button state imported from HA. Text sensors rather than `homeassistant`
@@ -247,8 +323,9 @@ script:
 # `setup_page` replaces it once that fails and the fallback AP comes up (see
 # the interval above), naming the AP to join; `main_page` -- the 6-button
 # dashboard, hidden until the device is actually reachable from HA -- is a 2
-# column x 3 row grid over the full 240x320 portrait panel (this board's
-# native, already-confirmed-working orientation, no rotation transform).
+# column x 3 row grid over the 240x320 portrait panel (this board's native,
+# already-confirmed-working orientation, no rotation transform), with a
+# one-line footer under it showing the web portal's http://<ip> address.
 # Button -> HA service mapping is the finalized list from Jira DIY-102. Every
 # button shares one theme: dim grey by default, lit amber when `checked` --
 # which only the imported HA state above ever sets.
@@ -291,6 +368,18 @@ lvgl:
             text_color: 0xFFFFFF
             align: TOP_MID
             text_align: CENTER
+        # Updated by the ip_address sensor to include the last address, so a
+        # device that dropped off wifi still tells you where it was.
+        - label:
+            id: lbl_connecting_ip
+            x: 0
+            y: 240
+            width: 240
+            text: "Not connected"
+            text_font: montserrat_14
+            text_color: 0x909090
+            align: TOP_MID
+            text_align: CENTER
     - id: setup_page
       bg_color: 0x000000
       bg_opa: COVER
@@ -322,6 +411,17 @@ lvgl:
             text_color: 0xFFFFFF
             align: TOP_MID
             text_align: CENTER
+        # For phones that don't pop the captive portal up by themselves.
+        # 192.168.4.1 is ESPHome's default fallback AP address.
+        - label:
+            x: 0
+            y: 280
+            width: 240
+            text: "Then open http://192.168.4.1"
+            text_font: montserrat_14
+            text_color: 0x909090
+            align: TOP_MID
+            text_align: CENTER
     - id: main_page
       bg_color: 0x000000
       bg_opa: COVER
@@ -331,7 +431,7 @@ lvgl:
             x: 8
             y: 8
             width: 108
-            height: 96
+            height: 88
             widgets:
               - label:
                   id: lbl_roku_power
@@ -347,7 +447,7 @@ lvgl:
             x: 124
             y: 8
             width: 108
-            height: 96
+            height: 88
             widgets:
               - label:
                   text: "Play\nGame"
@@ -362,9 +462,9 @@ lvgl:
         - button:
             id: btn_roku_watch_tv
             x: 8
-            y: 112
+            y: 104
             width: 108
-            height: 96
+            height: 88
             widgets:
               - label:
                   text: "Watch\nTV"
@@ -379,9 +479,9 @@ lvgl:
         - button:
             id: btn_window_lamp
             x: 124
-            y: 112
+            y: 104
             width: 108
-            height: 96
+            height: 88
             widgets:
               - label:
                   text: "Window\nLamp"
@@ -394,9 +494,9 @@ lvgl:
         - button:
             id: btn_window_lights
             x: 8
-            y: 216
+            y: 200
             width: 108
-            height: 96
+            height: 88
             widgets:
               - label:
                   text: "Window\nLights"
@@ -409,9 +509,9 @@ lvgl:
         - button:
             id: btn_standing_lamp
             x: 124
-            y: 216
+            y: 200
             width: 108
-            height: 96
+            height: 88
             widgets:
               - label:
                   text: "Standing\nLamp"
@@ -421,3 +521,15 @@ lvgl:
                   service: switch.toggle
                   data:
                     entity_id: switch.media_room_plug
+        # Footer under the 3 button rows: the device's web portal address.
+        # Filled in by the ip_address sensor, cleared by wifi on_disconnect.
+        - label:
+            id: lbl_ip_footer
+            x: 0
+            y: 296
+            width: 240
+            text: ""
+            text_font: montserrat_14
+            text_color: 0x909090
+            align: TOP_MID
+            text_align: CENTER
