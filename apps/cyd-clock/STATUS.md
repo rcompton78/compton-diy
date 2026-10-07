@@ -596,6 +596,70 @@ Nov 1 00:00 local time, every year**, with no setup, and reverts on its own afte
   `cyd` is now very close to full. The next feature on that board will most likely need to
   trim something first.
 
+## Legendary Items — Hogwarts Crest & Sorting Hat (COM-382, 2026-10-07)
+
+The first two **legendary**-tier store items, and a new cosmetic slot. A mockup of both items,
+on every fur colour and room theme with the store listing, is in the COM-382 Artifact.
+
+- **Legendary tier.** `STORE_COST_LEGENDARY = 350`, shared with COM-375 to COM-378. It started
+  at 1000, but the user cut it to 350 after the first device flash: still the top tier, just above
+  Pikachu/Eevee at 300. No existing item costs 350 or more, so only legendary items get the tag. The new
+  `storeItemTags(baseCost, cost)` helper adds a gold **★ LEGENDARY** tag to any store row priced
+  at that tier or higher, plus the existing 🔥 SALE tag while a flash sale is active. It replaces
+  eight copies of the SALE markup, one per store section, so the later legendary cards get the
+  marker for free. Both items use `flashSalePrice()` like every other item.
+- **New chest-badge category (`BADGES[]`)**, a fourth worn slot beside the head
+  (`ACCESSORIES[]`), the face (`GLASSES[]`) and the right arm. It uses the same model as glasses:
+  - **Config:** `ownedBadges` (uint8_t bitmask), `equippedBadge` and `seenBadgeCount`, saved as
+    `badges`/`badgeEquipped`/`seenBadges`. Backups pick them up through the shared
+    `toJson()`/`fromJson()`, and an older config or backup simply owns no badges.
+  - **Store and dressing room:** a "Badges - Chest" section in the store, the purchase and
+    rollback branch, and a dressing-room radio with None. `BADGE_STORE_COUNT` feeds
+    `hasNewStoreItems()`, and the ids go into `collectStoreItemIds()`, so the uniqueness check
+    and the flash-sale id check cover them.
+  - **Resolver:** `equippedBadgeIndex()` works like the glasses resolver, so a new purchase is
+    equipped automatically.
+- **Hogwarts Crest**: a 21×25 px shield with a C_DARK outline. It is quartered red, green, blue
+  and yellow around an outlined gold plate with an "H". It is drawn last in `drawCat()`, over the
+  tabby/calico body pattern and with the celebration bounce, at x cx−10..+10, y cy+6..+30. That
+  is clear of the paws, a held stuffy (which starts at cx+29), a held toy (which starts at
+  cx+24), the sparkle ring and every button. In the sleep scene it is drawn again after the
+  blanket, so it reads as pinned to the blanket (the user's choice over hiding it).
+  - **Hunger lines move.** The tummy rumble lines normally sit exactly where the crest goes, and
+    their fur-colour erase would punch through it. With a badge equipped, `drawHungerLines()`
+    moves them below the shield (cy+33/+38/+43, 5 px apart instead of 8).
+- **Sorting Hat** (`ACCESSORIES[]`): a patched brown hat with a wide, droopy brim and a cone
+  crumpled at a kink. The tip flops to the left, and a face is creased in (brow folds and a seam
+  mouth). It has a 1px near-black outline and no band or buckle, so it reads differently from
+  the black, right-bending witch hat.
+  - **Placement:** the brim sits low on the brow (cy−57), which buys extra height under the
+    cy−87 apex limit. The brim's lowest row is cy−52, above the blink rect (cy−50).
+  - **Size:** the user asked for it a little bigger than the first mockup. It is now 65 px
+    wide, against the witch hat's 55 px, and as tall as the zone allows.
+- **Accessory indexing changed again.** The Sorting Hat is **appended after** the party/witch
+  hats (index 12), not inserted before them. Ownership is an index-keyed bitmask, so shifting
+  the theme-week hats would hand their bits to a different item on a device, or in a backup,
+  that owned one mid-theme-week.
+  - The purchasable accessories are therefore no longer a contiguous prefix. Store rendering and
+    purchase iterate the whole catalog and skip theme-week entries via `isStoreAccessory()`.
+  - `ACCESSORY_IDX_PARTY_HAT`/`WITCH_HAT` are now fixed at 10 and 11, rather than derived from
+    `ACCESSORY_STORE_COUNT`.
+  - `ACCESSORY_STORE_COUNT` is still the number of purchasable accessories (`ACCESSORY_COUNT - 2`,
+    now 11), so the "new store items!" flash fires once for the hat, and once for the new badge
+    section.
+- **Flash** (`pio run` size report):
+
+| Board | Before | After | Delta | % used |
+|---|---|---|---|---|
+| `cyd` | 1,289,869 B | 1,293,177 B | +3,308 B | 98.4% → **98.7%** (~17.1KB left) |
+| `freenove-s3` | 1,246,597 B | 1,249,869 B | +3,272 B | 37.3% → 37.4% |
+
+  This covers the new category plumbing, both pieces of art and the marker, offset by sharing
+  the SALE markup. About 17.1KB of headroom is left on `cyd` for COM-375 to COM-378. If that runs
+  short, the first candidates to trim are the long per-section `String` HTML builders in
+  `handleConfigStoreGet()`/`handleConfigDressGet()`, which repeat the same row markup in every
+  section and could share one row builder.
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`

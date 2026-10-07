@@ -94,6 +94,11 @@ static constexpr uint32_t STORE_COST_ACCESSORY_GLASSES = 50;  // matches bow pri
 static constexpr uint32_t STORE_COST_RIGHT_ARM_SLOT = 200;  // one-time unlock, not per-stuffy
 static constexpr uint32_t STORE_COST_HOCKEY_STICK = 100;
 static constexpr uint32_t STORE_COST_MAGIC_WAND = 100;
+// Legendary tier (COM-382): the top-of-store price shared by every legendary item (COM-375 to
+// COM-378 reuse it too), just above the Pikachu/Eevee 300 tier. Any item priced at or above it
+// gets the gold "LEGENDARY" store tag — see storeItemTags() — so keep every non-legendary price
+// below it.
+static constexpr uint32_t STORE_COST_LEGENDARY = 350;
 
 // Touch calibration — print "Touch: x= y=" from serial to tune
 static constexpr int TX_MIN = 300, TX_MAX = 3800;
@@ -182,6 +187,19 @@ static constexpr uint16_t C_WITCH_HAT        = 0x0000;  // witch hat cone/brim (
 static constexpr uint16_t C_WITCH_HAT_RIM    = 0x9B5A;  // 1px lavender outline so the black hat reads on the sky and on a black cat (~#9b6bd6)
 static constexpr uint16_t C_WITCH_HAT_BAND   = 0xFC40;  // witch hat band, candy-corn temple arms (~#ff8a00)
 static constexpr uint16_t C_CANDY_CORN_TOP   = 0xFE83;  // candy-corn lens wide yellow band (~#ffd21f)
+
+// Legendary Harry Potter items (COM-382). The Sorting Hat is a patched brown with a near-black
+// outline, so it reads on pale furs and pale themes; its mid-brown fill is what separates it from a
+// black cat and the dark themes. The crest's house colors are saturated flat fills inside a C_DARK
+// outline, the same contrast recipe as the candy-corn lenses above.
+static constexpr uint16_t C_SORTING_HAT       = 0x8B07;  // hat body (~#8a6038)
+static constexpr uint16_t C_SORTING_HAT_PATCH = 0x51C3;  // shaded flank and brim fold (~#56391f)
+static constexpr uint16_t C_SORTING_HAT_LINE  = 0x28E2;  // outline, crumple and face creases (~#2b1d12)
+static constexpr uint16_t C_CREST_RED    = 0xA8C4;  // Gryffindor quarter (~#ae1820)
+static constexpr uint16_t C_CREST_GREEN  = 0x1BC7;  // Slytherin quarter (~#1c7a3c)
+static constexpr uint16_t C_CREST_BLUE   = 0x2298;  // Ravenclaw quarter (~#2350c0)
+static constexpr uint16_t C_CREST_YELLOW = 0xF623;  // Hufflepuff quarter (~#f5c518)
+static constexpr uint16_t C_CREST_GOLD   = 0xED86;  // centre plate behind the "H" (~#e8b030)
 
 // Toy catalog colors (DIY-110) — first entry is the mini hockey stick.
 static constexpr uint16_t C_HOCKEY_SHAFT = 0xA145;  // wood-tone shaft (tan/brown)
@@ -296,9 +314,10 @@ static void drawBowTangerine(int cx, int cy);
 static void drawBowFlamingoPink(int cx, int cy);
 
 // Forward-declared for the same reason as the bow functions above. Unlike the bows, this one
-// isn't store-purchasable — see ACCESSORY_STORE_COUNT below.
+// isn't store-purchasable — see isStoreAccessory() below.
 static void drawPartyHat(int cx, int cy);
 static void drawWitchHat(int cx, int cy);
+static void drawSortingHat(int cx, int cy);
 
 // Accessory catalog — same purchase/equip model as cat colors, but layered independently
 // on top of whichever cat color is equipped (an accessory works with any fur color). `id` is
@@ -327,26 +346,44 @@ static constexpr Accessory ACCESSORIES[] = {
     {"bow_apple_green",   "Apple Green Bow",   STORE_COST_ACCESSORY_BOW, "#C2E189", drawBowAppleGreen},
     {"bow_tangerine",     "Tangerine Bow",     STORE_COST_ACCESSORY_BOW, "#FFA552", drawBowTangerine},
     {"bow_flamingo_pink", "Flamingo Pink Bow", STORE_COST_ACCESSORY_BOW, "#FCA3B7", drawBowFlamingoPink},
-    // Below: theme-week exclusives (DIY-108) — MUST stay appended after every real
-    // store-purchasable entry above. Never store-purchasable (see ACCESSORY_STORE_COUNT,
-    // which store rendering/purchase code bounds itself to instead of ACCESSORY_COUNT); owned
+    // Below: theme-week exclusives (DIY-108), at the fixed ACCESSORY_IDX_* indices below. Never
+    // store-purchasable (store rendering/purchase code skips them via isStoreAccessory()); owned
     // only for the duration of an active theme week, granted/revoked by
     // applyThemeWeekCosmetics()/revertThemeWeekCosmetics().
     {"party_hat", "Party Hat", 0, "#9370DB", drawPartyHat},
     {"witch_hat", "Witch Hat", 0, "#FF8A00", drawWitchHat},  // Halloween (COM-379)
+    // Below: store-purchasable again (COM-382). Appended after the theme-week block rather than
+    // inserted before it: ownership is a bitmask keyed by index, so shifting the party/witch hat
+    // down a slot would hand their bits to a different item on any device (or backup) that owned
+    // one mid-theme-week. Store code skips the theme-week entries with isStoreAccessory() instead
+    // of assuming the purchasable entries are a contiguous prefix.
+    {"sorting_hat", "Sorting Hat", STORE_COST_LEGENDARY, "#C8955A", drawSortingHat},
 };
 static constexpr int ACCESSORY_COUNT = sizeof(ACCESSORIES) / sizeof(ACCESSORIES[0]);
 static_assert(ACCESSORY_COUNT <= 16, "ownedAccessories bitmask is uint16_t");
-// Count of normal, store-purchasable accessories — everything before the theme-week-exclusive
-// block above. Store rendering/purchase/seen-count logic bounds itself to this, not the full
-// ACCESSORY_COUNT, so theme-exclusive entries never show up as purchasable and never trip the
-// "new store items!" badge (see hasNewStoreItems()). The subtracted number is the size of that
+// Catalog index of each theme-week-exclusive accessory, for applyThemeWeekCosmetics()/
+// revertThemeWeekCosmetics(). Fixed, not derived from the catalog size, since store-purchasable
+// entries now also sit after them (the Sorting Hat, COM-382).
+static constexpr int ACCESSORY_IDX_PARTY_HAT = 10;
+static constexpr int ACCESSORY_IDX_WITCH_HAT = 11;
+static_assert(ACCESSORY_COUNT > ACCESSORY_IDX_WITCH_HAT, "theme-week accessory indices out of range");
+// Count of normal, store-purchasable accessories: everything except the theme-week-exclusive
+// block above. hasNewStoreItems() compares the seen count against this, so theme-exclusive
+// entries never trip the "new store items!" badge. The subtracted number is the size of that
 // exclusive block: bump it whenever a theme week appends another entry.
 static constexpr int ACCESSORY_STORE_COUNT = ACCESSORY_COUNT - 2;
-// Catalog index of each theme-week-exclusive accessory, for applyThemeWeekCosmetics()/
-// revertThemeWeekCosmetics(). Derived from ACCESSORY_STORE_COUNT, in the block's order above.
-static constexpr int ACCESSORY_IDX_PARTY_HAT = ACCESSORY_STORE_COUNT;
-static constexpr int ACCESSORY_IDX_WITCH_HAT = ACCESSORY_STORE_COUNT + 1;
+
+/**
+ * Whether an ACCESSORIES[] entry can be bought in the store. Store rendering and purchase code
+ * use this rather than an index bound, since the store-purchasable entries aren't a contiguous
+ * prefix: the theme-week exclusives sit in the middle of the catalog (see the Sorting Hat).
+ *
+ * @param i Index into ACCESSORIES[].
+ * @return false for the theme-week-exclusive entries, true for everything else.
+ */
+static constexpr bool isStoreAccessory(int i) {
+    return i != ACCESSORY_IDX_PARTY_HAT && i != ACCESSORY_IDX_WITCH_HAT;
+}
 
 // Forward-declared for the same reason as the bow functions above — GLASSES[] needs this
 // before drawCat() (and `tft`) are declared.
@@ -380,10 +417,38 @@ static constexpr Glasses GLASSES[] = {
 };
 static constexpr int GLASSES_COUNT = sizeof(GLASSES) / sizeof(GLASSES[0]);
 static_assert(GLASSES_COUNT <= 8, "ownedGlasses bitmask is uint8_t");
-// Count of normal, store-purchasable glasses — see ACCESSORY_STORE_COUNT's comment for why.
+// Count of normal, store-purchasable glasses — everything before the theme-week-exclusive block
+// above. Store rendering/purchase/seen-count logic bounds itself to this, not the full
+// GLASSES_COUNT, so theme-exclusive entries never show up as purchasable and never trip the
+// "new store items!" badge (see hasNewStoreItems()). The subtracted number is the size of that
+// exclusive block: bump it whenever a theme week appends another entry.
 static constexpr int GLASSES_STORE_COUNT = GLASSES_COUNT - 2;
 static constexpr int GLASSES_IDX_BALLOON    = GLASSES_STORE_COUNT;
 static constexpr int GLASSES_IDX_CANDY_CORN = GLASSES_STORE_COUNT + 1;
+
+// Forward-declared for the same reason as the bow functions above.
+static void drawHogwartsCrest(int cx, int cy);
+
+// Chest badge catalog (COM-382) — a fourth worn-cosmetic slot alongside ACCESSORIES[] (head),
+// GLASSES[] (face) and the right-arm items, with its own store section, dressing-room control and
+// owned/equipped bitmask. Same struct shape and purchase/equip model as GLASSES[]; kept separate
+// for the same reason glasses are: it draws at its own point in drawCat() (last, over the chest).
+// `id` is the persisted/form key; never reorder or reuse indices.
+struct Badge {
+    const char* id;
+    const char* label;
+    uint32_t cost;
+    const char* webColor;  // CSS hex approximation, for coloring its label in the config UI
+    void (*draw)(int cx, int cy);  // paints the badge onto the cat's chest
+};
+static constexpr Badge BADGES[] = {
+    {"hogwarts_crest", "Hogwarts Crest", STORE_COST_LEGENDARY, "#E8B030", drawHogwartsCrest},
+};
+static constexpr int BADGE_COUNT = sizeof(BADGES) / sizeof(BADGES[0]);
+static_assert(BADGE_COUNT <= 8, "ownedBadges bitmask is uint8_t");
+// Count of store-purchasable badges. No theme-week badges exist yet, so it's the whole catalog;
+// if one is ever appended, subtract it here like ACCESSORY_STORE_COUNT does.
+static constexpr int BADGE_STORE_COUNT = BADGE_COUNT;
 
 // Forward declarations: each stuffy's sleep-scene art, defined further below alongside
 // drawSleepingCat(). Declared here so the STUFFIES[] catalog can reference them directly —
@@ -559,7 +624,7 @@ static constexpr RoomTheme ROOM_THEMES[] = {
 };
 static constexpr int ROOM_THEME_COUNT = sizeof(ROOM_THEMES) / sizeof(ROOM_THEMES[0]);
 static_assert(ROOM_THEME_COUNT <= 16, "ownedRoomThemes bitmask is uint16_t");
-// Count of normal, store-purchasable room themes — see ACCESSORY_STORE_COUNT's comment for why.
+// Count of normal, store-purchasable room themes — see GLASSES_STORE_COUNT's comment for why.
 static constexpr int ROOM_THEME_STORE_COUNT = ROOM_THEME_COUNT - 2;
 static constexpr int ROOM_THEME_IDX_BIRTHDAY      = ROOM_THEME_STORE_COUNT;
 static constexpr int ROOM_THEME_IDX_HAUNTED_NIGHT = ROOM_THEME_STORE_COUNT + 1;
@@ -681,6 +746,7 @@ static uint16_t catBodyColor();
 static bool catHasCuteEyes();
 static int equippedAccessoryIndex();
 static int equippedGlassesIndex();
+static int equippedBadgeIndex();
 static int equippedStuffyRightIndex();
 static int equippedBlanketIndex();
 
@@ -773,6 +839,40 @@ static void drawWitchHat(int cx, int cy) {
     tft.fillRect(cx - 1, cy - 69, 2, 2, C_WITCH_HAT);
 }
 
+/**
+ * Sorting Hat (legendary, COM-382): a patched brown hat with a wide, droopy brim, a cone crumpled
+ * at a kink, a tip that flops to the left, and a face creased into it. It differs from the witch
+ * hat above in colour (brown, not black), silhouette (the tip bends left and droops) and detail
+ * (no band or buckle). It sits low over the brow (brim at cy-57), as the Sorting Hat slumps onto
+ * Harry, which buys extra height under the cy-87 apex limit that drawCat()'s clear rect sets. The
+ * brim outline's lowest row is cy-52, just above drawEyes()'s blink rect (cy-50), so blinking
+ * never erases part of the hat. Each body shape is first painted 1px larger in the outline colour.
+ *
+ * @param cx Cat center x (CAT_CX).
+ * @param cy Cat center y, including any bounce offset.
+ */
+static void drawSortingHat(int cx, int cy) {
+    // Outline pass.
+    tft.fillEllipse(cx, cy - 57, 32, 5, C_SORTING_HAT_LINE);
+    tft.fillTriangle(cx - 17, cy - 57, cx + 17, cy - 57, cx + 2, cy - 83, C_SORTING_HAT_LINE);
+    tft.fillTriangle(cx - 6, cy - 74, cx + 7, cy - 79, cx - 10, cy - 87, C_SORTING_HAT_LINE);
+    tft.fillTriangle(cx - 11, cy - 87, cx - 5, cy - 83, cx - 21, cy - 77, C_SORTING_HAT_LINE);
+    // Brim, lower cone, kinked upper cone, drooping tip.
+    tft.fillEllipse(cx, cy - 57, 31, 4, C_SORTING_HAT);
+    tft.fillTriangle(cx - 15, cy - 58, cx + 15, cy - 58, cx + 2, cy - 81, C_SORTING_HAT);
+    tft.fillTriangle(cx - 5, cy - 75, cx + 6, cy - 78, cx - 10, cy - 86, C_SORTING_HAT);
+    tft.fillTriangle(cx - 10, cy - 86, cx - 6, cy - 83, cx - 20, cy - 78, C_SORTING_HAT);
+    // Shaded right flank and brim fold, then the crumple line at the kink.
+    tft.fillTriangle(cx + 4, cy - 58, cx + 15, cy - 58, cx + 2, cy - 81, C_SORTING_HAT_PATCH);
+    tft.fillEllipse(cx + 16, cy - 56, 13, 2, C_SORTING_HAT_PATCH);
+    tft.drawLine(cx - 6, cy - 75, cx + 6, cy - 78, C_SORTING_HAT_LINE);
+    // Creased face: two brow folds and a seam mouth.
+    tft.drawLine(cx - 9, cy - 70, cx - 4, cy - 68, C_SORTING_HAT_LINE);
+    tft.drawLine(cx + 1, cy - 68, cx + 7, cy - 70, C_SORTING_HAT_LINE);
+    tft.drawLine(cx - 6, cy - 62, cx - 1, cy - 61, C_SORTING_HAT_LINE);
+    tft.drawLine(cx - 1, cy - 61, cx + 5, cy - 62, C_SORTING_HAT_LINE);
+}
+
 // Glasses art (declared earlier alongside GLASSES[]). Called from drawCat() after the eyes
 // (unlike the bow above, which is drawn before them) so the round lenses sit over the eye
 // shapes drawn by drawEyeShapes() at (cx-15/+15, cy-37, r=11). Round rim + round lens per
@@ -862,6 +962,41 @@ static void drawCandyCornSunglasses(int cx, int cy) {
         tft.drawLine(cx - 30, cy - 48 + w, cx - 43, cy - 54 + w, C_WITCH_HAT_BAND);
         tft.drawLine(cx + 30, cy - 48 + w, cx + 43, cy - 54 + w, C_WITCH_HAT_BAND);
     }
+}
+
+// Top edge of the chest badge (COM-382), relative to the cat's center y. Shared by
+// drawHogwartsCrest() and drawHungerLines(), which moves its rumble lines below the badge.
+static constexpr int BADGE_TOP_DY = 6;
+static constexpr int BADGE_BOTTOM_DY = BADGE_TOP_DY + 24;
+
+/**
+ * Hogwarts crest chest badge (legendary, COM-382): a 21×25 px shield with a C_DARK outline,
+ * quartered red, green, blue and yellow around a gold plate with a dark "H". It sits on the upper
+ * chest (cx-10..+10, cy+6..+30), clear of the paws, a held stuffy (from cx+29) and a held toy (from
+ * cx+24). drawCat() draws it last, over the tabby/calico body pattern; drawSleepingCat() draws it
+ * again on top of the blanket, so it reads as pinned there.
+ *
+ * @param cx Cat center x (CAT_CX).
+ * @param cy Cat center y, including any bounce offset.
+ */
+static void drawHogwartsCrest(int cx, int cy) {
+    int y = cy + BADGE_TOP_DY;
+    // Shield outline: a square top and a pointed bottom.
+    tft.fillRect(cx - 10, y, 21, 15, C_DARK);
+    tft.fillTriangle(cx - 10, y + 14, cx + 10, y + 14, cx, y + 24, C_DARK);
+    // House quarters, leaving a 1px dark cross between them.
+    tft.fillRect(cx - 9, y + 1, 9, 7, C_CREST_RED);
+    tft.fillRect(cx + 1, y + 1, 9, 7, C_CREST_GREEN);
+    tft.fillRect(cx - 9, y + 9, 9, 5, C_CREST_BLUE);
+    tft.fillTriangle(cx - 9, y + 14, cx - 1, y + 14, cx - 1, y + 22, C_CREST_BLUE);
+    tft.fillRect(cx + 1, y + 9, 9, 5, C_CREST_YELLOW);
+    tft.fillTriangle(cx + 1, y + 14, cx + 9, y + 14, cx + 1, y + 22, C_CREST_YELLOW);
+    // Outlined gold plate with an "H".
+    tft.fillRect(cx - 5, y + 4, 11, 10, C_DARK);
+    tft.fillRect(cx - 4, y + 5, 9, 8, C_CREST_GOLD);
+    tft.drawFastVLine(cx - 2, y + 6, 6, C_DARK);
+    tft.drawFastVLine(cx + 2, y + 6, 6, C_DARK);
+    tft.drawFastHLine(cx - 2, y + 8, 5, C_DARK);
 }
 
 // Draws just the eye shapes (sclera/pupil/glint, or a closed dash) into an already
@@ -1009,6 +1144,10 @@ static void drawCat(int cx, int cy, CatStatus status, CatBoredom boredom, CatHea
     if (colorIdx >= 0 && CAT_COLORS[colorIdx].drawBodyPattern) {
         CAT_COLORS[colorIdx].drawBodyPattern(cx, cy);
     }
+
+    // Chest badge (COM-382) — last, so it sits on top of the body pattern
+    int badgeIdx = equippedBadgeIndex();
+    if (badgeIdx >= 0) BADGES[badgeIdx].draw(cx, cy);
 }
 
 // Calm, static "asleep" scene for the sleep-window peek: reuses drawCat() with a
@@ -1108,6 +1247,19 @@ static int equippedGlassesIndex() {
     if (eq == EQUIP_NONE) return -1;  // user explicitly unequipped
     if (eq < GLASSES_COUNT && (owned & (1 << eq))) return eq;
     for (int i = 0; i < GLASSES_COUNT; i++) {
+        if (owned & (1 << i)) return i;
+    }
+    return -1;
+}
+
+// Same resolution logic as equippedBlanketIndex(), for the chest badge catalog (COM-382).
+static int equippedBadgeIndex() {
+    uint8_t owned = configMgr.config().ownedBadges;
+    if (owned == 0) return -1;
+    uint8_t eq = configMgr.config().equippedBadge;
+    if (eq == EQUIP_NONE) return -1;  // user explicitly unequipped
+    if (eq < BADGE_COUNT && (owned & (1 << eq))) return eq;
+    for (int i = 0; i < BADGE_COUNT; i++) {
         if (owned & (1 << i)) return i;
     }
     return -1;
@@ -1214,6 +1366,7 @@ static bool hasNewStoreItems() {
            CAT_COLOR_COUNT > configMgr.config().seenCatColorCount ||
            ACCESSORY_STORE_COUNT > configMgr.config().seenAccessoryCount ||
            GLASSES_STORE_COUNT > configMgr.config().seenGlassesCount ||
+           BADGE_STORE_COUNT > configMgr.config().seenBadgeCount ||
            TOY_COUNT > configMgr.config().seenToyCount ||
            !configMgr.config().seenRightArmSlot;
 }
@@ -2192,6 +2345,11 @@ static void drawSleepingCat(int cx, int cy) {
         // Blanket — covers body/paws/tail, starts right at the neckline
         tft.fillRoundRect(cx - 40, cy, 80, 60, 12, color.base);
         tft.fillRect(cx - 40, cy + 4, 80, 6, color.trim);  // folded-edge trim
+
+        // The blanket just covered the chest badge drawCat() drew; draw it again on top, so it
+        // reads as pinned to the blanket (COM-382).
+        int badgeIdx = equippedBadgeIndex();
+        if (badgeIdx >= 0) BADGES[badgeIdx].draw(cx, cy);
     }
 
     if (stuffyIdx >= 0) {
@@ -2236,12 +2394,17 @@ static void clearSparkles(int cx, int cy) {
 }
 
 static void drawHungerLines(int cx, int cy, bool show) {
-    // Three short horizontal lines on the tummy — manga hunger growl effect
-    int bx = cx - 12, by = cy + 18;
+    // Three short horizontal lines on the tummy — manga hunger growl effect. A chest badge
+    // (COM-382) sits right where they normally go, and the fur-colour erase below would punch
+    // through it, so with a badge equipped they move just below it, packed tighter to stay above
+    // the paw toe lines.
+    bool badge = equippedBadgeIndex() >= 0;
+    int bx = cx - 12, by = badge ? cy + BADGE_BOTTOM_DY + 3 : cy + 18;
+    int step = badge ? 5 : 8;
     uint16_t col = show ? C_RUMBLE : catBodyColor();  // erase with body colour to avoid flicker
-    tft.drawFastHLine(bx,      by,      14, col);
-    tft.drawFastHLine(bx +  2, by +  8, 10, col);
-    tft.drawFastHLine(bx,      by + 16, 14, col);
+    tft.drawFastHLine(bx,      by,            14, col);
+    tft.drawFastHLine(bx +  2, by + step,     10, col);
+    tft.drawFastHLine(bx,      by + 2 * step, 14, col);
 }
 
 static void drawBoredomZzz(int cx, int cy, bool show) {
@@ -3195,7 +3358,7 @@ static int64_t parseIso8601ToLocalStamp(const char* iso) {
 // construction (it's the same catalog counts summed here), but if a future catalog is added or
 // grown without updating it, this halts immediately instead of silently overrunning the
 // caller's stack buffer.
-static constexpr int STORE_ITEM_ID_COUNT = CAT_COLOR_COUNT + ACCESSORY_COUNT + GLASSES_COUNT + STUFFY_COUNT + TOY_COUNT + BLANKET_COLOR_COUNT + ROOM_THEME_COUNT + 1;
+static constexpr int STORE_ITEM_ID_COUNT = CAT_COLOR_COUNT + ACCESSORY_COUNT + GLASSES_COUNT + BADGE_COUNT + STUFFY_COUNT + TOY_COUNT + BLANKET_COLOR_COUNT + ROOM_THEME_COUNT + 1;
 static int collectStoreItemIds(const char** ids, int cap) {
     int n = 0;
     auto push = [&](const char* id) {
@@ -3209,6 +3372,7 @@ static int collectStoreItemIds(const char** ids, int cap) {
     for (int i = 0; i < CAT_COLOR_COUNT; i++) push(CAT_COLORS[i].id);
     for (int i = 0; i < ACCESSORY_COUNT; i++) push(ACCESSORIES[i].id);
     for (int i = 0; i < GLASSES_COUNT; i++) push(GLASSES[i].id);
+    for (int i = 0; i < BADGE_COUNT; i++) push(BADGES[i].id);
     for (int i = 0; i < STUFFY_COUNT; i++) push(STUFFIES[i].id);
     for (int i = 0; i < TOY_COUNT; i++) push(TOYS[i].id);
     for (int i = 0; i < BLANKET_COLOR_COUNT; i++) push(BLANKET_COLORS[i].id);
@@ -4284,6 +4448,9 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <h3>Glasses</h3>
 %%GLASSES_ITEMS%%
 
+<h3>Badges - Chest</h3>
+%%BADGE_ITEMS%%
+
 <h3>Toys (for the Right Arm slot)</h3>
 %%TOY_ITEMS%%
 
@@ -4343,6 +4510,9 @@ static const char CONFIG_DRESS_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 
 <h3>Glasses</h3>
 %%GLASSES_OPTIONS%%
+
+<h3>Badges - Chest</h3>
+%%BADGE_OPTIONS%%
 
 <button type="submit" style="width:100%;margin-top:8px">Save</button>
 </form>
@@ -4573,6 +4743,22 @@ static void handleConfigCityGet() {
 }
 
 // Renders the buy button/owned-label markup for one store item.
+/**
+ * The tags shown after a store item's label: a gold "LEGENDARY" marker for anything priced at
+ * the legendary tier (COM-382), and the red "SALE" tag while a flash sale has cut its price.
+ * Shared by every store section so the two tags always look the same everywhere.
+ *
+ * @param baseCost The item's catalog price, before any flash sale.
+ * @param cost The price actually charged, from flashSalePrice().
+ * @return The tags' HTML, or an empty string if neither applies.
+ */
+static String storeItemTags(uint32_t baseCost, uint32_t cost) {
+    String html;
+    if (baseCost >= STORE_COST_LEGENDARY) html += " <span style='color:#ffcc33;font-weight:bold'>\xE2\x98\x85 LEGENDARY</span>";
+    if (cost != baseCost) html += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+    return html;
+}
+
 static String storeItemAction(const char* item, bool owned, uint32_t cost, uint32_t points) {
     if (owned) return "<span class='owned'>Owned</span>";
     String html = "<form method='POST' action='/save-config/store'>";
@@ -4610,6 +4796,7 @@ static void handleConfigStoreGet() {
         configMgr.config().seenCatColorCount     = (uint8_t)CAT_COLOR_COUNT;
         configMgr.config().seenAccessoryCount    = (uint8_t)ACCESSORY_STORE_COUNT;
         configMgr.config().seenGlassesCount      = (uint8_t)GLASSES_STORE_COUNT;
+        configMgr.config().seenBadgeCount        = (uint8_t)BADGE_STORE_COUNT;
         configMgr.config().seenToyCount          = (uint8_t)TOY_COUNT;
         configMgr.config().seenRightArmSlot      = true;
         configMgr.save();
@@ -4623,9 +4810,8 @@ static void handleConfigStoreGet() {
         bool ownedFirst = configMgr.config().ownedStuffies & (1 << i);
         bool ownedSecond = configMgr.config().ownedStuffiesSecond & (1 << i);
         uint32_t itemCost = flashSalePrice(STUFFIES[i].id, STUFFIES[i].cost);
-        bool onSale = itemCost != STUFFIES[i].cost;
         stuffyItems += "<div class='item'><span>" + String(STUFFIES[i].label) + "</span>";
-        if (onSale) stuffyItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        stuffyItems += storeItemTags(STUFFIES[i].cost, itemCost);
         stuffyItems += storeItemActionStuffy(STUFFIES[i].id, ownedFirst, ownedSecond, itemCost, points);
         stuffyItems += "</div>\n";
     }
@@ -4634,9 +4820,8 @@ static void handleConfigStoreGet() {
     for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
         bool owned = configMgr.config().ownedBlanketColors & (1 << i);
         uint32_t itemCost = flashSalePrice(BLANKET_COLORS[i].id, STORE_COST_BLANKET);
-        bool onSale = itemCost != STORE_COST_BLANKET;
         blanketItems += "<div class='item'><span style='color:" + String(BLANKET_COLORS[i].webColor) + "'>Blanket - " + String(BLANKET_COLORS[i].label) + "</span>";
-        if (onSale) blanketItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        blanketItems += storeItemTags(STORE_COST_BLANKET, itemCost);
         blanketItems += storeItemAction(BLANKET_COLORS[i].id, owned, itemCost, points);
         blanketItems += "</div>\n";
     }
@@ -4645,10 +4830,9 @@ static void handleConfigStoreGet() {
     for (int i = 0; i < ROOM_THEME_STORE_COUNT; i++) {
         bool owned = configMgr.config().ownedRoomThemes & (1 << i);
         uint32_t itemCost = flashSalePrice(ROOM_THEMES[i].id, ROOM_THEMES[i].cost);
-        bool onSale = itemCost != ROOM_THEMES[i].cost;
         String themeColor = ROOM_THEMES[i].webColor ? String(ROOM_THEMES[i].webColor) : "#fff";
         roomThemeItems += "<div class='item'><span style='color:" + themeColor + "'>" + String(ROOM_THEMES[i].label) + "</span>";
-        if (onSale) roomThemeItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        roomThemeItems += storeItemTags(ROOM_THEMES[i].cost, itemCost);
         roomThemeItems += storeItemAction(ROOM_THEMES[i].id, owned, itemCost, points);
         roomThemeItems += "</div>\n";
     }
@@ -4660,20 +4844,19 @@ static void handleConfigStoreGet() {
     for (int i = 0; i < CAT_COLOR_COUNT; i++) {
         bool owned = configMgr.config().ownedCatColors & (1 << i);
         uint32_t itemCost = flashSalePrice(CAT_COLORS[i].id, CAT_COLORS[i].cost);
-        bool onSale = itemCost != CAT_COLORS[i].cost;
         catColorItems += "<div class='item'><span style='color:" + String(CAT_COLORS[i].webColor) + "'>Cat - " + String(CAT_COLORS[i].label) + "</span>";
-        if (onSale) catColorItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        catColorItems += storeItemTags(CAT_COLORS[i].cost, itemCost);
         catColorItems += storeItemAction(CAT_COLORS[i].id, owned, itemCost, points);
         catColorItems += "</div>\n";
     }
     page.replace("%%CAT_COLOR_ITEMS%%", catColorItems);
     String accessoryItems = "";
-    for (int i = 0; i < ACCESSORY_STORE_COUNT; i++) {
+    for (int i = 0; i < ACCESSORY_COUNT; i++) {
+        if (!isStoreAccessory(i)) continue;
         bool owned = configMgr.config().ownedAccessories & (1 << i);
         uint32_t itemCost = flashSalePrice(ACCESSORIES[i].id, ACCESSORIES[i].cost);
-        bool onSale = itemCost != ACCESSORIES[i].cost;
         accessoryItems += "<div class='item'><span style='color:" + String(ACCESSORIES[i].webColor) + "'>" + String(ACCESSORIES[i].label) + "</span>";
-        if (onSale) accessoryItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        accessoryItems += storeItemTags(ACCESSORIES[i].cost, itemCost);
         accessoryItems += storeItemAction(ACCESSORIES[i].id, owned, itemCost, points);
         accessoryItems += "</div>\n";
     }
@@ -4682,28 +4865,35 @@ static void handleConfigStoreGet() {
     for (int i = 0; i < GLASSES_STORE_COUNT; i++) {
         bool owned = configMgr.config().ownedGlasses & (1 << i);
         uint32_t itemCost = flashSalePrice(GLASSES[i].id, GLASSES[i].cost);
-        bool onSale = itemCost != GLASSES[i].cost;
         glassesItems += "<div class='item'><span style='color:" + String(GLASSES[i].webColor) + "'>" + String(GLASSES[i].label) + "</span>";
-        if (onSale) glassesItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        glassesItems += storeItemTags(GLASSES[i].cost, itemCost);
         glassesItems += storeItemAction(GLASSES[i].id, owned, itemCost, points);
         glassesItems += "</div>\n";
     }
     page.replace("%%GLASSES_ITEMS%%", glassesItems);
+    String badgeItems = "";
+    for (int i = 0; i < BADGE_STORE_COUNT; i++) {
+        bool owned = configMgr.config().ownedBadges & (1 << i);
+        uint32_t itemCost = flashSalePrice(BADGES[i].id, BADGES[i].cost);
+        badgeItems += "<div class='item'><span style='color:" + String(BADGES[i].webColor) + "'>" + String(BADGES[i].label) + "</span>";
+        badgeItems += storeItemTags(BADGES[i].cost, itemCost);
+        badgeItems += storeItemAction(BADGES[i].id, owned, itemCost, points);
+        badgeItems += "</div>\n";
+    }
+    page.replace("%%BADGE_ITEMS%%", badgeItems);
     String toyItems = "";
     for (int i = 0; i < TOY_COUNT; i++) {
         bool owned = configMgr.config().ownedToys & (1 << i);
         uint32_t itemCost = flashSalePrice(TOYS[i].id, TOYS[i].cost);
-        bool onSale = itemCost != TOYS[i].cost;
         toyItems += "<div class='item'><span>" + String(TOYS[i].label) + "</span>";
-        if (onSale) toyItems += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        toyItems += storeItemTags(TOYS[i].cost, itemCost);
         toyItems += storeItemAction(TOYS[i].id, owned, itemCost, points);
         toyItems += "</div>\n";
     }
     page.replace("%%TOY_ITEMS%%", toyItems);
     uint32_t rightArmSlotCost = flashSalePrice("right_arm_slot", STORE_COST_RIGHT_ARM_SLOT);
-    bool rightArmOnSale = rightArmSlotCost != STORE_COST_RIGHT_ARM_SLOT;
     String rightArmSlotItem = "<div class='item'><span>Right Arm Slot</span>";
-    if (rightArmOnSale) rightArmSlotItem += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+    rightArmSlotItem += storeItemTags(STORE_COST_RIGHT_ARM_SLOT, rightArmSlotCost);
     rightArmSlotItem += storeItemAction("right_arm_slot", configMgr.config().rightArmSlotUnlocked,
                                          rightArmSlotCost, points);
     rightArmSlotItem += "</div>\n";
@@ -5179,11 +5369,11 @@ static void handleConfigStorePost() {
     String item = wm.server->arg("item");
     uint32_t cost;
     bool alreadyOwned;
-    int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1, catColorIdx = -1, accessoryIdx = -1, glassesIdx = -1, toyIdx = -1;
+    int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1, catColorIdx = -1, accessoryIdx = -1, glassesIdx = -1, badgeIdx = -1, toyIdx = -1;
     bool rightArmSlotPurchase = false;  // not from a catalog array, so tracked as a plain flag
-    // *_STORE_COUNT bounds throughout this lookup, not the full *_COUNT — the theme-week-
-    // exclusive entries (DIY-108, appended at the end of ROOM_THEMES[]/ACCESSORIES[]/
-    // GLASSES[]) must never be purchasable here, no matter what item id is posted.
+    // *_STORE_COUNT bounds (and isStoreAccessory() for ACCESSORIES[]) throughout this lookup,
+    // not the full *_COUNT — the theme-week-exclusive entries (DIY-108, in ROOM_THEMES[]/
+    // ACCESSORIES[]/GLASSES[]) must never be purchasable here, no matter what item id is posted.
     for (int i = 0; i < STUFFY_COUNT; i++) {
         if (item == STUFFIES[i].id) { stuffyIdx = i; break; }
     }
@@ -5215,8 +5405,8 @@ static void handleConfigStorePost() {
                     cost = flashSalePrice(CAT_COLORS[catColorIdx].id, CAT_COLORS[catColorIdx].cost);
                     alreadyOwned = configMgr.config().ownedCatColors & (1 << catColorIdx);
                 } else {
-                    for (int i = 0; i < ACCESSORY_STORE_COUNT; i++) {
-                        if (item == ACCESSORIES[i].id) { accessoryIdx = i; break; }
+                    for (int i = 0; i < ACCESSORY_COUNT; i++) {
+                        if (isStoreAccessory(i) && item == ACCESSORIES[i].id) { accessoryIdx = i; break; }
                     }
                     if (accessoryIdx >= 0) {
                         cost = flashSalePrice(ACCESSORIES[accessoryIdx].id, ACCESSORIES[accessoryIdx].cost);
@@ -5229,10 +5419,16 @@ static void handleConfigStorePost() {
                             cost = flashSalePrice(GLASSES[glassesIdx].id, GLASSES[glassesIdx].cost);
                             alreadyOwned = configMgr.config().ownedGlasses & (1 << glassesIdx);
                         } else {
+                            for (int i = 0; i < BADGE_STORE_COUNT; i++) {
+                                if (item == BADGES[i].id) { badgeIdx = i; break; }
+                            }
                             for (int i = 0; i < TOY_COUNT; i++) {
                                 if (item == TOYS[i].id) { toyIdx = i; break; }
                             }
-                            if (toyIdx >= 0) {
+                            if (badgeIdx >= 0) {
+                                cost = flashSalePrice(BADGES[badgeIdx].id, BADGES[badgeIdx].cost);
+                                alreadyOwned = configMgr.config().ownedBadges & (1 << badgeIdx);
+                            } else if (toyIdx >= 0) {
                                 cost = flashSalePrice(TOYS[toyIdx].id, TOYS[toyIdx].cost);
                                 alreadyOwned = configMgr.config().ownedToys & (1 << toyIdx);
                             } else if (item == "right_arm_slot") {
@@ -5277,6 +5473,9 @@ static void handleConfigStorePost() {
     } else if (glassesIdx >= 0) {
         configMgr.config().ownedGlasses |= (1 << glassesIdx);
         configMgr.config().equippedGlasses = glassesIdx;  // newly bought glasses become equipped
+    } else if (badgeIdx >= 0) {
+        configMgr.config().ownedBadges |= (1 << badgeIdx);
+        configMgr.config().equippedBadge = badgeIdx;  // newly bought badge becomes equipped
     } else if (toyIdx >= 0) {
         // Doesn't auto-equip (unlike the other categories above) — a toy shares the
         // right-arm slot with a stuffy (DIY-110), so buying one shouldn't silently switch
@@ -5302,6 +5501,7 @@ static void handleConfigStorePost() {
         else if (catColorIdx >= 0) configMgr.config().ownedCatColors &= ~(1 << catColorIdx);
         else if (accessoryIdx >= 0) configMgr.config().ownedAccessories &= ~(1 << accessoryIdx);
         else if (glassesIdx >= 0) configMgr.config().ownedGlasses &= ~(1 << glassesIdx);
+        else if (badgeIdx >= 0) configMgr.config().ownedBadges &= ~(1 << badgeIdx);
         else if (toyIdx >= 0) configMgr.config().ownedToys &= ~(1 << toyIdx);
         else if (rightArmSlotPurchase) configMgr.config().rightArmSlotUnlocked = false;
         else if (configMgr.config().ownedStuffiesSecond & (1 << stuffyIdx)) configMgr.config().ownedStuffiesSecond &= ~(1 << stuffyIdx);
@@ -5531,6 +5731,27 @@ static void handleConfigDressGet() {
         }
     }
     page.replace("%%GLASSES_OPTIONS%%", glassesOptions);
+
+    uint8_t ownedBadges = configMgr.config().ownedBadges;
+    int equippedBadgeIdx = equippedBadgeIndex();
+    String badgeOptions = "";
+    if (ownedBadges == 0) {
+        badgeOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
+    } else {
+        badgeOptions += "<label class='pick'><input type='radio' name='badge' value='none'";
+        if (equippedBadgeIdx < 0) badgeOptions += " checked";
+        badgeOptions += "> None</label>";
+        for (int i = 0; i < BADGE_COUNT; i++) {
+            if (!(ownedBadges & (1 << i))) continue;
+            badgeOptions += "<label class='pick'><input type='radio' name='badge' value='";
+            badgeOptions += BADGES[i].id;
+            badgeOptions += "'";
+            if (i == equippedBadgeIdx) badgeOptions += " checked";
+            badgeOptions += "> <span style='color:" + String(BADGES[i].webColor) + "'>"
+                            + String(BADGES[i].label) + "</span></label>";
+        }
+    }
+    page.replace("%%BADGE_OPTIONS%%", badgeOptions);
 
     String msg = "";
     if (wm.server->hasArg("saved"))
@@ -5767,6 +5988,23 @@ static void handleConfigDressPost() {
             return;
         }
         configMgr.config().equippedGlasses = idx;
+        changed = true;
+    }
+
+    String badgeId = wm.server->arg("badge");
+    if (badgeId == "none") {
+        configMgr.config().equippedBadge = EQUIP_NONE;
+        changed = true;
+    } else if (badgeId.length() > 0) {
+        int idx = -1;
+        for (int i = 0; i < BADGE_COUNT; i++) {
+            if (badgeId == BADGES[i].id) { idx = i; break; }
+        }
+        if (idx < 0 || !(configMgr.config().ownedBadges & (1 << idx))) {
+            wm.server->send(400, "text/plain", "Invalid selection");
+            return;
+        }
+        configMgr.config().equippedBadge = idx;
         changed = true;
     }
 

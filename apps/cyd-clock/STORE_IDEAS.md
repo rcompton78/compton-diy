@@ -38,3 +38,19 @@ left on the table:
   still ghost that shipped.
 - A Christmas week (Dec 18–25?) on the same pattern: santa hat, snowflake glasses, a
   fireplace/snowfall room theme.
+
+## Legendary tier
+
+COM-382 introduced the legendary tier: `STORE_COST_LEGENDARY` (350 points, the top tier above Pikachu/Eevee's 300) and a gold
+"★ LEGENDARY" store tag for anything priced at or above it (`storeItemTags()`). Shipped so far:
+
+- **Sorting Hat** (head accessory).
+- **Hogwarts Crest**, the first item in the new **chest badge** slot (`BADGES[]`). The slot is
+  general, so more badges are now cheap to add: one catalog row plus its draw function, inside
+  the shield-sized area on the chest (x cx−10..+10, y cy+6..+30). Ideas:
+  - single-house crests (Gryffindor lion, etc.);
+  - a gold star or sheriff badge;
+  - a Pokémon gym badge to go with the Pikachu/Eevee stuffies.
+
+Still planned on the same tier: COM-375 (Glory the RainWing), COM-376 (Golden Snitch), COM-377
+(Shiny Mew) and COM-378 (Hogwarts at Night room theme).

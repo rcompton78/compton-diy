@@ -82,6 +82,9 @@ struct AppConfig {
     uint8_t ownedGlasses       = 0;  // Store purchase: bitmask, bit N = owns glasses N
     uint8_t equippedGlasses    = 0;  // Dressing room: index of the glasses to display
     uint8_t seenGlassesCount   = 0;  // Highest GLASSES_COUNT the store page has shown the user
+    uint8_t ownedBadges        = 0;  // Store purchase: bitmask, bit N = owns chest badge N (COM-382)
+    uint8_t equippedBadge      = 0;  // Dressing room: index of the chest badge to display
+    uint8_t seenBadgeCount     = 0;  // Highest BADGE_STORE_COUNT the store page has shown the user
     uint32_t totalXp   = 0;          // Lifetime XP; only ever increases, separate from spendable `points`
     uint32_t highestMilestoneLevel = 0;  // Highest level whose milestone bonus points have already
                                           // been paid out; not reset by the badges-page XP reset, so a
