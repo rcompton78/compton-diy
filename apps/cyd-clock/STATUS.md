@@ -723,16 +723,19 @@ and nothing on screen changes:
   (the prebuilt default is ERROR). The firmware's own `Serial.print` output is unaffected.
 - **`WM_NODEBUG`** (~18.7KB): removes WiFiManager's serial debug output.
 - **`-Wl,--wrap=mbedtls_strerror` / `-Wl,--wrap=esp_err_to_name`** (~22.6KB):
-  `src/link_stubs.c` replaces mbedtls' `error.c` table and esp-idf's error-name table with
-  stubs that print the numeric code, so TLS errors and `ESP_ERROR_CHECK` panics show
-  e.g. `ESP_ERR 0x101` instead of `ESP_ERR_NO_MEM`.
+  `src/link_stubs.c` replaces mbedtls' `error.c` table with a stub that prints the numeric
+  code (e.g. `mbedtls error -0x7280`), and esp-idf's error-name table with one that names
+  only the generic `ESP_ERR_*` codes (0x101–0x10C). Other codes read `UNKNOWN ERROR`, or the
+  WiFi/flash range. The esp-idf stub returns string literals only, never a buffer, because
+  callers rely on the original's static lifetime and reentrancy (two calls in one log line,
+  ISRs, early boot). `ESP_ERROR_CHECK` panics still print the hex code alongside the name.
 
 - **Flash** (`pio run` size report, dev build):
 
 | Board | Before | After | Delta | % used |
 |---|---|---|---|---|
-| `cyd` | 1,293,557 B | 1,209,049 B | −84,508 B | 98.7% → **92.2%** (~99KB left) |
-| `freenove-s3` | 1,250,189 B | 1,162,609 B | −87,580 B | 37.4% → 34.8% |
+| `cyd` | 1,293,557 B | 1,209,429 B | −84,128 B | 98.7% → **92.3%** (~99KB left) |
+| `freenove-s3` | 1,250,189 B | 1,162,993 B | −87,196 B | 37.4% → 34.8% |
 
   Measured on top of COM-378 with `RELEASE_VERSION=dev` and an empty token. A release build's
   longer version and token strings add a few hundred bytes, which is why COM-378's own
