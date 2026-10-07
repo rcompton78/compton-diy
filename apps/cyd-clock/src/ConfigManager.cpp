@@ -296,9 +296,10 @@ bool ConfigManager::load() {
 // (1.14.1 in this core) renames over an existing file in a single littlefs metadata commit, so
 // there's no remove-then-rename window; it only refuses while either file is open. A power
 // cut or full filesystem at any point leaves CONFIG_FILE as either the old or the new config.
-// The read-back is what actually detects a full filesystem: fs::File is a 4KB fully-buffered
-// stdio stream, so a few-KB config's write() reports every byte as written and the real
-// failure happens in fclose(), which File::close() discards.
+// The read-back is what actually detects a full filesystem: fs::File is a fully-buffered stdio
+// stream (newlib sizes the buffer from esp_littlefs's st_blksize, the 4KB block size), so a
+// few-KB config's write() reports every byte as written and the real failure happens in
+// fclose(), which File::close() discards. Don't rely on shrinking the buffer instead.
 bool ConfigManager::save() {
     String json = exportBackupJson();
     File f = LittleFS.open(CONFIG_TMP_FILE, "w");

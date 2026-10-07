@@ -808,9 +808,10 @@ every form submit is handled the same as before. The one deliberate behaviour ch
 
 ## Atomic Config Save (COM-388, 2026-10-07)
 
-- **COM-387's short-write detection didn't work on device.** `fs::File` on this core is a stdio
-  `FILE*` with a 4KB fully-buffered `setvbuf`, and config.json is ~1KB. So `write()` only fills the
-  buffer and always reports every byte. The real write, and its failure on a full filesystem,
+- **COM-387's short-write detection didn't work on device.** `fs::File` on this core is a
+  fully-buffered stdio `FILE*`, and config.json is ~1KB. Arduino's own 4KB `setvbuf` is skipped for
+  LittleFS because esp_littlefs reports a `st_blksize`, and newlib then sizes the buffer from that
+  (the 4KB block size). So `write()` only fills the buffer and always reports every byte. The real write, and its failure on a full filesystem,
   happens in `fclose()`, and `File::close()` returns `void`, so the error is lost. Before this fix,
   `save()` reported success on a full filesystem, the store and backup rollbacks never ran, and the
   file was left truncated. The host harness reproduces it on master's code: with zero free space,
@@ -832,10 +833,13 @@ every form submit is handled the same as before. The one deliberate behaviour ch
   boot.
 - **Free space:** a save needs room for the new copy (~1KB) alongside the old one. If it doesn't
   fit, the save fails cleanly and the old config stays.
-- **Backup restore now rolls back too.** `handleConfigBackupPost()` snapshots `AppConfig` before
-  `importBackupJson()` and restores it if `save()` fails (`?err=save`), like the store purchase
-  rollback. Before, a failed restore left the imported config live in memory, and the next
-  unrelated save would have persisted it.
+- **Backup restore and both resets now roll back too.** `handleConfigBackupPost()` snapshots
+  `AppConfig` before `importBackupJson()` and restores it if `save()` fails (`?err=save`), like the
+  store purchase rollback. `handleConfigResetPost()` does the same around `resetToDefaults()`, and
+  `handleConfigBadgesResetPost()` restores `totalXp`. Before, a failed save left the change live in
+  memory while the page reported failure, and the next unrelated save would have persisted it.
+  These error branches were effectively unreachable on device until the read-back made `save()`
+  report a full filesystem.
 - **Verified on a host harness** (not committed): the real `ConfigManager.cpp` and ArduinoJson,
   compiled for x86 against stub `Arduino.h`/`LittleFS.h`. The fake LittleFS commits data only at
   close, loses bytes past capacity silently at close, and renames atomically. It also injects a
@@ -846,8 +850,8 @@ every form submit is handled the same as before. The one deliberate behaviour ch
   - a full filesystem and zero free space
   - a stale or partial temp file at boot
   - the temp-file fallback
-  - a backup import followed by a save failure at every operation, which leaves both the
-    in-memory and on-disk config unchanged
+  - a backup import, a full reset or a badges XP reset followed by a save failure at every
+    operation, which leaves both the in-memory and on-disk config unchanged
 
   Master's `ConfigManager.cpp` fails 19 of these checks.
 - **On device (`cyd`):** the existing config loaded unchanged after flashing. Restoring a backup
