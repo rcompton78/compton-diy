@@ -751,8 +751,9 @@ of every `cyd` device, wipes the LittleFS config unless the user backs it up fir
 
 ## Store & Dressing Room Handlers Table-Driven (COM-387, 2026-10-07)
 
-A flash diet from the cyd-clock flash audit (items F and H). It changes no behaviour: every page
-and form submit works exactly as before.
+A flash diet from the cyd-clock flash audit (items F and H). Every page renders the same HTML and
+every form submit is handled the same as before. The one deliberate behaviour change is in
+`ConfigManager::save()` (see below).
 
 - **One category layer over the eight catalogs.** `ItemCategory` (`ITEM_STUFFY` … `ITEM_TOY`, in
   store-section order) plus `catalogEntry()` (id, label, web colour, base cost), `isStoreItem()`,
