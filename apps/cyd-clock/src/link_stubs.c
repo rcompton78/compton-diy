@@ -12,8 +12,10 @@ void __wrap_mbedtls_strerror(int ret, char *buf, size_t buflen) {
     if (buflen) snprintf(buf, buflen, "mbedtls error -0x%04X", (unsigned)(ret < 0 ? -ret : ret));
 }
 
+// Thread-local so concurrent callers (prebuilt esp-idf ESP_LOGE runs on several tasks) each
+// get their own buffer instead of overwriting each other's text.
 const char *__wrap_esp_err_to_name(esp_err_t code) {
-    static char buf[24];
+    static __thread char buf[24];
     snprintf(buf, sizeof(buf), "ESP_ERR 0x%x", (unsigned)code);
     return buf;
 }
