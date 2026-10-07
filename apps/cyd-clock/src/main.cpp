@@ -183,6 +183,14 @@ static constexpr uint16_t C_PUMPKIN_RIDGE    = 0xD2E0;  // jack-o'-lantern ridge
 static constexpr uint16_t C_PUMPKIN_STEM     = 0x3BE5;  // jack-o'-lantern stem (~#3a7d2c)
 static constexpr uint16_t C_CANDLE_GLOW      = 0xFF09;  // lit jack-o'-lantern face, witch-hat buckle (~#ffe14d)
 static constexpr uint16_t C_GHOST            = 0xF79F;  // Oct 31 ghost (~#f2f2ff)
+
+// Hogwarts at Night colors (COM-378). The sky doubles as the theme's bgColor, so the lake along
+// the floor (behind the cat's name) is the same flat navy and text erases leave no boxes there.
+static constexpr uint16_t C_HOGWARTS_SKY    = 0x1129;  // navy sky and lake (~#10244a)
+static constexpr uint16_t C_HOGWARTS_CASTLE = 0x0000;  // black castle silhouette
+static constexpr uint16_t C_HOGWARTS_WINDOW = 0xFE68;  // warm lit window (~#ffcc44)
+static constexpr uint16_t C_HOGWARTS_GLINT  = 0xA3C5;  // dim gold window reflection on the lake (~#a07828)
+static constexpr uint16_t C_HOGWARTS_TAIL   = 0x8DDF;  // shooting-star tail (~#8fb8ff)
 static constexpr uint16_t C_WITCH_HAT        = 0x0000;  // witch hat cone/brim (black)
 static constexpr uint16_t C_WITCH_HAT_RIM    = 0x9B5A;  // 1px lavender outline so the black hat reads on the sky and on a black cat (~#9b6bd6)
 static constexpr uint16_t C_WITCH_HAT_BAND   = 0xFC40;  // witch hat band, candy-corn temple arms (~#ff8a00)
@@ -598,6 +606,10 @@ static void drawBirthdayBackground(int x, int y, int w, int h);
 // drawBirthdayBackground().
 static void drawHauntedNightBackground(int x, int y, int w, int h);
 
+// Forward declaration: legendary (COM-378) "Hogwarts at Night" backdrop (castle silhouette with
+// lit windows under a starry sky), defined further below alongside drawHauntedNightBackground().
+static void drawHogwartsNightBackground(int x, int y, int w, int h);
+
 // Room theme catalog — same purchase/equip model as blanket colors and stuffies. `id` is
 // the stable identifier used in store/dressing-room form requests; ConfigManager persists
 // ownership as an `ownedRoomThemes` bitmask and the equipped selection as a numeric
@@ -632,13 +644,42 @@ static constexpr RoomTheme ROOM_THEMES[] = {
     // store-purchasable entry above; see ROOM_THEME_STORE_COUNT.
     {"birthday", "Birthday", 0, 0xFCF3, drawBirthdayBackground, nullptr},  // confetti + balloons — not a straight color, label stays white
     {"haunted_night", "Haunted Night", 0, C_HAUNTED_SKY, drawHauntedNightBackground, nullptr},  // Halloween (COM-379): moon + bats + jack-o'-lantern — label stays white
+    // Below: store-purchasable again (COM-378). Appended after the theme-week block for the same
+    // reason as the Sorting Hat in ACCESSORIES[]: ownership is an index-keyed bitmask, so store
+    // code filters with isStoreRoomTheme() rather than assuming a contiguous prefix.
+    {"hogwarts_night", "Hogwarts at Night", STORE_COST_LEGENDARY, C_HOGWARTS_SKY, drawHogwartsNightBackground, "#E8B030"},  // legendary: castle + lit windows + shooting star, gold label
 };
 static constexpr int ROOM_THEME_COUNT = sizeof(ROOM_THEMES) / sizeof(ROOM_THEMES[0]);
 static_assert(ROOM_THEME_COUNT <= 16, "ownedRoomThemes bitmask is uint16_t");
-// Count of normal, store-purchasable room themes — see GLASSES_STORE_COUNT's comment for why.
-static constexpr int ROOM_THEME_STORE_COUNT = ROOM_THEME_COUNT - 2;
-static constexpr int ROOM_THEME_IDX_BIRTHDAY      = ROOM_THEME_STORE_COUNT;
-static constexpr int ROOM_THEME_IDX_HAUNTED_NIGHT = ROOM_THEME_STORE_COUNT + 1;
+// Catalog index of each theme-week-exclusive room theme. Fixed, not derived from the catalog
+// size, since a store-purchasable theme (Hogwarts at Night, COM-378) now sits after them.
+static constexpr int ROOM_THEME_IDX_BIRTHDAY       = 9;
+static constexpr int ROOM_THEME_IDX_HAUNTED_NIGHT  = 10;
+static constexpr int ROOM_THEME_IDX_HOGWARTS_NIGHT = 11;
+static_assert(ROOM_THEME_COUNT > ROOM_THEME_IDX_HOGWARTS_NIGHT, "room theme indices out of range");
+static_assert(ROOM_THEMES[ROOM_THEME_IDX_BIRTHDAY].cost == 0 && ROOM_THEMES[ROOM_THEME_IDX_HAUNTED_NIGHT].cost == 0,
+              "theme-week exclusives must be cost 0, or isStoreRoomTheme() would put them in the store");
+
+/**
+ * Whether a ROOM_THEMES[] entry can be bought in the store. Same **store-purchasable ⇔ cost > 0**
+ * invariant as isStoreAccessory(): the cost-0 theme-week exclusives sit in the middle of the
+ * catalog, ahead of Hogwarts at Night.
+ *
+ * @param i Index into ROOM_THEMES[].
+ * @return true if the entry has a price, false for the cost-0 theme-week exclusives.
+ */
+static constexpr bool isStoreRoomTheme(int i) {
+    return ROOM_THEMES[i].cost > 0;
+}
+
+// Counts the store-purchasable ROOM_THEMES[] entries from index `i` onward (recursive, so it
+// stays a C++11 constexpr function).
+static constexpr int countStoreRoomThemes(int i) {
+    return i >= ROOM_THEME_COUNT ? 0 : (isStoreRoomTheme(i) ? 1 : 0) + countStoreRoomThemes(i + 1);
+}
+// Count of normal, store-purchasable room themes, derived from isStoreRoomTheme() — see
+// ACCESSORY_STORE_COUNT's comment for why.
+static constexpr int ROOM_THEME_STORE_COUNT = countStoreRoomThemes(0);
 
 // Sentinel stored in equippedBlanketColor/equippedStuffy/equippedRoomTheme to mean
 // "explicitly unequipped by the user in the dressing room", as opposed to 0 which means "no
@@ -2069,7 +2110,7 @@ static constexpr int BIRTHDAY_CONFETTI_COUNT = sizeof(BIRTHDAY_CONFETTI) / sizeo
 
 // "Birthday" room theme (DIY-108) — pastel backdrop, a scatter of confetti squares, and a
 // few floating balloons (ellipse + string). Only ever owned/selectable during an active
-// theme week (see ROOM_THEME_STORE_COUNT and applyThemeWeekCosmetics()/
+// theme week (see isStoreRoomTheme() and applyThemeWeekCosmetics()/
 // revertThemeWeekCosmetics()) — this is cyd-clock's first "special theme week" visual, not a
 // normal store item. Same setViewport/resetViewport clipping convention as
 // drawStarryNightBackground() — see that function's comment for why.
@@ -2198,6 +2239,171 @@ static void drawHauntedNightBackground(int x, int y, int w, int h) {
     }
 
     tft.resetViewport();
+}
+
+// Hogwarts at Night (COM-378) castle towers, left to right. Each is a rect from `top` down to the
+// curtain wall at HOGWARTS_WALL_Y, capped by a pointed roof `roofH` tall that overhangs the
+// walls by 2px. The two tall towers fill the only floor-level gaps no overlay ever covers, between
+// the side buttons and the cat's clear rect (x 56–69 and 171–184). Every roof in the right-hand
+// badge column (x>=168) stays below y=112, and the right turret stays right of the right-hand
+// "Zz" (x<=210), since both print text over a bgColor box that would show against black.
+struct HogwartsTower { uint8_t x, top, w, roofH; };
+static constexpr HogwartsTower HOGWARTS_TOWERS[] = {
+    {30,  118, 14, 20},  // left turret, peeks over the Meds button
+    {57,  124, 12, 24},  // left tall tower
+    {84,  118, 72, 26},  // great hall, mostly behind the cat
+    {92,  96,  12, 26},  // keep towers either side of the hall roof, behind the cat's head
+    {136, 96,  12, 26},
+    {172, 130, 12, 16},  // right tall tower
+    {214, 128, 14, 16},  // right turret, peeks over the Water button
+};
+static constexpr int HOGWARTS_WALL_Y = ANIMAL_Y + 120;  // top of the curtain wall; the lake starts at ANIMAL_Y+148
+static constexpr int HOGWARTS_LAKE_Y = ANIMAL_Y + ANIMAL_H - 27;  // = the name label strip, flat C_HOGWARTS_SKY
+
+// Lit windows, 3x4 px each. The first HOGWARTS_FLICKER_WINDOWS entries are the ones that may
+// flicker: they sit only where nothing is ever drawn over the backdrop while the animation runs
+// (the tall towers' gaps, and the turret tops above the Meds/Water buttons), because the flicker
+// repaints them straight through zoneFillRect() and would otherwise erase whatever was on top.
+struct HogwartsWindow { uint8_t x, y; };
+static constexpr HogwartsWindow HOGWARTS_WINDOWS[] = {
+    {61, 132}, {61, 146}, {61, 170},     // left tall tower
+    {176, 138}, {176, 150}, {176, 170},  // right tall tower
+    {35, 124}, {219, 130},               // turret tops
+    // Static from here on.
+    {96, 104}, {140, 104},
+    {90, 126}, {102, 126}, {136, 126}, {148, 126}, {90, 142}, {148, 142},
+    {14, 170}, {44, 170}, {200, 170}, {226, 170},
+};
+static constexpr int HOGWARTS_WINDOW_COUNT = sizeof(HOGWARTS_WINDOWS) / sizeof(HOGWARTS_WINDOWS[0]);
+static constexpr int HOGWARTS_FLICKER_WINDOWS = 8;
+static constexpr int HOGWARTS_WINDOW_W = 3, HOGWARTS_WINDOW_H = 4;
+static constexpr uint8_t HOGWARTS_NO_WINDOW = 0xFF;
+
+// Shooting star path: the head starts at (X0, Y0) and moves DX left and DY down per frame, with a
+// tail line TAIL_DX right and TAIL_DY up from it. The whole path stays in the open sky top-left
+// (x 6–62, y 42–65): above the left "Zz" marks (y>=57 only from x 48), left of the cat's clear
+// rect (x>=70), and above the moon.
+static constexpr int HOGWARTS_STAR_X0 = 46, HOGWARTS_STAR_Y0 = ANIMAL_Y + 8;
+static constexpr int HOGWARTS_STAR_DX = 5, HOGWARTS_STAR_DY = 2;
+static constexpr int HOGWARTS_STAR_TAIL_DX = 10, HOGWARTS_STAR_TAIL_DY = 4;
+static constexpr int HOGWARTS_STAR_FRAMES = 9;
+
+// Animation state, read by drawHogwartsNightBackground() so every partial redraw of the zone
+// agrees with what updateHogwartsNightAnim() last put on screen.
+static uint8_t hogwartsDarkWindow = HOGWARTS_NO_WINDOW;  // flicker window currently dark
+static int8_t  hogwartsStarFrame  = -1;                  // shooting-star frame, -1 when none in flight
+
+/**
+ * "Hogwarts at Night" room theme (legendary, COM-378): a navy sky with stars and a moon, and a
+ * black castle silhouette (curtain wall, towers, pointed roofs) with warm lit windows standing on
+ * a lake. The lake is the same flat navy as the sky and the theme's bgColor, because the cat's
+ * name label sits on it and erases its glyph cells with bgColor. Uses the same
+ * setViewport/resetViewport clipping as drawStarryNightBackground(), so it can draw the whole
+ * scene on every small erase and only the requested slice reaches the screen. It also draws the
+ * current animation state (a dark window, the shooting star in flight), so the frequent small
+ * erases elsewhere in the zone never resurrect or wipe either one.
+ *
+ * @param x Left edge of the rect to repaint.
+ * @param y Top edge of the rect to repaint (already clamped to the animal zone).
+ * @param w Width of the rect.
+ * @param h Height of the rect.
+ */
+static void drawHogwartsNightBackground(int x, int y, int w, int h) {
+    tft.setViewport(x, y, w, h, false);
+    tft.fillRect(x, y, w, h, C_HOGWARTS_SKY);
+
+    // Same fixed star field as Starry Night; the castle covers the lower ones.
+    for (const Star& s : STARRY_NIGHT_STARS) {
+        if (s.r == 0) tft.drawPixel(s.x, s.y, TFT_WHITE);
+        else          tft.fillCircle(s.x, s.y, s.r, TFT_WHITE);
+    }
+
+    // Moon, left of the "Zz" column and below the shooting star's path.
+    tft.fillCircle(16, ANIMAL_Y + 42, 8, 0xFFDB);
+    tft.fillCircle(13, ANIMAL_Y + 39, 2, 0xEF7A);
+
+    tft.fillRect(0, HOGWARTS_WALL_Y, 240, HOGWARTS_LAKE_Y - HOGWARTS_WALL_Y, C_HOGWARTS_CASTLE);
+    for (int mx = 0; mx < 240; mx += 8) tft.fillRect(mx, HOGWARTS_WALL_Y - 4, 4, 4, C_HOGWARTS_CASTLE);
+    for (const HogwartsTower& t : HOGWARTS_TOWERS) {
+        tft.fillRect(t.x, t.top, t.w, HOGWARTS_WALL_Y - t.top, C_HOGWARTS_CASTLE);
+        tft.fillTriangle(t.x - 2, t.top, t.x + t.w + 1, t.top, t.x + t.w / 2, t.top - t.roofH, C_HOGWARTS_CASTLE);
+    }
+
+    for (int i = 0; i < HOGWARTS_WINDOW_COUNT; i++) {
+        if (i == hogwartsDarkWindow) continue;
+        tft.fillRect(HOGWARTS_WINDOWS[i].x, HOGWARTS_WINDOWS[i].y, HOGWARTS_WINDOW_W, HOGWARTS_WINDOW_H, C_HOGWARTS_WINDOW);
+    }
+
+    // Window reflections on the lake under the two tall towers, outside the name text.
+    tft.drawFastHLine(58, HOGWARTS_LAKE_Y + 4, 10, C_HOGWARTS_GLINT);
+    tft.drawFastHLine(60, HOGWARTS_LAKE_Y + 9, 6, C_HOGWARTS_GLINT);
+    tft.drawFastHLine(173, HOGWARTS_LAKE_Y + 4, 10, C_HOGWARTS_GLINT);
+    tft.drawFastHLine(175, HOGWARTS_LAKE_Y + 9, 6, C_HOGWARTS_GLINT);
+
+    if (hogwartsStarFrame >= 0) {
+        int hx = HOGWARTS_STAR_X0 - hogwartsStarFrame * HOGWARTS_STAR_DX;
+        int hy = HOGWARTS_STAR_Y0 + hogwartsStarFrame * HOGWARTS_STAR_DY;
+        tft.drawLine(hx, hy, hx + HOGWARTS_STAR_TAIL_DX, hy - HOGWARTS_STAR_TAIL_DY, C_HOGWARTS_TAIL);
+        tft.fillRect(hx, hy, 2, 2, TFT_WHITE);
+    }
+
+    tft.resetViewport();
+}
+
+/**
+ * Advances Hogwarts at Night's two animations, called every awake loop() tick. Every ~6–15 s one
+ * of the flicker windows goes dark for 1–3 s, and every 1–3 min a shooting star crosses the
+ * top-left sky over HOGWARTS_STAR_FRAMES ticks (about half a second). Each step only updates the
+ * state drawHogwartsNightBackground() reads, then repaints the few pixels that changed through
+ * zoneFillRect(); both effects stay in spots nothing is drawn over, so nothing else needs a redraw.
+ * The state resets while another theme is equipped, and a star in flight is dropped (with one full
+ * backdrop repaint) when the sleep-window peek scene starts, which stays static.
+ *
+ * @param now The loop's millis() reading.
+ */
+static void updateHogwartsNightAnim(unsigned long now) {
+    static unsigned long nextFlickerMs = 0, nextStarMs = 0;
+    if (equippedRoomThemeIndex() != ROOM_THEME_IDX_HOGWARTS_NIGHT) {
+        hogwartsDarkWindow = HOGWARTS_NO_WINDOW;
+        hogwartsStarFrame = -1;
+        nextFlickerMs = 0;
+        return;
+    }
+    if (peekingAsleep) {
+        if (hogwartsStarFrame >= 0) { hogwartsStarFrame = -1; dirty.animalBg = true; }
+        return;
+    }
+    if (nextFlickerMs == 0) {
+        nextFlickerMs = now + random(6000, 15001);
+        nextStarMs = now + random(60000, 180001);
+    }
+
+    if ((long)(now - nextFlickerMs) >= 0) {
+        uint8_t win = hogwartsDarkWindow;
+        if (win == HOGWARTS_NO_WINDOW) {
+            win = hogwartsDarkWindow = (uint8_t)random(HOGWARTS_FLICKER_WINDOWS);
+            nextFlickerMs = now + random(1000, 3001);
+        } else {
+            hogwartsDarkWindow = HOGWARTS_NO_WINDOW;
+            nextFlickerMs = now + random(6000, 15001);
+        }
+        zoneFillRect(HOGWARTS_WINDOWS[win].x, HOGWARTS_WINDOWS[win].y, HOGWARTS_WINDOW_W, HOGWARTS_WINDOW_H);
+    }
+
+    if (hogwartsStarFrame < 0) {
+        if ((long)(now - nextStarMs) < 0) return;
+        hogwartsStarFrame = 0;
+    } else if (++hogwartsStarFrame >= HOGWARTS_STAR_FRAMES) {
+        hogwartsStarFrame = -1;
+        nextStarMs = now + random(60000, 180001);
+    }
+    // Repaint the previous frame's streak and the new one in one rect (one frame past the last
+    // when the star just ended, which only erases).
+    int f = hogwartsStarFrame >= 0 ? hogwartsStarFrame : HOGWARTS_STAR_FRAMES;
+    int hx = HOGWARTS_STAR_X0 - f * HOGWARTS_STAR_DX;
+    int hy = HOGWARTS_STAR_Y0 + f * HOGWARTS_STAR_DY;
+    zoneFillRect(hx, hy - HOGWARTS_STAR_DY - HOGWARTS_STAR_TAIL_DY,
+                 HOGWARTS_STAR_DX + HOGWARTS_STAR_TAIL_DX + 2, HOGWARTS_STAR_DY + HOGWARTS_STAR_TAIL_DY + 2);
 }
 
 // Perceived luminance of an RGB565 color, used below to pick a contrasting tape color —
@@ -3586,10 +3792,11 @@ static void assertStoreIdsUnique() {
 //
 // Each theme owns one exclusive entry in ACCESSORIES[], GLASSES[] and ROOM_THEMES[], never
 // buyable (see the *_IDX_* constants beside each catalog). A future theme appends its entries
-// to each catalog and gives each one a fixed *_IDX_* constant. In GLASSES[] and ROOM_THEMES[]
-// they go past *_STORE_COUNT, so also bump those subtractions. In ACCESSORIES[] the entry must
-// be cost 0 instead: store-purchasable there means cost > 0 (isStoreAccessory()), because a
-// store item (the Sorting Hat) already sits after the exclusives. The theme also gets its own
+// to each catalog and gives each one a fixed *_IDX_* constant. In GLASSES[] they go past
+// GLASSES_STORE_COUNT, so also bump that subtraction. In ACCESSORIES[] and ROOM_THEMES[] the
+// entry must be cost 0 instead: store-purchasable there means cost > 0 (isStoreAccessory()/
+// isStoreRoomTheme()), because a store item (the Sorting Hat, Hogwarts at Night) already sits
+// after the exclusives. The theme also gets its own
 // key, isXActive() check and themeWeekItems() branch.
 static constexpr const char* THEME_WEEK_BIRTHDAY  = "birthday";
 static constexpr const char* THEME_WEEK_HALLOWEEN = "halloween";
@@ -4841,7 +5048,8 @@ static void handleConfigStoreGet() {
     }
     page.replace("%%BLANKET_ITEMS%%", blanketItems);
     String roomThemeItems = "";
-    for (int i = 0; i < ROOM_THEME_STORE_COUNT; i++) {
+    for (int i = 0; i < ROOM_THEME_COUNT; i++) {
+        if (!isStoreRoomTheme(i)) continue;
         bool owned = configMgr.config().ownedRoomThemes & (1 << i);
         uint32_t itemCost = flashSalePrice(ROOM_THEMES[i].id, ROOM_THEMES[i].cost);
         String themeColor = ROOM_THEMES[i].webColor ? String(ROOM_THEMES[i].webColor) : "#fff";
@@ -5385,7 +5593,7 @@ static void handleConfigStorePost() {
     bool alreadyOwned;
     int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1, catColorIdx = -1, accessoryIdx = -1, glassesIdx = -1, badgeIdx = -1, toyIdx = -1;
     bool rightArmSlotPurchase = false;  // not from a catalog array, so tracked as a plain flag
-    // *_STORE_COUNT bounds (and isStoreAccessory() for ACCESSORIES[]) throughout this lookup,
+    // *_STORE_COUNT bounds (and isStoreAccessory()/isStoreRoomTheme() for ACCESSORIES[]/ROOM_THEMES[]) throughout this lookup,
     // not the full *_COUNT — the theme-week-exclusive entries (DIY-108, in ROOM_THEMES[]/
     // ACCESSORIES[]/GLASSES[]) must never be purchasable here, no matter what item id is posted.
     for (int i = 0; i < STUFFY_COUNT; i++) {
@@ -5405,8 +5613,8 @@ static void handleConfigStorePost() {
             cost = flashSalePrice(BLANKET_COLORS[blanketIdx].id, STORE_COST_BLANKET);
             alreadyOwned = configMgr.config().ownedBlanketColors & (1 << blanketIdx);
         } else {
-            for (int i = 0; i < ROOM_THEME_STORE_COUNT; i++) {
-                if (item == ROOM_THEMES[i].id) { roomThemeIdx = i; break; }
+            for (int i = 0; i < ROOM_THEME_COUNT; i++) {
+                if (isStoreRoomTheme(i) && item == ROOM_THEMES[i].id) { roomThemeIdx = i; break; }
             }
             if (roomThemeIdx >= 0) {
                 cost = flashSalePrice(ROOM_THEMES[roomThemeIdx].id, ROOM_THEMES[roomThemeIdx].cost);
@@ -6473,6 +6681,9 @@ void loop() {
         }
         wasSaleActive = saleActive;
     }
+
+    // Hogwarts at Night's window flicker and shooting star (COM-378); no-op under any other theme.
+    updateHogwartsNightAnim(now);
 
     // Timer row refresh while running
     {
