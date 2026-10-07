@@ -96,7 +96,7 @@ static constexpr uint32_t STORE_COST_HOCKEY_STICK = 100;
 static constexpr uint32_t STORE_COST_MAGIC_WAND = 100;
 // Legendary tier (COM-382): the top-of-store price shared by every legendary item (COM-375 to
 // COM-378 reuse it too), just above the Pikachu/Eevee 300 tier. Any item priced at or above it
-// gets the gold "LEGENDARY" store tag — see storeItemTags() — so keep every non-legendary price
+// gets the gold "LEGENDARY" store tag — see appendStoreItemTags() — so keep every non-legendary price
 // below it.
 static constexpr uint32_t STORE_COST_LEGENDARY = 350;
 
@@ -4784,20 +4784,25 @@ static void sendHtmlPage(const String& page) {
     wm.server->send(200, "text/html", page);
 }
 
+// A config page template with the shared stylesheet substituted for its %%STYLE%% slot.
+static String loadPage(const char* html) {
+    String page = String(FPSTR(html));
+    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    return page;
+}
+
 static void handleConfigHome() {
     if (!configMgr.config().setupComplete) {
         wm.server->sendHeader("Location", "/setup");
         wm.server->send(302, "text/plain", "");
         return;
     }
-    String page = String(FPSTR(CONFIG_HOME_HTML));
-    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    String page = loadPage(CONFIG_HOME_HTML);
     sendHtmlPage(page);
 }
 
 static void handleConfigAdminGet() {
-    String page = String(FPSTR(CONFIG_ADMIN_HTML));
-    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    String page = loadPage(CONFIG_ADMIN_HTML);
     sendHtmlPage(page);
 }
 
@@ -4806,8 +4811,7 @@ static void handleConfigAdminGet() {
 // false. Only offers the free-tier solid colors (STORE_COST_CAT_COLOR_SOLID) — tabby/calico
 // stay store-only purchases, same as the "maybe" colors DIY-48's card described.
 static void handleSetupGet() {
-    String page = String(FPSTR(CONFIG_SETUP_HTML));
-    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    String page = loadPage(CONFIG_SETUP_HTML);
 
     String colorOptions = "<label class='pick'><input type='radio' name='catColor' value='none' checked> "
                            "<span>White</span></label>";
@@ -4905,14 +4909,12 @@ static void handleRootPage() {
         wm.server->send(302, "text/plain", "");
         return;
     }
-    String page = String(FPSTR(ROOT_MENU_HTML));
-    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    String page = loadPage(ROOT_MENU_HTML);
     sendHtmlPage(page);
 }
 
 static void handleConfigCatGet() {
-    String page = String(FPSTR(CONFIG_CAT_HTML));
-    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    String page = loadPage(CONFIG_CAT_HTML);
     page.replace("%%HUNGER%%", String(configMgr.config().hungerMinutes));
     page.replace("%%BOREDOM%%", String(configMgr.config().boredomMinutes));
     page.replace("%%SICKCOOLDOWN%%", String(configMgr.config().sickCooldownHours));
@@ -4951,8 +4953,7 @@ static void handleConfigCatGet() {
 }
 
 static void handleConfigCityGet() {
-    String page = String(FPSTR(CONFIG_CITY_HTML));
-    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    String page = loadPage(CONFIG_CITY_HTML);
     page.replace("%%LAT%%", String(configMgr.config().latitude,  4));
     page.replace("%%LON%%", String(configMgr.config().longitude, 4));
     page.replace("%%UTC%%", String(configMgr.config().utcOffsetSeconds));
@@ -4963,6 +4964,117 @@ static void handleConfigCityGet() {
     sendHtmlPage(page);
 }
 
+// The eight item catalogs, as one switchable category (COM-387). Each catalog has its own
+// struct type, so the store and dressing-room handlers used to repeat the same row/radio/lookup
+// code once per catalog; they now loop over these categories and go through the accessors
+// below instead. Enum order is the store page's section order and the purchase lookup's
+// search order. Catalogs are still walked by index with the same owned-bitmask checks, so
+// the append-only catalog rule is untouched.
+enum ItemCategory : uint8_t {
+    ITEM_STUFFY, ITEM_BLANKET, ITEM_ROOM_THEME, ITEM_CAT_COLOR,
+    ITEM_ACCESSORY, ITEM_GLASSES, ITEM_BADGE, ITEM_TOY, ITEM_CATEGORY_COUNT
+};
+
+// One catalog entry's web-facing fields. `webColor` is nullptr for catalogs whose labels are
+// never colored (stuffies, toys); a room theme without its own webColor reports "#fff".
+struct CatalogEntry {
+    const char* id;
+    const char* label;
+    const char* webColor;
+    uint32_t cost;
+};
+
+static constexpr int ITEM_CATALOG_COUNTS[ITEM_CATEGORY_COUNT] = {
+    STUFFY_COUNT, BLANKET_COLOR_COUNT, ROOM_THEME_COUNT, CAT_COLOR_COUNT,
+    ACCESSORY_COUNT, GLASSES_COUNT, BADGE_COUNT, TOY_COUNT,
+};
+
+static CatalogEntry catalogEntry(ItemCategory cat, int i) {
+    switch (cat) {
+        case ITEM_STUFFY:     return {STUFFIES[i].id, STUFFIES[i].label, nullptr, STUFFIES[i].cost};
+        case ITEM_BLANKET:    return {BLANKET_COLORS[i].id, BLANKET_COLORS[i].label, BLANKET_COLORS[i].webColor, STORE_COST_BLANKET};
+        case ITEM_ROOM_THEME: return {ROOM_THEMES[i].id, ROOM_THEMES[i].label,
+                                      ROOM_THEMES[i].webColor ? ROOM_THEMES[i].webColor : "#fff", ROOM_THEMES[i].cost};
+        case ITEM_CAT_COLOR:  return {CAT_COLORS[i].id, CAT_COLORS[i].label, CAT_COLORS[i].webColor, CAT_COLORS[i].cost};
+        case ITEM_ACCESSORY:  return {ACCESSORIES[i].id, ACCESSORIES[i].label, ACCESSORIES[i].webColor, ACCESSORIES[i].cost};
+        case ITEM_GLASSES:    return {GLASSES[i].id, GLASSES[i].label, GLASSES[i].webColor, GLASSES[i].cost};
+        case ITEM_BADGE:      return {BADGES[i].id, BADGES[i].label, BADGES[i].webColor, BADGES[i].cost};
+        default:              return {TOYS[i].id, TOYS[i].label, nullptr, TOYS[i].cost};
+    }
+}
+
+// Whether entry `i` is sold in the store. The theme-week exclusives (DIY-108) are skipped:
+// cost-0 entries in ACCESSORIES[]/ROOM_THEMES[], and the tail of GLASSES[] past
+// GLASSES_STORE_COUNT. They must never show up or be purchasable, whatever item id is posted.
+static bool isStoreItem(ItemCategory cat, int i) {
+    switch (cat) {
+        case ITEM_ROOM_THEME: return isStoreRoomTheme(i);
+        case ITEM_ACCESSORY:  return isStoreAccessory(i);
+        case ITEM_GLASSES:    return i < GLASSES_STORE_COUNT;
+        case ITEM_BADGE:      return i < BADGE_STORE_COUNT;
+        default:              return true;
+    }
+}
+
+// The category's owned bitmask from ConfigManager, widened to 32 bits (the fields are a mix
+// of uint8_t and uint16_t).
+static uint32_t ownedItems(ItemCategory cat) {
+    const AppConfig& c = configMgr.config();
+    switch (cat) {
+        case ITEM_STUFFY:     return c.ownedStuffies;
+        case ITEM_BLANKET:    return c.ownedBlanketColors;
+        case ITEM_ROOM_THEME: return c.ownedRoomThemes;
+        case ITEM_CAT_COLOR:  return c.ownedCatColors;
+        case ITEM_ACCESSORY:  return c.ownedAccessories;
+        case ITEM_GLASSES:    return c.ownedGlasses;
+        case ITEM_BADGE:      return c.ownedBadges;
+        default:              return c.ownedToys;
+    }
+}
+
+// Sets or clears one bit of the category's owned bitmask.
+static void setItemOwned(ItemCategory cat, int i, bool owned) {
+    AppConfig& c = configMgr.config();
+    uint32_t mask = ownedItems(cat);
+    mask = owned ? (mask | (1u << i)) : (mask & ~(1u << i));
+    switch (cat) {
+        case ITEM_STUFFY:     c.ownedStuffies      = mask; break;
+        case ITEM_BLANKET:    c.ownedBlanketColors = mask; break;
+        case ITEM_ROOM_THEME: c.ownedRoomThemes    = mask; break;
+        case ITEM_CAT_COLOR:  c.ownedCatColors     = mask; break;
+        case ITEM_ACCESSORY:  c.ownedAccessories   = mask; break;
+        case ITEM_GLASSES:    c.ownedGlasses       = mask; break;
+        case ITEM_BADGE:      c.ownedBadges        = mask; break;
+        default:              c.ownedToys          = mask; break;
+    }
+}
+
+// The category's equipped index in ConfigManager. Toys have no single equipped field of their
+// own here; their slot is the shared right arm (equippedToy plus equippedRightArmKind).
+static uint8_t* equippedItemField(ItemCategory cat) {
+    AppConfig& c = configMgr.config();
+    switch (cat) {
+        case ITEM_STUFFY:     return &c.equippedStuffy;
+        case ITEM_BLANKET:    return &c.equippedBlanketColor;
+        case ITEM_ROOM_THEME: return &c.equippedRoomTheme;
+        case ITEM_CAT_COLOR:  return &c.equippedCatColor;
+        case ITEM_ACCESSORY:  return &c.equippedAccessory;
+        case ITEM_GLASSES:    return &c.equippedGlasses;
+        case ITEM_BADGE:      return &c.equippedBadge;
+        default:              return &c.equippedToy;
+    }
+}
+
+// Index of the entry whose id is `id`, or -1. `storeOnly` restricts the search to
+// isStoreItem() entries, for purchases.
+static int findCatalogIndex(ItemCategory cat, const String& id, bool storeOnly) {
+    for (int i = 0; i < ITEM_CATALOG_COUNTS[cat]; i++) {
+        if (storeOnly && !isStoreItem(cat, i)) continue;
+        if (id == catalogEntry(cat, i).id) return i;
+    }
+    return -1;
+}
+
 /**
  * The tags shown after a store item's label: a gold "LEGENDARY" marker for anything priced at
  * the legendary tier (COM-382), and the red "SALE" tag while a flash sale has cut its price.
@@ -4970,42 +5082,71 @@ static void handleConfigCityGet() {
  *
  * @param baseCost The item's catalog price, before any flash sale.
  * @param cost The price actually charged, from flashSalePrice().
- * @return The tags' HTML, or an empty string if neither applies.
  */
-static String storeItemTags(uint32_t baseCost, uint32_t cost) {
-    String html;
+static void appendStoreItemTags(String& html, uint32_t baseCost, uint32_t cost) {
     if (baseCost >= STORE_COST_LEGENDARY) html += " <span style='color:#ffcc33;font-weight:bold'>\xE2\x98\x85 LEGENDARY</span>";
     if (cost != baseCost) html += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
-    return html;
 }
 
-// Renders the buy button/owned-label markup for one store item.
-static String storeItemAction(const char* item, bool owned, uint32_t cost, uint32_t points) {
-    if (owned) return "<span class='owned'>Owned</span>";
-    String html = "<form method='POST' action='/save-config/store'>";
-    html += "<input type='hidden' name='item' value='" + String(item) + "'>";
-    html += "<button type='submit'";
-    if (points < cost) html += " disabled";
-    html += ">Buy for " + String(cost) + "</button></form>";
-    return html;
-}
-
-// Stuffy variant of storeItemAction() — stuffies can be bought twice (DIY-106), so the same
-// item id posts a second purchase once the first is owned, rather than being blocked as
-// "already owned" until a 2nd copy is owned too. Labeled "Buy 2nd for N" so it's clear the
-// button re-buys the same item rather than something new.
-static String storeItemActionStuffy(const char* item, bool ownedFirst, bool ownedSecond,
-                                     uint32_t cost, uint32_t points) {
-    if (ownedSecond) return "<span class='owned'>Owned (x2)</span>";
-    String html = "<form method='POST' action='/save-config/store'>";
-    html += "<input type='hidden' name='item' value='" + String(item) + "'>";
-    html += "<button type='submit'";
-    if (points < cost) html += " disabled";
+/**
+ * Appends one store row: the label, its tags, then either the owned marker or a buy form that
+ * posts `item` to /save-config/store.
+ *
+ * @param webColor CSS color for the label, or nullptr for an uncolored label.
+ * @param labelPrefix Text before the label (e.g. "Blanket - "), or "".
+ * @param ownedText The owned marker's text, or nullptr when the item can still be bought.
+ * @param buyText The buy button's text before the price ("Buy for " / "Buy 2nd for ").
+ */
+static void appendStoreItemRow(String& html, const char* item, const char* webColor,
+                               const char* labelPrefix, const char* label, uint32_t baseCost,
+                               const char* ownedText, const char* buyText, uint32_t points) {
+    uint32_t cost = flashSalePrice(item, baseCost);
+    html += "<div class='item'><span";
+    if (webColor) { html += " style='color:"; html += webColor; html += "'"; }
     html += ">";
-    html += ownedFirst ? "Buy 2nd for " : "Buy for ";
-    html += String(cost) + "</button></form>";
-    return html;
+    html += labelPrefix;
+    html += label;
+    html += "</span>";
+    appendStoreItemTags(html, baseCost, cost);
+    if (ownedText) {
+        html += "<span class='owned'>";
+        html += ownedText;
+        html += "</span>";
+    } else {
+        html += "<form method='POST' action='/save-config/store'><input type='hidden' name='item' value='";
+        html += item;
+        html += "'><button type='submit'";
+        if (points < cost) html += " disabled";
+        html += ">";
+        html += buyText;
+        html += String(cost);
+        html += "</button></form>";
+    }
+    html += "</div>\n";
 }
+
+// Store row for catalog entry `i` of `cat`. Stuffies can be bought twice (DIY-106), so the
+// same item id posts a second purchase once the first copy is owned, labeled "Buy 2nd for N"
+// so it's clear the button re-buys the same item; only owning both copies shows as owned.
+static void appendStoreRow(String& html, ItemCategory cat, int i, uint32_t points) {
+    static const char* const LABEL_PREFIXES[ITEM_CATEGORY_COUNT] = {"", "Blanket - ", "", "Cat - ", "", "", "", ""};
+    CatalogEntry e = catalogEntry(cat, i);
+    bool owned = ownedItems(cat) & (1u << i);
+    const char* ownedText = owned ? "Owned" : nullptr;
+    const char* buyText = "Buy for ";
+    if (cat == ITEM_STUFFY) {
+        bool ownedSecond = configMgr.config().ownedStuffiesSecond & (1u << i);
+        ownedText = ownedSecond ? "Owned (x2)" : nullptr;
+        if (owned) buyText = "Buy 2nd for ";
+    }
+    appendStoreItemRow(html, e.id, e.webColor, LABEL_PREFIXES[cat], e.label, e.cost, ownedText, buyText, points);
+}
+
+// Each category's slot in CONFIG_STORE_HTML, in ItemCategory order.
+static const char* const STORE_ITEM_PLACEHOLDERS[ITEM_CATEGORY_COUNT] = {
+    "%%STUFFY_ITEMS%%", "%%BLANKET_ITEMS%%", "%%ROOM_THEME_ITEMS%%", "%%CAT_COLOR_ITEMS%%",
+    "%%ACCESSORY_ITEMS%%", "%%GLASSES_ITEMS%%", "%%BADGE_ITEMS%%", "%%TOY_ITEMS%%",
+};
 
 static void handleConfigStoreGet() {
     // Clear the on-device points flash by stamping the current catalog sizes as "seen" —
@@ -5022,103 +5163,24 @@ static void handleConfigStoreGet() {
         configMgr.config().seenRightArmSlot      = true;
         configMgr.save();
     }
-    String page = String(FPSTR(CONFIG_STORE_HTML));
-    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    String page = loadPage(CONFIG_STORE_HTML);
     uint32_t points = configMgr.config().points;
     page.replace("%%POINTS%%", String(points));
-    String stuffyItems = "";
-    for (int i = 0; i < STUFFY_COUNT; i++) {
-        bool ownedFirst = configMgr.config().ownedStuffies & (1 << i);
-        bool ownedSecond = configMgr.config().ownedStuffiesSecond & (1 << i);
-        uint32_t itemCost = flashSalePrice(STUFFIES[i].id, STUFFIES[i].cost);
-        stuffyItems += "<div class='item'><span>" + String(STUFFIES[i].label) + "</span>";
-        stuffyItems += storeItemTags(STUFFIES[i].cost, itemCost);
-        stuffyItems += storeItemActionStuffy(STUFFIES[i].id, ownedFirst, ownedSecond, itemCost, points);
-        stuffyItems += "</div>\n";
+    for (int c = 0; c < ITEM_CATEGORY_COUNT; c++) {
+        ItemCategory cat = (ItemCategory)c;
+        // White isn't a CAT_COLORS[] entry (it's the always-available default, equipped via
+        // EQUIP_NONE — see the comment above that catalog) but the wizard and Dress page both
+        // list it as an explicit choice, so show it here too rather than have it look missing.
+        String rows = cat == ITEM_CAT_COLOR
+            ? "<div class='item'><span>Cat - White</span><span class='owned'>Owned</span></div>\n" : "";
+        for (int i = 0; i < ITEM_CATALOG_COUNTS[cat]; i++) {
+            if (isStoreItem(cat, i)) appendStoreRow(rows, cat, i, points);
+        }
+        page.replace(STORE_ITEM_PLACEHOLDERS[cat], rows);
     }
-    page.replace("%%STUFFY_ITEMS%%", stuffyItems);
-    String blanketItems = "";
-    for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
-        bool owned = configMgr.config().ownedBlanketColors & (1 << i);
-        uint32_t itemCost = flashSalePrice(BLANKET_COLORS[i].id, STORE_COST_BLANKET);
-        blanketItems += "<div class='item'><span style='color:" + String(BLANKET_COLORS[i].webColor) + "'>Blanket - " + String(BLANKET_COLORS[i].label) + "</span>";
-        blanketItems += storeItemTags(STORE_COST_BLANKET, itemCost);
-        blanketItems += storeItemAction(BLANKET_COLORS[i].id, owned, itemCost, points);
-        blanketItems += "</div>\n";
-    }
-    page.replace("%%BLANKET_ITEMS%%", blanketItems);
-    String roomThemeItems = "";
-    for (int i = 0; i < ROOM_THEME_COUNT; i++) {
-        if (!isStoreRoomTheme(i)) continue;
-        bool owned = configMgr.config().ownedRoomThemes & (1 << i);
-        uint32_t itemCost = flashSalePrice(ROOM_THEMES[i].id, ROOM_THEMES[i].cost);
-        String themeColor = ROOM_THEMES[i].webColor ? String(ROOM_THEMES[i].webColor) : "#fff";
-        roomThemeItems += "<div class='item'><span style='color:" + themeColor + "'>" + String(ROOM_THEMES[i].label) + "</span>";
-        roomThemeItems += storeItemTags(ROOM_THEMES[i].cost, itemCost);
-        roomThemeItems += storeItemAction(ROOM_THEMES[i].id, owned, itemCost, points);
-        roomThemeItems += "</div>\n";
-    }
-    page.replace("%%ROOM_THEME_ITEMS%%", roomThemeItems);
-    // White isn't a CAT_COLORS[] entry (it's the always-available default, equipped via
-    // EQUIP_NONE — see the comment above that catalog) but the wizard and Dress page both
-    // list it as an explicit choice, so show it here too rather than have it look missing.
-    String catColorItems = "<div class='item'><span>Cat - White</span><span class='owned'>Owned</span></div>\n";
-    for (int i = 0; i < CAT_COLOR_COUNT; i++) {
-        bool owned = configMgr.config().ownedCatColors & (1 << i);
-        uint32_t itemCost = flashSalePrice(CAT_COLORS[i].id, CAT_COLORS[i].cost);
-        catColorItems += "<div class='item'><span style='color:" + String(CAT_COLORS[i].webColor) + "'>Cat - " + String(CAT_COLORS[i].label) + "</span>";
-        catColorItems += storeItemTags(CAT_COLORS[i].cost, itemCost);
-        catColorItems += storeItemAction(CAT_COLORS[i].id, owned, itemCost, points);
-        catColorItems += "</div>\n";
-    }
-    page.replace("%%CAT_COLOR_ITEMS%%", catColorItems);
-    String accessoryItems = "";
-    for (int i = 0; i < ACCESSORY_COUNT; i++) {
-        if (!isStoreAccessory(i)) continue;
-        bool owned = configMgr.config().ownedAccessories & (1 << i);
-        uint32_t itemCost = flashSalePrice(ACCESSORIES[i].id, ACCESSORIES[i].cost);
-        accessoryItems += "<div class='item'><span style='color:" + String(ACCESSORIES[i].webColor) + "'>" + String(ACCESSORIES[i].label) + "</span>";
-        accessoryItems += storeItemTags(ACCESSORIES[i].cost, itemCost);
-        accessoryItems += storeItemAction(ACCESSORIES[i].id, owned, itemCost, points);
-        accessoryItems += "</div>\n";
-    }
-    page.replace("%%ACCESSORY_ITEMS%%", accessoryItems);
-    String glassesItems = "";
-    for (int i = 0; i < GLASSES_STORE_COUNT; i++) {
-        bool owned = configMgr.config().ownedGlasses & (1 << i);
-        uint32_t itemCost = flashSalePrice(GLASSES[i].id, GLASSES[i].cost);
-        glassesItems += "<div class='item'><span style='color:" + String(GLASSES[i].webColor) + "'>" + String(GLASSES[i].label) + "</span>";
-        glassesItems += storeItemTags(GLASSES[i].cost, itemCost);
-        glassesItems += storeItemAction(GLASSES[i].id, owned, itemCost, points);
-        glassesItems += "</div>\n";
-    }
-    page.replace("%%GLASSES_ITEMS%%", glassesItems);
-    String badgeItems = "";
-    for (int i = 0; i < BADGE_STORE_COUNT; i++) {
-        bool owned = configMgr.config().ownedBadges & (1 << i);
-        uint32_t itemCost = flashSalePrice(BADGES[i].id, BADGES[i].cost);
-        badgeItems += "<div class='item'><span style='color:" + String(BADGES[i].webColor) + "'>" + String(BADGES[i].label) + "</span>";
-        badgeItems += storeItemTags(BADGES[i].cost, itemCost);
-        badgeItems += storeItemAction(BADGES[i].id, owned, itemCost, points);
-        badgeItems += "</div>\n";
-    }
-    page.replace("%%BADGE_ITEMS%%", badgeItems);
-    String toyItems = "";
-    for (int i = 0; i < TOY_COUNT; i++) {
-        bool owned = configMgr.config().ownedToys & (1 << i);
-        uint32_t itemCost = flashSalePrice(TOYS[i].id, TOYS[i].cost);
-        toyItems += "<div class='item'><span>" + String(TOYS[i].label) + "</span>";
-        toyItems += storeItemTags(TOYS[i].cost, itemCost);
-        toyItems += storeItemAction(TOYS[i].id, owned, itemCost, points);
-        toyItems += "</div>\n";
-    }
-    page.replace("%%TOY_ITEMS%%", toyItems);
-    uint32_t rightArmSlotCost = flashSalePrice("right_arm_slot", STORE_COST_RIGHT_ARM_SLOT);
-    String rightArmSlotItem = "<div class='item'><span>Right Arm Slot</span>";
-    rightArmSlotItem += storeItemTags(STORE_COST_RIGHT_ARM_SLOT, rightArmSlotCost);
-    rightArmSlotItem += storeItemAction("right_arm_slot", configMgr.config().rightArmSlotUnlocked,
-                                         rightArmSlotCost, points);
-    rightArmSlotItem += "</div>\n";
+    String rightArmSlotItem;
+    appendStoreItemRow(rightArmSlotItem, "right_arm_slot", nullptr, "", "Right Arm Slot", STORE_COST_RIGHT_ARM_SLOT,
+                       configMgr.config().rightArmSlotUnlocked ? "Owned" : nullptr, "Buy for ", points);
     page.replace("%%RIGHT_ARM_SLOT_ITEM%%", rightArmSlotItem);
     String msg = "";
     if (wm.server->hasArg("welcome")) {
@@ -5140,8 +5202,7 @@ static void handleConfigStoreGet() {
 static void handleConfigBadgesGet() {
     uint32_t xp = configMgr.config().totalXp;
     uint32_t level = levelForXp(xp);
-    String page = String(FPSTR(CONFIG_BADGES_HTML));
-    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    String page = loadPage(CONFIG_BADGES_HTML);
     String msg = "";
     if (wm.server->hasArg("reset")) {
         msg = "<div class='banner ok'>Badge progress has been reset.</div>";
@@ -5228,8 +5289,7 @@ static void handleConfigResetPost() {
 }
 
 static void handleConfigBackupGet() {
-    String page = String(FPSTR(CONFIG_BACKUP_HTML));
-    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    String page = loadPage(CONFIG_BACKUP_HTML);
     page.replace("%%EXPORT_JSON%%", htmlEscape(configMgr.exportBackupJson()));
     String msg = "";
     if (wm.server->hasArg("saved")) {
@@ -5283,8 +5343,7 @@ static void handleConfigBackupPost() {
 }
 
 static void handleConfigUpdateGet() {
-    String page = String(FPSTR(CONFIG_UPDATE_HTML));
-    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    String page = loadPage(CONFIG_UPDATE_HTML);
     page.replace("%%CURRENT_VERSION%%", htmlEscape(FIRMWARE_VERSION));
     String lastChecked = "never";
     if (configMgr.config().lastUpdateCheckEpoch > 0) {
@@ -5368,8 +5427,7 @@ static String flashSalePollStatusText() {
 }
 
 static void handleConfigFlashSaleGet() {
-    String page = String(FPSTR(CONFIG_FLASHSALE_HTML));
-    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    String page = loadPage(CONFIG_FLASHSALE_HTML);
     page.replace("%%POLL_STATUS%%", flashSalePollStatusText());
     page.replace("%%POLL_HTTP_CODE%%", lastFlashSalePollHttpCode == 0 ? "(no request made)" : String(lastFlashSalePollHttpCode));
     page.replace("%%POLL_RAW_BODY%%", lastFlashSalePollRawBody.length() ? htmlEscape(lastFlashSalePollRawBody) : "(empty)");
@@ -5468,8 +5526,7 @@ static String halloweenStatusText() {
 }
 
 static void handleConfigThemeWeekGet() {
-    String page = String(FPSTR(CONFIG_THEMEWEEK_HTML));
-    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    String page = loadPage(CONFIG_THEMEWEEK_HTML);
     page.replace("%%STATUS%%", themeWeekStatusText());
     page.replace("%%HALLOWEEN_STATUS%%", halloweenStatusText());
     uint8_t mode = configMgr.config().themeWeekHalloweenMode;
@@ -5591,81 +5648,28 @@ static void handleConfigStorePost() {
     String item = wm.server->arg("item");
     uint32_t cost;
     bool alreadyOwned;
-    int stuffyIdx = -1, blanketIdx = -1, roomThemeIdx = -1, catColorIdx = -1, accessoryIdx = -1, glassesIdx = -1, badgeIdx = -1, toyIdx = -1;
-    bool rightArmSlotPurchase = false;  // not from a catalog array, so tracked as a plain flag
-    // *_STORE_COUNT bounds (and isStoreAccessory()/isStoreRoomTheme() for ACCESSORIES[]/ROOM_THEMES[]) throughout this lookup,
-    // not the full *_COUNT — the theme-week-exclusive entries (DIY-108, in ROOM_THEMES[]/
-    // ACCESSORIES[]/GLASSES[]) must never be purchasable here, no matter what item id is posted.
-    for (int i = 0; i < STUFFY_COUNT; i++) {
-        if (item == STUFFIES[i].id) { stuffyIdx = i; break; }
+    ItemCategory cat = ITEM_CATEGORY_COUNT;  // ITEM_CATEGORY_COUNT = the right arm slot, not a catalog item
+    int idx = -1;
+    // Store-only lookup (isStoreItem()): the theme-week-exclusive entries (DIY-108, in
+    // ROOM_THEMES[]/ACCESSORIES[]/GLASSES[]) must never be purchasable here, no matter what
+    // item id is posted.
+    for (int c = 0; c < ITEM_CATEGORY_COUNT && idx < 0; c++) {
+        idx = findCatalogIndex((ItemCategory)c, item, true);
+        if (idx >= 0) cat = (ItemCategory)c;
     }
-    if (stuffyIdx >= 0) {
-        cost = flashSalePrice(STUFFIES[stuffyIdx].id, STUFFIES[stuffyIdx].cost);
+    if (idx >= 0) {
+        CatalogEntry e = catalogEntry(cat, idx);
+        cost = flashSalePrice(e.id, e.cost);
         // Stuffies can be bought twice (DIY-106) — only maxed at 2 copies counts as
         // "already owned" here; owning just the 1st copy still allows this same item id
         // to be bought again for the 2nd, handled in the purchase branch below.
-        alreadyOwned = configMgr.config().ownedStuffiesSecond & (1 << stuffyIdx);
+        alreadyOwned = (cat == ITEM_STUFFY ? configMgr.config().ownedStuffiesSecond : ownedItems(cat)) & (1u << idx);
+    } else if (item == "right_arm_slot") {
+        cost = flashSalePrice("right_arm_slot", STORE_COST_RIGHT_ARM_SLOT);
+        alreadyOwned = configMgr.config().rightArmSlotUnlocked;
     } else {
-        for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
-            if (item == BLANKET_COLORS[i].id) { blanketIdx = i; break; }
-        }
-        if (blanketIdx >= 0) {
-            cost = flashSalePrice(BLANKET_COLORS[blanketIdx].id, STORE_COST_BLANKET);
-            alreadyOwned = configMgr.config().ownedBlanketColors & (1 << blanketIdx);
-        } else {
-            for (int i = 0; i < ROOM_THEME_COUNT; i++) {
-                if (isStoreRoomTheme(i) && item == ROOM_THEMES[i].id) { roomThemeIdx = i; break; }
-            }
-            if (roomThemeIdx >= 0) {
-                cost = flashSalePrice(ROOM_THEMES[roomThemeIdx].id, ROOM_THEMES[roomThemeIdx].cost);
-                alreadyOwned = configMgr.config().ownedRoomThemes & (1 << roomThemeIdx);
-            } else {
-                for (int i = 0; i < CAT_COLOR_COUNT; i++) {
-                    if (item == CAT_COLORS[i].id) { catColorIdx = i; break; }
-                }
-                if (catColorIdx >= 0) {
-                    cost = flashSalePrice(CAT_COLORS[catColorIdx].id, CAT_COLORS[catColorIdx].cost);
-                    alreadyOwned = configMgr.config().ownedCatColors & (1 << catColorIdx);
-                } else {
-                    for (int i = 0; i < ACCESSORY_COUNT; i++) {
-                        if (isStoreAccessory(i) && item == ACCESSORIES[i].id) { accessoryIdx = i; break; }
-                    }
-                    if (accessoryIdx >= 0) {
-                        cost = flashSalePrice(ACCESSORIES[accessoryIdx].id, ACCESSORIES[accessoryIdx].cost);
-                        alreadyOwned = configMgr.config().ownedAccessories & (1 << accessoryIdx);
-                    } else {
-                        for (int i = 0; i < GLASSES_STORE_COUNT; i++) {
-                            if (item == GLASSES[i].id) { glassesIdx = i; break; }
-                        }
-                        if (glassesIdx >= 0) {
-                            cost = flashSalePrice(GLASSES[glassesIdx].id, GLASSES[glassesIdx].cost);
-                            alreadyOwned = configMgr.config().ownedGlasses & (1 << glassesIdx);
-                        } else {
-                            for (int i = 0; i < BADGE_STORE_COUNT; i++) {
-                                if (item == BADGES[i].id) { badgeIdx = i; break; }
-                            }
-                            for (int i = 0; i < TOY_COUNT; i++) {
-                                if (item == TOYS[i].id) { toyIdx = i; break; }
-                            }
-                            if (badgeIdx >= 0) {
-                                cost = flashSalePrice(BADGES[badgeIdx].id, BADGES[badgeIdx].cost);
-                                alreadyOwned = configMgr.config().ownedBadges & (1 << badgeIdx);
-                            } else if (toyIdx >= 0) {
-                                cost = flashSalePrice(TOYS[toyIdx].id, TOYS[toyIdx].cost);
-                                alreadyOwned = configMgr.config().ownedToys & (1 << toyIdx);
-                            } else if (item == "right_arm_slot") {
-                                rightArmSlotPurchase = true;
-                                cost = flashSalePrice("right_arm_slot", STORE_COST_RIGHT_ARM_SLOT);
-                                alreadyOwned = configMgr.config().rightArmSlotUnlocked;
-                            } else {
-                                wm.server->send(400, "text/plain", "Unknown item");
-                                return;
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        wm.server->send(400, "text/plain", "Unknown item");
+        return;
     }
 
     if (alreadyOwned) {
@@ -5680,54 +5684,33 @@ static void handleConfigStorePost() {
     }
 
     configMgr.config().points -= cost;
-    if (blanketIdx >= 0) {
-        configMgr.config().ownedBlanketColors |= (1 << blanketIdx);
-        configMgr.config().equippedBlanketColor = blanketIdx;  // newly bought color becomes equipped
-    } else if (roomThemeIdx >= 0) {
-        configMgr.config().ownedRoomThemes |= (1 << roomThemeIdx);
-        configMgr.config().equippedRoomTheme = roomThemeIdx;  // newly bought theme becomes equipped
-    } else if (catColorIdx >= 0) {
-        configMgr.config().ownedCatColors |= (1 << catColorIdx);
-        configMgr.config().equippedCatColor = catColorIdx;  // newly bought color becomes equipped
-    } else if (accessoryIdx >= 0) {
-        configMgr.config().ownedAccessories |= (1 << accessoryIdx);
-        configMgr.config().equippedAccessory = accessoryIdx;  // newly bought accessory becomes equipped
-    } else if (glassesIdx >= 0) {
-        configMgr.config().ownedGlasses |= (1 << glassesIdx);
-        configMgr.config().equippedGlasses = glassesIdx;  // newly bought glasses become equipped
-    } else if (badgeIdx >= 0) {
-        configMgr.config().ownedBadges |= (1 << badgeIdx);
-        configMgr.config().equippedBadge = badgeIdx;  // newly bought badge becomes equipped
-    } else if (toyIdx >= 0) {
-        // Doesn't auto-equip (unlike the other categories above) — a toy shares the
-        // right-arm slot with a stuffy (DIY-110), so buying one shouldn't silently switch
-        // the slot away from whatever's already equipped there. Same reasoning as why
-        // buying a stuffy never auto-equips it to the right arm either.
-        configMgr.config().ownedToys |= (1 << toyIdx);
-    } else if (rightArmSlotPurchase) {
+    // 1st copy already owned — this purchase is for the 2nd copy (DIY-106). Doesn't touch
+    // equippedStuffy/equippedStuffyRight; the user picks which arm gets it via the dressing
+    // room, same as unlocking the right arm slot doesn't auto-equip either.
+    bool secondStuffy = cat == ITEM_STUFFY && (configMgr.config().ownedStuffies & (1u << idx));
+    // Snapshot the slot an auto-equip below may overwrite, so a failed save restores it too
+    // rather than leaving it pointing at an item that's no longer owned.
+    uint8_t* equipped = idx >= 0 ? equippedItemField(cat) : nullptr;
+    uint8_t prevEquipped = equipped ? *equipped : EQUIP_NONE;
+    if (idx < 0) {
         configMgr.config().rightArmSlotUnlocked = true;  // starts empty — see equippedStuffyRightIndex()
-    } else if (configMgr.config().ownedStuffies & (1 << stuffyIdx)) {
-        // 1st copy already owned — this purchase is for the 2nd copy (DIY-106). Doesn't
-        // touch equippedStuffy/equippedStuffyRight; the user picks which arm gets it via
-        // the dressing room, same as unlocking the right arm slot doesn't auto-equip either.
-        configMgr.config().ownedStuffiesSecond |= (1 << stuffyIdx);
+    } else if (secondStuffy) {
+        configMgr.config().ownedStuffiesSecond |= (1u << idx);
     } else {
-        configMgr.config().ownedStuffies |= (1 << stuffyIdx);
-        configMgr.config().equippedStuffy = stuffyIdx;  // newly bought stuffy becomes equipped
+        setItemOwned(cat, idx, true);
+        // A newly bought item becomes equipped, except a toy — a toy shares the right-arm slot
+        // with a stuffy (DIY-110), so buying one shouldn't silently switch the slot away from
+        // whatever's already equipped there. Same reasoning as why buying a stuffy never
+        // auto-equips it to the right arm either.
+        if (cat != ITEM_TOY) *equippedItemField(cat) = idx;
     }
     if (!configMgr.save()) {
         // Roll back in-memory state since persistence failed.
         configMgr.config().points += cost;
-        if (blanketIdx >= 0) configMgr.config().ownedBlanketColors &= ~(1 << blanketIdx);
-        else if (roomThemeIdx >= 0) configMgr.config().ownedRoomThemes &= ~(1 << roomThemeIdx);
-        else if (catColorIdx >= 0) configMgr.config().ownedCatColors &= ~(1 << catColorIdx);
-        else if (accessoryIdx >= 0) configMgr.config().ownedAccessories &= ~(1 << accessoryIdx);
-        else if (glassesIdx >= 0) configMgr.config().ownedGlasses &= ~(1 << glassesIdx);
-        else if (badgeIdx >= 0) configMgr.config().ownedBadges &= ~(1 << badgeIdx);
-        else if (toyIdx >= 0) configMgr.config().ownedToys &= ~(1 << toyIdx);
-        else if (rightArmSlotPurchase) configMgr.config().rightArmSlotUnlocked = false;
-        else if (configMgr.config().ownedStuffiesSecond & (1 << stuffyIdx)) configMgr.config().ownedStuffiesSecond &= ~(1 << stuffyIdx);
-        else configMgr.config().ownedStuffies &= ~(1 << stuffyIdx);
+        if (idx < 0) configMgr.config().rightArmSlotUnlocked = false;
+        else if (secondStuffy) configMgr.config().ownedStuffiesSecond &= ~(1u << idx);
+        else setItemOwned(cat, idx, false);
+        if (equipped) *equipped = prevEquipped;
         wm.server->sendHeader("Location", "/config/store?err=save");
         wm.server->send(302, "text/plain", "");
         return;
@@ -5738,42 +5721,72 @@ static void handleConfigStorePost() {
     wm.server->send(302, "text/plain", "");
 }
 
-// Shared by the left ("stuffy") and right-arm ("stuffyRight") slot pickers on the dressing
-// room page — the two lists are identical apart from which field name they post, which
-// slot's equipped index they check/highlight, and how they describe the other arm's
-// conflicting pick. `otherArmIdx` is the *other* slot's currently-equipped index (< 0 if
-// none): matching it greys out and disables that option here, so the user can't select a
-// stuffy that's already on the other arm in the first place — see the
-// stuffyChanged/stuffyRightChanged guard in handleConfigDressPost() below, which this keeps
+/**
+ * Appends one dressing-room radio option.
+ *
+ * @param valuePrefix Prepended to `value` in the posted value ("stuffy:" / "toy:" for the
+ *     combined right-arm field), or "".
+ * @param webColor CSS color for the label, or nullptr for an uncolored label.
+ * @param disabled Greys out the option and disables its radio.
+ * @param note Raw text after the label, inside the option (e.g. " (also on left arm)"), or "".
+ */
+static void appendPickRadio(String& html, const char* field, const char* valuePrefix, const char* value,
+                            const char* label, const char* webColor, bool checked,
+                            bool disabled = false, const char* note = "") {
+    html += "<label class='pick";
+    if (disabled) html += " disabled";
+    html += "'><input type='radio' name='";
+    html += field;
+    html += "' value='";
+    html += valuePrefix;
+    html += value;
+    html += "'";
+    if (checked) html += " checked";
+    if (disabled) html += " disabled";
+    html += "> ";
+    if (webColor) { html += "<span style='color:"; html += webColor; html += "'>"; }
+    html += label;
+    if (webColor) html += "</span>";
+    html += note;
+    html += "</label>";
+}
+
+static const char NOT_OWNED_HTML[] = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
+
+// A "None" option plus one option per owned entry of `cat`, or the not-owned notice if none
+// are owned. Used by every single-slot picker on the dressing room page.
+static String buildPickGroup(const char* field, ItemCategory cat, int equippedIdx) {
+    uint32_t owned = ownedItems(cat);
+    if (owned == 0) return NOT_OWNED_HTML;
+    String html;
+    appendPickRadio(html, field, "", "none", "None", nullptr, equippedIdx < 0);
+    for (int i = 0; i < ITEM_CATALOG_COUNTS[cat]; i++) {
+        if (!(owned & (1u << i))) continue;
+        CatalogEntry e = catalogEntry(cat, i);
+        appendPickRadio(html, field, "", e.id, e.label, e.webColor, i == equippedIdx);
+    }
+    return html;
+}
+
+// One option per owned stuffy, shared by the left ("stuffy") and right-arm ("rightArm",
+// values prefixed "stuffy:") slot pickers. `otherArmIdx` is the *other* slot's
+// currently-equipped stuffy (< 0 if none): matching it greys out and disables that option
+// here, so the user can't select a stuffy that's already on the other arm in the first place
+// — see the same-stuffy-on-both-arms guard in handleConfigDressPost() below, which this keeps
 // the user from ever needing to hit. Owning a 2nd copy of that stuffy (DIY-106) lifts the
-// disable, since a 2nd copy means there's genuinely one for each arm — the "(on X arm)" note
-// still shows so it's clear that arm is also wearing it.
-static String buildStuffyRadioOptions(const char* fieldName, int equippedIdx, int otherArmIdx, const char* otherArmLabel) {
+// disable, since a 2nd copy means there's genuinely one for each arm — `otherArmNote` (e.g.
+// " (also on right arm)") still shows so it's clear that arm is also wearing it.
+static void appendStuffyRadios(String& html, const char* field, const char* valuePrefix,
+                               int equippedIdx, int otherArmIdx, const char* otherArmNote) {
     uint16_t ownedStuffies = configMgr.config().ownedStuffies;
     uint16_t ownedStuffiesSecond = configMgr.config().ownedStuffiesSecond;
-    String options = "<label class='pick'><input type='radio' name='";
-    options += fieldName;
-    options += "' value='none'";
-    if (equippedIdx < 0) options += " checked";
-    options += "> None</label>";
     for (int i = 0; i < STUFFY_COUNT; i++) {
         if (!(ownedStuffies & (1 << i))) continue;
         bool onOtherArm = (i == otherArmIdx);
         bool conflicts = onOtherArm && !(ownedStuffiesSecond & (1 << i));
-        options += "<label class='pick";
-        if (conflicts) options += " disabled";
-        options += "'><input type='radio' name='";
-        options += fieldName;
-        options += "' value='";
-        options += STUFFIES[i].id;
-        options += "'";
-        if (i == equippedIdx) options += " checked";
-        if (conflicts) options += " disabled";
-        options += "> " + String(STUFFIES[i].label);
-        if (onOtherArm) { options += " (also on "; options += otherArmLabel; options += " arm)"; }
-        options += "</label>";
+        appendPickRadio(html, field, valuePrefix, STUFFIES[i].id, STUFFIES[i].label, nullptr,
+                        i == equippedIdx, conflicts, onOtherArm ? otherArmNote : "");
     }
-    return options;
 }
 
 // Combined right-arm slot picker (DIY-110 restructure) — a single radio group covering both
@@ -5783,203 +5796,98 @@ static String buildStuffyRadioOptions(const char* fieldName, int equippedIdx, in
 // handleConfigDressPost() can tell which sub-catalog a selection belongs to without having
 // to search both by id — store item ids are already globally unique (assertStoreIdsUnique())
 // but the prefix keeps the parsing explicit rather than relying on that. The stuffy half
-// reuses buildStuffyRadioOptions()'s left/right conflict logic (a stuffy already on the left
+// shares appendStuffyRadios()'s left/right conflict logic (a stuffy already on the left
 // arm is disabled here unless a 2nd copy is owned, DIY-106); toys have no such conflict since
 // they have no left-arm slot to clash with.
 static String buildRightArmRadioOptions(int equippedLeftStuffyIdx) {
-    uint16_t ownedStuffies = configMgr.config().ownedStuffies;
-    uint16_t ownedStuffiesSecond = configMgr.config().ownedStuffiesSecond;
     uint16_t ownedToys = configMgr.config().ownedToys;
     uint8_t kind = configMgr.config().equippedRightArmKind;
-    int equippedStuffyRightIdx = equippedStuffyRightIndex();
+    // Both resolvers are already -1 unless the slot's kind matches.
     int equippedToyIdx = equippedToyIndex();
 
-    String options = "<label class='pick'><input type='radio' name='rightArm' value='none'";
-    if (kind != RIGHT_ARM_KIND_STUFFY && kind != RIGHT_ARM_KIND_TOY) options += " checked";
-    options += "> None</label>";
-
-    for (int i = 0; i < STUFFY_COUNT; i++) {
-        if (!(ownedStuffies & (1 << i))) continue;
-        bool onLeftArm = (i == equippedLeftStuffyIdx);
-        bool conflicts = onLeftArm && !(ownedStuffiesSecond & (1 << i));
-        options += "<label class='pick";
-        if (conflicts) options += " disabled";
-        options += "'><input type='radio' name='rightArm' value='stuffy:";
-        options += STUFFIES[i].id;
-        options += "'";
-        if (kind == RIGHT_ARM_KIND_STUFFY && i == equippedStuffyRightIdx) options += " checked";
-        if (conflicts) options += " disabled";
-        options += "> " + String(STUFFIES[i].label);
-        if (onLeftArm) options += " (also on left arm)";
-        options += "</label>";
-    }
+    String options;
+    appendPickRadio(options, "rightArm", "", "none", "None", nullptr,
+                    kind != RIGHT_ARM_KIND_STUFFY && kind != RIGHT_ARM_KIND_TOY);
+    appendStuffyRadios(options, "rightArm", "stuffy:", equippedStuffyRightIndex(), equippedLeftStuffyIdx,
+                       " (also on left arm)");
     for (int i = 0; i < TOY_COUNT; i++) {
         if (!(ownedToys & (1 << i))) continue;
-        options += "<label class='pick'><input type='radio' name='rightArm' value='toy:";
-        options += TOYS[i].id;
-        options += "'";
-        if (kind == RIGHT_ARM_KIND_TOY && i == equippedToyIdx) options += " checked";
-        options += "> " + String(TOYS[i].label) + "</label>";
+        appendPickRadio(options, "rightArm", "toy:", TOYS[i].id, TOYS[i].label, nullptr, i == equippedToyIdx);
     }
     return options;
 }
 
 static void handleConfigDressGet() {
-    String page = String(FPSTR(CONFIG_DRESS_HTML));
-    page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
+    String page = loadPage(CONFIG_DRESS_HTML);
 
-    uint16_t owned = configMgr.config().ownedBlanketColors;
-    int equippedIdx = equippedBlanketIndex();
-    String options = "";
-    if (owned == 0) {
-        options = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
-    } else {
-        options += "<label class='pick'><input type='radio' name='blanketColor' value='none'";
-        if (equippedIdx < 0) options += " checked";
-        options += "> None</label>";
-        for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
-            if (!(owned & (1 << i))) continue;
-            options += "<label class='pick'><input type='radio' name='blanketColor' value='";
-            options += BLANKET_COLORS[i].id;
-            options += "'";
-            if (i == equippedIdx) options += " checked";
-            options += "> <span style='color:" + String(BLANKET_COLORS[i].webColor) + "'>"
-                     + String(BLANKET_COLORS[i].label) + "</span></label>";
-        }
-    }
-    page.replace("%%BLANKET_OPTIONS%%", options);
+    page.replace("%%BLANKET_OPTIONS%%", buildPickGroup("blanketColor", ITEM_BLANKET, equippedBlanketIndex()));
 
-    uint16_t ownedStuffies = configMgr.config().ownedStuffies;
     int equippedStuffyIdx = equippedStuffyIndex();
-    int equippedStuffyRightIdx = equippedStuffyRightIndex();
-    String stuffyOptions = "";
-    if (ownedStuffies == 0) {
-        stuffyOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
-    } else {
-        stuffyOptions = buildStuffyRadioOptions("stuffy", equippedStuffyIdx, equippedStuffyRightIdx, "right");
+    String stuffyOptions = NOT_OWNED_HTML;
+    if (configMgr.config().ownedStuffies != 0) {
+        stuffyOptions = "";
+        appendPickRadio(stuffyOptions, "stuffy", "", "none", "None", nullptr, equippedStuffyIdx < 0);
+        appendStuffyRadios(stuffyOptions, "stuffy", "", equippedStuffyIdx, equippedStuffyRightIndex(),
+                           " (also on right arm)");
     }
     page.replace("%%STUFFY_OPTIONS%%", stuffyOptions);
 
-    String rightArmOptions = "";
+    String rightArmOptions;
     if (!configMgr.config().rightArmSlotUnlocked) {
         rightArmOptions = "<p style='color:#888'>Not unlocked yet — visit the Store.</p>";
-    } else if (ownedStuffies == 0 && configMgr.config().ownedToys == 0) {
-        rightArmOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
+    } else if (configMgr.config().ownedStuffies == 0 && configMgr.config().ownedToys == 0) {
+        rightArmOptions = NOT_OWNED_HTML;
     } else {
         rightArmOptions = buildRightArmRadioOptions(equippedStuffyIdx);
     }
     page.replace("%%RIGHT_ARM_OPTIONS%%", rightArmOptions);
 
-    uint16_t ownedThemes = configMgr.config().ownedRoomThemes;
-    int equippedThemeIdx = equippedRoomThemeIndex();
-    String themeOptions = "";
-    if (ownedThemes == 0) {
-        themeOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
-    } else {
-        themeOptions += "<label class='pick'><input type='radio' name='roomTheme' value='none'";
-        if (equippedThemeIdx < 0) themeOptions += " checked";
-        themeOptions += "> None</label>";
-        for (int i = 0; i < ROOM_THEME_COUNT; i++) {
-            if (!(ownedThemes & (1 << i))) continue;
-            themeOptions += "<label class='pick'><input type='radio' name='roomTheme' value='";
-            themeOptions += ROOM_THEMES[i].id;
-            themeOptions += "'";
-            if (i == equippedThemeIdx) themeOptions += " checked";
-            String themeColor = ROOM_THEMES[i].webColor ? String(ROOM_THEMES[i].webColor) : "#fff";
-            themeOptions += "> <span style='color:" + themeColor + "'>"
-                          + String(ROOM_THEMES[i].label) + "</span></label>";
-        }
-    }
-    page.replace("%%ROOM_THEME_OPTIONS%%", themeOptions);
+    page.replace("%%ROOM_THEME_OPTIONS%%", buildPickGroup("roomTheme", ITEM_ROOM_THEME, equippedRoomThemeIndex()));
 
+    // Cat color has no "not owned" state (white is always available), and each color carries
+    // a rename field next to its radio.
     uint8_t ownedCatColors = configMgr.config().ownedCatColors;
     int equippedCatColorIdx = equippedCatColorIndex();
-    String catColorOptions = "";
-    catColorOptions += "<label class='pick'><input type='radio' name='catColor' value='none'";
-    if (equippedCatColorIdx < 0) catColorOptions += " checked";
-    catColorOptions += "> White</label>";
+    String catColorOptions;
+    appendPickRadio(catColorOptions, "catColor", "", "none", "White", nullptr, equippedCatColorIdx < 0);
     catColorOptions += "<input name='name_white' maxlength='16' value='" + htmlEscape(getCatName(-1)) + "'>";
     for (int i = 0; i < CAT_COLOR_COUNT; i++) {
         if (!(ownedCatColors & (1 << i))) continue;
-        catColorOptions += "<label class='pick'><input type='radio' name='catColor' value='";
-        catColorOptions += CAT_COLORS[i].id;
-        catColorOptions += "'";
-        if (i == equippedCatColorIdx) catColorOptions += " checked";
-        catColorOptions += "> <span style='color:" + String(CAT_COLORS[i].webColor) + "'>"
-                          + String(CAT_COLORS[i].label) + "</span></label>";
+        appendPickRadio(catColorOptions, "catColor", "", CAT_COLORS[i].id, CAT_COLORS[i].label,
+                        CAT_COLORS[i].webColor, i == equippedCatColorIdx);
         catColorOptions += "<input name='name_" + String(CAT_COLORS[i].id) + "' maxlength='16' value='"
                           + htmlEscape(getCatName(i)) + "'>";
     }
     page.replace("%%CAT_COLOR_OPTIONS%%", catColorOptions);
 
-    uint16_t ownedAccessories = configMgr.config().ownedAccessories;
-    int equippedAccessoryIdx = equippedAccessoryIndex();
-    String accessoryOptions = "";
-    if (ownedAccessories == 0) {
-        accessoryOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
-    } else {
-        accessoryOptions += "<label class='pick'><input type='radio' name='accessory' value='none'";
-        if (equippedAccessoryIdx < 0) accessoryOptions += " checked";
-        accessoryOptions += "> None</label>";
-        for (int i = 0; i < ACCESSORY_COUNT; i++) {
-            if (!(ownedAccessories & (1 << i))) continue;
-            accessoryOptions += "<label class='pick'><input type='radio' name='accessory' value='";
-            accessoryOptions += ACCESSORIES[i].id;
-            accessoryOptions += "'";
-            if (i == equippedAccessoryIdx) accessoryOptions += " checked";
-            accessoryOptions += "> <span style='color:" + String(ACCESSORIES[i].webColor) + "'>"
-                              + String(ACCESSORIES[i].label) + "</span></label>";
-        }
-    }
-    page.replace("%%ACCESSORY_OPTIONS%%", accessoryOptions);
-
-    uint8_t ownedGlasses = configMgr.config().ownedGlasses;
-    int equippedGlassesIdx = equippedGlassesIndex();
-    String glassesOptions = "";
-    if (ownedGlasses == 0) {
-        glassesOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
-    } else {
-        glassesOptions += "<label class='pick'><input type='radio' name='glasses' value='none'";
-        if (equippedGlassesIdx < 0) glassesOptions += " checked";
-        glassesOptions += "> None</label>";
-        for (int i = 0; i < GLASSES_COUNT; i++) {
-            if (!(ownedGlasses & (1 << i))) continue;
-            glassesOptions += "<label class='pick'><input type='radio' name='glasses' value='";
-            glassesOptions += GLASSES[i].id;
-            glassesOptions += "'";
-            if (i == equippedGlassesIdx) glassesOptions += " checked";
-            glassesOptions += "> <span style='color:" + String(GLASSES[i].webColor) + "'>"
-                              + String(GLASSES[i].label) + "</span></label>";
-        }
-    }
-    page.replace("%%GLASSES_OPTIONS%%", glassesOptions);
-
-    uint8_t ownedBadges = configMgr.config().ownedBadges;
-    int equippedBadgeIdx = equippedBadgeIndex();
-    String badgeOptions = "";
-    if (ownedBadges == 0) {
-        badgeOptions = "<p style='color:#888'>Not owned yet — visit the Store.</p>";
-    } else {
-        badgeOptions += "<label class='pick'><input type='radio' name='badge' value='none'";
-        if (equippedBadgeIdx < 0) badgeOptions += " checked";
-        badgeOptions += "> None</label>";
-        for (int i = 0; i < BADGE_COUNT; i++) {
-            if (!(ownedBadges & (1 << i))) continue;
-            badgeOptions += "<label class='pick'><input type='radio' name='badge' value='";
-            badgeOptions += BADGES[i].id;
-            badgeOptions += "'";
-            if (i == equippedBadgeIdx) badgeOptions += " checked";
-            badgeOptions += "> <span style='color:" + String(BADGES[i].webColor) + "'>"
-                            + String(BADGES[i].label) + "</span></label>";
-        }
-    }
-    page.replace("%%BADGE_OPTIONS%%", badgeOptions);
+    page.replace("%%ACCESSORY_OPTIONS%%", buildPickGroup("accessory", ITEM_ACCESSORY, equippedAccessoryIndex()));
+    page.replace("%%GLASSES_OPTIONS%%", buildPickGroup("glasses", ITEM_GLASSES, equippedGlassesIndex()));
+    page.replace("%%BADGE_OPTIONS%%", buildPickGroup("badge", ITEM_BADGE, equippedBadgeIndex()));
 
     String msg = "";
     if (wm.server->hasArg("saved"))
         msg = "<div class='banner ok'>Saved.</div>";
     page.replace("%%MSG%%", msg);
     sendHtmlPage(page);
+}
+
+// Applies one single-slot equip field from the dressing room form: "none" unequips, a catalog
+// id equips that entry if it's owned, and an absent/empty field leaves the slot alone. Sends a
+// 400 and returns false for an unknown or unowned id, before touching the slot.
+static bool applyEquipField(const char* field, ItemCategory cat, bool& changed) {
+    String id = wm.server->arg(field);
+    if (id.length() == 0) return true;
+    int idx = EQUIP_NONE;
+    if (id != "none") {
+        idx = findCatalogIndex(cat, id, false);
+        if (idx < 0 || !(ownedItems(cat) & (1u << idx))) {
+            wm.server->send(400, "text/plain", "Invalid selection");
+            return false;
+        }
+    }
+    *equippedItemField(cat) = idx;
+    changed = true;
+    return true;
 }
 
 static void handleConfigDressPost() {
@@ -6023,22 +5931,7 @@ static void handleConfigDressPost() {
         hasColorName[i] = true;
     }
 
-    String colorId = wm.server->arg("blanketColor");
-    if (colorId == "none") {
-        configMgr.config().equippedBlanketColor = EQUIP_NONE;
-        changed = true;
-    } else if (colorId.length() > 0) {
-        int idx = -1;
-        for (int i = 0; i < BLANKET_COLOR_COUNT; i++) {
-            if (colorId == BLANKET_COLORS[i].id) { idx = i; break; }
-        }
-        if (idx < 0 || !(configMgr.config().ownedBlanketColors & (1 << idx))) {
-            wm.server->send(400, "text/plain", "Invalid selection");
-            return;
-        }
-        configMgr.config().equippedBlanketColor = idx;
-        changed = true;
-    }
+    if (!applyEquipField("blanketColor", ITEM_BLANKET, changed)) return;
 
     // A stuffy is one physical toy — the left (drawPeeking/drawFull) and right-arm
     // (drawHeld/drawHeldPeeking, DIY-64) slots are separate equip choices but must name
@@ -6055,10 +5948,7 @@ static void handleConfigDressPost() {
         newStuffy = EQUIP_NONE;
         stuffyChanged = true;
     } else if (stuffyId.length() > 0) {
-        int idx = -1;
-        for (int i = 0; i < STUFFY_COUNT; i++) {
-            if (stuffyId == STUFFIES[i].id) { idx = i; break; }
-        }
+        int idx = findCatalogIndex(ITEM_STUFFY, stuffyId, false);
         if (idx < 0 || !(configMgr.config().ownedStuffies & (1 << idx))) {
             wm.server->send(400, "text/plain", "Invalid selection");
             return;
@@ -6087,11 +5977,7 @@ static void handleConfigDressPost() {
             wm.server->send(400, "text/plain", "Right arm slot not unlocked");
             return;
         }
-        String id = rightArmId.substring(7);
-        int idx = -1;
-        for (int i = 0; i < STUFFY_COUNT; i++) {
-            if (id == STUFFIES[i].id) { idx = i; break; }
-        }
+        int idx = findCatalogIndex(ITEM_STUFFY, rightArmId.substring(7), false);
         if (idx < 0 || !(configMgr.config().ownedStuffies & (1 << idx))) {
             wm.server->send(400, "text/plain", "Invalid selection");
             return;
@@ -6104,11 +5990,7 @@ static void handleConfigDressPost() {
             wm.server->send(400, "text/plain", "Right arm slot not unlocked");
             return;
         }
-        String id = rightArmId.substring(4);
-        int idx = -1;
-        for (int i = 0; i < TOY_COUNT; i++) {
-            if (id == TOYS[i].id) { idx = i; break; }
-        }
+        int idx = findCatalogIndex(ITEM_TOY, rightArmId.substring(4), false);
         if (idx < 0 || !(configMgr.config().ownedToys & (1 << idx))) {
             wm.server->send(400, "text/plain", "Invalid selection");
             return;
@@ -6145,90 +6027,15 @@ static void handleConfigDressPost() {
         changed = true;
     }
 
-    String roomThemeId = wm.server->arg("roomTheme");
-    if (roomThemeId == "none") {
-        configMgr.config().equippedRoomTheme = EQUIP_NONE;
-        changed = true;
-    } else if (roomThemeId.length() > 0) {
-        int idx = -1;
-        for (int i = 0; i < ROOM_THEME_COUNT; i++) {
-            if (roomThemeId == ROOM_THEMES[i].id) { idx = i; break; }
-        }
-        if (idx < 0 || !(configMgr.config().ownedRoomThemes & (1 << idx))) {
-            wm.server->send(400, "text/plain", "Invalid selection");
-            return;
-        }
-        configMgr.config().equippedRoomTheme = idx;
-        changed = true;
-    }
+    if (!applyEquipField("roomTheme", ITEM_ROOM_THEME, changed)) return;
 
-    String catColorId = wm.server->arg("catColor");
-    if (catColorId == "none") {
-        configMgr.config().equippedCatColor = EQUIP_NONE;  // falls back to white, catBodyColor()
-        changed = true;
-    } else if (catColorId.length() > 0) {
-        int idx = -1;
-        for (int i = 0; i < CAT_COLOR_COUNT; i++) {
-            if (catColorId == CAT_COLORS[i].id) { idx = i; break; }
-        }
-        if (idx < 0 || !(configMgr.config().ownedCatColors & (1 << idx))) {
-            wm.server->send(400, "text/plain", "Invalid selection");
-            return;
-        }
-        configMgr.config().equippedCatColor = idx;
-        changed = true;
-    }
+    if (!applyEquipField("catColor", ITEM_CAT_COLOR, changed)) return;  // "none" falls back to white, catBodyColor()
 
-    String accessoryId = wm.server->arg("accessory");
-    if (accessoryId == "none") {
-        configMgr.config().equippedAccessory = EQUIP_NONE;
-        changed = true;
-    } else if (accessoryId.length() > 0) {
-        int idx = -1;
-        for (int i = 0; i < ACCESSORY_COUNT; i++) {
-            if (accessoryId == ACCESSORIES[i].id) { idx = i; break; }
-        }
-        if (idx < 0 || !(configMgr.config().ownedAccessories & (1 << idx))) {
-            wm.server->send(400, "text/plain", "Invalid selection");
-            return;
-        }
-        configMgr.config().equippedAccessory = idx;
-        changed = true;
-    }
+    if (!applyEquipField("accessory", ITEM_ACCESSORY, changed)) return;
 
-    String glassesId = wm.server->arg("glasses");
-    if (glassesId == "none") {
-        configMgr.config().equippedGlasses = EQUIP_NONE;
-        changed = true;
-    } else if (glassesId.length() > 0) {
-        int idx = -1;
-        for (int i = 0; i < GLASSES_COUNT; i++) {
-            if (glassesId == GLASSES[i].id) { idx = i; break; }
-        }
-        if (idx < 0 || !(configMgr.config().ownedGlasses & (1 << idx))) {
-            wm.server->send(400, "text/plain", "Invalid selection");
-            return;
-        }
-        configMgr.config().equippedGlasses = idx;
-        changed = true;
-    }
+    if (!applyEquipField("glasses", ITEM_GLASSES, changed)) return;
 
-    String badgeId = wm.server->arg("badge");
-    if (badgeId == "none") {
-        configMgr.config().equippedBadge = EQUIP_NONE;
-        changed = true;
-    } else if (badgeId.length() > 0) {
-        int idx = -1;
-        for (int i = 0; i < BADGE_COUNT; i++) {
-            if (badgeId == BADGES[i].id) { idx = i; break; }
-        }
-        if (idx < 0 || !(configMgr.config().ownedBadges & (1 << idx))) {
-            wm.server->send(400, "text/plain", "Invalid selection");
-            return;
-        }
-        configMgr.config().equippedBadge = idx;
-        changed = true;
-    }
+    if (!applyEquipField("badge", ITEM_BADGE, changed)) return;
 
     // Rename any owned cat (including white) — one optional field per color, submitted
     // alongside its radio button. Absent fields (e.g. a plain equip-only submission from

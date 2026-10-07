@@ -749,6 +749,62 @@ alone), deflate-compressing the config HTML (~11KB, estimate), dropping `-fstack
 of every `cyd` device, wipes the LittleFS config unless the user backs it up first, and needs
 `generate_release.py`'s LittleFS-offset lookup fixed.
 
+## Store & Dressing Room Handlers Table-Driven (COM-387, 2026-10-07)
+
+A flash diet from the cyd-clock flash audit (items F and H). Every page renders the same HTML and
+every form submit is handled the same as before. The one deliberate behaviour change is in
+`ConfigManager::save()` (see below).
+
+- **One category layer over the eight catalogs.** `ItemCategory` (`ITEM_STUFFY` … `ITEM_TOY`, in
+  store-section order) plus `catalogEntry()` (id, label, web colour, base cost), `isStoreItem()`,
+  `ownedItems()`/`setItemOwned()`, `equippedItemField()` and `findCatalogIndex()`. They are plain
+  switches rather than templates, so nothing gets instantiated once per catalog struct.
+- **Store page:** one loop over the categories through `appendStoreRow()`/`appendStoreItemRow()`
+  replaces the eight per-catalog loops and the old `storeItemTags()`/`storeItemAction()`/
+  `storeItemActionStuffy()` helpers. The Right Arm Slot row goes through the same row builder.
+- **Store purchase:** the eight-deep nested id lookup is one loop over the categories, and the
+  purchase and save-failure rollback are one branch each (stuffy 2nd copy, right arm slot, or
+  "set owned bit, auto-equip unless it's a toy").
+- **Dressing room:** `appendPickRadio()` renders every radio option. `buildPickGroup()` covers
+  blanket, room theme, accessory, glasses and badge, and `appendStuffyRadios()` is shared by the
+  left-arm and right-arm pickers. On submit, `applyEquipField()` handles the six single-slot
+  fields, and the stuffy/toy id lookups use `findCatalogIndex()`.
+- **`loadPage()`** replaces the 13 copies of the `%%STYLE%%` substitution.
+- **ConfigManager `load()`/`save()` go through a `String`** instead of passing ArduinoJson the
+  `fs::File` stream, so only the String reader/writer (already needed by backup import/export)
+  is compiled in. `save()` now also returns false on a short write, e.g. a full filesystem.
+  Before, it reported success, so a store purchase on a full filesystem now rolls back with
+  "Purchase failed to save" instead of claiming success. That rollback now also restores the
+  slot the purchase auto-equipped. On master it was left pointing at the unowned item, and the
+  resolver then fell back to the lowest-owned one, which the next save persisted. Master had the
+  same gap, but its save never reported failure, so the path was unreachable there.
+- **Verified identical on a host harness** (not committed): master's and this branch's
+  `main.cpp` and `ConfigManager.cpp` were both compiled for x86 against stub Arduino/WebServer/LittleFS
+  headers and the real ArduinoJson, then driven through the same seeded scenario matrix. The
+  matrix covers every `loadPage()` GET page, 600+ random store/dress GET states, every catalog
+  entry equipped in turn (including Hogwarts at Night and the Sorting Hat), and store purchases
+  of every item id from 120 states, each with and without a save failure. It also covers 6,000
+  random dressing-room submits plus equip/unequip of every entry. The two 46 MB transcripts
+  (status, headers, body, persisted config) were byte-identical. Five deliberately injected
+  bugs were all caught. Backup export/import, save/load round-trips and files written by either
+  version loading in the other all matched. The short-write check fails on master and passes here.
+  After the equip-slot rollback fix, the harness also checks that every failed-save purchase leaves the
+  config exactly as it was: all 2,104 do here, against 1,712 that differ on master. Those
+  failed-save cases are now the only lines where the two transcripts differ.
+- **Flash** (`pio run` size report, dev build, on top of COM-386):
+
+| Board | Before | After | Delta | % used |
+|---|---|---|---|---|
+| `cyd` | 1,209,477 B | 1,196,801 B | −12,676 B | 92.3% → **91.3%** (~111KB left) |
+| `freenove-s3` | 1,162,993 B | 1,150,021 B | −12,972 B | 34.8% → 34.4% |
+
+  Measured before COM-386 landed (on COM-378), it saved about the same: −12,924 B on `cyd` and
+  −12,868 B on `freenove-s3`.
+
+  The audit estimated 6.5–8.5KB. Sharing the dressing-room radio builder with the stuffy and
+  right-arm pickers, and `loadPage()`, account for the rest. Deflate-compressing the served HTML
+  (about 11KB, audit item I) is still open as a follow-up.
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`

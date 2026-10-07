@@ -256,28 +256,31 @@ void ConfigManager::toJson(JsonDocument& doc) const {
     doc["themeWeekHalloweenMode"]  = _config.themeWeekHalloweenMode;
 }
 
+// load()/save() go through a String rather than handing ArduinoJson the fs::File stream
+// directly, so only ArduinoJson's String reader/writer gets compiled in (backup import/export
+// already needs it) instead of a second fs::File copy of each (COM-387 flash diet). config.json
+// is a few KB, so the transient buffer is cheap.
 bool ConfigManager::load() {
     File f = LittleFS.open(CONFIG_FILE, "r");
     if (!f) return false;
-
-    JsonDocument doc;
-    if (deserializeJson(doc, f)) { f.close(); return false; }
-    fromJson(doc);
-
+    String json;
+    json.reserve(f.size());
+    char buf[128];
+    // Signed on purpose: File::read() is declared size_t but returns -1 for an invalid file,
+    // which would wrap to SIZE_MAX and never end the loop.
+    int n;
+    while ((n = f.read((uint8_t*)buf, sizeof(buf))) > 0) json.concat(buf, (unsigned int)n);
     f.close();
-    return true;
+    return importBackupJson(json);
 }
 
 bool ConfigManager::save() {
+    String json = exportBackupJson();
     File f = LittleFS.open(CONFIG_FILE, "w");
     if (!f) return false;
-
-    JsonDocument doc;
-    toJson(doc);
-
-    serializeJson(doc, f);
+    size_t written = f.write((const uint8_t*)json.c_str(), json.length());
     f.close();
-    return true;
+    return written == json.length();  // a short write (e.g. a full filesystem) is a failed save
 }
 
 String ConfigManager::exportBackupJson() const {
