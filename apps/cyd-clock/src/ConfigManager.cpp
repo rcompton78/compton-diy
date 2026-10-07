@@ -9,7 +9,7 @@ bool ConfigManager::begin() {
 
 // Sanity check for a packed YYYYMMDD date int (0 = unset, always valid) — used below to
 // reject malformed persisted/imported theme-week dates before they can reach
-// isThemeWeekActive()'s window math (main.cpp), which has no validation of its own.
+// isBirthdayWeekActive()'s window math (main.cpp), which has no validation of its own.
 // Calendar-aware (rejects e.g. Feb 30, and Feb 29 on a non-leap year), not just range-checked.
 static bool isPlausibleDateOrZero(int32_t d) {
     if (d == 0) return true;
@@ -169,7 +169,7 @@ void ConfigManager::fromJson(JsonDocument& doc) {
         int32_t end   = doc["themeWeekBirthdayEndDate"]   | _config.themeWeekBirthdayEndDate;
         // Reject the whole pair on any malformed/inverted/partial range, rather than one
         // field — a start with no matching end (or vice versa) is just as meaningless to
-        // isThemeWeekActive() as either being individually invalid, so only a fully-cleared
+        // isBirthdayWeekActive() as either being individually invalid, so only a fully-cleared
         // (0, 0) pair or a fully-set pair with end >= start is accepted; anything else leaves
         // the previously-persisted values untouched rather than silently disabling a
         // possibly-active range with a broken half-pair.
@@ -181,6 +181,12 @@ void ConfigManager::fromJson(JsonDocument& doc) {
     }
     _config.activeThemeWeekKey     = doc["themeWeekActive"] | _config.activeThemeWeekKey;
     _config.preThemeWeekRoomTheme  = doc["themeWeekPrevRoomTheme"] | _config.preThemeWeekRoomTheme;
+    {
+        // Ignore an out-of-range mode (e.g. from a newer firmware's backup) rather than let it
+        // reach isHalloweenWeekActive(), which treats anything but Preview/Off as Auto anyway.
+        uint8_t mode = doc["themeWeekHalloweenMode"] | _config.themeWeekHalloweenMode;
+        if (mode <= 2) _config.themeWeekHalloweenMode = mode;
+    }
 }
 
 void ConfigManager::toJson(JsonDocument& doc) const {
@@ -241,6 +247,7 @@ void ConfigManager::toJson(JsonDocument& doc) const {
     doc["themeWeekBirthdayEndDate"]   = _config.themeWeekBirthdayEndDate;
     doc["themeWeekActive"]         = _config.activeThemeWeekKey;
     doc["themeWeekPrevRoomTheme"]  = _config.preThemeWeekRoomTheme;
+    doc["themeWeekHalloweenMode"]  = _config.themeWeekHalloweenMode;
 }
 
 bool ConfigManager::load() {

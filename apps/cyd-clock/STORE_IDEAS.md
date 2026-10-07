@@ -25,3 +25,16 @@ Done: room/background themes (DIY-38) — `RoomTheme`/`ROOM_THEMES[]` in `apps/c
 - Limited-time/rotating item that changes weekly, using the RTC already available
 - "Lucky" cheap item with a random color each purchase — surprise mechanic reusing the existing bitmask ownership
 - Cosmetic rank/badge shown next to the points balance once total lifetime points cross a threshold (bragging rights, no gameplay effect)
+
+## Theme-week exclusives
+
+Theme weeks (DIY-108 Birthday, COM-379 Halloween) hand out cosmetics that can't be bought:
+they're appended past `*_STORE_COUNT` in their catalogs and granted/revoked by date. Ideas
+left on the table:
+
+- Pumpkin or ghost **stuffy** for Halloween. It was skipped because a stuffy needs four poses;
+  revisit if flash on the `cyd` board is ever freed up.
+- Flickering jack-o'-lantern eyes on Oct 31. This needs a periodic partial redraw, unlike the
+  still ghost that shipped.
+- A Christmas week (Dec 18–25?) on the same pattern: santa hat, snowflake glasses, a
+  fireplace/snowfall room theme.

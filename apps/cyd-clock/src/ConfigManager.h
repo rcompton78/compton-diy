@@ -93,13 +93,14 @@ struct AppConfig {
     uint32_t lastUpdateCheckEpoch = 0;     // Unix epoch of last check; 0 = never checked
 
     // Special theme weeks (DIY-108) — entirely local/offline, set via the device's own 7-tap
-    // secret admin page (/config/admin/themeweek), not any server. Only one theme
-    // ("birthday") is supported for now, so its date range gets its own two fields rather
-    // than a generic table — see main.cpp's Theme weeks section for the full mechanism.
+    // secret admin page (/config/admin/themeweek), not any server. Each theme gets its own
+    // hardcoded fields rather than a generic table: "birthday" has the admin-picked date range
+    // below, and "halloween" (COM-379) has fixed dates plus themeWeekHalloweenMode further down.
+    // See main.cpp's Theme weeks section for the full mechanism.
     // Calendar dates only (no time-of-day — the admin page is a plain date picker), packed as
     // YYYYMMDD; 0 = unset. The theme is active for the whole of both the start and end date,
     // inclusive, evaluated against the device's own already-configured local clock/timezone
-    // (same one the on-screen clock uses) — see isThemeWeekActive()/addOneCalendarDay() in
+    // (same one the on-screen clock uses) — see isBirthdayWeekActive()/addOneCalendarDay() in
     // main.cpp for how the inclusive end date becomes an exclusive end-of-day boundary.
     int32_t themeWeekBirthdayStartDate = 0;
     int32_t themeWeekBirthdayEndDate   = 0;
@@ -112,6 +113,10 @@ struct AppConfig {
     // regardless of what they changed it to during the theme week — 0xFF (EQUIP_NONE in
     // main.cpp) means "no theme was equipped before".
     uint8_t preThemeWeekRoomTheme = 0xFF;
+    // Halloween theme week (COM-379) override, set on the same admin page: 0 = Auto (Oct 24–31
+    // every year from the local clock), 1 = Preview (forced on, with the Oct 31 ghost),
+    // 2 = Off. See HALLOWEEN_MODE_* and isHalloweenWeekActive() in main.cpp.
+    uint8_t themeWeekHalloweenMode = 0;
 };
 
 class ConfigManager {

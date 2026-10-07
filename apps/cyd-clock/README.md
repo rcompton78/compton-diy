@@ -4,7 +4,10 @@ A desk clock/timer firmware for the "Cheap Yellow Display" (ESP32-2432S028R) and
 Freenove ESP32-S3 2.8" boards. Shows the time, date, and local weather, doubles as a
 countdown timer/stopwatch, and includes a virtual pet cat with care mechanics,
 gamified points/levels, and a cosmetics store (colors, accessories, stuffies, toys, room
-themes) — all configurable from a web UI served by the device itself.
+themes) — all configurable from a web UI served by the device itself. A few times a year
+the cat gets a seasonal theme week: Halloween (Oct 24–31) dresses it in a witch hat and
+candy-corn sunglasses in front of a Haunted Night backdrop, and the device can also be given
+a birthday week. Both turn on and off by themselves.
 
 ## Install (no cables, no toolchain)
 
