@@ -46,6 +46,8 @@
 
 // Filesystem paths
 #define CONFIG_FILE "/config.json"
+// ConfigManager::save() writes here first and renames it over CONFIG_FILE (COM-388)
+#define CONFIG_TMP_FILE "/config.json.tmp"
 
 // Weather (Open-Meteo — no API key required)
 #define WEATHER_API_HOST "api.open-meteo.com"

@@ -772,7 +772,8 @@ every form submit is handled the same as before. The one deliberate behaviour ch
 - **`loadPage()`** replaces the 13 copies of the `%%STYLE%%` substitution.
 - **ConfigManager `load()`/`save()` go through a `String`** instead of passing ArduinoJson the
   `fs::File` stream, so only the String reader/writer (already needed by backup import/export)
-  is compiled in. `save()` now also returns false on a short write, e.g. a full filesystem.
+  is compiled in. `save()` now also returns false on a short write, e.g. a full filesystem
+  (**COM-388 correction: on device this check never fired**; see the next section).
   Before, it reported success, so a store purchase on a full filesystem now rolls back with
   "Purchase failed to save" instead of claiming success. That rollback now also restores the
   slot the purchase auto-equipped. On master it was left pointing at the unowned item, and the
@@ -804,6 +805,60 @@ every form submit is handled the same as before. The one deliberate behaviour ch
   The audit estimated 6.5–8.5KB. Sharing the dressing-room radio builder with the stuffy and
   right-arm pickers, and `loadPage()`, account for the rest. Deflate-compressing the served HTML
   (about 11KB, audit item I) is still open as a follow-up.
+
+## Atomic Config Save (COM-388, 2026-10-07)
+
+- **COM-387's short-write detection didn't work on device.** `fs::File` on this core is a
+  fully-buffered stdio `FILE*`, and config.json is ~1KB. Arduino's own 4KB `setvbuf` is skipped for
+  LittleFS because esp_littlefs reports a `st_blksize`, and newlib then sizes the buffer from that
+  (the 4KB block size). So `write()` only fills the buffer and always reports every byte. The real write, and its failure on a full filesystem,
+  happens in `fclose()`, and `File::close()` returns `void`, so the error is lost. Before this fix,
+  `save()` reported success on a full filesystem, the store and backup rollbacks never ran, and the
+  file was left truncated. The host harness reproduces it on master's code: with zero free space,
+  `save()` returns true, and the next boot loads defaults.
+- **`save()` is now write-temp, verify, rename.**
+  1. Write `/config.json.tmp`.
+  2. Close it, reopen it and read it back. It must match the serialized JSON byte for byte; this
+     check is what actually catches a full filesystem.
+  3. `LittleFS.rename()` it over `/config.json`.
+
+  `/config.json` is never opened for writing, so it always holds the last good save. esp_littlefs
+  1.14.1 (in this Arduino core) replaces an existing destination in a single littlefs commit and
+  refuses only while either file is open, so there's no remove-then-rename window. On failure the
+  temp file is removed and `save()` returns false.
+- **`load()` falls back to the temp file.** It only reads `/config.json.tmp` when `/config.json` is
+  missing or doesn't parse. That covers a first-ever save cut before its rename, or a file
+  truncated by older firmware. A partial JSON object can't parse, so a temp file that parses is
+  complete. It then gets renamed into place. A stale temp file next to a good config is deleted at
+  boot.
+- **Free space:** a save needs room for the new copy (~1KB) alongside the old one. If it doesn't
+  fit, the save fails cleanly and the old config stays.
+- **Backup restore and both resets now roll back too.** `handleConfigBackupPost()` snapshots
+  `AppConfig` before `importBackupJson()` and restores it if `save()` fails (`?err=save`), like the
+  store purchase rollback. `handleConfigResetPost()` does the same around `resetToDefaults()`, and
+  `handleConfigBadgesResetPost()` restores `totalXp`. Before, a failed save left the change live in
+  memory while the page reported failure, and the next unrelated save would have persisted it.
+  These error branches were effectively unreachable on device until the read-back made `save()`
+  report a full filesystem.
+- **Verified on a host harness** (not committed): the real `ConfigManager.cpp` and ArduinoJson,
+  compiled for x86 against stub `Arduino.h`/`LittleFS.h`. The fake LittleFS commits data only at
+  close, loses bytes past capacity silently at close, and renames atomically. It also injects a
+  failure, a power cut before or after the operation, or a torn close at every FS operation of a
+  save. That's 136 cases across saving over an existing config and a first-ever save. After each
+  one plus a reboot, the config is exactly the old one or the new one. It's never defaults, and
+  never the old one after `save()` returned true. The run also covers:
+  - a full filesystem and zero free space
+  - a stale or partial temp file at boot
+  - the temp-file fallback
+  - a backup import, a full reset or a badges XP reset followed by a save failure at every
+    operation, which leaves both the in-memory and on-disk config unchanged
+
+  Master's `ConfigManager.cpp` fails 19 of these checks.
+- **On device (`cyd`):** the existing config loaded unchanged after flashing. Restoring a backup
+  with points +1, which runs a full temp-plus-rename save over the existing file, persisted across a
+  reset. Restoring the original backup then brought the config back byte-identical to the
+  pre-flash export (setupComplete=true). A full filesystem wasn't reproduced on hardware.
+- **Flash:** +1,672 B on `cyd` (1,196,849 → 1,198,521 B, 91.3% → 91.4%).
 
 ## Branch & Files
 

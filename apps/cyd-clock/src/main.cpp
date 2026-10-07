@@ -5235,8 +5235,10 @@ static void handleConfigBadgesResetPost() {
         wm.server->send(302, "text/plain", "");
         return;
     }
+    uint32_t prevXp = configMgr.config().totalXp;
     configMgr.config().totalXp = 0;
     if (!configMgr.save()) {
+        configMgr.config().totalXp = prevXp;  // roll back in-memory state since persistence failed
         wm.server->sendHeader("Location", "/config/badges?err=resetSave");
         wm.server->send(302, "text/plain", "");
         return;
@@ -5271,8 +5273,10 @@ static void handleConfigResetPost() {
         wm.server->send(302, "text/plain", "");
         return;
     }
+    AppConfig prevConfig = configMgr.config();
     configMgr.resetToDefaults();
     if (!configMgr.save()) {
+        configMgr.config() = prevConfig;  // roll back in-memory state since persistence failed
         wm.server->sendHeader("Location", "/config/backup?err=resetSave");
         wm.server->send(302, "text/plain", "");
         return;
@@ -5321,12 +5325,16 @@ static void handleConfigBackupPost() {
         wm.server->send(302, "text/plain", "");
         return;
     }
+    // importBackupJson() merges into the live config, so keep a copy to roll back to if the
+    // restore can't be persisted (same idea as the store purchase handler's rollback).
+    AppConfig prevConfig = configMgr.config();
     if (!configMgr.importBackupJson(json)) {
         wm.server->sendHeader("Location", "/config/backup?err=parse");
         wm.server->send(302, "text/plain", "");
         return;
     }
     if (!configMgr.save()) {
+        configMgr.config() = prevConfig;  // roll back in-memory state since persistence failed
         wm.server->sendHeader("Location", "/config/backup?err=save");
         wm.server->send(302, "text/plain", "");
         return;
