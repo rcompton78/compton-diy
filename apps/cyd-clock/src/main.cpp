@@ -363,27 +363,38 @@ static constexpr int ACCESSORY_COUNT = sizeof(ACCESSORIES) / sizeof(ACCESSORIES[
 static_assert(ACCESSORY_COUNT <= 16, "ownedAccessories bitmask is uint16_t");
 // Catalog index of each theme-week-exclusive accessory, for applyThemeWeekCosmetics()/
 // revertThemeWeekCosmetics(). Fixed, not derived from the catalog size, since store-purchasable
-// entries now also sit after them (the Sorting Hat, COM-382).
+// entries now also sit after them (the Sorting Hat, COM-382). A future theme's hat is appended
+// with cost 0 and gets its own fixed index here.
 static constexpr int ACCESSORY_IDX_PARTY_HAT = 10;
 static constexpr int ACCESSORY_IDX_WITCH_HAT = 11;
 static_assert(ACCESSORY_COUNT > ACCESSORY_IDX_WITCH_HAT, "theme-week accessory indices out of range");
-// Count of normal, store-purchasable accessories: everything except the theme-week-exclusive
-// block above. hasNewStoreItems() compares the seen count against this, so theme-exclusive
-// entries never trip the "new store items!" badge. The subtracted number is the size of that
-// exclusive block: bump it whenever a theme week appends another entry.
-static constexpr int ACCESSORY_STORE_COUNT = ACCESSORY_COUNT - 2;
+static_assert(ACCESSORIES[ACCESSORY_IDX_PARTY_HAT].cost == 0 && ACCESSORIES[ACCESSORY_IDX_WITCH_HAT].cost == 0,
+              "theme-week exclusives must be cost 0, or isStoreAccessory() would put them in the store");
 
 /**
- * Whether an ACCESSORIES[] entry can be bought in the store. Store rendering and purchase code
- * use this rather than an index bound, since the store-purchasable entries aren't a contiguous
- * prefix: the theme-week exclusives sit in the middle of the catalog (see the Sorting Hat).
+ * Whether an ACCESSORIES[] entry can be bought in the store. The invariant is
+ * **store-purchasable ⇔ cost > 0**: theme-week exclusives must be cost 0, and every real store
+ * item must cost more than 0, so a cost-0 entry is always a deliberate "not for sale". Store
+ * rendering and purchase code use this rather than an index bound, since the store-purchasable
+ * entries aren't a contiguous prefix: the theme-week exclusives sit in the middle of the catalog
+ * (see the Sorting Hat).
  *
  * @param i Index into ACCESSORIES[].
- * @return false for the theme-week-exclusive entries, true for everything else.
+ * @return true if the entry has a price, false for the cost-0 theme-week exclusives.
  */
 static constexpr bool isStoreAccessory(int i) {
-    return i != ACCESSORY_IDX_PARTY_HAT && i != ACCESSORY_IDX_WITCH_HAT;
+    return ACCESSORIES[i].cost > 0;
 }
+
+// Counts the store-purchasable ACCESSORIES[] entries from index `i` onward (recursive, so it
+// stays a C++11 constexpr function).
+static constexpr int countStoreAccessories(int i) {
+    return i >= ACCESSORY_COUNT ? 0 : (isStoreAccessory(i) ? 1 : 0) + countStoreAccessories(i + 1);
+}
+// Count of normal, store-purchasable accessories, derived from isStoreAccessory() so it can't
+// drift when a theme week appends another cost-0 entry. hasNewStoreItems() compares the seen
+// count against this, so theme-exclusive entries never trip the "new store items!" badge.
+static constexpr int ACCESSORY_STORE_COUNT = countStoreAccessories(0);
 
 // Forward-declared for the same reason as the bow functions above — GLASSES[] needs this
 // before drawCat() (and `tft`) are declared.
@@ -3573,10 +3584,13 @@ static void assertStoreIdsUnique() {
 // Only one theme is ever applied at a time. When both are active, Birthday wins (it's a range
 // someone scheduled on purpose; Halloween is automatic). See desiredThemeWeekKey().
 //
-// Each theme owns one exclusive entry in ACCESSORIES[], GLASSES[] and ROOM_THEMES[], appended
-// past *_STORE_COUNT so they're never buyable (see the *_IDX_* constants beside each catalog).
-// A future theme adds its entries to those blocks, bumps each *_STORE_COUNT subtraction, and
-// gets its own key, isXActive() check and themeWeekItems() branch.
+// Each theme owns one exclusive entry in ACCESSORIES[], GLASSES[] and ROOM_THEMES[], never
+// buyable (see the *_IDX_* constants beside each catalog). A future theme appends its entries
+// to each catalog and gives each one a fixed *_IDX_* constant. In GLASSES[] and ROOM_THEMES[]
+// they go past *_STORE_COUNT, so also bump those subtractions. In ACCESSORIES[] the entry must
+// be cost 0 instead: store-purchasable there means cost > 0 (isStoreAccessory()), because a
+// store item (the Sorting Hat) already sits after the exclusives. The theme also gets its own
+// key, isXActive() check and themeWeekItems() branch.
 static constexpr const char* THEME_WEEK_BIRTHDAY  = "birthday";
 static constexpr const char* THEME_WEEK_HALLOWEEN = "halloween";
 
@@ -4742,7 +4756,6 @@ static void handleConfigCityGet() {
     sendHtmlPage(page);
 }
 
-// Renders the buy button/owned-label markup for one store item.
 /**
  * The tags shown after a store item's label: a gold "LEGENDARY" marker for anything priced at
  * the legendary tier (COM-382), and the red "SALE" tag while a flash sale has cut its price.
@@ -4759,6 +4772,7 @@ static String storeItemTags(uint32_t baseCost, uint32_t cost) {
     return html;
 }
 
+// Renders the buy button/owned-label markup for one store item.
 static String storeItemAction(const char* item, bool owned, uint32_t cost, uint32_t points) {
     if (owned) return "<span class='owned'>Owned</span>";
     String html = "<form method='POST' action='/save-config/store'>";

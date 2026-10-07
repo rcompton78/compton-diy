@@ -641,12 +641,15 @@ on every fur colour and room theme with the store listing, is in the COM-382 Art
   the theme-week hats would hand their bits to a different item on a device, or in a backup,
   that owned one mid-theme-week.
   - The purchasable accessories are therefore no longer a contiguous prefix. Store rendering and
-    purchase iterate the whole catalog and skip theme-week entries via `isStoreAccessory()`.
+    purchase iterate the whole catalog and filter with `isStoreAccessory()`. Its invariant is
+    **store-purchasable ⇔ cost > 0**: theme-week exclusives must be cost 0 (a `static_assert`
+    checks the party and witch hats), and every real store item must cost more than 0.
   - `ACCESSORY_IDX_PARTY_HAT`/`WITCH_HAT` are now fixed at 10 and 11, rather than derived from
     `ACCESSORY_STORE_COUNT`.
-  - `ACCESSORY_STORE_COUNT` is still the number of purchasable accessories (`ACCESSORY_COUNT - 2`,
-    now 11), so the "new store items!" flash fires once for the hat, and once for the new badge
-    section.
+  - `ACCESSORY_STORE_COUNT` is now counted from that same invariant (`countStoreAccessories()`,
+    which gives 11) instead of a hand-maintained subtraction, so the "new store items!" flash
+    fires once for the hat, and once for the new badge section. These two points came out of
+    the pre-PR independent review.
 - **Flash** (`pio run` size report):
 
 | Board | Before | After | Delta | % used |
