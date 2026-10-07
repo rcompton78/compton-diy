@@ -5688,6 +5688,10 @@ static void handleConfigStorePost() {
     // equippedStuffy/equippedStuffyRight; the user picks which arm gets it via the dressing
     // room, same as unlocking the right arm slot doesn't auto-equip either.
     bool secondStuffy = cat == ITEM_STUFFY && (configMgr.config().ownedStuffies & (1u << idx));
+    // Snapshot the slot an auto-equip below may overwrite, so a failed save restores it too
+    // rather than leaving it pointing at an item that's no longer owned.
+    uint8_t* equipped = idx >= 0 ? equippedItemField(cat) : nullptr;
+    uint8_t prevEquipped = equipped ? *equipped : EQUIP_NONE;
     if (idx < 0) {
         configMgr.config().rightArmSlotUnlocked = true;  // starts empty — see equippedStuffyRightIndex()
     } else if (secondStuffy) {
@@ -5706,6 +5710,7 @@ static void handleConfigStorePost() {
         if (idx < 0) configMgr.config().rightArmSlotUnlocked = false;
         else if (secondStuffy) configMgr.config().ownedStuffiesSecond &= ~(1u << idx);
         else setItemOwned(cat, idx, false);
+        if (equipped) *equipped = prevEquipped;
         wm.server->sendHeader("Location", "/config/store?err=save");
         wm.server->send(302, "text/plain", "");
         return;

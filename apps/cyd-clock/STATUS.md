@@ -774,7 +774,10 @@ every form submit is handled the same as before. The one deliberate behaviour ch
   `fs::File` stream, so only the String reader/writer (already needed by backup import/export)
   is compiled in. `save()` now also returns false on a short write, e.g. a full filesystem.
   Before, it reported success, so a store purchase on a full filesystem now rolls back with
-  "Purchase failed to save" instead of claiming success.
+  "Purchase failed to save" instead of claiming success. That rollback now also restores the
+  slot the purchase auto-equipped. On master it was left pointing at the unowned item, and the
+  resolver then fell back to the lowest-owned one, which the next save persisted. Master had the
+  same gap, but its save never reported failure, so the path was unreachable there.
 - **Verified identical on a host harness** (not committed): master's and this branch's
   `main.cpp` and `ConfigManager.cpp` were both compiled for x86 against stub Arduino/WebServer/LittleFS
   headers and the real ArduinoJson, then driven through the same seeded scenario matrix. The
@@ -785,12 +788,15 @@ every form submit is handled the same as before. The one deliberate behaviour ch
   (status, headers, body, persisted config) were byte-identical. Five deliberately injected
   bugs were all caught. Backup export/import, save/load round-trips and files written by either
   version loading in the other all matched. The short-write check fails on master and passes here.
+  After the equip-slot rollback fix, the harness also checks that every failed-save purchase leaves the
+  config exactly as it was: all 2,104 do here, against 1,712 that differ on master. Those
+  failed-save cases are now the only lines where the two transcripts differ.
 - **Flash** (`pio run` size report, dev build, on top of COM-386):
 
 | Board | Before | After | Delta | % used |
 |---|---|---|---|---|
-| `cyd` | 1,209,477 B | 1,196,785 B | −12,692 B | 92.3% → **91.3%** (~111KB left) |
-| `freenove-s3` | 1,162,993 B | 1,150,005 B | −12,988 B | 34.8% → 34.4% |
+| `cyd` | 1,209,477 B | 1,196,801 B | −12,676 B | 92.3% → **91.3%** (~111KB left) |
+| `freenove-s3` | 1,162,993 B | 1,150,021 B | −12,972 B | 34.8% → 34.4% |
 
   Measured before COM-386 landed (on COM-378), it saved about the same: −12,924 B on `cyd` and
   −12,868 B on `freenove-s3`.
