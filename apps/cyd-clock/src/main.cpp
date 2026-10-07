@@ -164,6 +164,25 @@ static constexpr uint16_t C_PARTY_HAT_TRIM = 0xF6CB;  // party hat base band/pom
 static constexpr uint16_t C_BALLOON_GLASSES_RED  = TFT_RED;     // one balloon lens
 static constexpr uint16_t C_BALLOON_GLASSES_BLUE = 0x001F;      // the other balloon lens (true blue)
 
+// Halloween theme-week colors (COM-379). The Haunted Night backdrop is dark purple, so the
+// same DIY-108 contrast lesson applies in reverse: nothing that has to read against the sky
+// may be a dark purple/black without an outline (hence the witch hat's lavender rim), and the
+// bright pieces (moon, pumpkin, candy corn, ghost) are saturated, flat fills with no fine detail.
+static constexpr uint16_t C_HAUNTED_SKY      = 0x2888;  // deep purple sky (~#2a1245)
+static constexpr uint16_t C_HAUNTED_STAR     = 0xCDDD;  // faint lavender stars (~#c8b8e8)
+static constexpr uint16_t C_HAUNTED_MOON     = 0xFCC3;  // big orange moon (~#ff9a1f)
+static constexpr uint16_t C_HAUNTED_CRATER   = 0xE3C2;  // darker orange moon craters (~#e07a10)
+static constexpr uint16_t C_HAUNTED_HILL     = 0x1044;  // near-black hill along the floor (~#140b20)
+static constexpr uint16_t C_PUMPKIN          = 0xFBC0;  // jack-o'-lantern skin, candy-corn middle band (~#ff7a00)
+static constexpr uint16_t C_PUMPKIN_RIDGE    = 0xD2E0;  // jack-o'-lantern ridges (~#d45f00)
+static constexpr uint16_t C_PUMPKIN_STEM     = 0x3BE5;  // jack-o'-lantern stem (~#3a7d2c)
+static constexpr uint16_t C_CANDLE_GLOW      = 0xFF09;  // lit jack-o'-lantern face, witch-hat buckle (~#ffe14d)
+static constexpr uint16_t C_GHOST            = 0xF79F;  // Oct 31 ghost (~#f2f2ff)
+static constexpr uint16_t C_WITCH_HAT        = 0x0000;  // witch hat cone/brim (black)
+static constexpr uint16_t C_WITCH_HAT_RIM    = 0x9B5A;  // 1px lavender outline so the black hat reads on the sky and on a black cat (~#9b6bd6)
+static constexpr uint16_t C_WITCH_HAT_BAND   = 0xFC40;  // witch hat band, candy-corn temple arms (~#ff8a00)
+static constexpr uint16_t C_CANDY_CORN_TOP   = 0xFE83;  // candy-corn lens wide yellow band (~#ffd21f)
+
 // Toy catalog colors (DIY-110) — first entry is the mini hockey stick.
 static constexpr uint16_t C_HOCKEY_SHAFT = 0xA145;  // wood-tone shaft (tan/brown)
 static constexpr uint16_t C_HOCKEY_TAPE  = 0x0000;  // tape color on a light background (black);
@@ -279,6 +298,7 @@ static void drawBowFlamingoPink(int cx, int cy);
 // Forward-declared for the same reason as the bow functions above. Unlike the bows, this one
 // isn't store-purchasable — see ACCESSORY_STORE_COUNT below.
 static void drawPartyHat(int cx, int cy);
+static void drawWitchHat(int cx, int cy);
 
 // Accessory catalog — same purchase/equip model as cat colors, but layered independently
 // on top of whichever cat color is equipped (an accessory works with any fur color). `id` is
@@ -313,14 +333,20 @@ static constexpr Accessory ACCESSORIES[] = {
     // only for the duration of an active theme week, granted/revoked by
     // applyThemeWeekCosmetics()/revertThemeWeekCosmetics().
     {"party_hat", "Party Hat", 0, "#9370DB", drawPartyHat},
+    {"witch_hat", "Witch Hat", 0, "#FF8A00", drawWitchHat},  // Halloween (COM-379)
 };
 static constexpr int ACCESSORY_COUNT = sizeof(ACCESSORIES) / sizeof(ACCESSORIES[0]);
 static_assert(ACCESSORY_COUNT <= 16, "ownedAccessories bitmask is uint16_t");
 // Count of normal, store-purchasable accessories — everything before the theme-week-exclusive
 // block above. Store rendering/purchase/seen-count logic bounds itself to this, not the full
 // ACCESSORY_COUNT, so theme-exclusive entries never show up as purchasable and never trip the
-// "new store items!" badge (see hasNewStoreItems()).
-static constexpr int ACCESSORY_STORE_COUNT = ACCESSORY_COUNT - 1;
+// "new store items!" badge (see hasNewStoreItems()). The subtracted number is the size of that
+// exclusive block: bump it whenever a theme week appends another entry.
+static constexpr int ACCESSORY_STORE_COUNT = ACCESSORY_COUNT - 2;
+// Catalog index of each theme-week-exclusive accessory, for applyThemeWeekCosmetics()/
+// revertThemeWeekCosmetics(). Derived from ACCESSORY_STORE_COUNT, in the block's order above.
+static constexpr int ACCESSORY_IDX_PARTY_HAT = ACCESSORY_STORE_COUNT;
+static constexpr int ACCESSORY_IDX_WITCH_HAT = ACCESSORY_STORE_COUNT + 1;
 
 // Forward-declared for the same reason as the bow functions above — GLASSES[] needs this
 // before drawCat() (and `tft`) are declared.
@@ -329,6 +355,7 @@ static void drawSunglassesPinkRim(int cx, int cy);
 // Forward-declared for the same reason. Unlike the sunglasses above, this one isn't
 // store-purchasable — see GLASSES_STORE_COUNT below.
 static void drawBalloonSunglasses(int cx, int cy);
+static void drawCandyCornSunglasses(int cx, int cy);
 
 // Glasses catalog — a separate accessory slot from ACCESSORIES[] (own store section, own
 // dressing-room control, own owned/equipped bitmask), even though the struct shape and
@@ -349,11 +376,14 @@ static constexpr Glasses GLASSES[] = {
     // Below: theme-week exclusive (DIY-108) — MUST stay appended after every real
     // store-purchasable entry above; see GLASSES_STORE_COUNT.
     {"balloon_sunglasses", "Birthday Balloon Sunglasses", 0, "#FF0000", drawBalloonSunglasses},
+    {"candy_corn_sunglasses", "Candy Corn Sunglasses", 0, "#FFD21F", drawCandyCornSunglasses},  // Halloween (COM-379)
 };
 static constexpr int GLASSES_COUNT = sizeof(GLASSES) / sizeof(GLASSES[0]);
 static_assert(GLASSES_COUNT <= 8, "ownedGlasses bitmask is uint8_t");
 // Count of normal, store-purchasable glasses — see ACCESSORY_STORE_COUNT's comment for why.
-static constexpr int GLASSES_STORE_COUNT = GLASSES_COUNT - 1;
+static constexpr int GLASSES_STORE_COUNT = GLASSES_COUNT - 2;
+static constexpr int GLASSES_IDX_BALLOON    = GLASSES_STORE_COUNT;
+static constexpr int GLASSES_IDX_CANDY_CORN = GLASSES_STORE_COUNT + 1;
 
 // Forward declarations: each stuffy's sleep-scene art, defined further below alongside
 // drawSleepingCat(). Declared here so the STUFFIES[] catalog can reference them directly —
@@ -487,6 +517,11 @@ static void drawSkyBackground(int x, int y, int w, int h);
 // balloons), defined further below alongside drawSkyBackground().
 static void drawBirthdayBackground(int x, int y, int w, int h);
 
+// Forward declaration: theme-week-exclusive (COM-379) "Haunted Night" backdrop (orange moon,
+// bats, jack-o'-lantern, plus a ghost on Oct 31), defined further below alongside
+// drawBirthdayBackground().
+static void drawHauntedNightBackground(int x, int y, int w, int h);
+
 // Room theme catalog — same purchase/equip model as blanket colors and stuffies. `id` is
 // the stable identifier used in store/dressing-room form requests; ConfigManager persists
 // ownership as an `ownedRoomThemes` bitmask and the equipped selection as a numeric
@@ -520,10 +555,14 @@ static constexpr RoomTheme ROOM_THEMES[] = {
     // Below: theme-week exclusive (DIY-108) — MUST stay appended after every real
     // store-purchasable entry above; see ROOM_THEME_STORE_COUNT.
     {"birthday", "Birthday", 0, 0xFCF3, drawBirthdayBackground, nullptr},  // confetti + balloons — not a straight color, label stays white
+    {"haunted_night", "Haunted Night", 0, C_HAUNTED_SKY, drawHauntedNightBackground, nullptr},  // Halloween (COM-379): moon + bats + jack-o'-lantern — label stays white
 };
 static constexpr int ROOM_THEME_COUNT = sizeof(ROOM_THEMES) / sizeof(ROOM_THEMES[0]);
+static_assert(ROOM_THEME_COUNT <= 16, "ownedRoomThemes bitmask is uint16_t");
 // Count of normal, store-purchasable room themes — see ACCESSORY_STORE_COUNT's comment for why.
-static constexpr int ROOM_THEME_STORE_COUNT = ROOM_THEME_COUNT - 1;
+static constexpr int ROOM_THEME_STORE_COUNT = ROOM_THEME_COUNT - 2;
+static constexpr int ROOM_THEME_IDX_BIRTHDAY      = ROOM_THEME_STORE_COUNT;
+static constexpr int ROOM_THEME_IDX_HAUNTED_NIGHT = ROOM_THEME_STORE_COUNT + 1;
 
 // Sentinel stored in equippedBlanketColor/equippedStuffy/equippedRoomTheme to mean
 // "explicitly unequipped by the user in the dressing room", as opposed to 0 which means "no
@@ -709,6 +748,31 @@ static void drawPartyHat(int cx, int cy) {
     tft.fillCircle(cx + 4, cy - 76, 2, C_PARTY_HAT_TRIM);
 }
 
+/**
+ * Witch hat (theme-week exclusive, COM-379): a black cone whose tip bends over to the right,
+ * on a wide brim, with an orange band and yellow buckle. Each black shape is first painted 1px
+ * larger in lavender (C_WITCH_HAT_RIM) to form an outline, so the hat still reads against the
+ * Haunted Night sky and on a black cat. The apex stops at cy-87, inside drawCat()'s cy-88
+ * clear rect, the same budget as drawPartyHat().
+ *
+ * @param cx Cat center x (CAT_CX).
+ * @param cy Cat center y, including any bounce offset.
+ */
+static void drawWitchHat(int cx, int cy) {
+    // Outline pass: the same three shapes, 1px larger.
+    tft.fillEllipse(cx, cy - 63, 27, 5, C_WITCH_HAT_RIM);
+    tft.fillTriangle(cx - 15, cy - 62, cx + 13, cy - 62, cx + 5, cy - 87, C_WITCH_HAT_RIM);
+    tft.fillTriangle(cx + 5, cy - 87, cx + 16, cy - 81, cx + 3, cy - 79, C_WITCH_HAT_RIM);
+    // Brim, cone, bent tip.
+    tft.fillEllipse(cx, cy - 63, 26, 4, C_WITCH_HAT);
+    tft.fillTriangle(cx - 14, cy - 63, cx + 12, cy - 63, cx + 5, cy - 85, C_WITCH_HAT);
+    tft.fillTriangle(cx + 5, cy - 85, cx + 14, cy - 81, cx + 4, cy - 80, C_WITCH_HAT);
+    // Band + buckle.
+    tft.fillRect(cx - 12, cy - 70, 23, 4, C_WITCH_HAT_BAND);
+    tft.fillRect(cx - 3, cy - 71, 6, 6, C_CANDLE_GLOW);
+    tft.fillRect(cx - 1, cy - 69, 2, 2, C_WITCH_HAT);
+}
+
 // Glasses art (declared earlier alongside GLASSES[]). Called from drawCat() after the eyes
 // (unlike the bow above, which is drawn before them) so the round lenses sit over the eye
 // shapes drawn by drawEyeShapes() at (cx-15/+15, cy-37, r=11). Round rim + round lens per
@@ -749,6 +813,54 @@ static void drawBalloonSunglasses(int cx, int cy) {
     for (int w = -2; w <= 2; w++) {
         tft.drawLine(cx - 27, cy - 37 + w, cx - 43, cy - 47 + w, C_GLASSES_RIM);
         tft.drawLine(cx + 27, cy - 37 + w, cx + 43, cy - 47 + w, C_GLASSES_RIM);
+    }
+}
+
+/**
+ * One candy-corn lens for drawCandyCornSunglasses(): a point-down triangle split into three
+ * equal-height bands (yellow, orange, white tip) with a charcoal outline. The white tip needs
+ * that outline to stay visible on a white cat. Each band below the top one is drawn as the
+ * whole remaining triangle, and the band above is painted over it, so no trapezoid math is
+ * needed.
+ *
+ * @param lx Lens center x (the eye's x).
+ * @param top Y of the lens's wide top edge.
+ * @param tip Y of the lens's bottom point.
+ * @param hw Half-width of the top edge.
+ */
+static void drawCandyCornLens(int lx, int top, int tip, int hw) {
+    int h = tip - top;
+    tft.fillTriangle(lx - hw, top, lx + hw, top, lx, tip, TFT_WHITE);
+    // Orange covers the top two thirds: a triangle whose bottom edge sits at the 2/3 line,
+    // using the lens's own slope (half-width shrinks linearly to 0 at the tip).
+    int y2 = top + h * 2 / 3, hw2 = hw / 3;
+    tft.fillTriangle(lx - hw, top, lx + hw, top, lx - hw2, y2, C_PUMPKIN);
+    tft.fillTriangle(lx + hw, top, lx + hw2, y2, lx - hw2, y2, C_PUMPKIN);
+    int y1 = top + h / 3, hw1 = hw * 2 / 3;
+    tft.fillTriangle(lx - hw, top, lx + hw, top, lx - hw1, y1, C_CANDY_CORN_TOP);
+    tft.fillTriangle(lx + hw, top, lx + hw1, y1, lx - hw1, y1, C_CANDY_CORN_TOP);
+    tft.drawTriangle(lx - hw, top, lx + hw, top, lx, tip, C_DARK);
+}
+
+/**
+ * Theme-week-exclusive glasses (COM-379): a candy-corn lens over each eye, a charcoal bridge
+ * and orange temple arms. Same layering as drawSunglassesPinkRim(): called after the eyes, and
+ * the cat skips blinking while any glasses are equipped. The lens narrows to a point where
+ * the round eye doesn't, so the eye rect is first repainted with fur color (the same erase
+ * drawEyes() does) to keep the sclera from peeking out beside the tip. The lenses read as
+ * opaque shades. Like a blink, that erase also covers a tabby/calico head pattern in this rect.
+ *
+ * @param cx Cat center x (CAT_CX).
+ * @param cy Cat center y, including any bounce offset.
+ */
+static void drawCandyCornSunglasses(int cx, int cy) {
+    tft.fillRect(cx - 28, cy - 50, 56, 26, catBodyColor());
+    drawCandyCornLens(cx - 15, cy - 51, cy - 22, 15);
+    drawCandyCornLens(cx + 15, cy - 51, cy - 22, 15);
+    tft.fillRect(cx - 4, cy - 48, 8, 3, C_DARK);  // bridge
+    for (int w = -1; w <= 1; w++) {
+        tft.drawLine(cx - 30, cy - 48 + w, cx - 43, cy - 54 + w, C_WITCH_HAT_BAND);
+        tft.drawLine(cx + 30, cy - 48 + w, cx + 43, cy - 54 + w, C_WITCH_HAT_BAND);
     }
 }
 
@@ -1811,6 +1923,114 @@ static void drawBirthdayBackground(int x, int y, int w, int h) {
         tft.drawLine(b.x, b.y + 12, b.x, b.y + 26, C_DARK);  // string
         tft.fillEllipse(b.x, b.y, 9, 11, b.color);
         tft.fillTriangle(b.x - 2, b.y + 10, b.x + 2, b.y + 10, b.x, b.y + 13, b.color);  // knot
+    }
+
+    tft.resetViewport();
+}
+
+// Defined in the Theme weeks section below (it needs flashSaleNow()); declared here so
+// drawHauntedNightBackground() can decide whether to add the Oct 31 ghost.
+static bool isHalloweenGhostShown();
+
+// Fixed star scatter for Haunted Night, same idea as STARRY_NIGHT_STARS but sparser and dimmer
+// so the bats and moon stay the focus.
+struct HauntedPoint { int16_t x, y; };
+static constexpr HauntedPoint HAUNTED_STARS[] = {
+    {95, 52}, {150, 48}, {60, 120}, {176, 72}, {20, 160}, {190, 168}, {108, 196},
+};
+// Bat positions: the first crosses the moon (black on orange, the high-contrast one). The other
+// two sit in the only open sky left between the cat's ears and the zone's overlays: one left of
+// the left ear (clear of the boredom "Zz" column at x 48–70), one right of the right ear (above
+// the points text in the badge column).
+static constexpr HauntedPoint HAUNTED_BATS[] = {
+    {28, ANIMAL_Y + 34}, {76, ANIMAL_Y + 10}, {162, ANIMAL_Y + 10},
+};
+
+/**
+ * Draws one bat silhouette (about 22x9 px) centered on (x, y): a round body, two swept wing
+ * triangles with a scalloped trailing tip each, and two ear points. Always black, so bats are
+ * only placed where they contrast (over the moon or the mid-purple sky).
+ *
+ * @param x Body center x.
+ * @param y Body center y.
+ */
+static void drawBat(int x, int y) {
+    tft.fillCircle(x, y, 2, TFT_BLACK);
+    tft.fillTriangle(x - 1, y - 1, x - 9, y - 4, x - 7, y + 3, TFT_BLACK);
+    tft.fillTriangle(x + 1, y - 1, x + 9, y - 4, x + 7, y + 3, TFT_BLACK);
+    tft.fillTriangle(x - 9, y - 4, x - 5, y + 1, x - 11, y + 1, TFT_BLACK);
+    tft.fillTriangle(x + 9, y - 4, x + 5, y + 1, x + 11, y + 1, TFT_BLACK);
+    tft.fillTriangle(x - 2, y - 2, x - 1, y - 5, x, y - 2, TFT_BLACK);
+    tft.fillTriangle(x + 2, y - 2, x + 1, y - 5, x, y - 2, TFT_BLACK);
+}
+
+/**
+ * "Haunted Night" room theme (theme-week exclusive, COM-379), only owned while the Halloween
+ * theme week is applied. It draws a deep purple sky with a few faint stars, a big orange moon
+ * top-left (kept off the right-hand medal/points column), three bats and a dark hill along the
+ * floor. A lit jack-o'-lantern sits in the bottom-left corner. On Oct 31 (or in the admin
+ * Preview mode) it also draws a small white ghost on the left, between the moon and the Meds
+ * button. That ghost is plain backdrop art, not an animation:
+ * checkThemeWeekTransition() forces one full backdrop repaint when it appears or disappears.
+ * Uses the same setViewport/resetViewport clipping as drawStarryNightBackground(), so it can
+ * draw the whole scene on every small erase and only the requested slice reaches the screen.
+ *
+ * @param x Left edge of the rect to repaint.
+ * @param y Top edge of the rect to repaint (already clamped to the animal zone).
+ * @param w Width of the rect.
+ * @param h Height of the rect.
+ */
+static void drawHauntedNightBackground(int x, int y, int w, int h) {
+    tft.setViewport(x, y, w, h, false);
+    tft.fillRect(x, y, w, h, C_HAUNTED_SKY);
+
+    for (const HauntedPoint& s : HAUNTED_STARS) tft.drawPixel(s.x, s.y, C_HAUNTED_STAR);
+
+    // Moon, top-left, with three craters. Kept left of x=47 so the boredom "Zz" marks
+    // (drawBoredomZzz(), x 48–70) never print over it.
+    tft.fillCircle(26, ANIMAL_Y + 32, 20, C_HAUNTED_MOON);
+    tft.fillCircle(19, ANIMAL_Y + 27, 3, C_HAUNTED_CRATER);
+    tft.fillCircle(33, ANIMAL_Y + 40, 3, C_HAUNTED_CRATER);
+    tft.fillCircle(29, ANIMAL_Y + 22, 2, C_HAUNTED_CRATER);
+
+    for (const HauntedPoint& b : HAUNTED_BATS) drawBat(b.x, b.y);
+
+    // Two overlapping hill silhouettes along the floor. Their lower halves fall past the zone
+    // and the viewport clips them.
+    tft.fillEllipse(60, ANIMAL_Y + 182, 90, 20, C_HAUNTED_HILL);
+    tft.fillEllipse(210, ANIMAL_Y + 186, 70, 18, C_HAUNTED_HILL);
+
+    // Jack-o'-lantern, bottom-left on the hill: stem, ridged body, glowing triangle eyes and a
+    // wide mouth with two teeth. Deliberately night-only: it sits behind the Play button
+    // (PLAY_X/PLAY_Y), which covers it whenever the action buttons are showing. It only
+    // appears in the sleep-window peek scene (peekingAsleep), where drawAnimal() skips the
+    // buttons. There's no free floor spot that clears the buttons and name label, and the user
+    // chose to keep it as a night touch rather than move or drop it (COM-379).
+    tft.fillRect(28, ANIMAL_Y + 139, 4, 5, C_PUMPKIN_STEM);
+    tft.fillEllipse(30, ANIMAL_Y + 154, 15, 11, C_PUMPKIN);
+    tft.drawLine(24, ANIMAL_Y + 145, 23, ANIMAL_Y + 163, C_PUMPKIN_RIDGE);
+    tft.drawLine(36, ANIMAL_Y + 145, 37, ANIMAL_Y + 163, C_PUMPKIN_RIDGE);
+    tft.fillTriangle(21, ANIMAL_Y + 152, 27, ANIMAL_Y + 152, 24, ANIMAL_Y + 147, C_CANDLE_GLOW);
+    tft.fillTriangle(33, ANIMAL_Y + 152, 39, ANIMAL_Y + 152, 36, ANIMAL_Y + 147, C_CANDLE_GLOW);
+    tft.fillTriangle(20, ANIMAL_Y + 157, 40, ANIMAL_Y + 157, 30, ANIMAL_Y + 163, C_CANDLE_GLOW);
+    tft.fillRect(26, ANIMAL_Y + 157, 3, 2, C_PUMPKIN);
+    tft.fillRect(32, ANIMAL_Y + 157, 3, 2, C_PUMPKIN);
+
+    if (isHalloweenGhostShown()) {
+        // Ghost: round head, a body block and a three-bump hem, with hollow eyes and an "o" mouth.
+        // Left side, in the open sky between the moon (bottom y=ANIMAL_Y+52) and the Meds
+        // button (top y=MEDS_Y, shown while sick): spans x 23–45, y ANIMAL_Y+61..+90, clear
+        // of the "Zz" column (x>=48), the left sparkle (x>=61) and the whiskers (x>=74).
+        // It used to sit on the right, where the always-on Water button covered it.
+        const int gx = 34, gy = ANIMAL_Y + 76;
+        tft.fillCircle(gx, gy - 4, 11, C_GHOST);
+        tft.fillRect(gx - 11, gy - 4, 23, 14, C_GHOST);
+        tft.fillCircle(gx - 7, gy + 10, 4, C_GHOST);
+        tft.fillCircle(gx, gy + 10, 4, C_GHOST);
+        tft.fillCircle(gx + 7, gy + 10, 4, C_GHOST);
+        tft.fillEllipse(gx - 4, gy - 5, 2, 3, TFT_BLACK);
+        tft.fillEllipse(gx + 4, gy - 5, 2, 3, TFT_BLACK);
+        tft.fillCircle(gx, gy + 2, 2, TFT_BLACK);
     }
 
     tft.resetViewport();
@@ -3173,24 +3393,42 @@ static void assertStoreIdsUnique() {
     }
 }
 
-// ── Theme weeks (DIY-108) ────────────────────────────────────────────────────
-// Special theme weeks are entirely local/offline — the admin enters the date range directly
-// on the device's own 7-tap secret admin page (/config/admin/themeweek), which persists it in
-// ConfigManager (themeWeekBirthdayStartDate/EndDate below) and the device evaluates the
-// active/expired transition purely against its own NTP-synced clock. No network round trip,
-// no cat-buddy-api dependency — this intentionally replaced an earlier design that polled a
-// cat-buddy-api endpoint for the range (see DIY-108 history); the user decided against storing
-// theme-week schedules server-side at all.
+// ── Theme weeks (DIY-108, COM-379) ───────────────────────────────────────────
+// Special theme weeks are entirely local/offline. Everything is evaluated against the device's
+// own NTP-synced local clock (flashSaleNow()), with no network round trip and no cat-buddy-api
+// dependency. This intentionally replaced an earlier design that polled a cat-buddy-api
+// endpoint for the range (see DIY-108 history); the user decided against storing theme-week
+// schedules server-side at all.
 //
-// Only one theme, "birthday", is supported for now — hardcoded rather than a generic
-// multi-theme-key system, per the card's explicit scope for this pass. Future themes
-// (Christmas, etc.) are expected to each get their own hardcoded start/end config fields and
-// apply/revert branch later, not a generic table.
-static constexpr const char* THEME_WEEK_BIRTHDAY = "birthday";
+// Two themes exist, each hardcoded rather than driven by a generic table:
+//   - "birthday" (DIY-108): the admin enters a date range on the device's 7-tap secret admin
+//     page (/config/admin/themeweek), persisted as themeWeekBirthdayStartDate/EndDate.
+//   - "halloween" (COM-379): fixed to Oct 24–31 inclusive every year, so it needs no setup.
+//     The same admin page has an Auto/Preview/Off override (themeWeekHalloweenMode): Preview
+//     forces the full Oct 31 look on any date for on-device checks, Off skips it.
+// Only one theme is ever applied at a time. When both are active, Birthday wins (it's a range
+// someone scheduled on purpose; Halloween is automatic). See desiredThemeWeekKey().
+//
+// Each theme owns one exclusive entry in ACCESSORIES[], GLASSES[] and ROOM_THEMES[], appended
+// past *_STORE_COUNT so they're never buyable (see the *_IDX_* constants beside each catalog).
+// A future theme adds its entries to those blocks, bumps each *_STORE_COUNT subtraction, and
+// gets its own key, isXActive() check and themeWeekItems() branch.
+static constexpr const char* THEME_WEEK_BIRTHDAY  = "birthday";
+static constexpr const char* THEME_WEEK_HALLOWEEN = "halloween";
+
+// themeWeekHalloweenMode values (ConfigManager), set from the admin page.
+static constexpr uint8_t HALLOWEEN_MODE_AUTO    = 0;  // Oct 24–31 from the clock (default)
+static constexpr uint8_t HALLOWEEN_MODE_PREVIEW = 1;  // forced on, including the Oct 31 ghost
+static constexpr uint8_t HALLOWEEN_MODE_OFF     = 2;  // never applies
+
+// Halloween's fixed window as MMDD, inclusive at both ends, plus the ghost day.
+static constexpr int HALLOWEEN_START_MMDD = 1024;
+static constexpr int HALLOWEEN_END_MMDD   = 1031;
+static constexpr int HALLOWEEN_DAY_MMDD   = 1031;
 
 // Adds one calendar day to a YYYYMMDD date-only int (e.g. 20260831 -> 20260901) — used to turn
 // an inclusive admin-picked end date into the exclusive end-of-day boundary
-// isThemeWeekActive() compares against. Pure calendar-digit arithmetic: utcTmToEpoch() is used
+// isBirthdayWeekActive() compares against. Pure calendar-digit arithmetic: utcTmToEpoch() is used
 // only as a scratch epoch to get correct month/year rollover (via gmtime()), not as any real
 // UTC conversion — same trick parseIso8601ToLocalStamp() uses elsewhere for a different reason.
 static int32_t addOneCalendarDay(int32_t yyyymmdd) {
@@ -3207,7 +3445,7 @@ static int32_t addOneCalendarDay(int32_t yyyymmdd) {
 // date, i.e. an exclusive boundary) and compares directly — no timezone conversion at all,
 // since both sides are always the device's own local wall clock (the same clock/timezone the
 // on-screen time already uses).
-static bool isThemeWeekActive() {
+static bool isBirthdayWeekActive() {
     int32_t startDate = configMgr.config().themeWeekBirthdayStartDate;
     int32_t endDate   = configMgr.config().themeWeekBirthdayEndDate;
     if (startDate == 0 || endDate == 0) return false;
@@ -3218,48 +3456,126 @@ static bool isThemeWeekActive() {
     return now >= start && now < end;
 }
 
-// Grants + equips the birthday theme's exclusive cosmetics — called once per transition (see
-// checkThemeWeekTransition()), gated by activeThemeWeekKey so it never re-fires while already
-// applied. Snapshots the room theme the user had equipped beforehand so
-// revertThemeWeekCosmetics() can restore it exactly, regardless of anything the user changes
-// during the week.
-static void applyThemeWeekCosmetics() {
+/**
+ * Today's local month and day as MMDD (e.g. 1031), from the same local clock as the
+ * on-screen time.
+ *
+ * @return MMDD, or -1 while the clock hasn't NTP-synced yet.
+ */
+static int localTodayMmdd() {
+    int64_t now = flashSaleNow();
+    if (now < 0) return -1;
+    return (int)((now / 10000) % 10000);
+}
+
+/**
+ * Whether the Halloween theme week should be applied right now, ignoring any Birthday
+ * overlap (desiredThemeWeekKey() resolves that). Auto means Oct 24 00:00 up to Nov 1 00:00
+ * local time, every year. Preview is always on and Off is always off.
+ *
+ * @return true while Halloween is active.
+ */
+static bool isHalloweenWeekActive() {
+    uint8_t mode = configMgr.config().themeWeekHalloweenMode;
+    if (mode == HALLOWEEN_MODE_OFF) return false;
+    if (mode == HALLOWEEN_MODE_PREVIEW) return true;
+    int mmdd = localTodayMmdd();
+    return mmdd >= HALLOWEEN_START_MMDD && mmdd <= HALLOWEEN_END_MMDD;
+}
+
+/**
+ * Whether the Haunted Night backdrop should include the Oct 31 ghost: on Halloween day itself
+ * in Auto mode, or at any time in Preview mode so the full look can be checked on-device.
+ * It's only ever visible while Haunted Night is equipped, which needs the theme applied.
+ *
+ * @return true when drawHauntedNightBackground() should draw the ghost.
+ */
+static bool isHalloweenGhostShown() {
+    uint8_t mode = configMgr.config().themeWeekHalloweenMode;
+    if (mode == HALLOWEEN_MODE_PREVIEW) return true;
+    return mode == HALLOWEEN_MODE_AUTO && localTodayMmdd() == HALLOWEEN_DAY_MMDD;
+}
+
+/**
+ * Picks which theme week should be applied right now. Birthday wins over Halloween when both
+ * are active, so a birthday scheduled inside Oct 24–31 shows for its own days. Halloween then
+ * takes over for whatever's left of the week.
+ *
+ * @return THEME_WEEK_BIRTHDAY, THEME_WEEK_HALLOWEEN, or "" for none.
+ */
+static const char* desiredThemeWeekKey() {
+    if (isBirthdayWeekActive()) return THEME_WEEK_BIRTHDAY;
+    if (isHalloweenWeekActive()) return THEME_WEEK_HALLOWEEN;
+    return "";
+}
+
+// One theme week's exclusive catalog entries, as indices into ACCESSORIES[]/GLASSES[]/ROOM_THEMES[].
+struct ThemeWeekItems { int accessory, glasses, roomTheme; };
+
+/**
+ * Looks up the exclusive cosmetics that belong to a theme-week key.
+ *
+ * @param key A THEME_WEEK_* key, e.g. the persisted activeThemeWeekKey.
+ * @param out Filled with that theme's catalog indices on success.
+ * @return false for an unknown key, e.g. one written by a newer firmware's backup.
+ */
+static bool themeWeekItems(const String& key, ThemeWeekItems& out) {
+    if (key == THEME_WEEK_BIRTHDAY) {
+        out = {ACCESSORY_IDX_PARTY_HAT, GLASSES_IDX_BALLOON, ROOM_THEME_IDX_BIRTHDAY};
+        return true;
+    }
+    if (key == THEME_WEEK_HALLOWEEN) {
+        out = {ACCESSORY_IDX_WITCH_HAT, GLASSES_IDX_CANDY_CORN, ROOM_THEME_IDX_HAUNTED_NIGHT};
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Grants and force-equips one theme week's exclusive hat, glasses and room theme, and records
+ * `key` as activeThemeWeekKey. Called once per transition by checkThemeWeekTransition(), only
+ * when nothing is applied: a switch between themes reverts the old one first. It snapshots the
+ * room theme the user had equipped beforehand (preThemeWeekRoomTheme), so
+ * revertThemeWeekCosmetics() can restore it exactly, whatever the user changes during the week.
+ *
+ * @param key THEME_WEEK_BIRTHDAY or THEME_WEEK_HALLOWEEN.
+ */
+static void applyThemeWeekCosmetics(const char* key) {
+    ThemeWeekItems items;
+    if (!themeWeekItems(key, items)) return;
+
     configMgr.config().preThemeWeekRoomTheme = configMgr.config().equippedRoomTheme;
 
-    // Index of the theme-exclusive entry in each catalog — it's the first (and, today, only)
-    // entry after the store-purchasable ones, i.e. right at the *_STORE_COUNT index.
-    int hatIdx = ACCESSORY_STORE_COUNT;         // party_hat
-    int glassesIdx = GLASSES_STORE_COUNT;       // balloon_sunglasses
-    int themeIdx = ROOM_THEME_STORE_COUNT;      // birthday
+    configMgr.config().ownedAccessories |= (1 << items.accessory);
+    configMgr.config().equippedAccessory = items.accessory;
+    configMgr.config().ownedGlasses |= (1 << items.glasses);
+    configMgr.config().equippedGlasses = items.glasses;
+    configMgr.config().ownedRoomThemes |= (1 << items.roomTheme);
+    configMgr.config().equippedRoomTheme = items.roomTheme;
 
-    configMgr.config().ownedAccessories |= (1 << hatIdx);
-    configMgr.config().equippedAccessory = hatIdx;
-    configMgr.config().ownedGlasses |= (1 << glassesIdx);
-    configMgr.config().equippedGlasses = glassesIdx;
-    configMgr.config().ownedRoomThemes |= (1 << themeIdx);
-    configMgr.config().equippedRoomTheme = themeIdx;
-
-    configMgr.config().activeThemeWeekKey = THEME_WEEK_BIRTHDAY;
+    configMgr.config().activeThemeWeekKey = key;
     configMgr.save();
     dirty.animal = true;
     dirty.animalBg = true;  // the newly-equipped room theme changes the backdrop
 }
 
-// Force-removes the birthday theme's exclusive cosmetics and restores the pre-theme-week room
-// theme — called once when a previously-applied theme week ends. Only clears the owned bits;
-// equippedAccessory/equippedGlasses are left as-is since equippedAccessoryIndex()/
-// equippedGlassesIndex() already fall back gracefully once the owned bit clears (see their
-// "owned bit not set" branch) — the room theme is the one exception that needs an explicit
-// restore, since its fallback would pick "lowest owned theme" rather than "what the user had
-// before".
+/**
+ * Force-removes the currently applied theme week's exclusive cosmetics and restores the
+ * pre-theme-week room theme. Called once when a theme week ends, or just before switching to
+ * another one. Only clears the owned bits: equippedAccessory/equippedGlasses are left as-is,
+ * since equippedAccessoryIndex()/equippedGlassesIndex() already fall back gracefully once the
+ * owned bit clears (see their "owned bit not set" branch). The room theme is the one exception
+ * that needs an explicit restore, since its fallback would pick "lowest owned theme" rather
+ * than "what the user had before". An unknown key (from a newer firmware's backup) still
+ * restores the room theme and clears the key, so the device can't get stuck in that state.
+ */
 static void revertThemeWeekCosmetics() {
-    int hatIdx = ACCESSORY_STORE_COUNT;
-    int glassesIdx = GLASSES_STORE_COUNT;
-    int themeIdx = ROOM_THEME_STORE_COUNT;
-
-    configMgr.config().ownedAccessories &= ~(1 << hatIdx);
-    configMgr.config().ownedGlasses &= ~(1 << glassesIdx);
-    configMgr.config().ownedRoomThemes &= ~(1 << themeIdx);
+    ThemeWeekItems items;
+    if (themeWeekItems(configMgr.config().activeThemeWeekKey, items)) {
+        configMgr.config().ownedAccessories &= ~(1 << items.accessory);
+        configMgr.config().ownedGlasses &= ~(1 << items.glasses);
+        configMgr.config().ownedRoomThemes &= ~(1 << items.roomTheme);
+    }
 
     configMgr.config().equippedRoomTheme = configMgr.config().preThemeWeekRoomTheme;
     configMgr.config().preThemeWeekRoomTheme = EQUIP_NONE;
@@ -3269,27 +3585,38 @@ static void revertThemeWeekCosmetics() {
     dirty.animalBg = true;
 }
 
-// Checks the locally-configured birthday range against activeThemeWeekKey and fires
-// apply/revert on a transition. Pure local-state comparison (no network), so it's cheap
-// enough to call unconditionally from every loop() tick (see that call site) — this also
-// means the admin page's "Set"/"Clear" actions (handleConfigThemeWeekSetPost/ClearPost) can
-// call it directly too, so a schedule change takes effect on the very same request rather
-// than waiting for the next loop() tick.
+// Compares desiredThemeWeekKey() against activeThemeWeekKey and fires revert/apply on a
+// transition. A switch (Birthday ending mid-Halloween, or a birthday scheduled inside it) is a
+// revert followed by an apply: the revert restores the original room theme first, so the
+// apply re-snapshots that original and not the outgoing theme's backdrop. Pure local-state
+// comparison (no network), so it's cheap enough to call unconditionally from every loop()
+// tick (see that call site). The admin page's handlers call it directly too, so a schedule or
+// mode change takes effect on the very same request rather than waiting for the next tick.
+//
+// It also repaints the backdrop once when the Halloween ghost appears or disappears (local
+// midnight going into and out of Oct 31, or a Preview toggle), since that change otherwise
+// wouldn't redraw anything.
 //
 // Bails out entirely while the clock hasn't NTP-synced yet (flashSaleNow() < 0) rather than
-// letting isThemeWeekActive() report that as "inactive" — a device rebooting mid-theme-week
-// would otherwise see a false "not active" on the first few ticks after boot (before sync),
+// letting isBirthdayWeekActive()/isHalloweenWeekActive() report that as "inactive" — a device
+// rebooting mid-theme-week would otherwise see a false "not active" on the first few ticks after boot (before sync),
 // fire a premature revertThemeWeekCosmetics(), then re-apply moments later once the clock
 // catches up. "Clock unknown" must mean "leave whatever's currently applied alone," not
 // "treat the theme as over."
 static void checkThemeWeekTransition() {
     if (flashSaleNow() < 0) return;
-    bool active = isThemeWeekActive();
-    bool applied = configMgr.config().activeThemeWeekKey == THEME_WEEK_BIRTHDAY;
-    if (active && !applied) {
-        applyThemeWeekCosmetics();
-    } else if (!active && applied) {
-        revertThemeWeekCosmetics();
+    const char* desired = desiredThemeWeekKey();
+    const String& applied = configMgr.config().activeThemeWeekKey;
+    if (applied != desired) {
+        if (applied.length() > 0) revertThemeWeekCosmetics();
+        if (desired[0] != '\0') applyThemeWeekCosmetics(desired);
+    }
+
+    static bool ghostShown = false;
+    bool ghost = isHalloweenGhostShown();
+    if (ghost != ghostShown) {
+        ghostShown = ghost;
+        if (equippedRoomThemeIndex() == ROOM_THEME_IDX_HAUNTED_NIGHT) dirty.animalBg = true;
     }
 }
 
@@ -3412,7 +3739,7 @@ body{font-family:sans-serif;max-width:500px;margin:0 auto;padding:20px;backgroun
 h2{margin-top:0}
 h3{margin:20px 0 10px;font-size:1rem;color:#aaa;border-bottom:1px solid #333;padding-bottom:6px}
 label{display:block;font-size:.82rem;color:#888;margin-bottom:2px}
-input{display:block;width:100%;padding:8px;margin-bottom:14px;background:#1e1e1e;color:#ddd;border:1px solid #333;border-radius:5px}
+input,select{display:block;width:100%;padding:8px;margin-bottom:14px;background:#1e1e1e;color:#ddd;border:1px solid #333;border-radius:5px}
 .row{display:flex;gap:8px}
 .row input{flex:1;margin-bottom:0}
 button{padding:9px 16px;background:#0070f3;color:#fff;border:none;border-radius:5px;cursor:pointer}
@@ -3890,12 +4217,13 @@ static const char CONFIG_THEMEWEEK_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <a class="back" href="/config/admin">&larr; Admin</a>
 <h2>Theme Week</h2>
 %%MSG%%
-<p class="dim">Schedules the birthday theme (DIY-108) — the device shows its cosmetics for the whole of both days picked below, then reverts automatically. Stored on this device only, evaluated against its own clock/timezone (the same one the clock screen uses) — nothing is sent anywhere.</p>
+<p class="dim">Seasonal cosmetics for the cat. While a theme week is on, its hat, glasses and room theme are added and equipped, then removed again when it ends (the previous room theme comes back). Everything is stored on this device and checked against its own clock/timezone, the same one the clock screen uses. Nothing is sent anywhere. If a birthday overlaps Halloween, the birthday shows on its days.</p>
 
 <h3>Status</h3>
 <p>%%STATUS%%</p>
+<p>%%HALLOWEEN_STATUS%%</p>
 
-<h3>Schedule</h3>
+<h3>Birthday</h3>
 <form method="POST" action="/config/admin/themeweek/set">
 <label>Start date<input type="date" name="start" value="%%START_VALUE%%" required></label>
 <label>End date<input type="date" name="end" value="%%END_VALUE%%" required></label>
@@ -3904,8 +4232,19 @@ static const char CONFIG_THEMEWEEK_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <p class="dim" style="font-size:.82rem">Dates are calendar days, not a specific time — the theme is active from the start of the start date through the end of the end date. Scheduling replaces any range set previously.</p>
 
 <form method="POST" action="/config/admin/themeweek/clear" style="margin-top:12px">
-<button type="submit" style="width:100%">Clear scheduled/active theme week</button>
+<button type="submit" style="width:100%">Clear birthday</button>
 </form>
+
+<h3>Halloween</h3>
+<form method="POST" action="/config/admin/themeweek/halloween">
+<label>Mode<select name="mode">
+<option value="auto"%%HW_AUTO%%>Auto (Oct 24 &ndash; Oct 31)</option>
+<option value="preview"%%HW_PREVIEW%%>Preview now (includes the Oct 31 ghost)</option>
+<option value="off"%%HW_OFF%%>Off</option>
+</select></label>
+<button type="submit" style="width:100%">Save</button>
+</form>
+<p class="dim" style="font-size:.82rem">Preview stays on until you switch back to Auto.</p>
 </body></html>
 )html";
 
@@ -4682,10 +5021,10 @@ static String formatDateRange(int32_t startDate, int32_t endDate) {
 static String themeWeekStatusText() {
     int32_t startDate = configMgr.config().themeWeekBirthdayStartDate;
     int32_t endDate   = configMgr.config().themeWeekBirthdayEndDate;
-    if (startDate == 0 || endDate == 0) return "No theme week scheduled.";
+    if (startDate == 0 || endDate == 0) return "No birthday scheduled.";
 
     String s = "Birthday: <strong>" + formatDateRange(startDate, endDate) + "</strong>";
-    if (isThemeWeekActive()) {
+    if (isBirthdayWeekActive()) {
         s += " (currently active).";
     } else {
         int64_t now = flashSaleNow();
@@ -4695,15 +5034,42 @@ static String themeWeekStatusText() {
     return s;
 }
 
+/**
+ * One-line summary of the Halloween theme week for the /config/admin/themeweek page: the
+ * override mode, and in Auto mode whether it's active now or held off by an overlapping
+ * birthday.
+ *
+ * @return HTML-safe status text.
+ */
+static String halloweenStatusText() {
+    uint8_t mode = configMgr.config().themeWeekHalloweenMode;
+    if (mode == HALLOWEEN_MODE_OFF) return "Halloween: <strong>off</strong> (won't apply).";
+    if (mode == HALLOWEEN_MODE_PREVIEW) {
+        return String("Halloween: <strong>preview</strong> (forced on, with the Oct 31 ghost)") +
+               (isBirthdayWeekActive() ? ", waiting for the birthday to end." : ".");
+    }
+    String s = "Halloween: <strong>Oct 24 \xE2\x80\x93 Oct 31</strong>, automatic";
+    if (!isHalloweenWeekActive())      s += " (not active now).";
+    else if (isBirthdayWeekActive())   s += " (birthday is showing instead).";
+    else                               s += " (currently active).";
+    return s;
+}
+
 static void handleConfigThemeWeekGet() {
     String page = String(FPSTR(CONFIG_THEMEWEEK_HTML));
     page.replace("%%STYLE%%", String(FPSTR(CONFIG_STYLE)));
     page.replace("%%STATUS%%", themeWeekStatusText());
+    page.replace("%%HALLOWEEN_STATUS%%", halloweenStatusText());
+    uint8_t mode = configMgr.config().themeWeekHalloweenMode;
+    page.replace("%%HW_AUTO%%",    mode == HALLOWEEN_MODE_AUTO    ? " selected" : "");
+    page.replace("%%HW_PREVIEW%%", mode == HALLOWEEN_MODE_PREVIEW ? " selected" : "");
+    page.replace("%%HW_OFF%%",     mode == HALLOWEEN_MODE_OFF     ? " selected" : "");
     page.replace("%%START_VALUE%%", dateToInputValue(configMgr.config().themeWeekBirthdayStartDate));
     page.replace("%%END_VALUE%%", dateToInputValue(configMgr.config().themeWeekBirthdayEndDate));
     String msg = "";
     if (wm.server->hasArg("scheduled")) msg = "<div class='banner ok'>Scheduled — see status below.</div>";
     else if (wm.server->hasArg("cleared")) msg = "<div class='banner ok'>Cleared.</div>";
+    else if (wm.server->hasArg("halloween")) msg = "<div class='banner ok'>Halloween mode saved.</div>";
     else if (wm.server->hasArg("err")) msg = "<div class='banner err'>End date must be on or after the start date.</div>";
     page.replace("%%MSG%%", msg);
     sendHtmlPage(page);
@@ -4731,6 +5097,29 @@ static void handleConfigThemeWeekClearPost() {
     configMgr.save();
     checkThemeWeekTransition();  // revert immediately if it was currently applied
     wm.server->sendHeader("Location", "/config/admin/themeweek?cleared=1");
+    wm.server->send(302, "text/plain", "");
+}
+
+/**
+ * POST /config/admin/themeweek/halloween: saves the Halloween override (`mode` = auto,
+ * preview or off) and runs checkThemeWeekTransition() straight away, so Preview applies and
+ * Off reverts on this request. Redirects back to the theme-week page, or answers 400 for an
+ * unknown mode.
+ */
+static void handleConfigThemeWeekHalloweenPost() {
+    String m = wm.server->arg("mode");
+    uint8_t mode;
+    if (m == "auto")         mode = HALLOWEEN_MODE_AUTO;
+    else if (m == "preview") mode = HALLOWEEN_MODE_PREVIEW;
+    else if (m == "off")     mode = HALLOWEEN_MODE_OFF;
+    else {
+        wm.server->send(400, "text/plain", "Invalid mode");
+        return;
+    }
+    configMgr.config().themeWeekHalloweenMode = mode;
+    configMgr.save();
+    checkThemeWeekTransition();
+    wm.server->sendHeader("Location", "/config/admin/themeweek?halloween=1");
     wm.server->send(302, "text/plain", "");
 }
 
@@ -5565,6 +5954,7 @@ static void runWiFiManager(ConfigManager& cfg) {
         wm.server->on("/config/admin/themeweek",       HTTP_GET,  handleConfigThemeWeekGet);
         wm.server->on("/config/admin/themeweek/set",   HTTP_POST, handleConfigThemeWeekSetPost);
         wm.server->on("/config/admin/themeweek/clear", HTTP_POST, handleConfigThemeWeekClearPost);
+        wm.server->on("/config/admin/themeweek/halloween", HTTP_POST, handleConfigThemeWeekHalloweenPost);
         wm.server->on("/save-config/setup",        HTTP_POST, handleSetupPost);
         wm.server->on("/save-config/cat",          HTTP_POST, handleConfigCatPost);
         wm.server->on("/save-config/city",         HTTP_POST, handleConfigCityPost);
@@ -5666,10 +6056,10 @@ void loop() {
         fetchFlashSale();
     }
 
-    // Theme-week transition check (DIY-108) — entirely local (no network involved), so it
-    // just runs every tick rather than being gated behind a poll interval like the flash-sale
-    // check above. The admin page's Set/Clear handlers also call this directly so a schedule
-    // change takes effect on the same request rather than waiting for the next tick.
+    // Theme-week transition check (DIY-108, COM-379) — entirely local (no network involved),
+    // so it just runs every tick rather than being gated behind a poll interval like the
+    // flash-sale check above. The admin page's Set/Clear/Halloween-mode handlers also call this
+    // directly so a change takes effect on the same request rather than waiting for the next tick.
     checkThemeWeekTransition();
 
     // First-run setup: hold on the "complete setup at <ip>" screen until the wizard (cat

@@ -540,6 +540,62 @@ hardcoded additions later, not a generic system built now.
   cases (a same-day range, an already-past range immediately reverting on
   submit).
 
+## Theme Weeks — Halloween Theme (COM-379, 2026-10-07)
+
+The second theme week, built on the DIY-108 mechanism. It's on from **Oct 24 00:00 to
+Nov 1 00:00 local time, every year**, with no setup, and reverts on its own afterwards.
+
+- **Cosmetics** (all exclusive, appended past `*_STORE_COUNT`):
+  - **Haunted Night** room theme: a deep purple sky with a few faint stars and a big orange
+    moon top-left. The moon stays clear of the level medal and points column. Three black
+    bats (one across the moon), a dark hill along the floor, and a lit jack-o'-lantern in the
+    bottom-left corner.
+  - **Witch Hat**: a black cone with a bent tip and an orange band with a yellow buckle. It has
+    a 1px lavender outline, so it reads against the dark sky and on a black cat.
+  - **Candy Corn Sunglasses**: yellow/orange/white point-down lenses with a charcoal outline.
+    The eye rect is repainted with fur color first, so no sclera peeks out beside the narrow
+    tip. On tabby/calico cats this covers the head pattern in that rect, the same as a blink.
+  - **Jack-o'-lantern is night-only by choice.** It sits behind the Play button, so it only
+    shows in the sleep-window peek scene, where the action buttons are hidden. No floor spot
+    clears the buttons and name label, and the user chose to keep it as a night touch.
+  - **Oct 31 only**: a small white ghost on the left side of Haunted Night, in open sky
+    between the moon and the (sick-only) Meds button. It's plain backdrop art, not an animation.
+    It first sat on the right, but on hardware the always-on Water button covered it. Placement
+    has to avoid every animal-zone overlay, not just the cat: the Play/Meds/Water/Treat
+    buttons, the boredom "Zz" marks (x 48–70 on the left), the sparkle ring and the badge
+    column. The moon was shrunk to r20 for the same reason, to keep it clear of the Zz.
+    `checkThemeWeekTransition()` forces one backdrop repaint when it appears or disappears.
+- **A stuffy was deliberately skipped.** The card offered a pumpkin or ghost stuffy, but a
+  stuffy needs four poses (peeking/full/held/held-peeking). That's roughly 4× the art and
+  flash, and the same complexity the cupcake was dropped for in DIY-108.
+- **Admin override** on `/config/admin/themeweek`, persisted as `themeWeekHalloweenMode` and
+  included in backups:
+  - **Auto** (default): uses the Oct 24–31 dates.
+  - **Preview**: forces the full Oct 31 look, ghost included, on any date, for on-device
+    checks before the 24th. It stays on until switched back.
+  - **Off**: skips Halloween entirely.
+- **Overlap: Birthday wins.** `desiredThemeWeekKey()` picks birthday, then halloween, then
+  none. When the desired key differs from `activeThemeWeekKey`, it reverts the old theme and
+  then applies the new one. Because the revert restores `preThemeWeekRoomTheme` first, a
+  Birthday→Halloween hand-off still ends on Nov 1 with the user's original room theme, not the
+  Birthday backdrop.
+- **Exclusive-entry indexing changed.** DIY-108 assumed one exclusive entry per catalog
+  (`*_STORE_COUNT = *_COUNT - 1`, and the item index equal to `*_STORE_COUNT`). Each catalog
+  now subtracts the size of its exclusive block (2), and apply/revert use named indices
+  (`ACCESSORY_IDX_*`, `GLASSES_IDX_*`, `ROOM_THEME_IDX_*`) looked up by key in
+  `themeWeekItems()`. The `*_STORE_COUNT` values themselves didn't change, so the "new store
+  items!" badge isn't affected. Party-hat/balloon/birthday indices are unchanged too, so a
+  device upgraded mid-Birthday reverts correctly.
+- **Flash** (`pio run` size report):
+
+| Board | Before | After | Delta | % used |
+|---|---|---|---|---|
+| `cyd` | 1,285,205 B | 1,289,869 B | +4,664 B | 98.1% → **98.4%** (~20.9KB left) |
+| `freenove-s3` | 1,241,957 B | 1,246,597 B | +4,640 B | 37.2% → 37.3% |
+
+  `cyd` is now very close to full. The next feature on that board will most likely need to
+  trim something first.
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`
