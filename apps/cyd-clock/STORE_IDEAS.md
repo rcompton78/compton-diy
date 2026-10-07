@@ -18,7 +18,7 @@ easy to slot in, no other plumbing changes needed.
 - Hats/accessories worn directly on the cat (party hat, bow, tiny crown) rather than a stuffy beside it — a different equip slot, more visible since it's on the cat itself
 - Blanket patterns (polka dot, plaid) instead of just solid colors — reuses the existing blanket color-catalog mechanic with an extra draw variant
 
-Done: room/background themes (DIY-38) — `RoomTheme`/`ROOM_THEMES[]` in `apps/cyd-clock/src/main.cpp`, rendered behind the cat at all times (not just the sleep scene). Five flat-color themes pairing with the blanket palette, plus a "Starry Night" theme (moon + fixed star field) as the first real-art entry. More real-art themes (fireplace, etc.) are still open — reuse `drawStarryNightBackground()`'s `tft.setViewport()` clipping pattern for any theme with per-pixel art rather than a flat fill.
+Done: room/background themes (DIY-38) — `RoomTheme`/`ROOM_THEMES[]` in `apps/cyd-clock/src/main.cpp`, rendered behind the cat at all times (not just the sleep scene). Five flat-color themes pairing with the blanket palette, plus a "Starry Night" theme (moon + fixed star field) as the first real-art entry. Later real-art themes: "6-7" (DIY-87), "Clear Sky" (DIY-90) and the legendary "Hogwarts at Night" (COM-378, castle silhouette with flickering windows and a rare shooting star). More (fireplace, etc.) are still open — reuse `drawStarryNightBackground()`'s `tft.setViewport()` clipping pattern for any theme with per-pixel art rather than a flat fill.
 
 ## Mechanics-flavored (ties into the points economy)
 
@@ -29,7 +29,7 @@ Done: room/background themes (DIY-38) — `RoomTheme`/`ROOM_THEMES[]` in `apps/c
 ## Theme-week exclusives
 
 Theme weeks (DIY-108 Birthday, COM-379 Halloween) hand out cosmetics that can't be bought:
-they're appended past `*_STORE_COUNT` in their catalogs and granted/revoked by date. Ideas
+they're appended to their catalogs with cost 0 (or past `GLASSES_STORE_COUNT` in `GLASSES[]`) and granted/revoked by date. Ideas
 left on the table:
 
 - Pumpkin or ghost **stuffy** for Halloween. It was skipped because a stuffy needs four poses;
@@ -52,5 +52,10 @@ COM-382 introduced the legendary tier: `STORE_COST_LEGENDARY` (350 points, the t
   - a gold star or sheriff badge;
   - a Pokémon gym badge to go with the Pikachu/Eevee stuffies.
 
-Still planned on the same tier: COM-375 (Glory the RainWing), COM-376 (Golden Snitch), COM-377
-(Shiny Mew) and COM-378 (Hogwarts at Night room theme).
+- **Hogwarts at Night** room theme (COM-378): a castle on the Black Lake under a starry sky,
+  with windows that flicker and a rare shooting star. Its two animations are the first periodic
+  partial redraw of a room backdrop, so the flickering jack-o'-lantern eyes idea above could
+  reuse the same pattern (`updateHogwartsNightAnim()`).
+
+Still planned on the same tier: COM-375 (Glory the RainWing), COM-376 (Golden Snitch) and COM-377
+(Shiny Mew).

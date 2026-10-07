@@ -663,6 +663,52 @@ on every fur colour and room theme with the store listing, is in the COM-382 Art
   `handleConfigStoreGet()`/`handleConfigDressGet()`, which repeat the same row markup in every
   section and could share one row builder.
 
+## Legendary Room Theme — Hogwarts at Night (COM-378, 2026-10-07)
+
+The third legendary item and the first legendary room theme: a navy sky with Starry Night's star
+field and a small moon, and a black castle silhouette standing on the Black Lake. It has a
+crenellated curtain wall, a great hall with two keep towers behind the cat, two tall towers in
+the gaps between the buttons and the cat, and two turrets peeking over the Meds and Water buttons,
+with 20 warm windows. A mockup with both animations is in the COM-378 Artifact.
+
+- **Price and store.** It reuses `STORE_COST_LEGENDARY` (350), so it gets the ★ LEGENDARY tag from
+  `storeItemTags()` and goes through `flashSalePrice()` like every row. The label is gold
+  (`#E8B030`, the crest's gold).
+- **Room theme indexing changed, same as COM-382's accessories.** The theme is appended after the
+  Birthday/Haunted Night theme-week entries (index 11), so `ROOM_THEMES[]`' purchasable entries
+  aren't a contiguous prefix any more. `isStoreRoomTheme()` (store-purchasable ⇔ cost > 0) now
+  filters the store listing and the purchase lookup. `ROOM_THEME_STORE_COUNT` is counted from it
+  (10, so the "new store items!" flash fires once), and `ROOM_THEME_IDX_BIRTHDAY`/`HAUNTED_NIGHT`
+  are fixed at 9 and 10, with a `static_assert` that both cost 0. Ownership, equip, backup and
+  restore already went through the full catalog and the `uint16_t` bitmask, so they needed no
+  change.
+- **The lake is the sky colour on purpose.** The cat's name sits on it, and the name, the "Zz"
+  marks and the points text all print over a box of the theme's `bgColor`. With the lake and sky
+  both `C_HOGWARTS_SKY` there are no boxes. The castle art also stays out of the right-hand "Zz"
+  box (x 188–210, y 114–128) and the badge column's text (x≥168, y<112).
+- **Animations** (`updateHogwartsNightAnim()`, called every awake `loop()` tick):
+  - *Window flicker:* every 6–15 s one of 8 windows goes dark for 1–3 s.
+  - *Shooting star:* every 1–3 min a streak crosses the top-left sky in 9 frames (about 0.5 s).
+  - Both repaint only their own pixels through `zoneFillRect()`, so they're limited to spots
+    nothing is drawn over while they run. The flicker windows are in the tall towers
+    (x 56–69 and 171–184, the gaps between the side buttons and the cat's clear rect) and in
+    the turret tops above the Meds/Water buttons. The star's path is above the moon and the
+    left "Zz", left of the cat's clear rect.
+  - `drawHogwartsNightBackground()` reads the animation state (`hogwartsDarkWindow`,
+    `hogwartsStarFrame`), so the many small erases elsewhere in the zone never bring back a dark
+    window or wipe a star mid-flight.
+  - The state resets while another theme is equipped. The animations pause in the sleep-window
+    peek scene: a star already in flight is dropped there, with one full backdrop repaint.
+- **Flash** (`pio run` size report):
+
+| Board | Before | After | Delta | % used |
+|---|---|---|---|---|
+| `cyd` | 1,293,149 B | 1,294,077 B | +928 B | 98.7% → **98.7%** (~16.6KB left) |
+| `freenove-s3` | 1,249,841 B | 1,250,781 B | +940 B | 37.4% → 37.4% |
+
+  It's cheap because the stars reuse Starry Night's table, and the towers and windows are small
+  data tables drawn by two loops.
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`
