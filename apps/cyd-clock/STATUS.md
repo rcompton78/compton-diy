@@ -709,6 +709,46 @@ with 20 warm windows. A mockup with both animations is in the COM-378 Artifact.
   It's cheap because the stars reuse Starry Night's table, and the towers and windows are small
   data tables drawn by two loops.
 
+## Build-Config Flash Diet (COM-386, 2026-10-07)
+
+An audit of the `cyd` image found the build config, not our own code, held the easiest
+headroom. The changes below are build-config only, applied to both envs in `platformio.ini`,
+and nothing on screen changes:
+
+- **Unused TFT_eSPI fonts dropped** (~12.6KB): `LOAD_FONT7`, `LOAD_FONT8`, `LOAD_GFXFF` and
+  `SMOOTH_FONT`. Every `drawString`/`textWidth` call uses font 1, 2, 4 or 6 only. Re-add the
+  matching flag before drawing with any other font, because an unloaded font maps to TFT_eSPI's
+  empty `chrtbl_null` entry and draws nothing, rather than failing the build.
+- **`CORE_DEBUG_LEVEL=0`** (~30.8KB): removes the Arduino core/WiFi/HTTP/FS `log_e` strings
+  (the prebuilt default is ERROR). The firmware's own `Serial.print` output is unaffected.
+- **`WM_NODEBUG`** (~18.7KB): removes WiFiManager's serial debug output.
+- **`-Wl,--wrap=mbedtls_strerror` / `-Wl,--wrap=esp_err_to_name`** (~22.6KB):
+  `src/link_stubs.c` replaces mbedtls' `error.c` table with a stub that prints the numeric
+  code (e.g. `mbedtls error -0x7280`), and esp-idf's error-name table with one that names
+  only the generic `ESP_ERR_*` codes (0x101–0x10C). Other codes read `UNKNOWN ERROR`, or the
+  WiFi/flash range. The esp-idf stub returns string literals only, never a buffer, because
+  callers rely on the original's static lifetime and reentrancy (two calls in one log line,
+  ISRs, early boot). `ESP_ERROR_CHECK` panics still print the hex code alongside the name.
+
+- **Flash** (`pio run` size report, dev build):
+
+| Board | Before | After | Delta | % used |
+|---|---|---|---|---|
+| `cyd` | 1,293,557 B | 1,209,429 B | −84,128 B | 98.7% → **92.3%** (~99KB left) |
+| `freenove-s3` | 1,250,189 B | 1,162,993 B | −87,196 B | 37.4% → 34.8% |
+
+  Measured on top of COM-378 with `RELEASE_VERSION=dev` and an empty token. A release build's
+  longer version and token strings add a few hundred bytes, which is why COM-378's own
+  figure above reads 1,294,077 B.
+
+The next candidates, measured in the audit but deliberately left out of this card, are a
+shared row builder for the store/dress handlers (COM-387, ~4.5KB measured for the GET pages
+alone), deflate-compressing the config HTML (~11KB, estimate), dropping `-fstack-protector`
+(~11–14KB, at the cost of stack-overflow detection), and, as a last resort, the
+`min_spiffs.csv` partition layout (a 1.875MB app slot). That last one needs a USB/web reflash
+of every `cyd` device, wipes the LittleFS config unless the user backs it up first, and needs
+`generate_release.py`'s LittleFS-offset lookup fixed.
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`
