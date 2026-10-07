@@ -731,8 +731,8 @@ and nothing on screen changes:
 
 | Board | Before | After | Delta | % used |
 |---|---|---|---|---|
-| `cyd` | 1,293,557 B | 1,209,021 B | −84,536 B | 98.7% → **92.2%** (~99KB left) |
-| `freenove-s3` | 1,250,189 B | 1,162,581 B | −87,608 B | 37.4% → 34.8% |
+| `cyd` | 1,293,557 B | 1,209,049 B | −84,508 B | 98.7% → **92.2%** (~99KB left) |
+| `freenove-s3` | 1,250,189 B | 1,162,609 B | −87,580 B | 37.4% → 34.8% |
 
   Measured on top of COM-378 with `RELEASE_VERSION=dev` and an empty token. A release build's
   longer version and token strings add a few hundred bytes, which is why COM-378's own
