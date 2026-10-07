@@ -458,7 +458,7 @@ static constexpr Badge BADGES[] = {
 static constexpr int BADGE_COUNT = sizeof(BADGES) / sizeof(BADGES[0]);
 static_assert(BADGE_COUNT <= 8, "ownedBadges bitmask is uint8_t");
 // Count of store-purchasable badges. No theme-week badges exist yet, so it's the whole catalog;
-// if one is ever appended, subtract it here like ACCESSORY_STORE_COUNT does.
+// if one is ever appended, subtract it here like GLASSES_STORE_COUNT does.
 static constexpr int BADGE_STORE_COUNT = BADGE_COUNT;
 
 // Forward declarations: each stuffy's sleep-scene art, defined further below alongside
