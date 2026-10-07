@@ -44,7 +44,7 @@ struct AppConfig {
                                       // Kept as its own bitmask rather than widening ownedStuffies to 2-bit
                                       // counts, so old on-disk configs just default this to 0 with no
                                       // migration needed. Owning a 2nd copy is what allows the same stuffy
-                                      // to be equipped on both arms at once — see buildStuffyRadioOptions().
+                                      // to be equipped on both arms at once — see appendStuffyRadios().
     uint8_t seenStuffyCount       = 0;  // Highest STUFFY_COUNT the store page has shown the user
     bool    rightArmSlotUnlocked = false;  // Store purchase: one-time unlock, independent of ownedStuffies —
                                             // any already-owned stuffy can be equipped here too
@@ -125,7 +125,11 @@ struct AppConfig {
 class ConfigManager {
 public:
     bool begin();
+    // Reads config.json into config(). False (config() untouched) if the file is missing,
+    // can't be opened or doesn't parse.
     bool load();
+    // Writes config() to config.json. False if the file can't be opened or the write comes up
+    // short (e.g. a full filesystem), so callers can roll back in-memory changes.
     bool save();
     AppConfig& config() { return _config; }
 

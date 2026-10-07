@@ -42,7 +42,7 @@ left on the table:
 ## Legendary tier
 
 COM-382 introduced the legendary tier: `STORE_COST_LEGENDARY` (350 points, the top tier above Pikachu/Eevee's 300) and a gold
-"★ LEGENDARY" store tag for anything priced at or above it (`storeItemTags()`). Shipped so far:
+"★ LEGENDARY" store tag for anything priced at or above it (`appendStoreItemTags()`). Shipped so far:
 
 - **Sorting Hat** (head accessory).
 - **Hogwarts Crest**, the first item in the new **chest badge** slot (`BADGES[]`). The slot is
