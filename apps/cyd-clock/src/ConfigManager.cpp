@@ -266,8 +266,10 @@ bool ConfigManager::load() {
     String json;
     json.reserve(f.size());
     char buf[128];
-    size_t n;
-    while ((n = f.read((uint8_t*)buf, sizeof(buf))) > 0) json.concat(buf, n);
+    // Signed on purpose: File::read() is declared size_t but returns -1 for an invalid file,
+    // which would wrap to SIZE_MAX and never end the loop.
+    int n;
+    while ((n = f.read((uint8_t*)buf, sizeof(buf))) > 0) json.concat(buf, (unsigned int)n);
     f.close();
     return importBackupJson(json);
 }
