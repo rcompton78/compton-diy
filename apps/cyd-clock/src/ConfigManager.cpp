@@ -260,27 +260,57 @@ void ConfigManager::toJson(JsonDocument& doc) const {
 // directly, so only ArduinoJson's String reader/writer gets compiled in (backup import/export
 // already needs it) instead of a second fs::File copy of each (COM-387 flash diet). config.json
 // is a few KB, so the transient buffer is cheap.
-bool ConfigManager::load() {
-    File f = LittleFS.open(CONFIG_FILE, "r");
+static bool readFile(const char* path, String& out) {
+    File f = LittleFS.open(path, "r");
     if (!f) return false;
-    String json;
-    json.reserve(f.size());
+    out = String();
+    out.reserve(f.size());
     char buf[128];
     // Signed on purpose: File::read() is declared size_t but returns -1 for an invalid file,
     // which would wrap to SIZE_MAX and never end the loop.
     int n;
-    while ((n = f.read((uint8_t*)buf, sizeof(buf))) > 0) json.concat(buf, (unsigned int)n);
+    while ((n = f.read((uint8_t*)buf, sizeof(buf))) > 0) out.concat(buf, (unsigned int)n);
     f.close();
-    return importBackupJson(json);
+    return true;
 }
 
+// save() never writes CONFIG_FILE in place (COM-388), so it always holds the last good save.
+// A leftover CONFIG_TMP_FILE is either a save that died before its rename or a partial one;
+// a partial JSON object can't parse, so whichever of the two parses is a complete config.
+bool ConfigManager::load() {
+    String json;
+    if (readFile(CONFIG_FILE, json) && importBackupJson(json)) {
+        if (LittleFS.exists(CONFIG_TMP_FILE)) LittleFS.remove(CONFIG_TMP_FILE);
+        return true;
+    }
+    // Only reachable if CONFIG_FILE is missing (a first-ever save that died before its rename)
+    // or unparseable (left truncated by pre-COM-388 firmware's in-place write).
+    if (readFile(CONFIG_TMP_FILE, json) && importBackupJson(json)) {
+        LittleFS.rename(CONFIG_TMP_FILE, CONFIG_FILE);
+        return true;
+    }
+    return false;
+}
+
+// Atomic: writes CONFIG_TMP_FILE, reads it back, then renames it over CONFIG_FILE. esp_littlefs
+// (1.14.1 in this core) renames over an existing file in a single littlefs metadata commit, so
+// there's no remove-then-rename window; it only refuses while either file is open. A power
+// cut or full filesystem at any point leaves CONFIG_FILE as either the old or the new config.
+// The read-back is what actually detects a full filesystem: fs::File is a 4KB fully-buffered
+// stdio stream, so a few-KB config's write() reports every byte as written and the real
+// failure happens in fclose(), which File::close() discards.
 bool ConfigManager::save() {
     String json = exportBackupJson();
-    File f = LittleFS.open(CONFIG_FILE, "w");
+    File f = LittleFS.open(CONFIG_TMP_FILE, "w");
     if (!f) return false;
     size_t written = f.write((const uint8_t*)json.c_str(), json.length());
     f.close();
-    return written == json.length();  // a short write (e.g. a full filesystem) is a failed save
+    String readBack;
+    bool ok = written == json.length() &&
+              readFile(CONFIG_TMP_FILE, readBack) && readBack == json &&
+              LittleFS.rename(CONFIG_TMP_FILE, CONFIG_FILE);
+    if (!ok) LittleFS.remove(CONFIG_TMP_FILE);
+    return ok;
 }
 
 String ConfigManager::exportBackupJson() const {

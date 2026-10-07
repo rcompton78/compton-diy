@@ -125,11 +125,13 @@ struct AppConfig {
 class ConfigManager {
 public:
     bool begin();
-    // Reads config.json into config(). False (config() untouched) if the file is missing,
-    // can't be opened or doesn't parse.
+    // Reads config.json into config(), falling back to a complete config.json.tmp left by a
+    // save() interrupted before its rename. False (config() untouched) if neither parses.
     bool load();
-    // Writes config() to config.json. False if the file can't be opened or the write comes up
-    // short (e.g. a full filesystem), so callers can roll back in-memory changes.
+    // Atomically replaces config.json with config() via config.json.tmp + rename, so a power
+    // cut or full filesystem never leaves it truncated (COM-388). False if the temp file can't
+    // be written and read back intact or the rename fails, so callers can roll back in-memory
+    // changes; config.json then still holds the previous save.
     bool save();
     AppConfig& config() { return _config; }
 
