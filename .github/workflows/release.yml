@@ -33,6 +33,7 @@ jobs:
           ln -sfn /hdd/compton-diy/venv-espframe apps/espframe/.venv
           ln -sfn /hdd/compton-diy/platformio-core-root .platformio-core
           ln -sfn /hdd/compton-diy/platformio-core-espframe apps/espframe/.platformio-core
+          ln -sfn /hdd/compton-diy/venv-espframe-stand apps/espframe/hardware/stand/.venv
 
       - name: Compute version
         id: version
@@ -100,6 +101,11 @@ jobs:
           pnpm nx run-many -t build
           pnpm nx run-many -t build-fs
 
+      # build123d + OCP for the espframe stand's print files. setup.sh resolves the
+      # .venv symlink itself and only rebuilds when requirements.txt changes.
+      - name: Install stand CAD env
+        run: pnpm nx run espframe-stand:cad-setup
+
       - name: Generate releases
         env:
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
@@ -115,7 +121,7 @@ jobs:
         with:
           path: dist/
 
-      - name: Determine affected firmware projects
+      - name: Determine affected release projects
         id: affected
         env:
           BASE_SHA: ${{ steps.base.outputs.sha }}
@@ -139,16 +145,33 @@ jobs:
           COMMIT_SHA: ${{ github.sha }}
         run: |
           shopt -s nullglob
-          ASSETS=()
+          FIRMWARE=()
+          PRINTS=()
           while IFS= read -r project; do
             [ -z "$project" ] && continue
-            ASSETS+=(dist/"$project"/*-ota.bin)
+            FIRMWARE+=(dist/"$project"/*-ota.bin)
+            PRINTS+=(dist/"$project"/*.tar.gz)
           done <<< "$AFFECTED_PROJECTS"
 
+          NOTES="Automated build from $COMMIT_SHA. Changed: $(echo "$AFFECTED_PROJECTS" | paste -sd, -)."
+          if [ ${#FIRMWARE[@]} -gt 0 ]; then
+            NOTES="$NOTES"$'\n\n'"Firmware: upload the *-ota.bin matching your device via its config portal's Update page."
+          fi
+          if [ ${#PRINTS[@]} -gt 0 ]; then
+            NOTES="$NOTES"$'\n\n'"Print files: download the *.tar.gz (3MF/STL/STEP print files, fit and tip-over checks, README and preview renders) and see its README for print settings and assembly."
+          fi
+          if [ ${#FIRMWARE[@]} -gt 0 ] && [ ${#PRINTS[@]} -gt 0 ]; then
+            TITLE="Release $RELEASE_VERSION"
+          elif [ ${#PRINTS[@]} -gt 0 ]; then
+            TITLE="Print files $RELEASE_VERSION"
+          else
+            TITLE="Firmware $RELEASE_VERSION"
+          fi
+
           gh release create "$RELEASE_VERSION" \
-            "${ASSETS[@]}" \
-            --title "Firmware $RELEASE_VERSION" \
-            --notes "Automated build from $COMMIT_SHA. Changed: $(echo "$AFFECTED_PROJECTS" | paste -sd, -). Upload the *-ota.bin matching your device via its config portal's Update page."
+            "${FIRMWARE[@]}" "${PRINTS[@]}" \
+            --title "$TITLE" \
+            --notes "$NOTES"
 
       - name: Advance last-release tag
         if: steps.affected.outputs.projects != ''

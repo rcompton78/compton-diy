@@ -28,6 +28,10 @@ A 3D-printable portrait desk stand for the 7" espframe (Waveshare ESP32-S3-Touch
   - Any USB-C charger works, and you can flash or read logs through the stand without taking it apart.
 - **Orientation.** The board's USB edge goes down: the landscape panel turned 90° counter-clockwise, seen from the front. Pick the matching rotation in the espframe settings (COM-362).
 
+## Download the print files
+
+Every merge to `master` that changes the stand attaches `espframe-stand-<version>.tar.gz` to that build's [GitHub release](https://github.com/rcompton78/compton-diy/releases). Look for the newest release titled "Print files …" or "Release …" with that asset. The tarball holds the 3MF/STL/STEP files for every part, `checks.txt`, this README and the preview renders. CI only publishes it when every check below passes.
+
 ## Building
 
 ```bash
@@ -39,7 +43,9 @@ This creates (or refreshes) a local Python venv (`setup.sh`, Python 3.10–3.13,
 - runs the checks below, writes `out/checks.txt`, and exits non-zero if any check fails;
 - renders the preview PNGs into `docs/`. These are committed so this README shows them.
 
-The targets are local-only on purpose. They aren't called `build`, `test` or `install`, so CI and `pnpm install` never download build123d's ~150 MB of CAD libraries.
+`pnpm nx run espframe-stand:release` runs `cad` and then packs the tarball into `dist/espframe-stand/` (`scripts/pack-hardware-release.sh`, which refuses to pack if `checks.txt` has any `FAIL`). On merge to `master`, `.github/workflows/release.yml` runs it on the self-hosted runner, with the venv cached outside the checkout, and attaches the tarball to the GitHub release.
+
+The targets aren't called `build`, `test` or `install`, so PR CI, the firmware builds and `pnpm install` never download build123d's ~150 MB of CAD libraries.
 
 Every dimension is a named constant in [`stand/params.py`](stand/params.py), tagged `MEASURED`, `SOURCED`, `DESIGN` or `EST`. Change a value and re-run the target. Material densities are parameters too: `PETG_DENSITY` for the structural parts, and `FRAME_DENSITY` for the wood-fill frame.
 
@@ -57,7 +63,7 @@ Every dimension is a named constant in [`stand/params.py`](stand/params.py), tag
 | Cable length | 265 mm path of 300 mm (35 mm slack) |
 | Cable clearance along its length | ≥ cable radius everywhere |
 | Plug bend fits above the tray floor | 5.6 mm of straight drop to spare (rev D without the frame had 1.9) |
-| Tip-over: push at the screen centre to tip it back | **4.6 N** (need ≥ 4.5, set from the printed stand feeling sturdy without ballast; rev A design was 3.2 N) at 118 mm deep. Sideways tip at 34°. Weight stuck under the front raises it (about +0.8 N per 100 g). |
+| Tip-over: push at the screen centre to tip it back | **4.5 N** (need ≥ 4.5, set from the printed stand feeling sturdy without ballast; rev A design was 3.2 N) at 118 mm deep. Sideways tip at 34°. Weight stuck under the front raises it (about +0.8 N per 100 g). |
 | Frame opening clear of the picture | 0.75 mm reveal on every side (need ≥ 0.5) |
 | Frame never touches the glass | closest 0.71 mm (need ≥ 0.5) |
 | Glass edge gap L / R / T / B | 8.75 / 6.71 / 0.71 / 0.71 mm |
