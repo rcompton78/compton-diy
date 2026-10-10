@@ -3,11 +3,17 @@
 #
 # The venv is rebuilt only when requirements.txt changes: its hash is stored in
 # .venv/.requirements.sha256 and compared on every run. build123d's OCP wheels are
-# ~150 MB, so this stays a local-only step and is never run by CI or `pnpm install`.
+# ~150 MB, so `pnpm install` never runs this; only the cad/release targets do (CI's
+# release workflow runs it on the self-hosted runner, where the venv is cached).
+#
+# On that runner .venv is a symlink to a persistent dir outside the checkout, so
+# resolve it first: `python -m venv` refuses a symlinked target, and `rm -rf` on
+# the link would only remove the link.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-VENV="$HERE/.venv"
+VENV="$(readlink -f "$HERE/.venv" 2>/dev/null)" || VENV=""
+[ -n "$VENV" ] || VENV="$HERE/.venv"
 REQ="$HERE/requirements.txt"
 STAMP="$VENV/.requirements.sha256"
 want="$(sha256sum "$REQ" | cut -d' ' -f1)"

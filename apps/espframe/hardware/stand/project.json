@@ -2,7 +2,7 @@
   "name": "espframe-stand",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "projectType": "application",
-  "tags": ["hardware", "local-only"],
+  "tags": ["hardware"],
   "targets": {
     "cad-setup": {
       "executor": "nx:run-commands",
@@ -23,6 +23,24 @@
       "options": {
         "command": ".venv/bin/python -m stand.build",
         "cwd": "apps/espframe/hardware/stand"
+      }
+    },
+    "release": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["cad"],
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/stand/**/*.py",
+        "{projectRoot}/requirements.txt",
+        "{projectRoot}/README.md",
+        "{projectRoot}/docs/*.png",
+        "{workspaceRoot}/scripts/pack-hardware-release.sh",
+        { "env": "RELEASE_VERSION" }
+      ],
+      "outputs": ["{workspaceRoot}/dist/espframe-stand"],
+      "options": {
+        "command": "scripts/pack-hardware-release.sh apps/espframe/hardware/stand espframe-stand ${RELEASE_VERSION:-dev}",
+        "cwd": "."
       }
     }
   }

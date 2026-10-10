@@ -17,9 +17,11 @@ def main():
     args = parser.parse_args()
 
     dist_dir = os.path.join(REPO_ROOT, "dist")
+    # Only dirs with an ESP Web Tools manifest are flashers; others (e.g.
+    # dist/espframe-stand's print-file tarball) aren't firmware.
     apps = sorted(
         d for d in os.listdir(dist_dir)
-        if os.path.isdir(os.path.join(dist_dir, d))
+        if os.path.isfile(os.path.join(dist_dir, d, "manifest.json"))
     )
 
     cards = ""
