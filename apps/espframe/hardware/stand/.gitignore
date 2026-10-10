@@ -1,0 +1,3 @@
+# Generated print files and check report; rebuild with `pnpm nx run espframe-stand:cad`.
+out/
+__pycache__/
