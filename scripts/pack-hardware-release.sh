@@ -48,6 +48,10 @@ PKG="$STAGE/$NAME-$VERSION"
 mkdir -p "$PKG/docs" "$DEST"
 
 cp "${prints[@]}" "$CHECKS" "$PKG/"
+if [ ! -f "$SRC/README.md" ]; then
+  echo "ERROR: $SRC/README.md not found; hardware releases must ship a README." >&2
+  exit 1
+fi
 cp "$SRC/README.md" "$PKG/"
 if [ ${#renders[@]} -gt 0 ]; then cp "${renders[@]}" "$PKG/docs/"; fi
 {

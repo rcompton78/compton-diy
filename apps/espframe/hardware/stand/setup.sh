@@ -12,7 +12,8 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-VENV="$(readlink -f "$HERE/.venv")"
+VENV="$(readlink -f "$HERE/.venv" 2>/dev/null)" || VENV=""
+[ -n "$VENV" ] || VENV="$HERE/.venv"
 REQ="$HERE/requirements.txt"
 STAMP="$VENV/.requirements.sha256"
 want="$(sha256sum "$REQ" | cut -d' ' -f1)"

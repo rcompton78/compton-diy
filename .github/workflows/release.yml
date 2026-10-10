@@ -104,6 +104,7 @@ jobs:
       # build123d + OCP for the espframe stand's print files. setup.sh resolves the
       # .venv symlink itself and only rebuilds when requirements.txt changes.
       - name: Install stand CAD env
+        timeout-minutes: 30
         run: pnpm nx run espframe-stand:cad-setup
 
       - name: Generate releases
