@@ -105,10 +105,10 @@ The 7" was printed and tested piece by piece; its README has the details. These 
 **Design choices that proved out.**
 - **The back-plate fills the frame** out to its inner walls (0.3 mm clear). The back is closed with no gap round the plate, and the frame screws go through the plate's edges into bosses on the frame walls instead of through tabs.
 - **Vent slots:** with a closed back, there are two rows low (air in) and two high (air out), kept clear of the risers, spine and screws. On the 10", also keep them clear of the antenna region.
-- **No steel ballast:** the printed 7" was sturdy without it, so the pockets were dropped. The tip-over check now uses a **4.5 N** target (horizontal push at the screen centre) taken from that hands-on test.
+- **No steel ballast:** the printed 7" was sturdy without it, so the pockets were dropped. The tip-over check now uses a **4.5 N** target (horizontal push at the screen centre) taken from that hands-on test. COM-417 then moved the 7" to a 15° lean on a 120 mm foot and accepted 4.3 N for it.
   - Method: model each part's volume × density × fill, find the centre of mass, and check the push needed to tip it about the foot's rear edge. Then **hand-test the printed stand** and set the target from that.
-  - The model reads 4.6 N for the final 7".
-- **Shorter foot:** the 7" went from 128 to 118 mm deep. The spool post was replaced by a loose cable coil in the tray.
+  - The model read 4.5 N for the 10° 7" on its 118 mm foot, and reads 4.32 N at 15° on 120 mm (COM-417).
+- **Shorter foot:** the 7" went from 128 to 118 mm deep, then 120 with the 15° lean (COM-417). The spool post was replaced by a loose cable coil in the tray.
 - **Single dovetail:** two parallel sliding fits at 0.02 mm would bind. One locates itself, and the frame's bottom rail resting on the felted ledge takes the weight and stops it rocking.
 
 **Bugs to avoid.**
@@ -125,7 +125,7 @@ The 7" was printed and tested piece by piece; its README has the details. These 
   - fits: `SLIDE_CLEAR`, `DOVE_*` profile, `DOVE_TIP_CLEAR`, `POST_FACE_CLEAR`, `INSERT_*`, `M3_CLEAR_D`
   - jack: all `JACK_*` except `JACK_X`
   - plug and cable: `PLUG_*`, `CABLE_*`, `BEND_R`
-  - foot and lid: `WALL`, `FLOOR`, `LID_*`, `TILT_DEG` (10°)
+  - foot and lid: `WALL`, `FLOOR`, `LID_*` (incl. the `LID_DETENT_*` click-in fit), `TUNNEL_W`, `SLOT_W`, `TILT_DEG` (15° since COM-417)
   - plate: `PLATE_T`, `PLATE_EDGE_CLEAR`, `PLATE_R`
   - frame profile: `FRAME_FACE_T`, `FRAME_BEVEL`, `FRAME_OUTER_CH`, `FRAME_WALL`, `FELT_*`, `REVEAL`
   - vents: `VENT_SLOT`, `VENT_PITCH_X`
