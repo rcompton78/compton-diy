@@ -102,15 +102,17 @@ DOVE_TIP_CLEAR = 0.4              # DESIGN: rail tip to groove floor; the groove
 DOVE_GROOVE_L = SPINE_TOP_Y - 2.0  # DESIGN: open at the bottom edge, closed by 2 mm of spine at the top (a groove past the spine cut through the 3 mm plate)
 DOVE_RAIL_L = DOVE_GROOVE_L - 2.0   # DESIGN: 2 mm short of the groove end
 LOCK_Y = 18.0                     # DESIGN: optional foot-lock screw height
-PLATE_NOTCH = (14.0, 6.0)         # DESIGN: cable notch in the plate bottom edge above the plug bend (w, h)
+PLATE_NOTCH = (16.0, 6.0)         # DESIGN: cable notch in the plate bottom edge above the plug bend (w, h); 14 felt tight (COM-417)
 
 # --- Foot (world frame) -------------------------------------------------------------
-TILT_DEG = 10.0                   # DESIGN
+TILT_DEG = 15.0                   # DESIGN (COM-417): a desktop picture frame's usual lean; was 10
 S = math.sin(math.radians(TILT_DEG))
 C = math.cos(math.radians(TILT_DEG))
-LEDGE_H = 18.0                    # DESIGN: ledge seat height at the frame's front face (world Z)
+LEDGE_H = 20.0                    # DESIGN: ledge seat height at the frame's front face (world Z); 18 at 10°, raised
+                                  #   with the 15° lean so the deck (and lid) stays clear of the cable coil
 FOOT_W = 130.0                    # DESIGN
-FOOT_D = 118.0                    # DESIGN: glass corner to rear wall; shortest that still meets MIN_TIP_FORCE_N without extra ballast
+FOOT_D = 120.0                    # DESIGN (user, COM-417): glass corner to rear wall; kept short at 15° and accepted
+                                  #   with a lower MIN_TIP_FORCE_N rather than deepened (about 126 would hold 4.5 N)
 WALL = 3.0                        # DESIGN
 FLOOR = 3.0                       # DESIGN
 DECK_SKIN = 1.5                   # DESIGN: material over the cavity behind the plate
@@ -126,6 +128,13 @@ LOCK_POST_LEFT = 2.0              # DESIGN: post material under the counterbore
 LID_T = 1.6                       # DESIGN
 LID_RABBET = 1.5                  # DESIGN: step in the tray wall the lid sits on
 LID_CLEAR = 0.15                  # DESIGN: per side
+# Detents: short ridges on the lid's long (front and rear) edges click into V-grooves in the
+# rabbet walls; the thin rear wall flexes for the snap. Prise the lid out at the lift slot.
+LID_DETENT_H = 0.3                # DESIGN: ridge height off the lid edge (snap interference = H - LID_CLEAR); tune after printing
+LID_DETENT_N = 2                  # DESIGN: ridges per long edge
+LID_DETENT_L = 8.0                # DESIGN: ridge length along the edge
+LID_DETENT_GROOVE_CLEAR = 0.1     # DESIGN: groove oversize so a seated ridge doesn't bind
+MIN_DETENT_WALL = 1.0             # DESIGN: check limit, rear wall left behind a groove
 
 # Solid front under the ledge (no ballast: the user's printed stand is sturdy without it);
 # the cable tunnel runs through it to the tray.
@@ -140,7 +149,9 @@ PLUG_T = 6.5                      # EST
 CABLE_LEN = 300.0                 # SOURCED
 CABLE_D = 4.5                     # EST
 BEND_R = 4 * CABLE_D              # 18, EST: static minimum (4 × D)
-SLOT_W = 14.0                     # DESIGN: plug must pass through when assembling
+SLOT_W = 16.0                     # DESIGN: plug must pass through when assembling; 14 felt tight (COM-417)
+TUNNEL_W = 16.0                   # DESIGN: cable tunnel from the tray to the deck slot; the plug passes it too (was 12, under PLUG_W)
+MIN_PLUG_PASS = 1.0               # DESIGN: check limit, plug clearance per side through the tunnel and deck slot
 SLOT_T = (PORT_DEPTH - 4.0, PORT_DEPTH + 4 * CABLE_D + CABLE_D / 2 + 1.5)   # DESIGN: covers the whole plug bend through the deck
 COIL_W = 32.0                     # DESIGN: free cable coil in the tray, stadium (centreline R 18.25 ≥ BEND_R); no post
 COIL_Y = 62.0                     # DESIGN: coil centre (horizontal depth)
@@ -169,7 +180,9 @@ RECEPTACLE_TRIAL_T = [1.0, 1.2, 1.4]   # DESIGN: test plates bracketing JACK_REC
 DOVE_TRIAL_CLEARS = [0.02, 0.03, 0.04]                    # DESIGN: round 3, brackets SLIDE_CLEAR (round 2: 0.05 closest, a touch loose)
 
 # Required results.
-MIN_TIP_FORCE_N = 4.5             # MEASURED (user): the printed stand felt sturdy without ballast; was 6.5 with steel (rev A design: 3.2)
+MIN_TIP_FORCE_N = 4.3             # DESIGN (user, COM-417): accepted for the 15° lean on the 120 mm foot (4.32 N), in exchange
+                                  #   for a shorter foot. The 10° stand, 118 deep, was 4.5 N and the printed one felt very stable
+                                  #   without ballast; was 6.5 with steel (rev A design: 3.2)
 
 # --- Picture frame (style B, classic bevel, 21 mm face, wood-look) -------------------
 FRAME_DENSITY = 1.18e-3           # g/mm³, EST: wood-fill PLA (1.15–1.2); PolyWood is lighter
@@ -206,6 +219,6 @@ FRAME_BOSS_D = 7.0                # DESIGN
 FRAME_BOSS_L = 8.0                # DESIGN: boss length towards the glass from the plate front face
 FRAME_INSERT_DEPTH = INSERT_M3x4_L + 2.0   # DESIGN: M3 × 8 through a 3 mm tab reaches 5
 FRAME_SCREW_L = 8.0               # DESIGN
-FRAME_NOTCH_W = 15.0              # DESIGN: cable notch through the frame's bottom rail
+FRAME_NOTCH_W = 17.0              # DESIGN: cable notch through the frame's bottom rail; 15 felt tight (COM-417)
 
 MIN_DOVE_ENGAGE = 30.0            # DESIGN: check limit

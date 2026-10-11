@@ -1,5 +1,5 @@
 """Foot: felted ledge, dovetail post, cable tunnel and open tray for a free cable coil,
-a solid front, the panel jack behind a thin web in the rear wall, and the tray lid."""
+a solid front, the panel jack behind a thin web in the rear wall, and the click-in tray lid."""
 
 from dataclasses import dataclass
 
@@ -61,9 +61,13 @@ def build_foot() -> Part:
     rabbet = box(L.in_x0 - p.LID_RABBET, L.in_x1 + p.LID_RABBET, L.front_zone_end - p.LID_RABBET,
                  p.FOOT_D - p.WALL + p.LID_RABBET, L.z_cavity_top, L.z_deck + 1)
     foot -= tray + rabbet
+    # V-grooves in the rabbet's front and rear walls for the lid's detent ridges.
+    for x0, x1, y_edge, out in lid_detents():
+        g = p.LID_DETENT_GROOVE_CLEAR
+        foot -= _detent_prism(x0 - g, x1 + g, y_edge, out, p.LID_DETENT_H + g)
 
     # Cable tunnel under the wedge, from the deck slot back into the tray.
-    foot -= box(p.PORT_X - 6, p.PORT_X + 6, L.y_front + p.WALL + 2, L.front_zone_end + 1,
+    foot -= box(p.PORT_X - p.TUNNEL_W / 2, p.PORT_X + p.TUNNEL_W / 2, L.y_front + p.WALL + 2, L.front_zone_end + 1,
                 p.FLOOR, L.z_cavity_top)
 
     # Deck slot through the ledge, big enough for the plug to pass during assembly,
@@ -118,15 +122,51 @@ def build_rail(clear: float = p.SLIDE_CLEAR) -> Part:
                           d_root, d_tip, -p.SEAT, p.DOVE_RAIL_L - p.SEAT)
 
 
-def build_lid() -> Part:
-    """Flat lid for the tray opening. Printed flat."""
+def lid_outline():
+    """(x0, x1, y0, y1) of the lid, LID_CLEAR inside the rabbet on every side."""
     L = layout()
     c = p.LID_CLEAR
-    lid = box(L.in_x0 - p.LID_RABBET + c, L.in_x1 + p.LID_RABBET - c,
-              L.front_zone_end - p.LID_RABBET + c, p.FOOT_D - p.WALL + p.LID_RABBET - c,
-              L.z_cavity_top, L.z_deck)
+    return (L.in_x0 - p.LID_RABBET + c, L.in_x1 + p.LID_RABBET - c,
+            L.front_zone_end - p.LID_RABBET + c, p.FOOT_D - p.WALL + p.LID_RABBET - c)
+
+
+def lift_slot_x():
+    """(x0, x1) of the lid's lift slot, at its front-right corner."""
+    L = layout()
+    return L.in_x1 - 14, L.in_x1 - 4
+
+
+def lid_detents():
+    """(x0, x1, y_edge, out) per detent ridge: LID_DETENT_N evenly spaced along each long
+    (front and rear) lid edge; `out` is +1 where the ridge points to +Y, -1 to -Y."""
+    x0, x1, y0, y1 = lid_outline()
+    pitch = (x1 - x0) / p.LID_DETENT_N
+    spans = [(x0 + (i + 0.5) * pitch - p.LID_DETENT_L / 2, x0 + (i + 0.5) * pitch + p.LID_DETENT_L / 2)
+             for i in range(p.LID_DETENT_N)]
+    return [(a, b, y, out) for y, out in ((y0, -1), (y1, 1)) for a, b in spans]
+
+
+def _detent_prism(x0, x1, y_edge, out, h):
+    """Triangular ridge across X: base on the lid edge over the lid's full thickness, apex h out.
+    The shallow flanks ramp the snap in and out, and print without supports."""
+    L = layout()
+    zm, half = (L.z_cavity_top + L.z_deck) / 2, p.LID_T / 2
+    base = y_edge - out * 0.01
+    pts = [(base, zm - half), (y_edge + out * h, zm), (base, zm + half)]
+    # side_profile extrudes along the face normal, so keep the winding anticlockwise (+X).
+    return side_profile(pts if out > 0 else pts[::-1], x0, x1)
+
+
+def build_lid() -> Part:
+    """Flat lid for the tray opening, with detent ridges on its long edges. Printed flat."""
+    L = layout()
+    x0, x1, y0, y1 = lid_outline()
+    lid = box(x0, x1, y0, y1, L.z_cavity_top, L.z_deck)
+    for a, b, y_edge, out in lid_detents():
+        lid += _detent_prism(a, b, y_edge, out, p.LID_DETENT_H)
     # Lift slot so it can be prised out.
-    lid -= box(L.in_x1 - 14, L.in_x1 - 4, L.front_zone_end + 1, L.front_zone_end + 5, L.z_cavity_top - 1, L.z_deck + 1)
+    sx0, sx1 = lift_slot_x()
+    lid -= box(sx0, sx1, L.front_zone_end + 1, L.front_zone_end + 5, L.z_cavity_top - 1, L.z_deck + 1)
     return lid
 
 

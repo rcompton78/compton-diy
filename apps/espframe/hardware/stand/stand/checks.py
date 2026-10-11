@@ -7,7 +7,7 @@ from build123d import Vertex
 from . import params as p
 from . import reference as ref
 from .cable import build_path
-from .foot import build_rail
+from .foot import build_rail, layout, lid_detents, lift_slot_x
 from .frames import SCREEN_TO_WORLD, screen_point
 
 
@@ -90,7 +90,31 @@ def run(parts: dict) -> list:
               + f"; CG {cg_y:.1f} mm behind the glass corner, {cg_z:.1f} mm up; sideways tip at {side:.0f}°")
     add("Tip-over push at screen centre", force >= p.MIN_TIP_FORCE_N, detail)
 
-    # 8. Jack: flange against the web, receptacle through the window and flush outside,
+    # 8. Plug passes the tunnel and deck slot during assembly (pushed forward from the tray, then up).
+    L = layout()
+    t_side = (p.TUNNEL_W - p.PLUG_W) / 2
+    s_side = (p.SLOT_W - p.PLUG_W) / 2
+    t_head = (L.z_cavity_top - p.FLOOR) - p.PLUG_T
+    add("Plug passes the tunnel and deck slot",
+        min(t_side, s_side) >= p.MIN_PLUG_PASS and t_head >= 2 * p.MIN_PLUG_PASS,
+        f"{p.PLUG_W:g} × {p.PLUG_T:g} plug: {t_side:.2f} mm per side in the {p.TUNNEL_W:g} mm tunnel, "
+        f"{s_side:.2f} in the {p.SLOT_W:g} mm slot (need ≥ {p.MIN_PLUG_PASS:g}); {t_head:.1f} mm of tunnel height to spare")
+
+    # 9. Lid detents: seated ridges sit in their grooves, the snap has interference, the grooves
+    # leave enough rear wall, and no ridge runs into the lift slot.
+    snap = p.LID_DETENT_H - p.LID_CLEAR
+    groove = p.LID_DETENT_H + p.LID_DETENT_GROOVE_CLEAR - p.LID_CLEAR
+    wall_left = p.WALL - p.LID_RABBET - groove
+    sx0, sx1 = lift_slot_x()
+    ridges = lid_detents()
+    slot_free = all(b <= sx0 or a >= sx1 for a, b, _, out in ridges if out < 0)
+    l_over = (lid & foot).volume
+    add("Lid detents", l_over < 1e-3 and snap > 0 and wall_left >= p.MIN_DETENT_WALL and slot_free,
+        f"{len(ridges)} ridges {p.LID_DETENT_H:g} mm high snap past {snap:.2f} mm of interference into "
+        f"{groove:.2f} mm grooves; {wall_left:.2f} mm of rear wall behind them (need ≥ {p.MIN_DETENT_WALL:g}); "
+        f"seated overlap {l_over:.4f} mm³; lift slot {'clear' if slot_free else 'BLOCKED'}")
+
+    # 10. Jack: flange against the web, receptacle through the window and flush outside,
     # its own screws from outside clear of the body.
     jack = ref.jack()
     j_over = (jack & foot).volume
@@ -109,7 +133,7 @@ def run(parts: dict) -> list:
         f"screws at {p.JACK_SCREW_PITCH:g} mm pitch pass {body_gap:.2f} mm clear of the body; the heads leave "
         f"{heads_gap:.1f} mm between them, so a plug moulding wider than that won't seat fully (test your chargers)")
 
-    # 9. Foot-lock screw (optional, M3 × 12) reaches the M3 × 4 insert in the plate spine.
+    # 11. Foot-lock screw (optional, M3 × 12) reaches the M3 × 4 insert in the plate spine.
     to_floor = p.LOCK_POST_LEFT + p.DOVE_DEPTH + p.POST_FACE_CLEAR
     spine_left = (p.D_PLATE_BACK - p.DOVE_DEPTH) - (p.D_PLATE_FRONT - p.SPINE_T)
     lock_engage = 12.0 - to_floor
@@ -117,7 +141,7 @@ def run(parts: dict) -> list:
         f"M3 × 12 from the counterbore: {lock_engage:.1f} mm past the groove floor into a {p.INSERT_M3x4_L:.0f} mm insert "
         f"(tip {lock_engage - spine_left:.1f} mm proud of the spine, clear of the board)")
 
-    # 10. Picture frame.
+    # 12. Picture frame.
     panel = ref.panel()
     aa = ref.active_area_prism()
     reveal = min(p.AA_X[0] - p.OPEN_X[0], p.OPEN_X[1] - p.AA_X[1], p.AA_Y[0] - p.OPEN_Y[0], p.OPEN_Y[1] - p.AA_Y[1])
@@ -162,7 +186,7 @@ def run(parts: dict) -> list:
     add("Dovetail engagement", engage >= p.MIN_DOVE_ENGAGE,
         f"{engage:.1f} mm of the {p.DOVE_RAIL_L:.0f} mm rail inside the groove (need ≥ {p.MIN_DOVE_ENGAGE:.0f})")
 
-    # 11. Every printed part fits the P1S bed in its print pose.
+    # 13. Every printed part fits the P1S bed in its print pose.
     for name, solid in parts["print"].items():
         bb = solid.bounding_box()
         size = (bb.max - bb.min)
