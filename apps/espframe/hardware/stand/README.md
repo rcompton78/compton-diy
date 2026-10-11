@@ -72,7 +72,7 @@ Every dimension is a named constant in [`stand/params.py`](stand/params.py), tag
 | Cable clearance along its length | ≥ cable radius everywhere |
 | Plug bend fits above the tray floor | 4.9 mm of straight drop to spare (rev D without the frame had 1.9) |
 | Plug passes the tunnel and deck slot | 12.5 × 6.5 plug: 1.75 mm per side in the 16 mm tunnel and the 16 mm slot (need ≥ 1), 3.0 mm of tunnel height to spare |
-| Lid detents | 4 ridges 0.3 mm high snap past 0.15 mm of interference into 0.25 mm grooves, leaving 1.25 mm of rear wall; no overlap once seated; lift slot clear |
+| Lid detents | 4 ridges 0.3 mm high snap past 0.15 mm of interference into 0.25 mm grooves, leaving 1.25 mm of rear wall. Only the rear wall flexes: 0.15 mm with the front edge hooked in first, 0.30 if the lid is pressed in flat; no overlap once seated; lift slot clear |
 | Tip-over: push at the screen centre to tip it back | **4.3 N** (need ≥ 4.3) at 15° and 120 mm deep, accepted in exchange for a shorter foot when the lean went to 15°. The 10° stand, 118 mm deep, was 4.5 N, and that print felt sturdy without ballast; rev A design was 3.2 N. A foot about 126 mm deep would hold 4.5 N at 15°. Sideways tip at 34°. Weight stuck under the front raises it (about +0.8 N per 100 g). |
 | Frame opening clear of the picture | 0.75 mm reveal on every side (need ≥ 0.5) |
 | Frame never touches the glass | closest 0.71 mm (need ≥ 0.5) |
@@ -142,7 +142,7 @@ No heat-set kit? Buy an M3 assortment. Inserts go in with a soldering iron, pres
 6. **Frame.** Lay the screen face down on a soft cloth and lower the frame over it. Fix it with four M3 × 8 + washers from behind, through the plate's edge holes into the frame inserts. Check the even border, and that the felt only rests on the black bezel.
 7. **Plug and mount.** Plug the straight plug into the board's UART USB-C. Lower the plate's groove onto the foot's rail and let it slide down until the frame's bottom rail sits on the felted ledge. The plug's lead runs down through the notches in the plate and frame and into the deck slot.
    - Optionally, fit the foot-lock M3 × 12 from the back of the post.
-   - Press the lid in until its detents click.
+   - Fit the lid front edge first, so its front ridges drop into their grooves, then press the rear edge down until it clicks. Only the thin rear wall flexes, and a lid pressed in flat makes it flex twice as far.
 8. **Rotation.** In the espframe settings, pick the rotation (90 or 270) that shows the picture upright.
 
 ## Open items

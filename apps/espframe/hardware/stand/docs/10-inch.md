@@ -107,8 +107,8 @@ The 7" was printed and tested piece by piece; its README has the details. These 
 - **Vent slots:** with a closed back, there are two rows low (air in) and two high (air out), kept clear of the risers, spine and screws. On the 10", also keep them clear of the antenna region.
 - **No steel ballast:** the printed 7" was sturdy without it, so the pockets were dropped. The tip-over check now uses a **4.5 N** target (horizontal push at the screen centre) taken from that hands-on test. COM-417 then moved the 7" to a 15° lean on a 120 mm foot and accepted 4.3 N for it.
   - Method: model each part's volume × density × fill, find the centre of mass, and check the push needed to tip it about the foot's rear edge. Then **hand-test the printed stand** and set the target from that.
-  - The model reads 4.6 N for the final 7".
-- **Shorter foot:** the 7" went from 128 to 118 mm deep. The spool post was replaced by a loose cable coil in the tray.
+  - The model read 4.5 N for the 10° 7" on its 118 mm foot, and reads 4.32 N at 15° on 120 mm (COM-417).
+- **Shorter foot:** the 7" went from 128 to 118 mm deep, then 120 with the 15° lean (COM-417). The spool post was replaced by a loose cable coil in the tray.
 - **Single dovetail:** two parallel sliding fits at 0.02 mm would bind. One locates itself, and the frame's bottom rail resting on the felted ledge takes the weight and stops it rocking.
 
 **Bugs to avoid.**

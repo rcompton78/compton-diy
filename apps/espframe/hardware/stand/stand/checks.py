@@ -101,7 +101,9 @@ def run(parts: dict) -> list:
         f"{s_side:.2f} in the {p.SLOT_W:g} mm slot (need ≥ {p.MIN_PLUG_PASS:g}); {t_head:.1f} mm of tunnel height to spare")
 
     # 9. Lid detents: seated ridges sit in their grooves, the snap has interference, the grooves
-    # leave enough rear wall, and no ridge runs into the lift slot.
+    # leave enough rear wall, and no ridge runs into the lift slot. The front rim is the solid
+    # front zone, so only the rear wall flexes: hooked in front edge first, it flexes by `snap`;
+    # pressed in flat, the lid slides back off the front ridges and the rear wall takes both.
     snap = p.LID_DETENT_H - p.LID_CLEAR
     groove = p.LID_DETENT_H + p.LID_DETENT_GROOVE_CLEAR - p.LID_CLEAR
     wall_left = p.WALL - p.LID_RABBET - groove
@@ -111,7 +113,8 @@ def run(parts: dict) -> list:
     l_over = (lid & foot).volume
     add("Lid detents", l_over < 1e-3 and snap > 0 and wall_left >= p.MIN_DETENT_WALL and slot_free,
         f"{len(ridges)} ridges {p.LID_DETENT_H:g} mm high snap past {snap:.2f} mm of interference into "
-        f"{groove:.2f} mm grooves; {wall_left:.2f} mm of rear wall behind them (need ≥ {p.MIN_DETENT_WALL:g}); "
+        f"{groove:.2f} mm grooves (rear wall flexes {snap:.2f} mm with the front edge hooked in first, "
+        f"{2 * snap:.2f} pressed in flat); {wall_left:.2f} mm of rear wall behind them (need ≥ {p.MIN_DETENT_WALL:g}); "
         f"seated overlap {l_over:.4f} mm³; lift slot {'clear' if slot_free else 'BLOCKED'}")
 
     # 10. Jack: flange against the web, receptacle through the window and flush outside,
