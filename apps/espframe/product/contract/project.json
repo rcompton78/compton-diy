@@ -1152,7 +1152,7 @@
   ],
   "release_version_pattern": "^v\\d+\\.\\d+\\.\\d+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$",
   "stable_release_version_pattern": "^v\\d+\\.\\d+\\.\\d+$",
-  "firmware_version_placeholder_line": "  firmware_version: \"0.0.0\"",
+  "firmware_version_placeholder_line": "  firmware_version: \"dev\"",
   "firmware_local_build_version": "dev",
   "firmware_placeholder_versions": [
     "dev",

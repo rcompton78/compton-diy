@@ -44,6 +44,9 @@ jobs:
       - name: Install Node dependencies
         run: pnpm install
 
+      - name: Test release tooling
+        run: python3 -m unittest discover -s tools/esp-flasher -p 'test_*.py'
+
       - name: Build affected firmware
         env:
           BASE_REF: ${{ github.base_ref }}

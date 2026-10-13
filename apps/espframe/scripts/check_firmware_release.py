@@ -108,7 +108,7 @@ def test_inject_replaces_factory_placeholder() -> None:
         root = Path(tmp)
         factory_yaml = root / REAL_DEVICE.build_yaml
         factory_yaml.parent.mkdir(parents=True)
-        factory_yaml.write_text('substitutions:\n  firmware_version: "0.0.0"\n')
+        factory_yaml.write_text(f"substitutions:\n{firmware_release.FIRMWARE_VERSION_PLACEHOLDER}\n")
         original_root = firmware_release.ROOT
         try:
             firmware_release.ROOT = root

@@ -11,7 +11,7 @@
 substitutions:
   name: "immich-frame-waveshare-s3"
   friendly_name: "Immich Frame Waveshare S3 Touch LCD 7"
-  firmware_version: "0.0.0"
+  firmware_version: "dev"
 
 packages:
   espframe: !include ../devices/waveshare-esp32-s3-touch-lcd-7/packages.yaml

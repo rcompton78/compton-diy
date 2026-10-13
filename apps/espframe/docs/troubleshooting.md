@@ -1,6 +1,6 @@
 ---
 title: Troubleshooting Espframe Install and Immich Setup
-description: Fix common Espframe setup problems, including web installer failures, WiFi setup, Immich connection errors, API key permissions, and missing photos.
+description: Fix common Espframe setup problems, including web installer failures, wrong firmware after an update, WiFi setup, Immich connection errors, API key permissions, and missing photos.
 ---
 
 # Troubleshooting Espframe Install and Immich Setup
@@ -17,6 +17,26 @@ If the browser installer cannot find the display, first check the basics:
 - Close any other serial monitor, ESPHome dashboard, or flashing tool.
 
 See [USB Flashing Help for Guition ESP32-P4](/usb-flashing) for more detail.
+
+## Wrong Firmware After an Update
+
+Before per-device update manifests, a Waveshare ESP32-S3-Touch-LCD-7 could auto-update to the Freenove ESP32-S3 firmware, because both boards are ESP32-S3 and shared one manifest. The 7" then shows a black screen (the backlight stays off) and appears on the network as **Immich Frame Freenove S3** / `immich-frame-freenove-s3`.
+
+The Freenove firmware still joins your WiFi, so you can recover without opening the frame. Use either:
+
+- **USB:** open [ESPHome Web](https://web.esphome.io/) in Chrome or Edge, connect the 7" over USB, choose **Install**, and select `espframe-waveshare-esp32-s3-touch-lcd-7.bin` from the latest [release](https://github.com/rcompton78/compton-diy/releases) or from `https://rcompton78.github.io/compton-diy/espframe/`.
+- **Network:** push the Waveshare OTA image (`espframe-waveshare-esp32-s3-touch-lcd-7-ota.bin`, from the same places) over ESPHome's native OTA, port 3232. From a compton-diy checkout:
+
+  ```bash
+  scripts/espframe-esphome.sh upload apps/espframe/builds/waveshare-esp32-s3-touch-lcd-7.factory.yaml \
+    --device <frame-ip> --file espframe-waveshare-esp32-s3-touch-lcd-7-ota.bin
+  ```
+
+  This speaks ESPHome's OTA protocol, so Arduino's `espota.py` won't work here.
+
+Before this fix, the espframe web installer had a single **Install** button that picked the Freenove image for any ESP32-S3. It now has a separate button per device; pick the Waveshare one.
+
+After recovering, the frame checks its own manifest. If it was flashed with firmware older than this fix, see [the old shared manifest](/firmware-update#the-old-shared-manifest).
 
 ## WiFi Setup Problems
 

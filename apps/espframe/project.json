@@ -110,7 +110,7 @@
     "release": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "python3 tools/esp-flasher/generate_release.py --project-dir apps/espframe --name \"espframe\" --esphome freenove-s3:ESP32-S3:immich-frame-freenove-s3 --esphome waveshare-esp32-s3-touch-lcd-7:ESP32-S3:immich-frame-waveshare-s3 --esphome guition-esp32-p4-jc8012p4a1:ESP32-P4:immich-frame-10inch --version ${RELEASE_VERSION:-dev}",
+        "command": "python3 tools/esp-flasher/generate_release.py --project-dir apps/espframe --name \"espframe\" --esphome \"freenove-s3:ESP32-S3:immich-frame-freenove-s3:Freenove ESP32-S3 CYD\" --esphome \"waveshare-esp32-s3-touch-lcd-7:ESP32-S3:immich-frame-waveshare-s3:Waveshare ESP32-S3-Touch-LCD-7 (7 inch)\" --esphome \"guition-esp32-p4-jc8012p4a1:ESP32-P4:immich-frame-10inch:Guition ESP32-P4 JC8012P4A1 (10 inch)\" --version ${RELEASE_VERSION:-dev}",
         "cwd": "."
       },
       "dependsOn": ["build-freenove-s3", "build-waveshare-esp32-s3-touch-lcd-7", "build-guition-esp32-p4-jc8012p4a1"]

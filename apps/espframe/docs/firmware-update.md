@@ -5,7 +5,26 @@ description: Configure Espframe over-the-air and HTTP firmware updates from GitH
 
 # Espframe Firmware Updates
 
-OTA and HTTP updates from GitHub. The device checks the stable firmware manifest on GitHub Pages. The 10-inch model uses `https://jtenniswood.github.io/espframe/firmware/manifest.json`. Controls: device web UI at `http://<device-ip>/` under **Firmware** (and in Home Assistant).
+OTA and HTTP updates from GitHub. Each device checks its own stable firmware manifest on GitHub Pages. Controls: device web UI at `http://<device-ip>/` under **Firmware** (and in Home Assistant).
+
+| Device | Default manifest URL |
+|--------|----------------------|
+| Guition ESP32-P4 10" | `https://rcompton78.github.io/compton-diy/espframe/manifest-guition-esp32-p4-jc8012p4a1.json` |
+| Waveshare ESP32-S3-Touch-LCD-7 7" | `https://rcompton78.github.io/compton-diy/espframe/manifest-waveshare-esp32-s3-touch-lcd-7.json` |
+| Freenove ESP32-S3 CYD | `https://rcompton78.github.io/compton-diy/espframe/manifest-freenove-s3.json` |
+
+Each of these lists a single build. ESPHome installs the first build in a manifest whose chip family matches the device, and the Waveshare 7" and the Freenove board are both ESP32-S3, so a manifest listing both would install whichever came first on either board.
+
+### The old shared manifest
+
+Devices used to share `https://rcompton78.github.io/compton-diy/espframe/manifest.json`, and a saved manifest URL survives reflashing. That URL now lists only the ESP32-P4 build, so an ESP32-S3 device still pointed at it finds no compatible build and stops updating rather than installing another board's firmware. Firmware from this release onward moves a device off the shared URL onto its own manifest at boot.
+
+A device still on older firmware has to get the new firmware once some other way:
+
+- set **Stable Manifest URL** (under **Firmware** → **Advanced**) to the device's manifest URL from the table above, then press **Check for Update** and install, or
+- flash it over USB or ESPHome OTA (see [Troubleshooting](/troubleshooting#wrong-firmware-after-an-update)).
+
+The 10-inch frame keeps updating from the shared URL and migrates on its next update.
 
 During OTA updates, Espframe keeps the current backlight state while the update starts. If Home Assistant or the screen sleep control had already turned the display off, the screen stays off after the update reboot until it is woken again.
 

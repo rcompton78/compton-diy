@@ -26,7 +26,7 @@ from product_config import devices_by_slug, load_product, project_value
 ROOT = Path(__file__).resolve().parent.parent
 PRODUCT = load_product()
 PROJECT = PRODUCT["project"]
-FIRMWARE_VERSION_PLACEHOLDER = str(PROJECT.get("firmware_version_placeholder_line", '  firmware_version: "0.0.0"'))
+FIRMWARE_VERSION_PLACEHOLDER = str(PROJECT.get("firmware_version_placeholder_line", '  firmware_version: "dev"'))
 PLACEHOLDER_STRINGS = {
     str(value)
     for value in PROJECT.get("firmware_placeholder_versions", ["dev", "0.0.0", "main"])
