@@ -96,6 +96,10 @@ if [ -d "$ESPFRAME_DIR/product/contract" ]; then
   else
     echo "ESPHome already installed: $("$ESPFRAME_VENV_PYTHON" -m esphome version)"
   fi
+
+  # espframe's test:timezones validates against a pinned pip tzdata. Keep it in
+  # this venv so the system python3 needs nothing (PEP 668 blocks system pip).
+  "$ESPFRAME_VENV_DIR/bin/pip" install --quiet -r "$ESPFRAME_DIR/scripts/requirements-timezones.txt"
 else
   echo "Skipping ESPHome setup: apps/espframe not present."
 fi

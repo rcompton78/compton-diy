@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import datetime as dt
 import importlib.util
 import os
@@ -16,6 +17,10 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parents[1]
 TIMEZONES_PATH = ROOT / "components" / "espframe" / "timezones.py"
 REQUIREMENTS_PATH = Path(__file__).resolve().with_name("requirements-timezones.txt")
+INSTALL_HINT = (
+    f"run scripts/setup.sh (installs it into apps/espframe/.venv, which "
+    f"npm run test:timezones uses), or pip install -r {REQUIREMENTS_PATH} in a venv"
+)
 
 
 def load_timezones():
@@ -39,12 +44,11 @@ def use_pinned_tzdata() -> str:
     try:
         import tzdata
     except ImportError as exc:
-        raise SystemExit(f"tzdata is not installed: pip install -r {REQUIREMENTS_PATH}") from exc
+        raise SystemExit(f"tzdata is not installed: {INSTALL_HINT}") from exc
     installed = tuple(int(part) for part in tzdata.__version__.split("."))
     if installed < tuple(int(part) for part in pinned.group(1).split(".")):
         raise SystemExit(
-            f"tzdata {tzdata.__version__} is older than the pinned {pinned.group(1)}: "
-            f"pip install -r {REQUIREMENTS_PATH}"
+            f"tzdata {tzdata.__version__} is older than the pinned {pinned.group(1)}: {INSTALL_HINT}"
         )
     zoneinfo.reset_tzpath(to=[])
     return tzdata.IANA_VERSION
@@ -86,7 +90,29 @@ def assert_close(actual: float, expected: float, label: str) -> None:
         raise AssertionError(f"{label}: expected {expected}, got {actual}")
 
 
+def rule_sample_years(rolling: bool) -> list[int]:
+    """Years whose offsets each zone's POSIX rule must match.
+
+    The fixed years keep the PR check deterministic. The weekly drift job adds
+    years relative to today so it keeps catching newly announced changes once
+    the fixed years are in the past.
+    """
+    years = {2027, 2030}
+    if rolling:
+        this_year = dt.date.today().year
+        years |= {this_year + 1, this_year + 4}
+    return sorted(years)
+
+
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--rolling-years",
+        action="store_true",
+        help="also check the rules a year and four years from today (the weekly tzdata drift job)",
+    )
+    args = parser.parse_args()
+
     iana_version = use_pinned_tzdata()
     module = load_timezones()
     rows = module.TIMEZONES
@@ -105,10 +131,11 @@ def main() -> int:
         dt.datetime(2026, 11, 15, 12, tzinfo=dt.timezone.utc),
     ]
     # A POSIX string can't express a one-time transition, so the firmware's
-    # rule has to match the zone's current rules: sample the year after the
-    # 2026 one-time changes, plus a later year so a newer tzdata announcing a
-    # future change also fails the weekly drift check.
-    posix_instants = [instant.replace(year=year) for year in (2027, 2030) for instant in label_instants]
+    # rule has to match the zone's current rules: sample years after the 2026
+    # one-time changes, so a newer tzdata announcing a future change fails too.
+    posix_instants = [
+        instant.replace(year=year) for year in rule_sample_years(args.rolling_years) for instant in label_instants
+    ]
 
     for tz, gmt, _lat, _lon, posix in rows:
         label_offset = module.parse_gmt_label(gmt)

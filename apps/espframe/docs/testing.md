@@ -74,7 +74,7 @@ npm run test:firmware-logic
 
 This group compiles and runs host-side C++ tests for firmware helper logic, then checks timezone data. It is much faster than a full ESPHome compile and is the right place to cover slideshow decisions, Immich request building, date handling, duration parsing, and other logic that can be tested without a device.
 
-The timezone check validates `components/espframe/timezones.py` against the pip `tzdata` package pinned in `scripts/requirements-timezones.txt`, never the host's own timezone database, so it gives the same answer on every machine. Install it once with `pip install -r scripts/requirements-timezones.txt`; the check fails with that hint if it is missing or older than the pin. GitHub's PR Build runs the same pinned check, and the weekly **tzdata drift** workflow reruns it against the latest tzdata release, failing when a real-world rule change means the table needs updating.
+The timezone check validates `components/espframe/timezones.py` against the pip `tzdata` package, never the host's own timezone database. It requires at least the version pinned in `scripts/requirements-timezones.txt`; GitHub's PR Build installs exactly that version, so a local run only differs from CI if you have a newer tzdata installed. `scripts/setup.sh` installs the pin into `apps/espframe/.venv`, which `npm run test:timezones` uses when it exists; without it, the check falls back to the system `python3` and fails with an install hint if tzdata is missing or older than the pin. The weekly **tzdata drift** workflow reruns the check against the latest tzdata release, adding sample years relative to today (`--rolling-years`), and fails when a real-world rule change means the table needs updating.
 
 ### Full Firmware Compile
 

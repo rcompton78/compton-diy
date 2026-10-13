@@ -27,7 +27,7 @@
     "test:release-ready": "python3 tests/release_ready_tests.py",
     "test:workflow-contract": "python3 tests/workflow_contract_tests.py",
     "test:budgets": "python3 tests/build_budget_tests.py",
-    "test:timezones": "python3 scripts/check_timezones.py",
+    "test:timezones": "if [ -x .venv/bin/python ]; then .venv/bin/python scripts/check_timezones.py; else python3 scripts/check_timezones.py; fi",
     "test:helpers": "g++ -std=c++17 -I. -Itests/stubs tests/espframe_helper_tests.cpp -o /tmp/espframe_helper_tests && /tmp/espframe_helper_tests",
     "test:firmware-logic": "npm run test:helpers && npm run test:timezones",
     "check:fast": "npm run check:schema && npm run check:generated && npm run check:product && npm run check:backup && npm run check:compat && npm run check:ownership && npm run check:budgets && npm run check:firmware-fields",
