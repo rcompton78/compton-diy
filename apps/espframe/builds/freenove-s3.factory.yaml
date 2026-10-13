@@ -11,7 +11,7 @@
 substitutions:
   name: "immich-frame-freenove-s3"
   friendly_name: "Immich Frame Freenove S3"
-  firmware_version: "0.0.0"
+  firmware_version: "dev"
 
 packages:
   espframe: !include ../devices/freenove-s3/packages.yaml

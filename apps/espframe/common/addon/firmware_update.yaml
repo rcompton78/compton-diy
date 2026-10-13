@@ -15,6 +15,12 @@
 substitutions:
   firmware_version: "dev"
   firmware_manifest_url: "https://rcompton78.github.io/compton-diy/espframe/manifest.json"
+  # The shared manifest every device used to poll by default. It can't list
+  # two builds for one chipFamily (ESPHome takes the first match, so the 7"
+  # Waveshare installed the Freenove S3 build, COM-427), so each device now
+  # defaults to its own manifest-<device>.json instead. A saved URL survives
+  # reflashes, so on_boot below moves a device off this one.
+  legacy_firmware_manifest_url: "https://rcompton78.github.io/compton-diy/espframe/manifest.json"
 
 esphome:
   project:
@@ -32,6 +38,15 @@ esphome:
     - priority: -100
       then:
         - lambda: |-
+            const std::string legacy_url = "${legacy_firmware_manifest_url}";
+            const std::string default_url = "${firmware_manifest_url}";
+            if (default_url != legacy_url &&
+                strip_trailing_slashes(id(firmware_manifest_url_text).state) == legacy_url) {
+              // A call (not publish_state) so the template text persists it.
+              id(firmware_manifest_url_text).make_call().set_value(default_url).perform();
+              global_preferences->sync();
+              ESP_LOGI("firmware", "Migrated firmware manifest URL from the shared manifest to %s", default_url.c_str());
+            }
             id(firmware_update).set_source_url(id(firmware_manifest_url_text).state);
         - component.update: firmware_version_sensor
 

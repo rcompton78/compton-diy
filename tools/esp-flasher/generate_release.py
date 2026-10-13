@@ -23,9 +23,20 @@ Multi-board app:
 Output:
     dist/<app-slug>/
         <app-slug>-<env>.bin    merged firmware per variant
-        manifest.json           ESP Web Tools manifest (all variants)
+        <app-slug>-<env>-ota.bin  app-only image per variant, for OTA
+        manifest.json           shared manifest: every variant whose chipFamily
+                                is unique across the app's variants
+        manifest-<env>.json     one single-build manifest per variant
+                                (multi-variant apps only)
         index.html              web flasher page
-        esp-web-tools.js        bundled locally (no CDN at flash time)
+
+Both ESP Web Tools and ESPHome's http_request update pick the *first* build
+whose chipFamily matches the connected chip, so no manifest written here may
+list two builds with the same chipFamily (COM-427: the espframe 7" Waveshare
+S3 kept resolving to the Freenove S3 build). Apps with two variants on the
+same chip get them only in their own manifest-<env>.json; the flasher page
+then shows one install button per device instead of one auto-detecting
+button.
 """
 
 import argparse
@@ -36,6 +47,7 @@ import os
 import shutil
 import subprocess
 import sys
+from html import escape
 
 SCRIPT_DIR       = os.path.dirname(os.path.abspath(__file__))
 REPO_ROOT        = os.path.abspath(os.path.join(SCRIPT_DIR, "..", ".."))
@@ -140,10 +152,26 @@ def merge_firmware(project_dir, env_name, chip, output_path):
 
 # ── manifest + HTML ──────────────────────────────────────────────────────────
 
+def duplicate_chip_families(builds):
+    seen, dupes = set(), set()
+    for b in builds:
+        (dupes if b["chipFamily"] in seen else seen).add(b["chipFamily"])
+    return dupes
+
+
 def generate_manifest(app_name, version, builds, output_path):
     """
-    builds: list of {"chipFamily": "ESP32-C3", "bin": "app-c3.bin"}
+    builds: list of {"chipFamily": "ESP32-C3", "bin": "app-c3.bin",
+                     "ota_bin": "app-c3-ota.bin", "ota_md5": "..."}
     """
+    dupes = duplicate_chip_families(builds)
+    if dupes:
+        # Consumers take the first chipFamily match, so a duplicate would
+        # silently flash one board's firmware onto another (COM-427).
+        raise ValueError(
+            f"{os.path.basename(output_path)} would list more than one build for "
+            f"chipFamily {', '.join(sorted(dupes))}; give each such variant its own manifest"
+        )
     manifest = {
         "name": app_name,
         "version": version,
@@ -170,7 +198,42 @@ def md5sum(path):
 
 
 
-def copy_flasher_html(app_name, app_slug, version, output_path):
+def variant_manifest_name(env):
+    return f"manifest-{env}.json"
+
+
+def write_manifests(app_name, version, builds, dist_dir):
+    """
+    Writes the shared manifest.json plus, for a multi-variant app, one
+    manifest-<env>.json per variant. Each build needs "env" and "label" keys
+    on top of generate_manifest()'s. Returns True when two variants share a
+    chipFamily, i.e. the shared manifest can't serve them and the flasher
+    page needs per-device buttons.
+    """
+    dupes = duplicate_chip_families(builds)
+    shared = [b for b in builds if b["chipFamily"] not in dupes]
+    generate_manifest(app_name, version, shared,
+                      os.path.join(dist_dir, "manifest.json"))
+    if len(builds) > 1:
+        for b in builds:
+            generate_manifest(f"{app_name}: {b['label']}", version, [b],
+                              os.path.join(dist_dir, variant_manifest_name(b["env"])))
+    return bool(dupes)
+
+
+def install_buttons_html(builds, per_device):
+    if not per_device:
+        return ('<esp-web-install-button manifest="manifest.json">'
+                '</esp-web-install-button>')
+    return "\n    ".join(
+        f'<div class="device">{escape(b["label"])}</div>\n'
+        f'    <esp-web-install-button manifest="{variant_manifest_name(b["env"])}">'
+        f'</esp-web-install-button>'
+        for b in builds
+    )
+
+
+def copy_flasher_html(app_name, app_slug, version, builds, per_device, output_path):
     template = os.path.join(SCRIPT_DIR, "flasher-template.html")
     with open(template) as f:
         html = f.read()
@@ -178,7 +241,10 @@ def copy_flasher_html(app_name, app_slug, version, output_path):
     html = html.replace("{{APP_NAME}}", app_name)
     html = html.replace("{{APP_SLUG}}", app_slug)
     html = html.replace("{{VERSION}}", version)
-    html = html.replace("{{MANIFEST}}", "manifest.json")
+    html = html.replace("{{INSTALL_STEP}}",
+                        "Click <strong>Install</strong> under your device"
+                        if per_device else "Click <strong>Install</strong> below")
+    html = html.replace("{{INSTALL_BUTTONS}}", install_buttons_html(builds, per_device))
 
     with open(output_path, "w") as f:
         f.write(html)
@@ -191,14 +257,15 @@ def main():
     parser.add_argument("--project-dir", required=True)
     parser.add_argument("--name",        required=True, help="Human-readable app name")
     parser.add_argument("--build",       action="append", default=[],
-                        metavar="ENV:CHIP",
-                        help="PlatformIO board variant, e.g. c3:ESP32-C3. Repeat for multiple.")
+                        metavar="ENV:CHIP[:LABEL]",
+                        help="PlatformIO board variant, e.g. c3:ESP32-C3. LABEL names the device on "
+                             "the flasher page (defaults to ENV). Repeat for multiple.")
     parser.add_argument("--esphome",     action="append", default=[],
-                        metavar="ENV:CHIP:ESPHOME_NAME",
+                        metavar="ENV:CHIP:ESPHOME_NAME[:LABEL]",
                         help="ESPHome device variant, e.g. freenove-s3:ESP32-S3:immich-frame-freenove-s3. "
                              "ESPHome already merges bootloader+partitions+app, so unlike --build this just "
                              "copies builds/.esphome/build/ESPHOME_NAME/.pioenvs/ESPHOME_NAME/firmware{.factory,}.bin. "
-                             "Repeat for multiple.")
+                             "LABEL names the device on the flasher page (defaults to ENV). Repeat for multiple.")
     parser.add_argument("--version",     default="dev")
     args = parser.parse_args()
 
@@ -210,22 +277,26 @@ def main():
     dist_dir    = os.path.join(REPO_ROOT, "dist", app_slug)
     os.makedirs(dist_dir, exist_ok=True)
 
-    # Parse --build env:CHIP pairs
+    # Parse --build env:CHIP[:label]
     variants = []
     for b in args.build:
-        if ":" not in b:
-            parser.error(f"--build must be in ENV:CHIP format, got: {b}")
-        env_name, chip = b.split(":", 1)
-        variants.append({"env": env_name, "chip": chip})
+        parts = b.split(":", 2)
+        if len(parts) < 2:
+            parser.error(f"--build must be in ENV:CHIP[:LABEL] format, got: {b}")
+        env_name, chip = parts[:2]
+        label = parts[2] if len(parts) == 3 else env_name
+        variants.append({"env": env_name, "chip": chip, "label": label})
 
-    # Parse --esphome env:CHIP:esphome_name triples
+    # Parse --esphome env:CHIP:esphome_name[:label]
     esphome_variants = []
     for e in args.esphome:
-        parts = e.split(":")
-        if len(parts) != 3:
-            parser.error(f"--esphome must be in ENV:CHIP:ESPHOME_NAME format, got: {e}")
-        env_name, chip, esphome_name = parts
-        esphome_variants.append({"env": env_name, "chip": chip, "esphome_name": esphome_name})
+        parts = e.split(":", 3)
+        if len(parts) < 3:
+            parser.error(f"--esphome must be in ENV:CHIP:ESPHOME_NAME[:LABEL] format, got: {e}")
+        env_name, chip, esphome_name = parts[:3]
+        label = parts[3] if len(parts) == 4 else env_name
+        esphome_variants.append({"env": env_name, "chip": chip,
+                                 "esphome_name": esphome_name, "label": label})
 
     multi_variant = (len(variants) + len(esphome_variants)) > 1
 
@@ -247,6 +318,7 @@ def main():
         ota_dest = os.path.join(dist_dir, ota_bin_name)
         shutil.copy(ota_src, ota_dest)
         builds_for_manifest.append({
+            "env": v["env"], "label": v["label"],
             "chipFamily": v["chip"], "bin": bin_name,
             "ota_bin": ota_bin_name, "ota_md5": md5sum(ota_dest),
         })
@@ -275,17 +347,17 @@ def main():
         ota_dest = os.path.join(dist_dir, ota_bin_name)
         shutil.copy(ota_src, ota_dest)
         builds_for_manifest.append({
+            "env": v["env"], "label": v["label"],
             "chipFamily": v["chip"], "bin": bin_name,
             "ota_bin": ota_bin_name, "ota_md5": md5sum(ota_dest),
         })
 
-    print("==> Generating manifest")
-    generate_manifest(args.name, args.version, builds_for_manifest,
-                      os.path.join(dist_dir, "manifest.json"))
+    print("==> Generating manifests")
+    per_device = write_manifests(args.name, args.version, builds_for_manifest, dist_dir)
 
     print("==> Copying flasher HTML")
-    copy_flasher_html(args.name, app_slug, args.version,
-                      os.path.join(dist_dir, "index.html"))
+    copy_flasher_html(args.name, app_slug, args.version, builds_for_manifest,
+                      per_device, os.path.join(dist_dir, "index.html"))
 
     print(f"==> Done — dist/{app_slug}/ ({len(variants) + len(esphome_variants)} variant(s))")
 

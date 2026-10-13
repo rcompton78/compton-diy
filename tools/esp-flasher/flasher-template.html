@@ -55,6 +55,7 @@
       width: 100%;
     }
     esp-web-install-button::part(button):hover { background: #0060d0; }
+    .device { font-weight: 600; text-align: left; margin-bottom: 8px; }
     .note { font-size: 0.8rem; color: #555; }
     a { color: #0070f3; }
   </style>
@@ -67,13 +68,13 @@
     <div class="steps">
       <ol>
         <li>Connect your ESP32 via USB</li>
-        <li>Click <strong>Install</strong> below</li>
+        <li>{{INSTALL_STEP}}</li>
         <li>Select the correct COM/serial port</li>
         <li>Wait for flashing to complete (~30s)</li>
       </ol>
     </div>
 
-    <esp-web-install-button manifest="{{MANIFEST}}"></esp-web-install-button>
+    {{INSTALL_BUTTONS}}
 
     <p class="note">
       Requires Chrome or Edge with Web Serial support.<br>

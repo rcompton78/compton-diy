@@ -162,7 +162,7 @@
       "screen_rotation_180": "270",
       "screen_rotation_270": "0",
       "captive_portal_ip": "192.168.4.1",
-      "firmware_manifest_url": "https://rcompton78.github.io/compton-diy/espframe/manifest.json"
+      "firmware_manifest_url": "https://rcompton78.github.io/compton-diy/espframe/manifest-guition-esp32-p4-jc8012p4a1.json"
     },
     "font_assets": [
       {
@@ -374,7 +374,7 @@
       "screen_rotation_180": "180",
       "screen_rotation_270": "270",
       "captive_portal_ip": "192.168.4.1",
-      "firmware_manifest_url": "https://rcompton78.github.io/compton-diy/espframe/manifest.json"
+      "firmware_manifest_url": "https://rcompton78.github.io/compton-diy/espframe/manifest-freenove-s3.json"
     },
     "font_assets": [
       {
@@ -581,7 +581,7 @@
       "screen_rotation_180": "180",
       "screen_rotation_270": "270",
       "captive_portal_ip": "192.168.4.1",
-      "firmware_manifest_url": "https://rcompton78.github.io/compton-diy/espframe/manifest.json"
+      "firmware_manifest_url": "https://rcompton78.github.io/compton-diy/espframe/manifest-waveshare-esp32-s3-touch-lcd-7.json"
     },
     "font_assets": [
       {
