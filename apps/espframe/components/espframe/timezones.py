@@ -22,11 +22,16 @@ TIMEZONES = [
     ("America/Tijuana",                 "GMT-8",      32.51, -117.04, "PST8PDT,M3.2.0,M11.1.0"),
     ("America/Denver",                  "GMT-7",      39.74, -104.98, "MST7MDT,M3.2.0,M11.1.0"),
     ("America/Phoenix",                 "GMT-7",      33.45, -112.07, "MST7"),
-    ("America/Edmonton",                "GMT-7",      53.55, -113.49, "MST7MDT,M3.2.0,M11.1.0"),
+    # Alberta stayed on daylight time after the March 2026 spring-forward and
+    # dropped the November 2026 fall-back (tzdata 2026c+), so it is now fixed
+    # UTC-6. Keep the GMT-7 option value for saved-setting compatibility.
+    ("America/Edmonton",                "GMT-7",      53.55, -113.49, "CST6"),
     ("America/Boise",                   "GMT-7",      43.62, -116.21, "MST7MDT,M3.2.0,M11.1.0"),
     ("America/Chicago",                 "GMT-6",      41.88,  -87.63, "CST6CDT,M3.2.0,M11.1.0"),
     ("America/Mexico_City",             "GMT-6",      19.43,  -99.13, "CST6"),
-    ("America/Winnipeg",                "GMT-6",      49.90,  -97.14, "CST6CDT,M3.2.0,M11.1.0"),
+    # Manitoba likewise stays on UTC-5 from November 2026 (tzdata 2026e+).
+    # Keep the GMT-6 option value for saved-setting compatibility.
+    ("America/Winnipeg",                "GMT-6",      49.90,  -97.14, "EST5"),
     ("America/Guatemala",               "GMT-6",      14.63,  -90.51, "CST6"),
     ("America/Costa_Rica",              "GMT-6",       9.93,  -84.08, "CST6"),
     ("America/New_York",                "GMT-5",      40.71,  -74.01, "EST5EDT,M3.2.0,M11.1.0"),
@@ -57,9 +62,10 @@ TIMEZONES = [
     ("Europe/London",                   "GMT+0",      51.51,   -0.13, "GMT0BST,M3.5.0/1,M10.5.0"),
     ("Europe/Dublin",                   "GMT+0",      53.35,   -6.26, "IST-1GMT0,M10.5.0,M3.5.0/1"),
     ("Europe/Lisbon",                   "GMT+0",      38.72,   -9.14, "WET0WEST,M3.5.0/1,M10.5.0"),
-    # Morocco temporarily switches to GMT+0 during Ramadan. That yearly,
-    # religion-calendar rule is not representable by this compact POSIX string.
-    ("Africa/Casablanca",               "GMT+1",      33.57,   -7.59, "<+01>-1"),
+    # Morocco moved to permanent UTC+0 in September 2026 (tzdata 2026c+), which
+    # also ended its Ramadan switches. Keep the GMT+1 option value for
+    # saved-setting compatibility.
+    ("Africa/Casablanca",               "GMT+1",      33.57,   -7.59, "<+00>0"),
     ("Africa/Accra",                    "GMT+0",       5.56,   -0.19, "GMT0"),
     ("Atlantic/Reykjavik",              "GMT+0",      64.15,  -21.94, "GMT0"),
     ("Europe/Paris",                    "GMT+1",      48.86,    2.35, "CET-1CEST,M3.5.0,M10.5.0/3"),

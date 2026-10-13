@@ -1,0 +1,35 @@
+name: tzdata drift
+
+# espframe's timezone table (apps/espframe/components/espframe/timezones.py)
+# hard-codes a POSIX TZ rule per zone. PR Build checks it against the pinned
+# tzdata in apps/espframe/scripts/requirements-timezones.txt; this job checks it
+# against the latest tzdata release, so a real-world rule change (like Alberta
+# dropping DST in 2026) fails a run, and GitHub emails about it, before it
+# reaches anyone's frame. Not a PR gate. To fix a failure, update the flagged
+# zones in timezones.py, bump the pin, and rerun
+# apps/espframe/scripts/generate_assets.py.
+
+on:
+  schedule:
+    - cron: '17 14 * * 1'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install latest tzdata
+        run: pip install --upgrade tzdata
+
+      - name: Check espframe timezone table
+        run: python3 apps/espframe/scripts/check_timezones.py

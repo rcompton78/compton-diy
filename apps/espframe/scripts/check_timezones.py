@@ -7,20 +7,15 @@ import datetime as dt
 import importlib.util
 import os
 from pathlib import Path
+import re
 import time
+import zoneinfo
 from zoneinfo import ZoneInfo
 
 
 ROOT = Path(__file__).resolve().parents[1]
 TIMEZONES_PATH = ROOT / "components" / "espframe" / "timezones.py"
-CASABLANCA = "Africa/Casablanca"
-CASABLANCA_LIMITATION = "Ramadan UTC+0 transition is not representable by the compact POSIX string"
-VANCOUVER = "America/Vancouver"
-VANCOUVER_PERMANENT_DST = (
-    "British Columbia's March 2026 one-time switch to permanent daylight time "
-    "is not fully representable by a compact POSIX string"
-)
-VANCOUVER_PERMANENT_DST_START = dt.datetime(2026, 3, 8, 10, tzinfo=dt.timezone.utc)
+REQUIREMENTS_PATH = Path(__file__).resolve().with_name("requirements-timezones.txt")
 
 
 def load_timezones():
@@ -30,6 +25,29 @@ def load_timezones():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+def use_pinned_tzdata() -> str:
+    """Validate against the pip tzdata package, never the host's zoneinfo.
+
+    The host database's version depends on the machine, so the same table could
+    pass on one and fail on another. Returns the IANA version in use.
+    """
+    pinned = re.search(r"^tzdata==([\d.]+)", REQUIREMENTS_PATH.read_text(), re.MULTILINE)
+    if pinned is None:
+        raise RuntimeError(f"No tzdata pin in {REQUIREMENTS_PATH}")
+    try:
+        import tzdata
+    except ImportError as exc:
+        raise SystemExit(f"tzdata is not installed: pip install -r {REQUIREMENTS_PATH}") from exc
+    installed = tuple(int(part) for part in tzdata.__version__.split("."))
+    if installed < tuple(int(part) for part in pinned.group(1).split(".")):
+        raise SystemExit(
+            f"tzdata {tzdata.__version__} is older than the pinned {pinned.group(1)}: "
+            f"pip install -r {REQUIREMENTS_PATH}"
+        )
+    zoneinfo.reset_tzpath(to=[])
+    return tzdata.IANA_VERSION
 
 
 def posix_offset_hours(posix: str, instant: dt.datetime) -> float:
@@ -69,49 +87,40 @@ def assert_close(actual: float, expected: float, label: str) -> None:
 
 
 def main() -> int:
+    iana_version = use_pinned_tzdata()
     module = load_timezones()
     rows = module.TIMEZONES
     row_by_tz = {tz: (gmt, posix) for tz, gmt, _lat, _lon, posix in rows}
 
     assert_equal(row_by_tz["Asia/Almaty"][0], "GMT+5", "Asia/Almaty label")
-    assert CASABLANCA in row_by_tz, CASABLANCA_LIMITATION
 
-    sample_instants = [
+    # GMT labels are part of the saved option value, so a zone whose rules
+    # changed (e.g. Vancouver, Edmonton, Winnipeg and Casablanca in 2026) keeps
+    # its old label. A label only has to match an offset the zone used in 2026.
+    label_instants = [
         dt.datetime(2026, 1, 15, 12, tzinfo=dt.timezone.utc),
         dt.datetime(2026, 2, 20, 12, tzinfo=dt.timezone.utc),
         dt.datetime(2026, 4, 22, 12, tzinfo=dt.timezone.utc),
         dt.datetime(2026, 7, 15, 12, tzinfo=dt.timezone.utc),
         dt.datetime(2026, 11, 15, 12, tzinfo=dt.timezone.utc),
     ]
+    # A POSIX string can't express a one-time transition, so the firmware's
+    # rule has to match the zone's current rules: sample the year after the
+    # 2026 one-time changes, plus a later year so a newer tzdata announcing a
+    # future change also fails the weekly drift check.
+    posix_instants = [instant.replace(year=year) for year in (2027, 2030) for instant in label_instants]
 
     for tz, gmt, _lat, _lon, posix in rows:
         label_offset = module.parse_gmt_label(gmt)
-        iana_offsets = {iana_offset_hours(tz, instant) for instant in sample_instants}
+        iana_offsets = {iana_offset_hours(tz, instant) for instant in label_instants}
         if label_offset not in iana_offsets:
             raise AssertionError(f"{tz} label {gmt} is not one of the sampled IANA offsets {sorted(iana_offsets)}")
 
-        if tz == CASABLANCA:
-            continue
-
-        if tz == VANCOUVER:
-            assert VANCOUVER in row_by_tz, VANCOUVER_PERMANENT_DST
-            for instant in sample_instants:
-                # IANA tzdata packages disagree about British Columbia's future
-                # one-time 2026 DST change, and a compact POSIX TZ string cannot
-                # express a one-time transition. Validate the firmware's
-                # intentional fixed GMT-7 rule directly instead.
-                assert_close(
-                    posix_offset_hours(posix, instant),
-                    -7.0,
-                    f"{tz} compact POSIX offset on {instant.date()}",
-                )
-            continue
-
-        for instant in sample_instants:
+        for instant in posix_instants:
             assert_close(
                 posix_offset_hours(posix, instant),
                 iana_offset_hours(tz, instant),
-                f"{tz} POSIX offset on {instant.date()}",
+                f"{tz} POSIX offset on {instant.date()} (tzdata {iana_version})",
             )
 
     expected_noon_offsets = [
@@ -139,7 +148,7 @@ def main() -> int:
     assert "daylight GMT-4" in labels["America/New_York (GMT-5)"]
     assert labels["Asia/Almaty (GMT+5)"] == "Asia/Almaty (GMT+5)"
 
-    print("timezone validation passed")
+    print(f"timezone validation passed (tzdata {iana_version})")
     return 0
 
 

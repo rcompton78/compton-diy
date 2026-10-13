@@ -47,6 +47,11 @@ jobs:
       - name: Test release tooling
         run: python3 -m unittest discover -s tools/esp-flasher -p 'test_*.py'
 
+      - name: Check espframe timezone table
+        run: |
+          pip install -r apps/espframe/scripts/requirements-timezones.txt
+          python3 apps/espframe/scripts/check_timezones.py
+
       - name: Build affected firmware
         env:
           BASE_REF: ${{ github.base_ref }}
