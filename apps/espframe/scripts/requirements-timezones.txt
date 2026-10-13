@@ -1,0 +1,4 @@
+# IANA tzdata that check_timezones.py validates timezones.py against. Bump it
+# (and fix any zone the checker then flags) when the weekly tzdata-drift
+# workflow reports a newer release with real-world rule changes.
+tzdata==2026.5
