@@ -45,7 +45,9 @@
         "{workspaceRoot}/tools/sprites/convert.py",
         "{projectRoot}/platformio.ini",
         "{workspaceRoot}/libs/touch-driver/src/**",
+        "{workspaceRoot}/libs/touch-driver/library.json",
         "{workspaceRoot}/libs/ota-update-client/src/**",
+        "{workspaceRoot}/libs/ota-update-client/library.json",
         "{workspaceRoot}/scripts/pio.sh",
         { "env": "RELEASE_VERSION" }
       ],
@@ -69,7 +71,9 @@
         "{workspaceRoot}/tools/sprites/convert.py",
         "{projectRoot}/platformio.ini",
         "{workspaceRoot}/libs/touch-driver/src/**",
+        "{workspaceRoot}/libs/touch-driver/library.json",
         "{workspaceRoot}/libs/ota-update-client/src/**",
+        "{workspaceRoot}/libs/ota-update-client/library.json",
         "{workspaceRoot}/scripts/pio.sh",
         { "env": "RELEASE_VERSION" }
       ],

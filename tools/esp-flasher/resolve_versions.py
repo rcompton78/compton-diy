@@ -20,6 +20,11 @@ with a `release` target gets:
 When no earlier release lists a project (a new project) it is bumped, so the
 fail-safe is the old behaviour: one extra update, never a stuck device.
 
+`--force-bump a,b` (release.yml's manual `force_bump` input) bumps projects whose
+source didn't change but whose firmware should still reach devices, e.g. after
+rotating a secret baked in at build time; a carried project would otherwise be
+rebuilt with the new secret under its old version, so no device installs it.
+
     python3 tools/esp-flasher/resolve_versions.py \
         --base <last-release sha> --head <sha> --version 2026.10.13-139 \
         --output versions.json
@@ -93,7 +98,7 @@ def latest_listed_version(project, releases):
     return None
 
 
-def resolve(projects, affected, changed_files, project_inputs, releases, version):
+def resolve(projects, affected, changed_files, project_inputs, releases, version, forced=()):
     """Decide each release project's version.
 
     projects       — names of every project with a `release` target
@@ -102,10 +107,13 @@ def resolve(projects, affected, changed_files, project_inputs, releases, version
     project_inputs — {project: [workspace-relative input globs]}
     releases       — GitHub releases, newest first
     version        — this run's new version
+    forced         — names to bump regardless ("all" bumps every project)
     """
     bumped, carried, reasons = [], {}, {}
     for project in sorted(projects):
-        if project in affected:
+        if project in forced or "all" in forced:
+            reasons[project] = "forced"
+        elif project in affected:
             reasons[project] = "nx affected"
         else:
             hits = [f for g in project_inputs.get(project, [])
@@ -146,10 +154,16 @@ def main():
     parser.add_argument("--head", required=True)
     parser.add_argument("--version", required=True, help="this run's new version")
     parser.add_argument("--repo", default="", help="owner/name (default: the current repo)")
+    parser.add_argument("--force-bump", default="",
+                        help="comma-separated projects to bump even if unchanged, or 'all'")
     parser.add_argument("--output", help="write the JSON here as well as to stdout")
     args = parser.parse_args()
 
     projects = nx_json("show", "projects", "--withTarget", "release")
+    forced = {p.strip() for p in args.force_bump.split(",") if p.strip()}
+    unknown = forced - set(projects) - {"all"}
+    if unknown:
+        sys.exit(f"--force-bump: no release project named {', '.join(sorted(unknown))}")
     affected = set(nx_json("show", "projects", "--affected", "--withTarget", "release",
                            f"--base={args.base}", f"--head={args.head}"))
     changed_files = run(["git", "diff", "--name-only", args.base, args.head]).split()
@@ -162,7 +176,7 @@ def main():
         print(f"warning: could not list releases ({e}); bumping every project", file=sys.stderr)
         releases = []
 
-    result = resolve(projects, affected, changed_files, project_inputs, releases, args.version)
+    result = resolve(projects, affected, changed_files, project_inputs, releases, args.version, forced)
     text = json.dumps(result, indent=2)
     print(text)
     if args.output:

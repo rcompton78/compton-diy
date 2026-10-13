@@ -3,6 +3,14 @@ name: CI
 on:
   push:
     branches: [master]
+  # Manual re-release of unchanged projects, e.g. after rotating a secret baked
+  # in at build time (see "Resolve release versions" below).
+  workflow_dispatch:
+    inputs:
+      force_bump:
+        description: "Comma-separated projects to re-release under a new version even if unchanged (or 'all')"
+        required: false
+        default: ""
 
 concurrency:
   group: release-${{ github.ref }}
@@ -10,6 +18,8 @@ concurrency:
 
 jobs:
   build-and-release:
+    # A manual run from any other branch would publish its builds to Pages.
+    if: github.ref == 'refs/heads/master'
     runs-on: [self-hosted, compton-diy]
     permissions:
       contents: write
@@ -104,9 +114,11 @@ jobs:
           BASE_SHA: ${{ steps.base.outputs.sha }}
           HEAD_SHA: ${{ github.sha }}
           RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          FORCE_BUMP: ${{ inputs.force_bump }}
         run: |
           python3 tools/esp-flasher/resolve_versions.py \
             --base "$BASE_SHA" --head "$HEAD_SHA" --version "$RELEASE_VERSION" \
+            --force-bump "$FORCE_BUMP" \
             --output "$RUNNER_TEMP/release-versions.json"
           {
             echo "projects<<EOF"

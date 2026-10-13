@@ -35,8 +35,9 @@ RELEASES = [
 ]
 
 
-def resolve(affected=(), changed=(), releases=RELEASES):
-    return rv.resolve(PROJECTS, set(affected), list(changed), INPUTS, releases, "2026.10.14-139")
+def resolve(affected=(), changed=(), releases=RELEASES, forced=()):
+    return rv.resolve(PROJECTS, set(affected), list(changed), INPUTS, releases, "2026.10.14-139",
+                      set(forced))
 
 
 class ChangedProjectsTests(unittest.TestCase):
@@ -97,6 +98,23 @@ class ResolveTests(unittest.TestCase):
         r = resolve(releases=RELEASES[:1])
         self.assertEqual(r["bumped"], ["cyd-clock", "espframe-stand", "media-room-dashboard", "tamagotchi-plus"])
         self.assertEqual(r["carried"], {"espframe": "2026.10.13-138"})
+
+    def test_forced_project_bumps_while_unchanged(self):
+        # Rotating CAT_BUDDY_API_TOKEN changes no source, but clocks must get it.
+        r = resolve(forced=["cyd-clock"])
+        self.assertEqual(r["bumped"], ["cyd-clock"])
+        self.assertEqual(r["reasons"]["cyd-clock"], "forced")
+        self.assertNotIn("cyd-clock", r["carried"])
+
+    def test_force_all(self):
+        r = resolve(forced=["all"])
+        self.assertEqual(r["bumped"], PROJECTS)
+        self.assertEqual(r["carried"], {})
+
+    def test_lib_manifest_change_bumps_its_projects(self):
+        inputs = dict(INPUTS, **{"cyd-clock": INPUTS["cyd-clock"] + ["libs/touch-driver/library.json"]})
+        r = rv.resolve(PROJECTS, set(), ["libs/touch-driver/library.json"], inputs, RELEASES, "v")
+        self.assertEqual(r["bumped"], ["cyd-clock"])
 
     def test_no_release_history_bumps_everything(self):
         self.assertEqual(resolve(releases=[])["bumped"], PROJECTS)
