@@ -41,4 +41,3 @@ switch:
     on_turn_off:
       then:
         - lambda: 'id(developer_features_saved) = false;'
-        - script.execute: screen_apply_rotation

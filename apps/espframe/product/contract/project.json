@@ -342,10 +342,8 @@
   ],
   "screen_rotation_user_options": [
     "0",
-    "180"
-  ],
-  "screen_rotation_developer_options": [
     "90",
+    "180",
     "270"
   ],
   "screen_rotation_native_mapping": {
@@ -356,7 +354,7 @@
   },
   "screen_rotation_feature_source": "ESPHome 2026.4's LVGL rotation support",
   "screen_rotation_behavior": "picture and touch input turn together",
-  "screen_rotation_developer_behavior": "90 and 270 degree rotations are hidden unless Developer Features is enabled",
+  "screen_rotation_portrait_behavior": "90 and 270 degrees turn the picture a quarter turn from the board's native orientation",
   "developer_features_query_params": [
     "developer",
     "dev"
@@ -674,9 +672,7 @@
       "settings": [
         "screen_rotation"
       ],
-      "static_entities": [
-        "developer_features_enabled"
-      ]
+      "static_entities": []
     },
     {
       "id": "clock",
@@ -763,7 +759,7 @@
     "settings",
     "settings-mobile",
     "photo-source-reorder",
-    "screen-rotation-developer",
+    "screen-rotation-portrait",
     "screen-tone-schedule",
     "daily-settings-controls",
     "backup-import-success",

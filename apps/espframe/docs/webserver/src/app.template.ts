@@ -375,13 +375,17 @@
     }
   }
 
+  // A quarter turn from the board's native orientation: portrait on the 7"
+  // and 10". The firmware derives the real layout from the rotated display
+  // size (screen_layout_portrait), which also covers the natively portrait
+  // Freenove S3, so this only drives the web UI's pairing hint.
   function isPortraitScreenRotation(value) {
     return value === "90" || value === "270";
   }
 
   function screenRotationOptionsForUi() {
-    var options = productSettingOptions("screen_rotation", S.developer_features_enabled);
-    return options.length ? options : ["0", "180"];
+    var options = productSettingOptions("screen_rotation");
+    return options.length ? options : ["0", "90", "180", "270"];
   }
 
   function effectiveScreenRotationForUi() {

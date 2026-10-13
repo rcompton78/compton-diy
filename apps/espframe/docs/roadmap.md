@@ -41,7 +41,7 @@ Support mounting the frame in landscape or portrait orientation.
 
 | Feature | Status |
 |---|---|
-| Configurable screen rotation (0°/180°) | Available |
+| Configurable screen rotation (0°/90°/180°/270°), including portrait | Available |
 | Optimized layouts for both landscape and portrait orientations | Planned |
 
 ## Networking

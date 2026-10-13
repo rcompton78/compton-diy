@@ -118,13 +118,10 @@ def check_screen_schedule_metadata(product: dict, errors: list[str]) -> None:
 def check_screen_rotation_metadata(product: dict, errors: list[str]) -> None:
     project = product["project"]
     user_options = [str(value).strip() for value in project.get("screen_rotation_user_options", []) if str(value).strip()]
-    developer_options = [
-        str(value).strip() for value in project.get("screen_rotation_developer_options", []) if str(value).strip()
-    ]
     native_mapping = project.get("screen_rotation_native_mapping", {})
     feature_source = str(project.get("screen_rotation_feature_source", "")).strip()
     rotation_behavior = str(project.get("screen_rotation_behavior", "")).strip()
-    developer_behavior = str(project.get("screen_rotation_developer_behavior", "")).strip()
+    portrait_behavior = str(project.get("screen_rotation_portrait_behavior", "")).strip()
 
     settings_by_key = {str(setting.get("key", "")).strip(): setting for setting in product["settings"]}
     rotation_setting = settings_by_key.get("screen_rotation")
@@ -133,8 +130,8 @@ def check_screen_rotation_metadata(product: dict, errors: list[str]) -> None:
     else:
         if user_options and rotation_setting.get("options") != user_options:
             errors.append("project.screen_rotation_user_options must match screen_rotation options")
-        if developer_options and rotation_setting.get("developer_options") != developer_options:
-            errors.append("project.screen_rotation_developer_options must match screen_rotation developer_options")
+        if rotation_setting.get("developer_options"):
+            errors.append("screen_rotation must not hide options behind developer_options")
 
     screen_docs = read(ROOT / "docs" / "screen-settings.md", errors)
     backup_docs = read(ROOT / "docs" / "backup.md", errors)
@@ -146,16 +143,13 @@ def check_screen_rotation_metadata(product: dict, errors: list[str]) -> None:
         require_contains(screen_docs, feature_source, "docs/screen-settings.md", errors)
     if rotation_behavior:
         require_contains(screen_docs, rotation_behavior, "docs/screen-settings.md", errors)
-    if developer_behavior:
-        require_contains(screen_docs, developer_behavior, "docs/screen-settings.md", errors)
-        require_contains(web_template, "S.developer_features_enabled", rel(WEB_TEMPLATE), errors)
-    for option in user_options + developer_options:
+    if portrait_behavior:
+        require_contains(screen_docs, portrait_behavior, "docs/screen-settings.md", errors)
+    for option in user_options:
         require_contains(rotation_yaml, f'      - "{option}"', "common/addon/screen_rotation.yaml", errors)
         require_contains(web_template, option, rel(WEB_TEMPLATE), errors)
     for option in user_options:
         require_contains(screen_docs, f"{option}", "docs/screen-settings.md", errors)
-    for option in developer_options:
-        require_contains(screen_docs, option, "docs/screen-settings.md", errors)
     if isinstance(native_mapping, dict):
         for user_option, native_option in native_mapping.items():
             if not isinstance(user_option, str) or not isinstance(native_option, str):
@@ -170,17 +164,21 @@ def check_screen_rotation_metadata(product: dict, errors: list[str]) -> None:
         "Screen: Rotation",
         'initial_option: "${screen_rotation}"',
         "screen_apply_rotation",
-        "developer_features_enabled",
         "lvgl.display.set_rotation",
         "portrait_pairing_enabled",
         "immich_reapply_current_image_layout",
     ):
         require_contains(rotation_yaml, needle, "common/addon/screen_rotation.yaml", errors)
+    # Portrait (90/270) is a normal user option (COM-362): Developer Features
+    # must never force the rotation back to 0.
+    if "developer_features_enabled" in rotation_yaml:
+        errors.append("common/addon/screen_rotation.yaml must not gate rotation on developer_features_enabled")
+    if "screen_apply_rotation" in developer_yaml:
+        errors.append("common/addon/developer_features.yaml must not re-apply rotation when Developer Features changes")
     for needle in (
         "Developer: Features",
         "RESTORE_DEFAULT_OFF",
         "developer_features_saved",
-        "script.execute: screen_apply_rotation",
     ):
         require_contains(developer_yaml, needle, "common/addon/developer_features.yaml", errors)
     for needle in (
@@ -189,7 +187,7 @@ def check_screen_rotation_metadata(product: dict, errors: list[str]) -> None:
         'params.get("dev")',
         "experimental",
         "screenRotationOptionsForUi",
-        "productSettingOptions(\"screen_rotation\", S.developer_features_enabled)",
+        "productSettingOptions(\"screen_rotation\")",
         "isPortraitScreenRotation",
         "Enable in-development features",
         'saveSetting("screen_rotation"',

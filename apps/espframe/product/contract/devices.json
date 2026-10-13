@@ -152,8 +152,6 @@
     "package_substitutions": {
       "display_width": "1280",
       "display_height": "800",
-      "portrait_display_width": "800",
-      "portrait_display_height": "1280",
       "portrait_metadata_width": "710",
       "portrait_half_width": "640",
       "screen_rotation": "0",
@@ -364,8 +362,6 @@
     "package_substitutions": {
       "display_width": "240",
       "display_height": "320",
-      "portrait_display_width": "240",
-      "portrait_display_height": "320",
       "portrait_metadata_width": "220",
       "portrait_half_width": "120",
       "screen_rotation": "0",
@@ -571,8 +567,6 @@
     "package_substitutions": {
       "display_width": "800",
       "display_height": "480",
-      "portrait_display_width": "480",
-      "portrait_display_height": "800",
       "portrait_metadata_width": "426",
       "portrait_half_width": "400",
       "screen_rotation": "0",

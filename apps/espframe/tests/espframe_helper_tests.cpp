@@ -900,7 +900,7 @@ static void test_configuration_contract_capabilities() {
   static_assert(CONTRACT_VERSION == 2);
   static_assert(API_VERSION == 1);
   static_assert(SETTING_COUNT == 33);
-  static_assert(CONFIGURATION_FIELD_COUNT == 47);
+  static_assert(CONFIGURATION_FIELD_COUNT == 49);
   assert(std::string(CAPABILITIES_PATH) == "/espframe/api/v1/capabilities");
   assert(std::string(CONFIGURATION_PATH) == "/espframe/api/v1/configuration");
   const std::string capabilities(CAPABILITIES_JSON);

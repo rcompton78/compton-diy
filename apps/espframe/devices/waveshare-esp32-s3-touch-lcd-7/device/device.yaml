@@ -53,6 +53,16 @@ esp32:
       # cycling -- see HANDOFF.md).
       # https://docs.espressif.com/projects/esp-faq/en/latest/software-framework/peripherals/lcd.html
       CONFIG_ESP32S3_DATA_CACHE_LINE_64B: "y"
+      # Let malloc/new use PSRAM for anything over
+      # CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL. Without it every std::string
+      # comes from internal SRAM, which LVGL's 96KB draw buffer and Wi-Fi
+      # leave too small and fragmented: copying a 24-32KB Immich JSON
+      # response in http_request's play() then failed `new` and aborted
+      # about a minute into the slideshow (COM-362). The threshold is
+      # lowered from IDF's 16KB default to 4KB because the image fetch and
+      # decode path still took internal free down to ~8KB at 16KB.
+      CONFIG_SPIRAM_USE_MALLOC: "y"
+      CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL: "4096"
     advanced:
       enable_idf_experimental_features: true
 

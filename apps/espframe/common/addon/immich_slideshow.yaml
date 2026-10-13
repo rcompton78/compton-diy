@@ -372,10 +372,9 @@ script:
                     id(delayed_prefetch_chain).execute();
                     break;
                   }
-                  bool portrait_screen = id(screen_rotation_select).current_option() == "90" ||
-                                         id(screen_rotation_select).current_option() == "270";
-                  int target_w = portrait_screen ? ${portrait_display_width} : ${display_width};
-                  int target_h = portrait_screen ? ${portrait_display_height} : ${display_height};
+                  bool portrait_screen = id(screen_layout_portrait);
+                  int target_w = id(screen_layout_width);
+                  int target_h = id(screen_layout_height);
                   auto apply_slot_layout = [&](auto *img, SlotMeta &meta) {
                     bool fill = portrait_screen
                       ? (id(photo_display_mode).current_option() == "Fill")
@@ -453,10 +452,9 @@ script:
               case SLIDESHOW_COMMAND_LOAD_PREVIOUS_SLOT: {
                 int s = cmd.slot;
                 auto &meta = get_slot(s, id(espframe_core).slideshow().state().slot0, id(espframe_core).slideshow().state().slot1, id(espframe_core).slideshow().state().slot2);
-                bool portrait_screen = id(screen_rotation_select).current_option() == "90" ||
-                                       id(screen_rotation_select).current_option() == "270";
-                int target_w = portrait_screen ? ${portrait_display_width} : ${display_width};
-                int target_h = portrait_screen ? ${portrait_display_height} : ${display_height};
+                bool portrait_screen = id(screen_layout_portrait);
+                int target_w = id(screen_layout_width);
+                int target_h = id(screen_layout_height);
                 bool fill = portrait_screen
                   ? (id(photo_display_mode).current_option() == "Fill")
                   : ((id(photo_display_mode).current_option() == "Fill") && !meta.is_portrait);
@@ -728,10 +726,9 @@ script:
           auto &meta = get_slot(s, id(espframe_core).slideshow().state().slot0, id(espframe_core).slideshow().state().slot1, id(espframe_core).slideshow().state().slot2);
           if (meta.image_url.empty()) return;
           id(espframe_core).slideshow().state().active_slot_displayed = false;
-          bool portrait_screen = id(screen_rotation_select).current_option() == "90" ||
-                                 id(screen_rotation_select).current_option() == "270";
-          int target_w = portrait_screen ? ${portrait_display_width} : ${display_width};
-          int target_h = portrait_screen ? ${portrait_display_height} : ${display_height};
+          bool portrait_screen = id(screen_layout_portrait);
+          int target_w = id(screen_layout_width);
+          int target_h = id(screen_layout_height);
           bool fill = portrait_screen
             ? (id(photo_display_mode).current_option() == "Fill")
             : ((id(photo_display_mode).current_option() == "Fill") && !meta.is_portrait);
@@ -774,8 +771,7 @@ script:
       - lvgl.page.show: slideshow_page
       - script.execute: hide_connection_failed
       - lambda: |-
-          const bool portrait_screen = id(screen_rotation_select).current_option() == "90" ||
-                                       id(screen_rotation_select).current_option() == "270";
+          const bool portrait_screen = id(screen_layout_portrait);
           if (portrait_screen || !id(portrait_pairing_enabled).state) {
             lv_obj_add_flag(id(portrait_pair_container), LV_OBJ_FLAG_HIDDEN);
             id(espframe_core).slideshow().state().portrait = PortraitState{};
@@ -862,8 +858,7 @@ script:
           lv_label_set_text(id(portrait_metadata_date_label), date_text.c_str());
           lv_label_set_text(id(portrait_metadata_date_label_shadow), date_text.c_str());
 
-          const bool portrait_screen = id(screen_rotation_select).current_option() == "90" ||
-                                       id(screen_rotation_select).current_option() == "270";
+          const bool portrait_screen = id(screen_layout_portrait);
 
           if (has_location && !portrait_screen) {
             lv_obj_clear_flag(id(photo_metadata_location_label), LV_OBJ_FLAG_HIDDEN);

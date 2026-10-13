@@ -37,12 +37,12 @@ In Home Assistant, **Screen: Sleep** and **Screen: Wake** expose the same sleep/
 
 **Rotation** rotates the LVGL display layer, so the picture and touch input turn together. This uses ESPHome 2026.4's LVGL rotation support.
 
-The setting only exposes normal and upside-down orientations. On the 10" model, the firmware keeps its internal 90-degree panel offset and maps these two choices onto the correct LVGL values.
+90 and 270 degrees turn the picture a quarter turn from the board's native orientation. On the 7" and 10" models, 0 and 180 are landscape and 90 and 270 are portrait, for a frame standing on its side. The small Freenove S3 screen is natively portrait, so on it 90 and 270 are landscape. For a portrait stand, pick whichever of 90 or 270 puts the side you want at the bottom (for example, the side the power cable leaves from). The choice is saved and survives a reboot. On the 10" model, the firmware keeps its internal 90-degree panel offset and maps each choice onto the correct LVGL value.
 
-90 and 270 degree rotations are hidden unless Developer Features is enabled. Turning Developer Features off resets portrait rotation back to 0 degrees.
+Photos are sized to the screen as it is after rotation. In portrait, photos are aligned to the top of the screen (using your **Display Mode**, Fill or Fit), and portrait pairing turns off because there's no room for two photos side by side. Set **Photo Orientation** to portrait-only if you want every photo to suit the tall screen (see [Photo Sources](/photo-sources)).
 
 <!-- ESPFRAME:SETTINGS_TABLE screen_rotation START -->
 | Setting | Default | Description |
 |---------|---------|-------------|
-| **Rotation** | 0 degrees | Rotate the screen to 0 or 180 degrees. |
+| **Rotation** | 0 degrees | Rotate the screen to 0, 90, 180 or 270 degrees. 90 and 270 turn it a quarter turn from the board's native orientation. |
 <!-- ESPFRAME:SETTINGS_TABLE screen_rotation END -->
