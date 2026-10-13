@@ -102,6 +102,10 @@ if [ -d "$ESPFRAME_DIR/product/contract" ]; then
   # and only reinstall when the pin changes so repeat/offline runs skip PyPI.
   TZDATA_REQUIREMENTS="$ESPFRAME_DIR/scripts/requirements-timezones.txt"
   TZDATA_PIN="$(sed -n 's/^tzdata==//p' "$TZDATA_REQUIREMENTS")"
+  if [ -z "$TZDATA_PIN" ]; then
+    echo "ERROR: no exact 'tzdata==<version>' pin in $TZDATA_REQUIREMENTS." >&2
+    exit 1
+  fi
   if [ "$("$ESPFRAME_VENV_PYTHON" -c 'import tzdata; print(tzdata.__version__)' 2>/dev/null)" != "$TZDATA_PIN" ]; then
     echo "Installing tzdata $TZDATA_PIN into apps/espframe/.venv..."
     "$ESPFRAME_VENV_DIR/bin/pip" install --quiet -r "$TZDATA_REQUIREMENTS"
