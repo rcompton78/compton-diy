@@ -62,7 +62,7 @@ def face_felt() -> Part:
 
 
 def ledge_felt() -> Part:
-    """1 mm felt between the ledge and the frame's bottom rail (screen frame)."""
+    """1 mm felt between the ledge and the frame's face and side walls (screen frame)."""
     return screen_box(p.FRAME_X[0], p.FRAME_X[1], -p.SEAT, -p.RISE,
                       -(p.FRAME_FACE_GAP + p.FRAME_FACE_T), p.D_PLATE_BACK)
 

@@ -6,8 +6,8 @@ from . import params as p
 
 # Screen frame: x across, y up the glass from its bottom edge, z = -depth behind
 # the glass front. Rotating by (90 - tilt) about X maps it onto the world frame.
-# The ledge surface is the screen-frame plane y = -SEAT (the frame's bottom rail sits
-# on felt on it), and the point (y = -SEAT, depth 0) lands at world (Y=0, Z=LEDGE_H).
+# The ledge surface is the screen-frame plane y = -SEAT (the bottom edge of the frame's
+# face sits on felt on it), and the point (y = -SEAT, depth 0) lands at world (Y=0, Z=LEDGE_H).
 SCREEN_TO_WORLD: Location = Pos(0, 0, p.LEDGE_H) * Rot(X=90 - p.TILT_DEG) * Pos(0, p.SEAT, 0)
 
 

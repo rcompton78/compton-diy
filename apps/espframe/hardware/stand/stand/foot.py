@@ -44,7 +44,7 @@ def build_foot() -> Part:
     L = layout()
 
     # Body: side profile extruded across the width. The ledge is a flat seat (with felt)
-    # under the picture frame's bottom rail, from just in front of the frame face back
+    # under the picture frame's face and side walls, from just in front of the frame face back
     # to the plate; no lip, so nothing touches the glass.
     seat_front = _sp(-p.SEAT, -(p.FRAME_FACE_GAP + p.FRAME_FACE_T + p.LEDGE_OVER))
     profile = [

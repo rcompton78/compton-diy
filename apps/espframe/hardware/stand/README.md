@@ -12,26 +12,35 @@ A 3D-printable portrait desk stand for the 7" espframe (Waveshare ESP32-S3-Touch
 
 - **Picture frame (wood-look PLA).** Style B, classic bevel, with a 21 mm face.
   - The opening is the picture area plus a 0.75 mm reveal (88.22 × 156.38), and the face is the same width all round. That hides the panel's uneven black bezel (11 / 13 / 19 / 19 mm) behind an even border, so the frame sits 1 mm right of the glass centre.
-  - The face is 4 mm thick, with a 45° × 3 mm bevel into the opening and a 2 mm outer chamfer.
-  - The frame hangs on the back-plate: four M3 × 8 screws from behind, through the plate's edges, go into inserts in bosses on its side walls. Its bottom rail sits on felt on the foot's ledge.
-  - It never touches the glass. 1 mm felt on the back of the face stays 0.2 mm off the glass, and the walls clear the glass edges by ≥ 0.7 mm.
+  - The face is 4 mm thick, with a 45° × 3 mm bevel into the opening and a 2 mm outer chamfer round the top and sides. Its bottom edge is square, so the face comes right down to the ledge.
+  - The frame hangs on the back-plate: four M3 × 8 screws from behind, through the plate's edges, go into inserts in bosses on its side walls. The walls run down the sides and across the top only. There's no bottom wall: the bottom edge of the face and the ends of the side walls sit on felt on the foot's ledge.
+  - It never touches the glass. 1 mm felt on the back of the face stays 0.2 mm off the glass, and the walls clear the side and top glass edges by ≥ 0.7 mm.
 - **Back-plate (3 mm PETG).** It screws to the four M3 brass spacers that Waveshare already fits to the panel (8 mm, on ~2 mm tabs, tops at 10 mm).
   - Four printed risers (Ø9 × 4.5) sit on the spacers, lifting the plate to 14.5 mm above the panel back. That clears the tallest part, the 12 mm UART2 JST, by 2 mm (designed to 12.5).
   - It fills the frame out to its walls (0.3 mm clear), so the back is closed all round, and carries the frame on four screws near its side edges.
   - Two rows of vent slots low down and two near the top (4 slots of 20 × 3 mm each) let air through, since the back is otherwise closed.
-- **Foot (PETG).** The plate slides down onto a dovetail rail on the foot's post, and the frame's bottom rail settles on the felted ledge (20 mm high). The screen leans back at 15°, like a desktop picture frame (10° before COM-417).
+- **Foot (PETG).** The plate slides down onto a dovetail rail on the foot's post, and the frame's face settles on the felted ledge (20 mm high). The screen leans back at 15°, like a desktop picture frame (10° before COM-417).
   - No ballast: the printed stand was sturdy without it, and the front under the ledge is solid. The foot is 120 mm deep.
   - The tray is open on top and closed with a lid that clicks in: two small ridges on each long edge snap into grooves in the tray's rim. Prise it out at the slot in its front-right corner.
 - **Power and data.** A Poyiccot USB 3.1 panel-mount extension (straight, 30 cm) passes every pin through:
   - Its plug goes into the board's UART (CH343) USB-C port.
-  - The lead drops through notches in the plate and frame and through the deck slot, bends at R18, lies as one loose coil in the tray, and ends at the panel jack in the rear wall.
+  - The lead drops through a notch in the plate, past the open bottom of the frame and through the deck slot, bends at R18, lies as one loose coil in the tray, and ends at the panel jack in the rear wall.
   - Any USB-C charger works, and you can flash or read logs through the stand without taking it apart.
 - **Orientation.** The board's USB edge goes down: the landscape panel turned 90° counter-clockwise, seen from the front. Pick the matching rotation in the espframe settings (COM-362).
+
+## Changes in COM-431
+
+- **No bottom wall on the frame.** The 2 mm bottom wall, and its cable and dovetail notches, had to fit between the ledge and the glass's bottom edge with only 0.7 mm to spare, and on the printed stand it didn't. The frame now has walls down the sides and across the top only. The face's bottom edge and the side walls sit on the ledge felt, and the device still hangs on the plate's dovetail, so the screen sits at the same height as before (dovetail engagement unchanged at 31.8 mm).
+- **Square bottom edge.** The outer chamfer now runs round the top and sides only, so the face sits flat on the ledge with no notch and looks closer to the base.
+- **Tip-over limit 4.25 N** (was 4.3). The frame is about 5 g lighter, which takes the push to tip the stand back from 4.32 to 4.28 N. Reprinting a 1 mm deeper foot to win that back wasn't worth it.
+- **Assembly order matters** (step 6 below). Screw the frame to the plate before mounting it. The dovetail is a free slide, and the frame on the felt is what sets the plate's height. Mounted without the frame, the plate slides 2.3 mm further down until its bottom edge lands on the felt, and the frame's screw bosses then sit 2.3 mm above the plate's holes.
+
+**What to reprint:** only the frame. A printed COM-417 frame with its bottom wall cut off flush works the same, apart from the outer chamfer still on its bottom edge.
 
 ## Changes in COM-417
 
 - **15° lean** (was 10°). The ledge is 2 mm higher (20 mm) so the deck and lid stay clear of the cable coil, and the foot is 120 mm deep (was 118).
-- **Wider plug path.** The cable tunnel through the foot was 12 mm wide, narrower than the 12.5 mm plug. The tunnel and the deck slot are now 16 mm wide, and the cable notches in the plate and frame are 16 and 17 mm.
+- **Wider plug path.** The cable tunnel through the foot was 12 mm wide, narrower than the 12.5 mm plug. The tunnel and the deck slot are now 16 mm wide, and the cable notches in the plate and frame are 16 and 17 mm (the frame's went with its bottom wall in COM-431).
 - **The lid clicks in** on printed detents instead of just resting in its rabbet.
 
 **What to reprint:** the foot and lid. The plate and frame only gained wider cable notches (+2 mm), so reprinting them is optional: keep yours if the lead already drops through them easily.
@@ -73,15 +82,15 @@ Every dimension is a named constant in [`stand/params.py`](stand/params.py), tag
 | Plug bend fits above the tray floor | 4.9 mm of straight drop to spare (rev D without the frame had 1.9) |
 | Plug passes the tunnel and deck slot | 12.5 × 6.5 plug: 1.75 mm per side in the 16 mm tunnel and the 16 mm slot (need ≥ 1), 3.0 mm of tunnel height to spare |
 | Lid detents | 4 ridges 0.3 mm high snap past 0.15 mm of interference into 0.25 mm grooves, leaving 1.25 mm of rear wall. Only the rear wall flexes: 0.15 mm with the front edge hooked in first, 0.30 if the lid is pressed in flat; no overlap once seated; lift slot clear |
-| Tip-over: push at the screen centre to tip it back | **4.3 N** (need ≥ 4.3) at 15° and 120 mm deep, accepted in exchange for a shorter foot when the lean went to 15°. The 10° stand, 118 mm deep, was 4.5 N, and that print felt sturdy without ballast; rev A design was 3.2 N. A foot about 126 mm deep would hold 4.5 N at 15°. Sideways tip at 34°. Weight stuck under the front raises it (about +0.8 N per 100 g). |
+| Tip-over: push at the screen centre to tip it back | **4.28 N** (need ≥ 4.25) at 15° and 120 mm deep, accepted in exchange for a shorter foot when the lean went to 15° (4.32 before COM-431 took the frame's bottom wall off). The 10° stand, 118 mm deep, was 4.5 N, and that print felt sturdy without ballast; rev A design was 3.2 N. A foot about 126 mm deep would hold 4.5 N at 15°. Sideways tip at 34°. Weight stuck under the front raises it (about +0.8 N per 100 g). |
 | Frame opening clear of the picture | 0.75 mm reveal on every side (need ≥ 0.5) |
 | Frame never touches the glass | closest 0.71 mm (need ≥ 0.5) |
-| Glass edge gap L / R / T / B | 8.75 / 6.71 / 0.71 / 0.71 mm |
+| Glass edge gap L / R / T | 8.75 / 6.71 / 0.71 mm. The bottom is open (no bottom wall), with the ledge felt 2.71 mm below the glass |
 | Face felt clears the glass | 0.20 mm, none over the picture |
 | Only the picture shows through the opening | head-on, nothing but glass inside the opening: no frame, felt, plate, spacers or plug |
 | Plate edges meet the frame bosses | flush contact, no overlap |
 | Frame screw engagement | M3 × 8 through the 3 mm plate: 5 mm into a 6 mm hole with an M3 × 4 insert |
-| Frame rail seats on the ledge | on 1 mm felt; frame to foot never closer than 0.2 mm elsewhere |
+| Frame face seats on the ledge | square bottom edge of the face and the side walls on 1 mm felt; frame to foot never closer than 1.0 mm elsewhere |
 | Jack fits its recess and window | measured flange 25 × 8 × 6.5 bears on the 1.2 mm web inside the rear wall; no overlap |
 | Receptacle flush with the rear face | the metal USB-C receptacle (1.2 mm proud of the flange) pokes through a 9.3 × 3.7 window and ends flush |
 | Jack screws from outside | the jack's own screws (16.5 mm pitch) pass 0.3 mm clear of its body. Their heads leave 11 mm between them, so a charger plug moulding wider than that can't seat fully: test yours |
@@ -101,7 +110,7 @@ Structural parts are PETG on the stock Bambu P1S profile with the 0.4 mm nozzle.
 | `plate` | As exported: back face on the bed, risers and spine up. The dovetail groove's undercut faces the bed and prints without supports. | 4 walls, 40% infill (the risers end up solid), 0.2 mm layers |
 | `foot` | As exported: upright on its base | 4 walls, 25% infill, no supports. |
 | `lid` | Flat | 3 walls. If the detents are too stiff or too loose, tune `LID_DETENT_H` (0.3 mm). |
-| `frame` | As exported: face down on the bed, walls and bosses up. The bevel and outer chamfer are 45° overhangs: no supports. | Wood-look PLA, 3 walls, 20% infill. See the wood-look notes. |
+| `frame` | As exported: face down on the bed, walls and bosses up. The bevel and outer chamfer are 45° overhangs: no supports. The bottom end of the frame is open. | Wood-look PLA, 3 walls, 20% infill. See the wood-look notes. |
 
 ### Wood-look frame
 
@@ -112,7 +121,7 @@ Structural parts are PETG on the stock Bambu P1S profile with the 0.4 mm nozzle.
   - PLA softens around 55–60 °C, so keep the stand out of direct sun and hot cars.
   - Use the spool's own temperature, and don't leave the nozzle idling hot: wood fibre chars and clogs.
 - **Finish.** A smooth build plate gives a clean front face; a textured plate gives a matte grain. Wood fill can be sanded and stained.
-- **Mass.** The frame is about 76 g in wood-fill PLA (`FRAME_DENSITY` 1.18 g/cm³; PolyWood is lighter).
+- **Mass.** The frame is about 71 g in wood-fill PLA (`FRAME_DENSITY` 1.18 g/cm³; PolyWood is lighter).
 
 ## Bill of materials
 
@@ -125,7 +134,7 @@ Structural parts are PETG on the stock Bambu P1S profile with the 0.4 mm nozzle.
 | 4 | LUKAISEN M3 × 4 × 4.2 heat-set inserts (user's kit) | Frame side-wall bosses |
 | 1 | LUKAISEN M3 × 4 × 4.2 heat-set insert + 1 M3 × 12 | Optional foot lock (plate spine) |
 | 1 | 1 mm adhesive felt, ≈ 540 × 6 mm | Back of the frame face, over the black bezel only |
-| 1 | 1 mm adhesive felt, ≈ 130 × 28 mm | Ledge seat under the frame's bottom rail |
+| 1 | 1 mm adhesive felt, ≈ 130 × 28 mm | Ledge seat under the frame's face and side walls |
 | 4 | Small rubber feet | Under the foot |
 
 No heat-set kit? Buy an M3 assortment. Inserts go in with a soldering iron, pressed in square and flush. Use **220–240 °C for PETG** (plate, foot) and **about 190–200 °C for the PLA frame**. The wood-fill frame is more brittle than PETG, so snug its M3 × 8 screws and don't crank them. Hole size is `INSERT_HOLE_D` (OD − 0.2 = 4.0 mm); confirmed snug and flush in PETG on a test print. The wood-fill frame is untested; if its inserts go in loose or crack a boss, tune it there.
@@ -139,8 +148,8 @@ No heat-set kit? Buy an M3 assortment. Inserts go in with a soldering iron, pres
 3. **Jack.** With the lid off, set the jack inside the tray against the rear wall, receptacle outwards, so the flange drops into its recess and the receptacle pokes through the window. Fit the jack's own two screws from outside through the wall into the flange's threaded holes.
 4. **Cable.** Lay the spare cable as one loose coil in the tray beside the jack, no tighter than about 40 mm across. Then run it forward through the tunnel and push the plug up through the deck slot. Both are 16 mm wide, so the 12.5 × 6.5 plug passes with 1.75 mm each side.
 5. **Plate.** Screw the plate to the four brass spacers with M3 × 12 + washers. The spine and dovetail groove go to the bottom, near the USB edge.
-6. **Frame.** Lay the screen face down on a soft cloth and lower the frame over it. Fix it with four M3 × 8 + washers from behind, through the plate's edge holes into the frame inserts. Check the even border, and that the felt only rests on the black bezel.
-7. **Plug and mount.** Plug the straight plug into the board's UART USB-C. Lower the plate's groove onto the foot's rail and let it slide down until the frame's bottom rail sits on the felted ledge. The plug's lead runs down through the notches in the plate and frame and into the deck slot.
+6. **Frame.** **Screw the frame to the plate now, before the plate goes on the foot.** The dovetail doesn't stop the plate on its own: the frame resting on the ledge felt sets the height. Slid on without the frame, the plate drops 2.3 mm until its own bottom edge lands on the felt, and the frame's holes no longer line up with the plate's. Lay the screen face down on a soft cloth and lower the frame over it. Fix it with four M3 × 8 + washers from behind, through the plate's edge holes into the frame inserts. Check the even border, and that the felt only rests on the black bezel.
+7. **Plug and mount.** Plug the straight plug into the board's UART USB-C. Lower the plate's groove onto the foot's rail and let it slide down until the frame's face sits on the felted ledge. The plug's lead runs down through the notch in the plate, past the frame's open bottom and into the deck slot.
    - Optionally, fit the foot-lock M3 × 12 from the back of the post.
    - Fit the lid front edge first, so its front ridges drop into their grooves, then press the rear edge down until it clicks. Only the thin rear wall flexes, and a lid pressed in flat makes it flex twice as far.
 8. **Rotation.** In the espframe settings, pick the rotation (90 or 270) that shows the picture upright.

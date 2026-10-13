@@ -180,9 +180,9 @@ RECEPTACLE_TRIAL_T = [1.0, 1.2, 1.4]   # DESIGN: test plates bracketing JACK_REC
 DOVE_TRIAL_CLEARS = [0.02, 0.03, 0.04]                    # DESIGN: round 3, brackets SLIDE_CLEAR (round 2: 0.05 closest, a touch loose)
 
 # Required results.
-MIN_TIP_FORCE_N = 4.3             # DESIGN (user, COM-417): accepted for the 15° lean on the 120 mm foot (4.32 N), in exchange
-                                  #   for a shorter foot. The 10° stand, 118 deep, was 4.5 N and the printed one felt very stable
-                                  #   without ballast; was 6.5 with steel (rev A design: 3.2)
+MIN_TIP_FORCE_N = 4.25            # DESIGN (user, COM-431): 4.3 for the 15° lean on the 120 mm foot (COM-417), eased when the
+                                  #   frame lost its bottom wall (~5 g) rather than reprint a deeper foot. The 10° stand, 118 deep,
+                                  #   was 4.5 N and the printed one felt very stable without ballast; was 6.5 with steel (rev A design: 3.2)
 
 # --- Picture frame (style B, classic bevel, 21 mm face, wood-look) -------------------
 FRAME_DENSITY = 1.18e-3           # g/mm³, EST: wood-fill PLA (1.15–1.2); PolyWood is lighter
@@ -195,8 +195,8 @@ MIN_REVEAL = 0.5                  # DESIGN: check limit
 FRAME_FACE_W = 21.0               # DESIGN: minimum for an even border (top/bottom bezels are 19.04)
 FRAME_FACE_T = 4.0                # DESIGN
 FRAME_BEVEL = 3.0                 # DESIGN: 45° × 3 into the opening
-FRAME_OUTER_CH = 2.0              # DESIGN: 45° outer chamfer
-FRAME_WALL = 2.0                  # DESIGN
+FRAME_OUTER_CH = 2.0              # DESIGN: 45° outer chamfer, top and sides; the bottom edge is square (COM-431)
+FRAME_WALL = 2.0                  # DESIGN: side and top walls; no bottom wall (COM-431: it didn't fit between ledge and glass)
 FRAME_FACE_GAP = FELT_T + FELT_CLEAR   # face rear surface in front of the glass (1.2)
 MIN_EDGE_GAP = 0.5                # DESIGN: check limit, glass edge to frame wall
 
@@ -219,6 +219,5 @@ FRAME_BOSS_D = 7.0                # DESIGN
 FRAME_BOSS_L = 8.0                # DESIGN: boss length towards the glass from the plate front face
 FRAME_INSERT_DEPTH = INSERT_M3x4_L + 2.0   # DESIGN: M3 × 8 through a 3 mm tab reaches 5
 FRAME_SCREW_L = 8.0               # DESIGN
-FRAME_NOTCH_W = 17.0              # DESIGN: cable notch through the frame's bottom rail; 15 felt tight (COM-417)
 
 MIN_DOVE_ENGAGE = 30.0            # DESIGN: check limit

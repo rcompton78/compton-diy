@@ -109,7 +109,7 @@ The 7" was printed and tested piece by piece; its README has the details. These 
   - Method: model each part's volume × density × fill, find the centre of mass, and check the push needed to tip it about the foot's rear edge. Then **hand-test the printed stand** and set the target from that.
   - The model read 4.5 N for the 10° 7" on its 118 mm foot, and reads 4.32 N at 15° on 120 mm (COM-417).
 - **Shorter foot:** the 7" went from 128 to 118 mm deep, then 120 with the 15° lean (COM-417). The spool post was replaced by a loose cable coil in the tray.
-- **Single dovetail:** two parallel sliding fits at 0.02 mm would bind. One locates itself, and the frame's bottom rail resting on the felted ledge takes the weight and stops it rocking.
+- **Single dovetail:** two parallel sliding fits at 0.02 mm would bind. One locates itself, and the frame resting on the felted ledge takes the weight and stops it rocking. The 7" frame has no bottom wall (COM-431): one would have to fit between the ledge and the glass edge. Its face's square bottom edge and the side walls sit on the felt, and the frame must be screwed to the plate before mounting, since the dovetail slide doesn't set the height itself.
 
 **Bugs to avoid.**
 - **The dovetail groove must end inside the spine.**
