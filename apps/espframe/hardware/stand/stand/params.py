@@ -74,7 +74,8 @@ SCREEN_MASS = 354.0               # g, SOURCED (Waveshare listing, touch SKU)
 PLATE_T = 3.0                     # DESIGN
 RISER_D = 9.0                     # DESIGN: wide footprint, spreads screw load
 RISER_H = (PANEL_T + JST_DESIGN_H + PLATE_CLEAR) - (PANEL_T + TAB_H + BRASS_L)  # = 4.5, DESIGN
-PLATE_EDGE_CLEAR = 0.3           # DESIGN: plate edge to the frame's inner walls; the plate closes the whole back
+PLATE_EDGE_CLEAR = 0.3           # DESIGN: plate edge to the frame's inner walls; the plate closes the back at the sides and top
+                                  #   (the frame has no bottom wall, so a 2.3 mm gap stays above the ledge felt)
 PLATE_R = 0.5                     # DESIGN: corner radius (the frame's inner corners are square)
 # Vent slots through the plate (the back is otherwise closed): rows low down draw air in, rows
 # near the top let warm air out. Kept clear of the risers, spine, cable notch and frame screws.

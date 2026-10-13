@@ -17,7 +17,7 @@ A 3D-printable portrait desk stand for the 7" espframe (Waveshare ESP32-S3-Touch
   - It never touches the glass. 1 mm felt on the back of the face stays 0.2 mm off the glass, and the walls clear the side and top glass edges by ≥ 0.7 mm.
 - **Back-plate (3 mm PETG).** It screws to the four M3 brass spacers that Waveshare already fits to the panel (8 mm, on ~2 mm tabs, tops at 10 mm).
   - Four printed risers (Ø9 × 4.5) sit on the spacers, lifting the plate to 14.5 mm above the panel back. That clears the tallest part, the 12 mm UART2 JST, by 2 mm (designed to 12.5).
-  - It fills the frame out to its walls (0.3 mm clear), so the back is closed all round, and carries the frame on four screws near its side edges.
+  - It fills the frame out to its walls (0.3 mm clear), so the back is closed at the sides and top, with a 2.3 mm gap left along the bottom between the plate edge and the ledge felt (the frame has no bottom wall since COM-431), and carries the frame on four screws near its side edges.
   - Two rows of vent slots low down and two near the top (4 slots of 20 × 3 mm each) let air through, since the back is otherwise closed.
 - **Foot (PETG).** The plate slides down onto a dovetail rail on the foot's post, and the frame's face settles on the felted ledge (20 mm high). The screen leans back at 15°, like a desktop picture frame (10° before COM-417).
   - No ballast: the printed stand was sturdy without it, and the front under the ledge is solid. The foot is 120 mm deep.
