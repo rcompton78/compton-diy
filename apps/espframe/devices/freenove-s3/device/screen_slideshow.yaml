@@ -534,13 +534,12 @@ lvgl:
 # =============================================================================
 # PORTRAIT PAIRING OVERRIDE
 # =============================================================================
-# common/addon/screen_rotation.yaml turns portrait_pairing_enabled ON whenever
-# the (shared, universal) rotation option is "0" or "180" -- which is this
-# device's locked default, since freenove-s3 has no non-developer rotation
-# choice. Two side-by-side portrait photos would each be
-# ${portrait_half_width} (120) wide on this 240px screen, so force pairing
-# off unconditionally, after screen_rotation's on_boot hook (priority -150)
-# has run.
+# common/addon/screen_rotation.yaml only turns portrait_pairing_enabled on
+# for a landscape layout that two ${portrait_half_width} (120px) halves fill,
+# which never happens on this board: it is portrait at 0/180 and 320px wide
+# at 90/270. This boot-time override is kept as a backstop so pairing stays
+# off here whatever a restored or imported setting says, after
+# screen_rotation's on_boot hook (priority -150) has run.
 # =============================================================================
 
 esphome:

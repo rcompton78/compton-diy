@@ -192,7 +192,7 @@
     "default": "0",
     "docs_label": "Rotation",
     "docs_default": "0 degrees",
-    "docs_description": "Rotate the screen to 0, 90, 180 or 270 degrees. 90 and 270 are portrait.",
+    "docs_description": "Rotate the screen to 0, 90, 180 or 270 degrees. 90 and 270 turn it a quarter turn from the board's native orientation.",
     "firmware_initial_option": "${screen_rotation}",
     "options": [
       "0",

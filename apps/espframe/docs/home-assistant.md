@@ -38,7 +38,7 @@ Under **Settings → Devices & Services → ESPHome** (device page):
 | **Photos: Slideshow Interval** | Select | 10s–10min between photos |
 | **Photos: Portrait Pairing** | Switch | Pair compatible portrait photos side-by-side |
 | **Screen: Connection Timeout** | Select | 30s–30min before showing connection-failed screen |
-| **Screen: Rotation** | Select | LVGL screen rotation: 0, 90, 180 or 270 degrees (90 and 270 are portrait) |
+| **Screen: Rotation** | Select | LVGL screen rotation: 0, 90, 180 or 270 degrees (90 and 270 are a quarter turn; portrait on the 7" and 10") |
 | **Screen: Backlight** | Light | On/off and brightness (0–100%). Turning it off puts the frame to sleep; turning it on wakes manual sleep unless scheduled off-hours are active. |
 | **Screen: Sleep** | Button | Puts the display into the same sleep state as the touchscreen hold gesture, pausing slideshow fetches. |
 | **Screen: Wake** | Button | Wakes the display and resumes the slideshow. During scheduled off-hours, this is a temporary wake using the configured wake timeout. |

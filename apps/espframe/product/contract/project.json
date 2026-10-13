@@ -354,7 +354,7 @@
   },
   "screen_rotation_feature_source": "ESPHome 2026.4's LVGL rotation support",
   "screen_rotation_behavior": "picture and touch input turn together",
-  "screen_rotation_portrait_behavior": "90 and 270 degrees turn the frame to portrait, for a frame standing on its side",
+  "screen_rotation_portrait_behavior": "90 and 270 degrees turn the picture a quarter turn from the board's native orientation",
   "developer_features_query_params": [
     "developer",
     "dev"
@@ -759,7 +759,7 @@
     "settings",
     "settings-mobile",
     "photo-source-reorder",
-    "screen-rotation-developer",
+    "screen-rotation-portrait",
     "screen-tone-schedule",
     "daily-settings-controls",
     "backup-import-success",

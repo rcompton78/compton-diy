@@ -4,7 +4,24 @@
 # Uses ESPHome 2026.4 LVGL rotation so display content and touch input rotate
 # together. Device packages map the user-facing option to each panel's
 # LVGL-native rotation values.
+#
+# 90/270 turn the screen a quarter turn from the board's native orientation;
+# whether that is portrait depends on the board (the Freenove S3 is natively
+# portrait). screen_apply_rotation therefore derives the on-screen layout
+# size and orientation from ${display_width}x${display_height}, and the
+# slideshow sizes and lays out photos from those globals.
 # =============================================================================
+
+globals:
+  - id: screen_layout_width
+    type: int
+    initial_value: '${display_width}'
+  - id: screen_layout_height
+    type: int
+    initial_value: '${display_height}'
+  - id: screen_layout_portrait
+    type: bool
+    initial_value: '${display_height} > ${display_width}'
 
 select:
   - platform: template
@@ -39,35 +56,40 @@ script:
   - id: screen_apply_rotation
     mode: restart
     then:
+      - lambda: |-
+          const std::string current = id(screen_rotation_select).current_option();
+          const bool quarter_turn = current == "90" || current == "270";
+          id(screen_layout_width) = quarter_turn ? ${display_height} : ${display_width};
+          id(screen_layout_height) = quarter_turn ? ${display_width} : ${display_height};
+          id(screen_layout_portrait) = id(screen_layout_height) > id(screen_layout_width);
       - if:
           condition:
             lambda: 'return id(screen_rotation_select).current_option() == "0";'
           then:
             - lvgl.display.set_rotation: ${screen_rotation_0}
-            - switch.turn_on: portrait_pairing_enabled
-            - delay: 100ms
-            - script.execute: immich_reapply_current_image_layout
       - if:
           condition:
             lambda: 'return id(screen_rotation_select).current_option() == "90";'
           then:
             - lvgl.display.set_rotation: ${screen_rotation_90}
-            - switch.turn_off: portrait_pairing_enabled
-            - delay: 100ms
-            - script.execute: immich_reapply_current_image_layout
       - if:
           condition:
             lambda: 'return id(screen_rotation_select).current_option() == "180";'
           then:
             - lvgl.display.set_rotation: ${screen_rotation_180}
-            - switch.turn_on: portrait_pairing_enabled
-            - delay: 100ms
-            - script.execute: immich_reapply_current_image_layout
       - if:
           condition:
             lambda: 'return id(screen_rotation_select).current_option() == "270";'
           then:
             - lvgl.display.set_rotation: ${screen_rotation_270}
+      # Pair portrait photos only on a landscape layout that two
+      # ${portrait_half_width}-wide halves actually fill.
+      - if:
+          condition:
+            lambda: 'return !id(screen_layout_portrait) && 2 * ${portrait_half_width} >= id(screen_layout_width);'
+          then:
+            - switch.turn_on: portrait_pairing_enabled
+          else:
             - switch.turn_off: portrait_pairing_enabled
-            - delay: 100ms
-            - script.execute: immich_reapply_current_image_layout
+      - delay: 100ms
+      - script.execute: immich_reapply_current_image_layout
