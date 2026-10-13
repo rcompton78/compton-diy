@@ -3,8 +3,6 @@
 substitutions:
   display_width: "800"
   display_height: "480"
-  portrait_display_width: "480"
-  portrait_display_height: "800"
   portrait_metadata_width: "426"
   portrait_half_width: "400"
   screen_rotation: "0"
