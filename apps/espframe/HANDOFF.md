@@ -169,6 +169,13 @@ UI. Root cause and fix, found in a later session:
   image-fetch/JSON buffers in the shared `immich_api`/`http_request` code
   paths — that's shared across all devices, so any real fix there needs
   care).
+  **COM-362 found the actual heap problem:** without
+  `CONFIG_SPIRAM_USE_MALLOC` every `std::string` came from internal SRAM,
+  which LVGL's 96KB internal draw buffer plus Wi-Fi left too fragmented,
+  so `HttpRequestSendAction::play()`'s copy of a 24-32KB Immich response
+  aborted on a failed `new`, roughly every 4 slides. device.yaml now sets
+  `CONFIG_SPIRAM_USE_MALLOC: "y"` and `CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL:
+  "4096"`.
 - **`CONFIG_ESP32S3_DATA_CACHE_LINE_64B` tried alone** (no
   `execute_from_psram`) — user confirms **no tearing observed**, and the
   device survived multiple soak tests (several minutes of continuous
@@ -206,8 +213,9 @@ UI. Root cause and fix, found in a later session:
   needed; documented here only because it came up as a question.
 - **Screen rotation (physically turning the panel 90°/270°)** — also
   already exists as a shared feature
-  (`common/addon/screen_rotation.yaml`, gated behind a "Developer Features"
-  switch for 90°/270°) and is wired into this device's build already.
+  (`common/addon/screen_rotation.yaml`; 90°/270° were gated behind a
+  "Developer Features" switch until COM-362 made them regular user
+  options) and is wired into this device's build already.
   **CJS-217: validated and confirmed working, no code changes needed.**
   Tested all four rotations (0°/90°/180°/270°) on real hardware via the
   device's web UI (`http://<device-ip>/select/screen__rotation`): visual
