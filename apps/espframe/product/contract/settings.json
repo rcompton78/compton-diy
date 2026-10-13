@@ -192,14 +192,12 @@
     "default": "0",
     "docs_label": "Rotation",
     "docs_default": "0 degrees",
-    "docs_description": "Rotate the screen to 0 or 180 degrees.",
+    "docs_description": "Rotate the screen to 0, 90, 180 or 270 degrees. 90 and 270 are portrait.",
     "firmware_initial_option": "${screen_rotation}",
     "options": [
       "0",
-      "180"
-    ],
-    "developer_options": [
       "90",
+      "180",
       "270"
     ],
     "firmware_files": [

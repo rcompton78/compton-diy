@@ -183,7 +183,7 @@ const scenarios = [
   { name: "settings", configured: true, width: 1280, height: 900 },
   { name: "settings-mobile", configured: true, width: 390, height: 900 },
   { name: "photo-source-reorder", configured: true, width: 1280, height: 900 },
-  { name: "screen-rotation-developer", configured: true, width: 1280, height: 900, query: "dev=experimental" },
+  { name: "screen-rotation-portrait", configured: true, width: 1280, height: 900, query: "dev=experimental" },
   { name: "screen-tone-schedule", configured: true, width: 1280, height: 900 },
   { name: "daily-settings-controls", configured: true, width: 1280, height: 900 },
   { name: "backup-import-success", configured: true, width: 1280, height: 900, importFixture: validBackupFixture },
@@ -723,26 +723,16 @@ function smokeAssertionsForScenario(scenario) {
           }
         }, 8000, "album reorder save");
       }
-      async function requireScreenRotationDeveloperFlow() {
+      async function requireScreenRotationPortraitFlow() {
         clickTab("Device");
         await waitFor(() => pageText().indexOf("Rotation") !== -1, 8000, "device settings");
         requireText("Screen Brightness");
         requireText("Developer");
         requireText("Enable in-development features");
 
-        requireSelectIncludes("Rotation", ["0", "180"]);
-        requireSelectExcludes("Rotation", ["90", "270"]);
-
-        toggleByText("Enable in-development features").click();
-        await waitFor(() => {
-          try {
-            requirePostContains("Developer features enable", "Developer: Features", "turn_on");
-            requireSelectIncludes("Rotation", ["0", "90", "180", "270"]);
-            return true;
-          } catch (_) {
-            return false;
-          }
-        }, 8000, "developer rotation options");
+        // Portrait is a normal option (COM-362): all four rotations show
+        // without Developer Features.
+        requireSelectIncludes("Rotation", ["0", "90", "180", "270"]);
 
         setSelect("Rotation", "90");
         await waitFor(() => {
@@ -754,18 +744,27 @@ function smokeAssertionsForScenario(scenario) {
           }
         }, 8000, "portrait rotation save");
 
+        // Toggling Developer Features must not reset a portrait rotation.
         toggleByText("Enable in-development features").click();
         await waitFor(() => {
           try {
-            requirePostContains("Developer features disable", "Developer: Features", "turn_off");
-            requireLatestPostParam("Rotation reset", "Screen: Rotation", "option", "0");
-            requireSelectIncludes("Rotation", ["0", "180"]);
-            requireSelectExcludes("Rotation", ["90", "270"]);
+            requirePostContains("Developer features enable", "Developer: Features", "turn_on");
             return true;
           } catch (_) {
             return false;
           }
-        }, 8000, "developer rotation reset");
+        }, 8000, "developer features enable");
+        toggleByText("Enable in-development features").click();
+        await waitFor(() => {
+          try {
+            requirePostContains("Developer features disable", "Developer: Features", "turn_off");
+            requireLatestPostParam("Rotation kept", "Screen: Rotation", "option", "90");
+            requireSelectIncludes("Rotation", ["0", "90", "180", "270"]);
+            return true;
+          } catch (_) {
+            return false;
+          }
+        }, 8000, "portrait rotation kept");
       }
       async function requireScreenToneScheduleControls() {
         clickTab("Device");
@@ -936,8 +935,8 @@ function smokeAssertionsForScenario(scenario) {
             await requireAlbumReorderSave();
           }
 
-          if (${JSON.stringify(scenario.name)} === "screen-rotation-developer") {
-            await requireScreenRotationDeveloperFlow();
+          if (${JSON.stringify(scenario.name)} === "screen-rotation-portrait") {
+            await requireScreenRotationPortraitFlow();
           }
 
           if (${JSON.stringify(scenario.name)} === "screen-tone-schedule") {

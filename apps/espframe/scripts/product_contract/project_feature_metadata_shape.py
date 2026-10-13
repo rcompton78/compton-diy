@@ -91,7 +91,7 @@ def check_project_screen_feature_metadata_shape(product: dict, errors: list[str]
     for field in (
         "screen_rotation_feature_source",
         "screen_rotation_behavior",
-        "screen_rotation_developer_behavior",
+        "screen_rotation_portrait_behavior",
         "developer_features_query_value",
         "developer_features_label",
         "developer_features_entity",
@@ -100,7 +100,7 @@ def check_project_screen_feature_metadata_shape(product: dict, errors: list[str]
     ):
         if not str(project.get(field, "")).strip():
             errors.append(f"project.{field} is required")
-    for field in ("screen_rotation_user_options", "screen_rotation_developer_options"):
+    for field in ("screen_rotation_user_options",):
         values = project.get(field, [])
         if not isinstance(values, list) or not values:
             errors.append(f"project.{field} must be a non-empty list")

@@ -380,8 +380,8 @@
   }
 
   function screenRotationOptionsForUi() {
-    var options = productSettingOptions("screen_rotation", S.developer_features_enabled);
-    return options.length ? options : ["0", "180"];
+    var options = productSettingOptions("screen_rotation");
+    return options.length ? options : ["0", "90", "180", "270"];
   }
 
   function effectiveScreenRotationForUi() {
