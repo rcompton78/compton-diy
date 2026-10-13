@@ -46,6 +46,7 @@
         "{projectRoot}/platformio.ini",
         "{workspaceRoot}/libs/touch-driver/src/**",
         "{workspaceRoot}/libs/ota-update-client/src/**",
+        "{workspaceRoot}/scripts/pio.sh",
         { "env": "RELEASE_VERSION" }
       ],
       "outputs": ["{projectRoot}/.pio/build/waveshare-s3-169"]
@@ -69,6 +70,7 @@
         "{projectRoot}/platformio.ini",
         "{workspaceRoot}/libs/touch-driver/src/**",
         "{workspaceRoot}/libs/ota-update-client/src/**",
+        "{workspaceRoot}/scripts/pio.sh",
         { "env": "RELEASE_VERSION" }
       ],
       "outputs": ["{projectRoot}/.pio/build/waveshare-s3-169"]
