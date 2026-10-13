@@ -98,8 +98,14 @@ if [ -d "$ESPFRAME_DIR/product/contract" ]; then
   fi
 
   # espframe's test:timezones validates against a pinned pip tzdata. Keep it in
-  # this venv so the system python3 needs nothing (PEP 668 blocks system pip).
-  "$ESPFRAME_VENV_DIR/bin/pip" install --quiet -r "$ESPFRAME_DIR/scripts/requirements-timezones.txt"
+  # this venv so the system python3 needs nothing (PEP 668 blocks system pip),
+  # and only reinstall when the pin changes so repeat/offline runs skip PyPI.
+  TZDATA_REQUIREMENTS="$ESPFRAME_DIR/scripts/requirements-timezones.txt"
+  TZDATA_PIN="$(sed -n 's/^tzdata==//p' "$TZDATA_REQUIREMENTS")"
+  if [ "$("$ESPFRAME_VENV_PYTHON" -c 'import tzdata; print(tzdata.__version__)' 2>/dev/null)" != "$TZDATA_PIN" ]; then
+    echo "Installing tzdata $TZDATA_PIN into apps/espframe/.venv..."
+    "$ESPFRAME_VENV_DIR/bin/pip" install --quiet -r "$TZDATA_REQUIREMENTS"
+  fi
 else
   echo "Skipping ESPHome setup: apps/espframe not present."
 fi
