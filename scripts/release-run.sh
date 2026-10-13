@@ -22,10 +22,11 @@ EXCLUDE=()
 [ -n "$CARRIED" ] && EXCLUDE=(--exclude "$CARRIED")
 RELEASE_VERSION="$NEW_VERSION" pnpm nx run-many -t "$TARGETS" "${EXCLUDE[@]}"
 
-mapfile -t ENTRIES < <(jq -r '.carried | to_entries[] | "\(.key) \(.value)"' "$VERSIONS_JSON")
-for entry in "${ENTRIES[@]}"; do
-    project="${entry%% *}"
-    version="${entry#* }"
+# A plain assignment so a jq failure trips set -e instead of silently skipping
+# every carried project (and dropping it from the Pages index).
+ENTRIES="$(jq -r '.carried | to_entries[] | "\(.key) \(.value)"' "$VERSIONS_JSON")"
+[ -n "$ENTRIES" ] || exit 0
+while IFS=' ' read -r project version; do
     echo "==> $project: unchanged, keeping release $version"
-    RELEASE_VERSION="$version" pnpm nx run-many -t "$TARGETS" -p "$project"
-done
+    RELEASE_VERSION="$version" pnpm nx run-many -t "$TARGETS" -p "$project" </dev/null
+done <<< "$ENTRIES"

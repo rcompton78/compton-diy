@@ -166,7 +166,7 @@ def main():
         sys.exit(f"--force-bump: no release project named {', '.join(sorted(unknown))}")
     affected = set(nx_json("show", "projects", "--affected", "--withTarget", "release",
                            f"--base={args.base}", f"--head={args.head}"))
-    changed_files = run(["git", "diff", "--name-only", args.base, args.head]).split()
+    changed_files = run(["git", "diff", "--name-only", args.base, args.head]).splitlines()
     project_inputs = {p: workspace_inputs(nx_json("show", "project", p)) for p in projects}
 
     try:
