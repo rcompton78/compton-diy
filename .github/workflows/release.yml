@@ -3,6 +3,14 @@ name: CI
 on:
   push:
     branches: [master]
+  # Manual re-release of unchanged projects, e.g. after rotating a secret baked
+  # in at build time (see "Resolve release versions" below).
+  workflow_dispatch:
+    inputs:
+      force_bump:
+        description: "Comma-separated projects to re-release under a new version even if unchanged (or 'all')"
+        required: false
+        default: ""
 
 concurrency:
   group: release-${{ github.ref }}
@@ -17,6 +25,14 @@ jobs:
       NX_CACHE_DIRECTORY: /hdd/compton-diy/nx-cache
       NX_WORKSPACE_DATA_DIRECTORY: /hdd/compton-diy/nx-workspace-data
     steps:
+      # A manual run from any other ref would publish its builds to Pages and
+      # cut a release from it. Fail loudly rather than skip, so it's obvious.
+      - name: Require master
+        if: github.ref != 'refs/heads/master'
+        run: |
+          echo "::error::Run this workflow on master (got $GITHUB_REF)."
+          exit 1
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
@@ -92,14 +108,37 @@ jobs:
       - name: Install Node dependencies
         run: pnpm install
 
+      # Per-project versions (COM-428): only projects that changed since the
+      # last release get this run's version. Every other release project keeps
+      # its last release's version, so devices (which reinstall on any version
+      # mismatch) don't reinstall identical code after unrelated merges. The
+      # bumped list also drives the GitHub release below.
+      - name: Resolve release versions
+        id: affected
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASE_SHA: ${{ steps.base.outputs.sha }}
+          HEAD_SHA: ${{ github.sha }}
+          RELEASE_VERSION: ${{ steps.version.outputs.version }}
+          FORCE_BUMP: ${{ inputs.force_bump }}
+        run: |
+          python3 tools/esp-flasher/resolve_versions.py \
+            --base "$BASE_SHA" --head "$HEAD_SHA" --version "$RELEASE_VERSION" \
+            --force-bump "$FORCE_BUMP" \
+            --output "$RUNNER_TEMP/release-versions.json"
+          {
+            echo "projects<<EOF"
+            jq -r '.bumped[]' "$RUNNER_TEMP/release-versions.json"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Build all firmware
         env:
-          RELEASE_VERSION: ${{ steps.version.outputs.version }}
           CAT_BUDDY_API_TOKEN: ${{ secrets.CAT_BUDDY_API_TOKEN }}
           API_ENCRYPTION_KEY: ${{ secrets.API_ENCRYPTION_KEY }}
         run: |
-          pnpm nx run-many -t build
-          pnpm nx run-many -t build-fs
+          scripts/release-run.sh "$RUNNER_TEMP/release-versions.json" build
+          scripts/release-run.sh "$RUNNER_TEMP/release-versions.json" build-fs
 
       # build123d + OCP for the espframe stand's print files. setup.sh resolves the
       # .venv symlink itself and only rebuilds when requirements.txt changes.
@@ -109,10 +148,9 @@ jobs:
 
       - name: Generate releases
         env:
-          RELEASE_VERSION: ${{ steps.version.outputs.version }}
           CAT_BUDDY_API_TOKEN: ${{ secrets.CAT_BUDDY_API_TOKEN }}
           API_ENCRYPTION_KEY: ${{ secrets.API_ENCRYPTION_KEY }}
-        run: pnpm nx run-many -t release
+        run: scripts/release-run.sh "$RUNNER_TEMP/release-versions.json" release
 
       - name: Generate flasher index
         run: python3 tools/esp-flasher/generate_index.py --version="${{ steps.version.outputs.version }}"
@@ -121,21 +159,6 @@ jobs:
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: dist/
-
-      - name: Determine affected release projects
-        id: affected
-        env:
-          BASE_SHA: ${{ steps.base.outputs.sha }}
-          HEAD_SHA: ${{ github.sha }}
-        run: |
-          PROJECTS=$(pnpm nx show projects --affected --withTarget release \
-            --base="$BASE_SHA" --head="$HEAD_SHA" --json \
-            | jq -r '.[]')
-          {
-            echo "projects<<EOF"
-            echo "$PROJECTS"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub release
         if: steps.affected.outputs.projects != ''
@@ -154,6 +177,8 @@ jobs:
             PRINTS+=(dist/"$project"/*.tar.gz)
           done <<< "$AFFECTED_PROJECTS"
 
+          # resolve_versions.py reads the "Changed: a,b." list back to find each
+          # project's last release, so keep its format.
           NOTES="Automated build from $COMMIT_SHA. Changed: $(echo "$AFFECTED_PROJECTS" | paste -sd, -)."
           if [ ${#FIRMWARE[@]} -gt 0 ]; then
             NOTES="$NOTES"$'\n\n'"Firmware: upload the *-ota.bin matching your device via its config portal's Update page."
