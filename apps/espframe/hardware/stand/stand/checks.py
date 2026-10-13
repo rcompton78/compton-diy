@@ -85,7 +85,7 @@ def run(parts: dict) -> list:
     push_z = screen_point(p.GLASS_W / 2, p.GLASS_H / 2, 0).Z
     force = m_tot / 1000 * g * (p.FOOT_D - cg_y) / push_z
     side = math.degrees(math.atan((p.FOOT_W / 2) / cg_z))
-    detail = (f"{force:.1f} N (need ≥ {p.MIN_TIP_FORCE_N}); total {m_tot:.0f} g = "
+    detail = (f"{force:.2f} N (need ≥ {p.MIN_TIP_FORCE_N}); total {m_tot:.0f} g = "
               + ", ".join(f"{n} {m:.0f}" for m, _, _, n in masses)
               + f"; CG {cg_y:.1f} mm behind the glass corner, {cg_z:.1f} mm up; sideways tip at {side:.0f}°")
     add("Tip-over push at screen centre", force >= p.MIN_TIP_FORCE_N, detail)
@@ -158,9 +158,10 @@ def run(parts: dict) -> list:
         f"closest frame-to-glass {g_gap:.2f} mm (need ≥ {p.MIN_EDGE_GAP}), overlap {g_over:.4f} mm³")
     w = p.FRAME_WALL
     edges = dict(left=0 - (p.FRAME_X[0] + w), right=(p.FRAME_X[1] - w) - p.GLASS_W,
-                 top=(p.FRAME_Y[1] - w) - p.GLASS_H, bottom=0 - (p.FRAME_Y[0] + w))
+                 top=(p.FRAME_Y[1] - w) - p.GLASS_H)
     add("Glass edge gap", min(edges.values()) >= p.MIN_EDGE_GAP,
-        "L / R / T / B " + " / ".join(f"{v:.2f}" for v in edges.values()) + f" mm (need ≥ {p.MIN_EDGE_GAP})")
+        "L / R / T " + " / ".join(f"{v:.2f}" for v in edges.values()) + f" mm (need ≥ {p.MIN_EDGE_GAP}); "
+        f"B open, no bottom wall: ledge felt {p.RISE:.2f} mm below the glass")
     felt = ref.face_felt()
     f_gap = felt.distance_to(panel)
     f_over = (felt & aa).volume
@@ -182,8 +183,9 @@ def run(parts: dict) -> list:
         f"with an M3 × 4 insert")
     lf = SCREEN_TO_WORLD * ref.ledge_felt()
     seat_ok = lf.distance_to(foot) < 1e-3 and lf.distance_to(frame_w) < 1e-3 and (frame_w & foot).volume < 1e-3
-    add("Frame rail seats on the ledge", seat_ok,
-        f"bottom rail sits on {p.FELT_T:.0f} mm felt on the ledge; screen raised {p.RISE:.2f} mm by the rail; "
+    add("Frame face seats on the ledge", seat_ok,
+        f"face bottom edge (square, {p.FRAME_FACE_T:.0f} mm) and side walls sit on {p.FELT_T:.0f} mm felt on the ledge; "
+        f"screen raised {p.RISE:.2f} mm; "
         f"frame-to-foot overlap {(frame_w & foot).volume:.4f} mm³, closest {frame_w.distance_to(foot):.2f} mm")
     engage = min(p.DOVE_GROOVE_L, p.DOVE_RAIL_L - p.SEAT) - max(0.0, -p.SEAT)
     add("Dovetail engagement", engage >= p.MIN_DOVE_ENGAGE,

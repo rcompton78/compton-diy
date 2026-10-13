@@ -1,10 +1,13 @@
 """Picture frame (style B, classic bevel, 21 mm face), printed face-down in wood-look PLA.
 
 The opening is the active area plus a small reveal, and the face is the same width all
-round, so the uneven black bezel reads as an even border. The frame hangs on four tabs
-on the back-plate (screws from behind into inserts in wall bosses) and its bottom rail
-sits on the felted ledge of the foot. It never touches the glass: felt on the back of the
-face stays FELT_CLEAR off the glass, and the walls clear the glass edges.
+round, so the uneven black bezel reads as an even border. The frame hangs on the
+back-plate (screws from behind into inserts in wall bosses) and the bottom edge of its face
+sits on the felted ledge of the foot. Walls run down the sides and across the top only: a
+bottom wall would have to fit between the ledge and the glass. The outer chamfer runs round
+the top and sides, and the bottom edge is square so the face sits flat on the ledge. It
+never touches the glass: felt on the back of the face stays FELT_CLEAR off the glass, and
+the walls clear the glass edges.
 """
 
 from build123d import Align, Cylinder, Part, Plane, Pos, Rectangle, Rot, extrude, loft
@@ -26,19 +29,20 @@ def build_frame() -> Part:
     z_front = z_back + p.FRAME_FACE_T
     ch, bev = p.FRAME_OUTER_CH, p.FRAME_BEVEL
 
-    # Face: straight outer band, then a 45° outer chamfer to the front surface.
+    # Face: straight outer band, then a 45° outer chamfer to the front surface on the top and
+    # sides. The bottom edge stays square, so the face comes right down to the ledge.
     face = extrude(_rect_at(ox0, ox1, oy0, oy1, z_back), z_front - ch - z_back)
     face += loft([_rect_at(ox0, ox1, oy0, oy1, z_front - ch),
-                  _rect_at(ox0 + ch, ox1 - ch, oy0 + ch, oy1 - ch, z_front)])
+                  _rect_at(ox0 + ch, ox1 - ch, oy0, oy1 - ch, z_front)])
     # Opening with a 45° bevel opening out towards the viewer.
     face -= extrude(_rect_at(px0, px1, py0, py1, z_back - 1), z_front - z_back + 2)
     face -= loft([_rect_at(px0, px1, py0, py1, z_front - bev),
                   _rect_at(px0 - bev - 0.01, px1 + bev + 0.01, py0 - bev - 0.01, py1 + bev + 0.01, z_front + 0.01)])
 
-    # Walls from the face back to the plate's back face.
+    # Side and top walls from the face back to the plate's back face; no bottom wall (COM-431).
     w = p.FRAME_WALL
     walls = extrude(_rect_at(ox0, ox1, oy0, oy1, -p.D_PLATE_BACK), p.D_PLATE_BACK + z_back)
-    walls -= extrude(_rect_at(ox0 + w, ox1 - w, oy0 + w, oy1 - w, -p.D_PLATE_BACK - 1), p.D_PLATE_BACK + z_back + 2)
+    walls -= extrude(_rect_at(ox0 + w, ox1 - w, oy0 - 1, oy1 - w, -p.D_PLATE_BACK - 1), p.D_PLATE_BACK + z_back + 2)
     frame = face + walls
 
     # Bosses for the M3 × 4 inserts, tied to the side walls, face at the plate's front face.
@@ -53,12 +57,6 @@ def build_frame() -> Part:
             frame -= Pos(xc, ty, -p.D_PLATE_FRONT - 0.01) * Cylinder(
                 p.INSERT_HOLE_D / 2, p.FRAME_INSERT_DEPTH, align=(Align.CENTER, Align.CENTER, Align.MIN))
 
-    # Cable notch through the bottom rail, behind the glass, where the plug lead drops into the foot.
-    frame -= screen_box(p.PORT_X - p.FRAME_NOTCH_W / 2, p.PORT_X + p.FRAME_NOTCH_W / 2, oy0 - 1, oy0 + w + 0.5,
-                        p.SLOT_T[0] - 1, p.D_PLATE_BACK + 1)
-    # Notch round the foot's dovetail rail, which rises from the ledge through the bottom rail.
-    frame -= screen_box(p.DOVE_X - p.DOVE_FLOOR_W / 2 - 1.0, p.DOVE_X + p.DOVE_FLOOR_W / 2 + 1.0, oy0 - 1, oy0 + w + 0.5,
-                        p.D_PLATE_BACK - p.DOVE_DEPTH - 0.5, p.D_PLATE_BACK + 1)
     return frame
 
 
