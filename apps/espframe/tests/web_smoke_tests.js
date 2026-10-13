@@ -588,14 +588,6 @@ function smokeAssertionsForScenario(scenario) {
           }
         });
       }
-      function requireSelectExcludes(labelText, values) {
-        const select = selectByLabel(labelText);
-        values.forEach((value) => {
-          if (Array.from(select.options).some((option) => option.value === value)) {
-            throw new Error(labelText + " should not include option: " + value);
-          }
-        });
-      }
       function fieldByLabel(labelText) {
         const labels = Array.from(document.querySelectorAll("label"));
         const label = labels.find((item) => item.textContent.trim() === labelText);
