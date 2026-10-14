@@ -947,6 +947,17 @@ static void test_double_tap_navigation() {
   assert(register_short_tap(10000, TAP_SIDE_RIGHT, last_ms, last_side) == TAP_ACTION_NONE);
   assert(register_short_tap(10400, TAP_SIDE_RIGHT, last_ms, last_side) == TAP_ACTION_NONE);
   assert(last_ms == 10400);
+
+  // A first tap at millis() == 0 (boot, or the 32-bit wrap) still pairs.
+  last_ms = 0;
+  assert(register_short_tap(0, TAP_SIDE_RIGHT, last_ms, last_side) == TAP_ACTION_NONE);
+  assert(last_ms != 0);
+  assert(register_short_tap(200, TAP_SIDE_RIGHT, last_ms, last_side) == TAP_ACTION_NEXT);
+
+  // Across the wrap: first tap just before it, second just after.
+  last_ms = 0;
+  assert(register_short_tap(0xFFFFFF00u, TAP_SIDE_LEFT, last_ms, last_side) == TAP_ACTION_NONE);
+  assert(register_short_tap(0x00000050u, TAP_SIDE_LEFT, last_ms, last_side) == TAP_ACTION_PREVIOUS);
 }
 
 int main() {
