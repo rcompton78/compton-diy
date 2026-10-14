@@ -21,6 +21,9 @@ globals:
   - id: last_short_tap_ms
     type: uint32_t
     initial_value: '0'
+  - id: last_short_tap_side
+    type: int
+    initial_value: '0'
   - id: last_photo_displayed_ms
     type: uint32_t
     initial_value: '0'
@@ -322,6 +325,26 @@ remote_image:
               id(espframe_core).slideshow().state().diagnostic_reason, id(espframe_core).slideshow().state().portrait_preload_right_ready,
               id(espframe_core).slideshow().state().preload_noncritical_in_flight, id(espframe_core).slideshow().state().noncritical_remote_updates_in_flight);
             id(espframe_slideshow_dispatch).execute();
+
+# -----------------------------------------------------------------------------
+# Navigation buttons: same actions as the double-tap gestures
+# -----------------------------------------------------------------------------
+button:
+  - platform: template
+    name: "Photos: Previous"
+    icon: "mdi:skip-previous"
+    web_server:
+      sorting_group_id: sg_photos
+    on_press:
+      - script.execute: immich_show_previous
+
+  - platform: template
+    name: "Photos: Next"
+    icon: "mdi:skip-next"
+    web_server:
+      sorting_group_id: sg_photos
+    on_press:
+      - script.execute: immich_advance_forward
 
 # -----------------------------------------------------------------------------
 # Scripts: download error handler, display, advance, previous, prefetch
@@ -760,6 +783,7 @@ script:
       - lambda: |-
           id(espframe_core).slideshow().show_previous(
             millis(), id(espframe_core).slideshow().state().active_slot, id(espframe_core).slideshow().state().active_slot_displayed,
+            id(espframe_core).slideshow().state().last_advance_ms,
             id(espframe_core).slideshow().state().slot0, id(espframe_core).slideshow().state().slot1, id(espframe_core).slideshow().state().slot2, id(espframe_core).slideshow().state().current_display,
             id(espframe_core).slideshow().state().previous_display, id(espframe_core).slideshow().state().portrait, id(espframe_core).slideshow().state().slot_flags);
           id(espframe_slideshow_dispatch).execute();

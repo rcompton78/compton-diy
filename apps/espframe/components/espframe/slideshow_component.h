@@ -391,7 +391,7 @@ class EspFrameSlideshow {
   }
 
   bool show_previous(uint32_t now_ms, int &active_slot, bool &active_slot_displayed,
-                     SlotMeta &slot0, SlotMeta &slot1, SlotMeta &slot2,
+                     uint32_t &last_advance_ms, SlotMeta &slot0, SlotMeta &slot1, SlotMeta &slot2,
                      DisplayMeta &current_display, DisplayMeta &prev_display,
                      PortraitState &portrait, SlotFlags &flags) {
     if (!prev_display.valid) {
@@ -411,6 +411,9 @@ class EspFrameSlideshow {
     int previous_slot = (active_slot + 2) % 3;
     active_slot = previous_slot;
     active_slot_displayed = false;
+    // Restart the slideshow interval, as advance_forward does; otherwise an
+    // already-elapsed interval advances again as soon as the photo loads.
+    last_advance_ms = now_ms;
 
     SlotMeta &meta = this->slot_mut_(previous_slot, slot0, slot1, slot2);
     meta.ready = false;

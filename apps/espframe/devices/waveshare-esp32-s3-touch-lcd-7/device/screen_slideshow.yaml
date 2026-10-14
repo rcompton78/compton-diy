@@ -551,13 +551,27 @@ script:
             lambda: 'return !id(touch_started_while_off);'
           then:
             - script.execute: show_ip_overlay
+            # Double tap: right half -> next, left half -> previous. The
+            # indev point is in LVGL's rotated coordinates, so the halves
+            # follow the screen rotation.
             - lambda: |-
-                uint32_t now = millis();
-                if (id(last_short_tap_ms) != 0 && (now - id(last_short_tap_ms)) < 400) {
-                  id(last_short_tap_ms) = 0;
-                  id(immich_advance_forward).execute();
-                } else {
-                  id(last_short_tap_ms) = now;
+                lv_indev_t *indev = lv_indev_active();
+                if (indev == nullptr) return;
+                lv_point_t point;
+                lv_indev_get_point(indev, &point);
+                TapSide side = tap_side_for_x(point.x, id(screen_layout_width));
+                switch (register_short_tap(millis(), side, id(last_short_tap_ms), id(last_short_tap_side))) {
+                  case TAP_ACTION_NEXT:
+                    ESP_LOGI("touch", "Double tap right: next photo");
+                    id(immich_advance_forward).execute();
+                    break;
+                  case TAP_ACTION_PREVIOUS:
+                    ESP_LOGI("touch", "Double tap left: previous photo");
+                    id(immich_show_previous).execute();
+                    break;
+                  case TAP_ACTION_NONE:
+                  default:
+                    break;
                 }
       - lambda: |-
           id(touch_started_while_off) = false;
