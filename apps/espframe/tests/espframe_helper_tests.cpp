@@ -7,6 +7,7 @@
 #include "components/espframe/configuration_contract_generated.h"
 #include "components/espframe/duration_helpers.h"
 #include "components/espframe/immich_helpers.h"
+#include "components/espframe/touch_gestures.h"
 
 struct PhotoMeta {
   std::string asset_id, image_url, date, location, person;
@@ -775,10 +776,12 @@ static void test_slideshow_component_previous_flow() {
   SlotFlags flags;
   int active_slot = 0;
   bool displayed = true;
+  uint32_t last_advance = 100;
 
-  bool shown = slideshow.show_previous(1234, active_slot, displayed, slot0, slot1, slot2,
+  bool shown = slideshow.show_previous(1234, active_slot, displayed, last_advance, slot0, slot1, slot2,
                                        current, previous, portrait, flags);
   assert(shown);
+  assert(last_advance == 1234);
   assert(active_slot == 2);
   assert(!displayed);
   assert(current.asset_id == "previous");
@@ -790,8 +793,9 @@ static void test_slideshow_component_previous_flow() {
   assert(cmd.slot == 2);
 
   DisplayMeta empty_previous;
-  slideshow.show_previous(2000, active_slot, displayed, slot0, slot1, slot2,
+  slideshow.show_previous(2000, active_slot, displayed, last_advance, slot0, slot1, slot2,
                            current, empty_previous, portrait, flags);
+  assert(last_advance == 1234);
   assert(slideshow.pop_command(cmd));
   assert(cmd.kind == SLIDESHOW_COMMAND_LOG_NO_PREVIOUS);
 }
@@ -912,6 +916,39 @@ static void test_configuration_contract_capabilities() {
   assert(capabilities.find("\"configuration_parameter\":\"configuration\"") != std::string::npos);
 }
 
+static void test_double_tap_navigation() {
+  assert(tap_side_for_x(0, 800) == TAP_SIDE_LEFT);
+  assert(tap_side_for_x(399, 800) == TAP_SIDE_LEFT);
+  assert(tap_side_for_x(400, 800) == TAP_SIDE_RIGHT);
+  assert(tap_side_for_x(799, 800) == TAP_SIDE_RIGHT);
+
+  uint32_t last_ms = 0;
+  int last_side = TAP_SIDE_LEFT;
+
+  // Right double tap -> next; the pair is consumed.
+  assert(register_short_tap(1000, TAP_SIDE_RIGHT, last_ms, last_side) == TAP_ACTION_NONE);
+  assert(register_short_tap(1300, TAP_SIDE_RIGHT, last_ms, last_side) == TAP_ACTION_NEXT);
+  assert(last_ms == 0);
+  assert(register_short_tap(1500, TAP_SIDE_RIGHT, last_ms, last_side) == TAP_ACTION_NONE);
+
+  // Left double tap -> previous.
+  last_ms = 0;
+  assert(register_short_tap(5000, TAP_SIDE_LEFT, last_ms, last_side) == TAP_ACTION_NONE);
+  assert(register_short_tap(5399, TAP_SIDE_LEFT, last_ms, last_side) == TAP_ACTION_PREVIOUS);
+
+  // Taps on different halves are two single taps; the second starts a new window.
+  last_ms = 0;
+  assert(register_short_tap(8000, TAP_SIDE_LEFT, last_ms, last_side) == TAP_ACTION_NONE);
+  assert(register_short_tap(8200, TAP_SIDE_RIGHT, last_ms, last_side) == TAP_ACTION_NONE);
+  assert(register_short_tap(8400, TAP_SIDE_RIGHT, last_ms, last_side) == TAP_ACTION_NEXT);
+
+  // Too slow -> the second tap only starts a new window.
+  last_ms = 0;
+  assert(register_short_tap(10000, TAP_SIDE_RIGHT, last_ms, last_side) == TAP_ACTION_NONE);
+  assert(register_short_tap(10400, TAP_SIDE_RIGHT, last_ms, last_side) == TAP_ACTION_NONE);
+  assert(last_ms == 10400);
+}
+
 int main() {
   test_date_and_url_helpers();
   test_duration_helpers();
@@ -928,6 +965,7 @@ int main() {
   test_slideshow_component_companion_result_flow();
   test_slideshow_component_display_current_flow();
   test_configuration_contract_capabilities();
+  test_double_tap_navigation();
   std::cout << "espframe helper tests passed\n";
   return 0;
 }

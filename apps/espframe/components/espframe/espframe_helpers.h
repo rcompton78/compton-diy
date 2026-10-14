@@ -4,6 +4,7 @@
 #include "immich_helpers.h"
 #include "ntp_helpers.h"
 #include "sun_calc.h"
+#include "touch_gestures.h"
 #include <string>
 #include <cstdint>
 #include <cstring>

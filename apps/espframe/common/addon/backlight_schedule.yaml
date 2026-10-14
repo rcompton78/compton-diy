@@ -625,6 +625,9 @@ script:
                 id(screen_schedule_asleep) = false;
                 id(last_photo_displayed_ms) = millis();
                 if (was_off) {
+                  // The slideshow interval stops while asleep; restart it so
+                  // waking doesn't advance the photo straight away.
+                  id(espframe_core).slideshow().state().last_advance_ms = millis();
                   ESP_LOGI("backlight", "Wake: restoring brightness");
                 }
             - if:

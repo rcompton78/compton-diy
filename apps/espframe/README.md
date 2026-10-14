@@ -75,7 +75,7 @@ The full setup guide is here:
 
 Once installed, the frame has two main control surfaces:
 
-- **On the touchscreen:** tap to wake, double-tap to advance to the next photo, and press-and-hold to sleep.
+- **On the touchscreen:** tap to wake, double-tap the right half for the next photo or the left half for the previous one, and press-and-hold to sleep.
 - **In the web settings page:** change the photo source, slideshow speed, date filters, brightness, screen tone, rotation, WiFi, Immich connection, and firmware update options.
 
 ## Development
