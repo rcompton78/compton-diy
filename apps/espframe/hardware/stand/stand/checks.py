@@ -187,6 +187,11 @@ def run(parts: dict) -> list:
         f"face bottom edge (square, {p.FRAME_FACE_T:.0f} mm) and side walls sit on {p.FELT_T:.0f} mm felt on the ledge; "
         f"screen raised {p.RISE:.2f} mm; "
         f"frame-to-foot overlap {(frame_w & foot).volume:.4f} mm³, closest {frame_w.distance_to(foot):.2f} mm")
+    fb, ob = frame_w.bounding_box(), foot.bounding_box()
+    over_l, over_r = ob.min.X - fb.min.X, fb.max.X - ob.max.X
+    add("Frame and foot share a centre line", abs(over_l - over_r) <= 0.1,
+        f"frame overhangs the foot by {over_l:.2f} mm left / {over_r:.2f} mm right (need equal within 0.1; "
+        f"negative = foot sticks out)")
     engage = min(p.DOVE_GROOVE_L, p.DOVE_RAIL_L - p.SEAT) - max(0.0, -p.SEAT)
     add("Dovetail engagement", engage >= p.MIN_DOVE_ENGAGE,
         f"{engage:.1f} mm of the {p.DOVE_RAIL_L:.0f} mm rail inside the groove (need ≥ {p.MIN_DOVE_ENGAGE:.0f})")

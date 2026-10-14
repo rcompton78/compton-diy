@@ -24,8 +24,10 @@ class FootLayout:
 
 
 def layout() -> FootLayout:
-    side = (p.FOOT_W - p.GLASS_W) / 2
-    x0, x1 = -side, p.GLASS_W + side
+    # Centred on the picture frame, not the glass: the frame follows the active area, which sits
+    # 1 mm left of the glass centre (COM-442).
+    cx = sum(p.FRAME_X) / 2
+    x0, x1 = cx - p.FOOT_W / 2, cx + p.FOOT_W / 2
     in_x0, in_x1 = x0 + p.WALL, x1 - p.WALL
     front = screen_point(0, -p.SEAT, -(p.FRAME_FACE_GAP + p.FRAME_FACE_T + p.LEDGE_OVER))
     z_deck = screen_point(0, -p.SEAT, p.D_PLATE_BACK + p.POST_FACE_CLEAR).Z

@@ -20,6 +20,7 @@ A 3D-printable portrait desk stand for the 7" espframe (Waveshare ESP32-S3-Touch
   - It fills the frame out to its walls (0.3 mm clear), so the back is closed at the sides and top, with a 2.3 mm gap left along the bottom between the plate edge and the ledge felt (the frame has no bottom wall since COM-431), and carries the frame on four screws near its side edges.
   - Two rows of vent slots low down and two near the top (4 slots of 20 × 3 mm each) let air through, since the back is otherwise closed.
 - **Foot (PETG).** The plate slides down onto a dovetail rail on the foot's post, and the frame's face settles on the felted ledge (20 mm high). The screen leans back at 15°, like a desktop picture frame (10° before COM-417).
+  - It's centred on the frame, not the glass (COM-442), so the frame lines up with both ends of the foot.
   - No ballast: the printed stand was sturdy without it, and the front under the ledge is solid. The foot is 120 mm deep.
   - The tray is open on top and closed with a lid that clicks in: two small ridges on each long edge snap into grooves in the tray's rim. Prise it out at the slot in its front-right corner.
 - **Power and data.** A Poyiccot USB 3.1 panel-mount extension (straight, 30 cm) passes every pin through:
@@ -27,6 +28,13 @@ A 3D-printable portrait desk stand for the 7" espframe (Waveshare ESP32-S3-Touch
   - The lead drops through a notch in the plate, past the open bottom of the frame and through the deck slot, bends at R18, lies as one loose coil in the tray, and ends at the panel jack in the rear wall.
   - Any USB-C charger works, and you can flash or read logs through the stand without taking it apart.
 - **Orientation.** The board's USB edge goes down: the landscape panel turned 90° counter-clockwise, seen from the front. Pick the matching rotation in the espframe settings (COM-362).
+
+## Changes in COM-442
+
+- **Foot centred on the frame.** The foot was centred on the glass, but the frame follows the picture area, which sits 1 mm left of the glass centre. On the printed stand, the frame overhung the foot's left end by 1.1 mm and the foot stuck out 0.9 mm past the frame on the right. The foot (130 mm wide) is now centred on the frame (130.2 mm), so the frame overhangs by 0.11 mm at each end. A new check keeps the two on one centre line.
+- The foot's outline, tray and lid rabbet move 1.02 mm left. The dovetail post, cable tunnel, deck slot and jack stay where they were under the screen. Every other check result is unchanged. The coil keeps 1.9 mm to the tray's right wall (was 2.9).
+
+**What to reprint:** only the foot. The lid only moves with the tray and its shape is unchanged, so keep yours. The frame and plate don't change.
 
 ## Changes in COM-431
 
@@ -90,6 +98,7 @@ Every dimension is a named constant in [`stand/params.py`](stand/params.py), tag
 | Only the picture shows through the opening | head-on, nothing but glass inside the opening: no frame, felt, plate, spacers or plug |
 | Plate edges meet the frame bosses | flush contact, no overlap |
 | Frame screw engagement | M3 × 8 through the 3 mm plate: 5 mm into a 6 mm hole with an M3 × 4 insert |
+| Frame and foot share a centre line | the frame overhangs each end of the foot by 0.11 mm (need equal within 0.1) |
 | Frame face seats on the ledge | square bottom edge of the face and the side walls on 1 mm felt; frame to foot never closer than 1.0 mm elsewhere |
 | Jack fits its recess and window | measured flange 25 × 8 × 6.5 bears on the 1.2 mm web inside the rear wall; no overlap |
 | Receptacle flush with the rear face | the metal USB-C receptacle (1.2 mm proud of the flange) pokes through a 9.3 × 3.7 window and ends flush |
