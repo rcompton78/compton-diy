@@ -106,7 +106,21 @@ esphome:
                 return;
               delay(20);
             }
+            // ESPHome's powerdown hooks (which send the panel SLPIN) don't
+            // run on this path, and the display is already initialised.
+            id(tft_display).on_powerdown();
             id(light_sleep_1).sleep_again_no_touch();
+    # The panel spends deep sleep in SLPIN (ili9xxx's on_powerdown()). The
+    # ILI9341 wants ~120ms after SLPOUT before DISPON takes reliably, but a
+    # CUSTOM init_sequence can't express that delay (its delay entry needs a
+    # 0xFF length byte), so init sends SLPOUT then DISPON back to back. It has
+    # come back fine on-device; resending DISPON after the settle time makes
+    # it datasheet-correct. Runs right after the display's setup (800).
+    - priority: 790
+      then:
+        - lambda: |-
+            delay(120);
+            id(tft_display).command(0x29);  // DISPON
     - priority: -100
       then:
         - output.turn_on: backlight_output

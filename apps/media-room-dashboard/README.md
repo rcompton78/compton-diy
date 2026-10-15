@@ -54,15 +54,19 @@ Three power tiers, layered:
    plain `gpio` output (light sleep stops LEDC PWM, which flickered the
    screen) and `CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION` (keeps the USB serial
    console alive while a host is attached). The CPU runs at 160MHz.
-2. **Screen blank** after `idle_timeout` (20s) untouched, on `main_page`
+2. **Screen blank** after `idle_timeout` (30s) untouched, on `main_page`
    only: backlight off and LVGL paused. The connecting and setup pages never
    blank. The tap that wakes the screen only wakes it (LVGL is paused while
    the finger is down, and resumes on release); buttons respond from the
    next tap.
-3. **Deep sleep** `deep_sleep_delay` (10s) after blanking, so 30s after the
-   last touch, and only while wifi is connected. Touching the screen wakes
-   it (ext0 on the touch controller's INT line, GPIO17), but that's a full
-   reboot and reconnect. The 30s is a test value.
+3. **Deep sleep** `deep_sleep_timeout` (30min) after the last touch, and
+   only while wifi is connected. The panel goes into its own sleep mode
+   (SLPIN) first. Touching the screen wakes it (ext0 on the touch
+   controller's INT line, GPIO17), but that's a full reboot and reconnect.
+
+For a quick on-device test, build with shorter timeouts from the command
+line rather than editing them:
+`scripts/espframe-esphome.sh -s idle_timeout 20s -s deep_sleep_timeout 30s compile apps/media-room-dashboard/builds/freenove-s3.yaml`.
 
 **Deep sleep self-wake (being tested).** The first deep sleep + light sleep
 build woke itself within seconds of sleeping, for two reasons:

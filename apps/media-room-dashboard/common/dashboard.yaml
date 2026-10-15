@@ -39,12 +39,13 @@ substitutions:
   #     backlight off and LVGL paused. WiFi and the HA connection stay up, so
   #     a tap wakes it instantly. That tap only wakes the screen; buttons
   #     respond from the next one.
-  #  3. deep_sleep_delay after blanking (with wifi connected), deep sleep.
-  #     A touch wakes it, but that's a full reboot + reconnect.
-  # deep_sleep_delay is 10s (deep sleep 30s after the last touch) for testing
-  # the self-wake fix, not tuned for real use yet.
-  idle_timeout: "20s"
-  deep_sleep_delay: "10s"
+  #  3. deep_sleep_timeout after the last touch (with wifi connected), deep
+  #     sleep. A touch wakes it, but that's a full reboot + reconnect.
+  # Both count from the last touch. For a quick on-device test, override
+  # them on the command line instead of editing them here, e.g.
+  #   scripts/espframe-esphome.sh -s idle_timeout 20s -s deep_sleep_timeout 30s compile ...
+  idle_timeout: "30s"
+  deep_sleep_timeout: "30min"
 
 esphome:
   project:
@@ -90,6 +91,8 @@ wifi:
     # been skipped) on connecting_page, and it won't fire again until the
     # clock restarts, so main_page would otherwise never blank.
     - lambda: 'lv_display_trigger_activity(nullptr);'
+    # Start the deep-sleep clock; touches restart it from here on.
+    - script.execute: deep_sleep_countdown
   on_disconnect:
     - globals.set:
         id: setup_page_shown
@@ -353,8 +356,8 @@ script:
   # COM-214 tier 2: blank the screen. Pausing LVGL (with resume_on_input
   # off, see lvgl: below) stops it reading touch at all, so the touch that
   # wakes the screen never reaches a button. Pausing also stops LVGL's idle
-  # callbacks, so the deep-sleep tier runs off its own countdown instead of
-  # a second on_idle timeout.
+  # callbacks, so the deep-sleep tier runs off its own countdown (restarted
+  # by every touch) instead of a second on_idle timeout.
   - id: blank_screen
     then:
       - globals.set:
@@ -362,13 +365,11 @@ script:
           value: "true"
       - output.turn_off: backlight_output
       - lvgl.pause:
-      - script.execute: deep_sleep_countdown
 
   # Undo blank_screen. lvgl.resume also restarts LVGL's inactivity clock, so
   # the screen doesn't blank again straight away.
   - id: wake_screen
     then:
-      - script.stop: deep_sleep_countdown
       - if:
           condition:
             lambda: 'return id(screen_dark);'
@@ -379,13 +380,16 @@ script:
             - lvgl.resume:
             - output.turn_on: backlight_output
 
-  # COM-214 tier 3. Only while wifi is connected, so it can never drop the
-  # fallback AP mid-setup (setup activity happens on a phone, not this
-  # screen). deep_sleep_1 itself waits while the touch INT line is low.
+  # COM-214 tier 3: deep sleep deep_sleep_timeout after the last touch.
+  # Started on wifi connect and restarted on every touch release. Only
+  # sleeps while wifi is connected, so it can never drop the fallback AP
+  # mid-setup (setup activity happens on a phone, not this screen); after a
+  # drop, on_connect restarts it. deep_sleep_1 itself waits while the touch
+  # INT line is low.
   - id: deep_sleep_countdown
     mode: restart
     then:
-      - delay: ${deep_sleep_delay}
+      - delay: ${deep_sleep_timeout}
       - if:
           condition:
             wifi.connected:
@@ -396,15 +400,16 @@ script:
             - deep_sleep.enter: deep_sleep_1
 
 # Wake from tier 2 on release rather than on touch: LVGL is still paused
-# while the finger is down, so the whole waking tap is swallowed. on_touch
-# only cancels the deep-sleep countdown, so a finger held past it can't race
-# it.
+# while the finger is down, so the whole waking tap is swallowed. The
+# deep-sleep countdown stops while a finger is down and restarts from the
+# release.
 touchscreen:
   - id: !extend tft_touch
     on_touch:
       - script.stop: deep_sleep_countdown
     on_release:
       - script.execute: wake_screen
+      - script.execute: deep_sleep_countdown
 
 # -----------------------------------------------------------------------------
 # Three LVGL pages. `connecting_page` (the default, i.e. at boot, and again
