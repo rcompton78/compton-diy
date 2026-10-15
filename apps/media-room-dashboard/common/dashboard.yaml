@@ -196,30 +196,29 @@ update:
     name: "Firmware Update"
     source: ${firmware_manifest_url}
     update_interval: 6h
-    on_update_available:
-      then:
-        # firmware_version is never substituted with the real RELEASE_VERSION
-        # at build time (generate_release.py's --version only feeds
-        # manifest.json, not the compiled binary), so every "dev" build
-        # always mismatches the published manifest version and would
-        # otherwise auto-install on every boot forever, including a fresh
-        # ota.perform right after the one that just ran (since the OTA'd
-        # binary is also always "dev"). Skip auto-install entirely for
-        # unversioned/local builds -- matches libs/ota-update-client's
-        # existing currentVersion=="dev" skip for the same reason.
-        - if:
-            condition:
-              lambda: 'return strcmp("${firmware_version}", "dev") != 0;'
-            then:
-              - update.perform: firmware_update
+    # No install here. The check runs on every boot, and since COM-214's deep
+    # sleep every touch wake is a boot, so installing here would tie the
+    # remote up (download, flash, reboot) right when someone picks it up.
+    # deep_sleep_countdown installs it instead, once the device has sat idle
+    # for deep_sleep_timeout, in place of that deep sleep.
+    #
+    # Auto-install also skips unversioned "dev" builds: firmware_version is
+    # never substituted with the real RELEASE_VERSION at build time
+    # (generate_release.py's --version only feeds manifest.json, not the
+    # compiled binary), so every "dev" build always mismatches the published
+    # manifest version and would otherwise auto-install on every boot
+    # forever, including a fresh install right after the one that just ran
+    # (since the OTA'd binary is also always "dev"). Matches
+    # libs/ota-update-client's existing currentVersion=="dev" skip for the
+    # same reason.
 
 # Manual check/install from the web portal. The stock web_server v3 UI shows
 # the update entity's state but has no install control for it (HA's own
 # update card does), so these buttons are the portal's way to act on an
-# "UPDATE AVAILABLE" without waiting for the 6-hourly check. Install is a
-# deliberate press, so unlike on_update_available above it isn't skipped on
-# "dev" builds -- pressing it on a local build replaces it with the
-# published release.
+# "UPDATE AVAILABLE" without waiting for the next check. Install is a
+# deliberate press, so unlike the idle auto-install in deep_sleep_countdown
+# it runs immediately and isn't skipped on "dev" builds -- pressing it on a
+# local build replaces it with the published release.
 button:
   - platform: template
     name: "Check for Firmware Update"
@@ -386,6 +385,12 @@ script:
   # mid-setup (setup activity happens on a phone, not this screen); after a
   # drop, on_connect restarts it. deep_sleep_1 itself waits while the touch
   # INT line is low.
+  #
+  # If a firmware update is available (versioned builds only, see the update
+  # entity), install it here instead of sleeping: the device has been idle
+  # for deep_sleep_timeout, so nobody is waiting on it. A successful install
+  # reboots before the delay below ends. If it fails, the update is still
+  # "available" and the next idle stretch retries; this one sleeps anyway.
   - id: deep_sleep_countdown
     mode: restart
     then:
@@ -394,6 +399,22 @@ script:
           condition:
             wifi.connected:
           then:
+            - if:
+                condition:
+                  and:
+                    - update.is_available: firmware_update
+                    - lambda: 'return strcmp("${firmware_version}", "dev") != 0;'
+                then:
+                  - logger.log:
+                      format: "Idle: installing firmware update instead of deep sleep"
+                      level: INFO
+                  - update.perform: firmware_update
+                  # flash() blocks the main loop and reboots on success, so
+                  # this only finishes after a failed install.
+                  - delay: 5s
+                  - logger.log:
+                      format: "Idle: firmware update failed, entering deep sleep"
+                      level: WARN
             - logger.log:
                 format: "Idle: entering deep sleep"
                 level: INFO

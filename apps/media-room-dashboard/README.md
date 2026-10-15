@@ -64,6 +64,17 @@ Three power tiers, layered:
    (SLPIN) first. Touching the screen wakes it (ext0 on the touch
    controller's INT line, GPIO17), but that's a full reboot and reconnect.
 
+**Firmware updates and deep sleep.** The update check runs on every boot,
+which now means every touch wake (the 6-hourly poll never gets a chance:
+the device sleeps 30 minutes after the last touch). An available update is
+not installed on wake, which would tie the remote up right when it's picked
+up. Instead it installs once the device has been idle for
+`deep_sleep_timeout`, in place of that deep sleep (versioned builds only,
+like before). The portal's **Install Firmware Update** button still installs
+immediately. The `Update check already in progress` warning right after a
+wake is harmless: the boot-time check and the first poll land together, and
+the second just returns.
+
 For a quick on-device test, build with shorter timeouts from the command
 line rather than editing them:
 `scripts/espframe-esphome.sh -s idle_timeout 20s -s deep_sleep_timeout 30s compile apps/media-room-dashboard/builds/freenove-s3.yaml`.
@@ -209,8 +220,9 @@ The same address is also an `IP Address` diagnostic text sensor
 
 ESPHome's stock `web_server` (v3, port 80) at `http://<device-ip>/`. It
 lists the diagnostic entities (IP, firmware version), the `Firmware Update`
-entity's state (checked against the GitHub Pages manifest every 6 hours),
-**Check for Firmware Update** / **Install Firmware Update** buttons (the
+entity's state (checked against the GitHub Pages manifest on every boot and
+every 6 hours awake), **Check for Firmware Update** / **Install Firmware
+Update** buttons (the
 stock UI has no install control on the update entity itself; Install is a
 no-op unless an update is available, and does run on "dev" builds since it's
 a deliberate press), and an **OTA Update** upload form (`ota: platform:
