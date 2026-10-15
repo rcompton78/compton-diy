@@ -19,8 +19,7 @@ Both are built from the same model (`STAND_VARIANT=ledge|desk`, see Building) an
 | Frame sits on | felt on a 20 mm ledge on the foot | felt on the desk, in front of the foot |
 | Glass bottom above the desk | 23.6 mm | 19.0 mm |
 | Bottom border of the frame | 21 mm, like the other three sides | about 38 mm (21 on the other three) |
-| Inner bevel / outer chamfer | 3 / 2 mm | 1.5 / 1 mm |
-| Tip-over push at the screen centre | 4.28 N | 4.41 N |
+| Tip-over push at the screen centre | 4.28 N | 4.39 N |
 | Plug bend drop to spare | 4.9 mm | **0.1 mm**: test-fit the real plug and cable first |
 | Frame print | `frame` (130 × 198 mm) | `frame-desk` (130 × 216 mm) |
 | Foot print | `foot` | `foot-desk` |
@@ -56,7 +55,7 @@ The on-desk foot has no ledge: its body starts just behind the plate, and a low 
 
 **What to reprint:** only the foot. The lid only moves with the tray and its shape is unchanged, so keep yours. The frame and plate don't change.
 
-- **On-desk variant (new).** A second variant, alongside the ledge one: the frame's face and side walls run down to 1 mm felt on the desk with a level bottom, the foot loses the ledge for a low shelf under the glass, and the bevels are halved (1.5 / 1 mm). The glass comes down from 23.6 to 19.0 mm, the bottom border grows to about 38 mm, and tip-over improves to 4.41 N. Same straight cable: its R18 bend now has only 0.1 mm of drop to spare. The deck, tray and lid keep the ledge foot's heights, so the lid is shared.
+- **On-desk variant (new).** A second variant, alongside the ledge one: the frame's face and side walls run down to 1 mm felt on the desk with a level bottom, and the foot loses the ledge for a low shelf under the glass. The glass comes down from 23.6 to 19.0 mm, the bottom border grows to about 38 mm, and tip-over improves to 4.39 N. Same straight cable: its R18 bend now has only 0.1 mm of drop to spare. The deck, tray and lid keep the ledge foot's heights, so the lid is shared.
 
 **To build the on-desk variant:** print `frame-desk` and `foot-desk`, and reuse your plate and lid. Test-fit the plug and cable under the shelf before anything else (see Open items).
 
@@ -142,7 +141,7 @@ On-desk, where it differs from the ledge (every other check gives the same resul
 | Plate clears the shelf | 0.60 mm under the plate's bottom edge |
 | Shared lid (in the `shared` section) | the lid each pass builds is identical (volume and box), and the lid detent check seats it in the desk foot too, so the one printed lid fits both feet |
 | Cable length | 261 mm path of 300 mm (39 mm slack) |
-| Tip-over | **4.41 N** (need ≥ 4.25); sideways tip at 35° |
+| Tip-over | **4.39 N** (need ≥ 4.25); sideways tip at 35° |
 | Every part fits the P1S bed | yes (frame 130 × 216 × 28) |
 
 The tip-over figure uses the modelled part volumes, each part's material density and an estimated fill fraction (`PRINT_FILL` 0.55 for PETG, `FRAME_FILL` 0.85 for the thin frame), plus the 354 g screen. Weigh your printed parts and update the fill values to tighten it.
