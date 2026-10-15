@@ -4,8 +4,9 @@ ESPHome-based 6-button touchscreen remote for the media room. Each button
 calls a Home Assistant service directly over the native API, and lights up
 to reflect the real state of what it controls (TV power, active HDMI input,
 light on/off). Apart from a few diagnostics (IP address, firmware version,
-firmware update), the device has no entities of its own in HA: it's a
-remote with feedback, not a general dashboard. Its IP is always on screen,
+firmware update, battery voltage/level, and the wake reason / sleep log /
+boot count used for battery testing), the device has no entities of its own
+in HA: it's a remote with feedback, not a general dashboard. Its IP is always on screen,
 and it serves an admin portal with a firmware upload page at that address
 (see "IP address and admin portal").
 
@@ -29,9 +30,10 @@ UI or HA wiring:
 
 - `boards/<name>.yaml` — hardware only: chip/PSRAM, backlight, SPI display
   + touch controller + pins. Must define `tft_display`, `tft_touch`,
-  `backlight_output`, and `deep_sleep_1` (with its wake source configured)
-  component ids — nothing else in the app depends on board-specific detail
-  beyond those four ids.
+  `backlight_output` (an on/off output), and `deep_sleep_1` (deep_sleep with
+  a touch wake source) component ids — nothing else in the app depends on
+  board-specific detail beyond those four ids. Battery sensing, light sleep
+  and the sleep diagnostics are board-specific too, so they live there.
 - `common/dashboard.yaml` — everything else: wifi/api/ota, the 6-button LVGL
   UI, and the HA service calls. Board-agnostic.
 - `builds/<name>.yaml` — thin entrypoint combining the two as ESPHome
@@ -44,23 +46,42 @@ to `project.json` (see the `freenove-s3` ones for the pattern).
 
 ## Battery power (COM-214)
 
-Two of COM-214's three options are active, layered together:
+Three power tiers, layered:
 
-- **Automatic light sleep** (option 3, `components/light_sleep/`): ESP-IDF
-  power management drops the CPU/WiFi into light sleep during idle gaps.
-  No reboot and no dropped HA connection, so wake is instant. Requires the
-  backlight to be a plain `gpio` output (light sleep stops LEDC PWM, which
-  flickered the screen) and `CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION` (keeps the
-  USB serial console alive while a host is attached).
-- **Backlight off on idle** (option 2): after `idle_timeout` (20s) with no
-  touches the backlight turns off; the next touch turns it straight back on.
+1. **Automatic light sleep** (`components/light_sleep/`, always on): ESP-IDF
+   power management drops the CPU/WiFi into light sleep during idle gaps.
+   No reboot and no dropped HA connection. Requires the backlight to be a
+   plain `gpio` output (light sleep stops LEDC PWM, which flickered the
+   screen) and `CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION` (keeps the USB serial
+   console alive while a host is attached). The CPU runs at 160MHz.
+2. **Screen blank** after `idle_timeout` (20s) untouched, on `main_page`
+   only: backlight off and LVGL paused. The connecting and setup pages never
+   blank. The tap that wakes the screen only wakes it (LVGL is paused while
+   the finger is down, and resumes on release); buttons respond from the
+   next tap.
+3. **Deep sleep** `deep_sleep_delay` (10s) after blanking, so 30s after the
+   last touch, and only while wifi is connected. Touching the screen wakes
+   it (ext0 on the touch controller's INT line, GPIO17), but that's a full
+   reboot and reconnect. The 30s is a test value.
 
-**Deep sleep (option 1) is disabled.** On its own it worked, but a
-120-minute deep-sleep tier on top of light sleep self-wakes within seconds of
-sleeping, with no touch. Three GPIO17 fixes didn't help; details are in the
-commented-out tier in `common/dashboard.yaml` and in
-`components/light_sleep/light_sleep_component.h`. Untested theory: every test
-ran with USB attached, so try again on battery with USB unplugged.
+**Deep sleep self-wake (being tested).** The first deep sleep + light sleep
+build woke itself within seconds of sleeping. The likely cause: on the
+ESP32-S3, light sleep's GPIO wakeup doesn't work for deep sleep (only
+ext0/ext1 do), and it was left armed going into deep sleep. Light sleep now
+disarms itself in `on_powerdown()` and `deep_sleep_1` uses ext0. The other
+suspect is the PC's USB host, since every earlier test ran on PC USB.
+
+Diagnostics for testing without a serial console, all in HA and the web
+portal:
+
+- **Wake Reason**: why this boot happened, e.g. `deep sleep, woke on EXT0`
+  (a touch), `power-on`, `USB`, `software` (OTA/restart).
+- **Sleep Log**: the last 5 boots, newest first, e.g.
+  `#7 EXT0 after 42s (pin high)`: what woke it, how long it was down, and
+  GPIO17's level as it went down (`LOW` there means it slept with the touch
+  line already asserted). Kept in RTC memory, so it resets on power loss.
+- **Boot Count**: total boots, kept in flash, so it survives power loss.
+  A device that keeps self-waking shows this climbing every ~30s.
 
 Battery voltage and a rough LiPo percentage come from the board's GPIO9
 divider (`boards/freenove-s3.yaml`). The percentage is only an estimate from

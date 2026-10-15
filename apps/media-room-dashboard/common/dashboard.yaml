@@ -14,9 +14,9 @@
 # portal at http://<device-ip>/ (see web_server below).
 #
 # Requires a board package to have already defined `tft_display` (display),
-# `tft_touch` (touchscreen), `deep_sleep_1` (deep_sleep, with its wake source
-# configured), and `light_sleep_1`-equivalent automatic light sleep (the
-# light_sleep external component) — see boards/freenove-s3.yaml.
+# `tft_touch` (touchscreen), `backlight_output` (on/off output) and
+# `deep_sleep_1` (deep_sleep with a touch wake source) — see
+# boards/freenove-s3.yaml.
 # =============================================================================
 
 substitutions:
@@ -32,18 +32,19 @@ substitutions:
   tv_media_player: "media_player.living_room_tv"
   tv_game_app_id: "tvinput.hdmi1"
   tv_watch_app_id: "tvinput.hdmi3"
-  # COM-214: options 2 and 3 layered as idle tiers off the same LVGL
-  # inactivity clock (lvgl's on_idle trigger below):
-  #  - option 3 (automatic light sleep) runs continuously, no timeout of its
-  #    own -- see boards/freenove-s3.yaml's light_sleep component.
-  #  - option 2 (backlight off) kicks in after idle_timeout: screen goes
-  #    dark, everything else (WiFi/API/light sleep) keeps running, so wake
-  #    is instant, no reboot.
-  # option 1 (deep sleep, a third tier off deep_sleep_timeout) is disabled --
-  # see the on_idle comment below for why. deep_sleep_timeout is left
-  # defined, unused, so re-enabling it later is a one-line change.
+  # COM-214 power tiers (see the README's "Battery power" section):
+  #  1. automatic light sleep runs all the time underneath the others (the
+  #     board's light_sleep component).
+  #  2. after idle_timeout with no touch on main_page, the screen blanks:
+  #     backlight off and LVGL paused. WiFi and the HA connection stay up, so
+  #     a tap wakes it instantly. That tap only wakes the screen; buttons
+  #     respond from the next one.
+  #  3. deep_sleep_delay after blanking (with wifi connected), deep sleep.
+  #     A touch wakes it, but that's a full reboot + reconnect.
+  # deep_sleep_delay is 10s (deep sleep 30s after the last touch) for testing
+  # the self-wake fix, not tuned for real use yet.
   idle_timeout: "20s"
-  deep_sleep_timeout: "120min"
+  deep_sleep_delay: "10s"
 
 esphome:
   project:
@@ -61,7 +62,7 @@ wifi:
   # Skips the AP scan on connect, going straight for the BSSID+channel saved
   # from the last successful connection (persisted to NVS, survives
   # reboots) -- shaves a meaningful chunk off the deep-sleep wake reconnect
-  # (COM-214 option 1), which is a full ESP32 reboot each time. Falls back
+  # (COM-214 tier 3), which is a full ESP32 reboot each time. Falls back
   # to a normal scan if the saved AP can't be reached (e.g. router reboot
   # changed channel), so this doesn't add a new failure mode.
   fast_connect: true
@@ -85,10 +86,16 @@ wifi:
         id: setup_page_shown
         value: "false"
     - lvgl.page.show: main_page
+    # Restart LVGL's inactivity clock: on_idle may already have fired (and
+    # been skipped) on connecting_page, and it won't fire again until the
+    # clock restarts, so main_page would otherwise never blank.
+    - lambda: 'lv_display_trigger_activity(nullptr);'
   on_disconnect:
     - globals.set:
         id: setup_page_shown
         value: "false"
+    # Only main_page ever blanks; make sure a status page is visible.
+    - script.execute: wake_screen
     # Never leave a stale address in the footer; the ip_address sensor
     # repaints it on the next connect.
     - lvgl.label.update:
@@ -98,6 +105,10 @@ wifi:
 
 globals:
   - id: setup_page_shown
+    type: bool
+    initial_value: "false"
+  # True while the screen is blanked (COM-214 tier 2), see blank_screen.
+  - id: screen_dark
     type: bool
     initial_value: "false"
 
@@ -117,6 +128,7 @@ interval:
             - globals.set:
                 id: setup_page_shown
                 value: "true"
+            - script.execute: wake_screen
             - lvgl.page.show: setup_page
 
 captive_portal:
@@ -338,14 +350,61 @@ script:
           state:
             checked: false
 
-# Instant wake for COM-214 option 2's backlight-off idle, below: extends the
-# board's tft_touch (rather than adding a second touchscreen device) so the
-# backlight snaps back on the moment a touch lands, without waiting on
-# lvgl's on_idle to notice activity resumed.
+  # COM-214 tier 2: blank the screen. Pausing LVGL (with resume_on_input
+  # off, see lvgl: below) stops it reading touch at all, so the touch that
+  # wakes the screen never reaches a button. Pausing also stops LVGL's idle
+  # callbacks, so the deep-sleep tier runs off its own countdown instead of
+  # a second on_idle timeout.
+  - id: blank_screen
+    then:
+      - globals.set:
+          id: screen_dark
+          value: "true"
+      - output.turn_off: backlight_output
+      - lvgl.pause:
+      - script.execute: deep_sleep_countdown
+
+  # Undo blank_screen. lvgl.resume also restarts LVGL's inactivity clock, so
+  # the screen doesn't blank again straight away.
+  - id: wake_screen
+    then:
+      - script.stop: deep_sleep_countdown
+      - if:
+          condition:
+            lambda: 'return id(screen_dark);'
+          then:
+            - globals.set:
+                id: screen_dark
+                value: "false"
+            - lvgl.resume:
+            - output.turn_on: backlight_output
+
+  # COM-214 tier 3. Only while wifi is connected, so it can never drop the
+  # fallback AP mid-setup (setup activity happens on a phone, not this
+  # screen). deep_sleep_1 itself waits while the touch INT line is low.
+  - id: deep_sleep_countdown
+    mode: restart
+    then:
+      - delay: ${deep_sleep_delay}
+      - if:
+          condition:
+            wifi.connected:
+          then:
+            - logger.log:
+                format: "Idle: entering deep sleep"
+                level: INFO
+            - deep_sleep.enter: deep_sleep_1
+
+# Wake from tier 2 on release rather than on touch: LVGL is still paused
+# while the finger is down, so the whole waking tap is swallowed. on_touch
+# only cancels the deep-sleep countdown, so a finger held past it can't race
+# it.
 touchscreen:
   - id: !extend tft_touch
     on_touch:
-      - output.turn_on: backlight_output
+      - script.stop: deep_sleep_countdown
+    on_release:
+      - script.execute: wake_screen
 
 # -----------------------------------------------------------------------------
 # Three LVGL pages. `connecting_page` (the default, i.e. at boot, and again
@@ -375,35 +434,18 @@ lvgl:
       checked:
         bg_color: 0xF5A623
         text_color: 0x000000
-  # Tier 2 (deep sleep after deep_sleep_timeout) is DISABLED -- see
-  # deep_sleep_1's comment in boards/freenove-s3.yaml and
-  # light_sleep_component.h. THREE separate fixes attempted and confirmed
-  # NOT to work on-device (each verified via a genuine USB re-enumeration,
-  # not a log/cache artifact): rtc_gpio_pullup_en alone; adding
-  # esp_sleep_pd_config to keep it powered through deep sleep; removing
-  # deep_sleep_1's esp32_ext1_wakeup entirely to eliminate a suspected
-  # conflict with light_sleep's own gpio wakeup registration. All three
-  # still self-wake within seconds of entering deep sleep, no touch
-  # involved. Plain deep sleep alone, before the light_sleep component
-  # existed, was reliable -- so this is specifically a light_sleep +
-  # deep_sleep interaction, root cause still unconfirmed. Needs real
-  # investigation (e.g. known esp_pm-auto-light-sleep +
-  # esp_deep_sleep_start interactions in ESP-IDF's own issue tracker) before
-  # trying a fourth fix blind. Only tier 1 (backlight off) is active below;
-  # light sleep (COM-214 option 3) keeps running regardless, unaffected.
+  # The wake touch is handled by wake_screen, not LVGL (see blank_screen).
+  resume_on_input: false
+  # Tier 2: blank only on main_page. The connecting and setup pages stay lit
+  # so their wifi instructions stay readable.
   on_idle:
     - timeout: ${idle_timeout}
       then:
-        - output.turn_off: backlight_output
-    # Tier 2, disabled -- see the comment above. To re-enable once the root
-    # cause is actually fixed, uncomment this block:
-    # - timeout: ${deep_sleep_timeout}
-    #   then:
-    #     - if:
-    #         condition:
-    #           wifi.connected:
-    #         then:
-    #           - deep_sleep.enter: deep_sleep_1
+        - if:
+            condition:
+              lambda: 'return id(main_page)->is_showing();'
+            then:
+              - script.execute: blank_screen
   pages:
     - id: connecting_page
       bg_color: 0x000000

@@ -1,4 +1,4 @@
-"""ESPHome component enabling ESP-IDF automatic light sleep (COM-214 option 3)."""
+"""ESPHome component for ESP-IDF automatic light sleep and deep-sleep wake diagnostics (COM-214)."""
 
 import esphome.codegen as cg
 import esphome.config_validation as cv
@@ -15,9 +15,9 @@ CONF_WAKEUP_PIN = "wakeup_pin"
 # A plain pin number rather than a full GPIO pin schema: this talks to the
 # ESP-IDF GPIO/sleep APIs directly rather than through ESPHome's own GPIOPin
 # abstraction, so it deliberately sits outside ESPHome's pin-reuse tracking --
-# the same physical pin (GPIO17, the FT6336U's INT line) is also declared as
-# an ext1 wakeup source under boards/freenove-s3.yaml's dormant deep_sleep_1
-# (COM-214 option 1), and a full pin schema here would collide with that.
+# the same physical pin (GPIO17, the FT6336U's INT line) is also deep_sleep_1's
+# ext0 `wakeup_pin` in boards/freenove-s3.yaml, and a full pin schema here
+# would collide with that.
 CONFIG_SCHEMA = cv.Schema(
     {
         cv.GenerateID(): cv.declare_id(LightSleepComponent),

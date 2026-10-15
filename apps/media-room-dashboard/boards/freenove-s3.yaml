@@ -7,7 +7,8 @@
 # To port this app to a different board (e.g. the AliExpress 2.8" board this
 # card was originally targeting, see docs/diy-102-bringup/HANDOFF.md), add a
 # new file here — `boards/<name>.yaml` — that provides the same component
-# ids this file provides (`tft_display`, `tft_touch`, `backlight_output`) and
+# ids this file provides (`tft_display`, `tft_touch`, `backlight_output`,
+# `deep_sleep_1` with a touch wake source) and
 # point a new `builds/<name>.yaml` at it instead of this file. Nothing in
 # common/dashboard.yaml needs to change.
 #
@@ -37,9 +38,10 @@
 # mode) since it's optional and this isolates the fix to the one thing that
 # was actually broken.
 #
-# GPIO17 (touch INT) doubles as a wake source for two of COM-214's
-# battery-power prototypes below -- independent of the interrupt_pin/polling
-# decision above: both wake mechanisms are raw hardware-level pin watches,
+# GPIO17 (touch INT) doubles as the wake source for both of COM-214's sleep
+# tiers below (light sleep's GPIO wakeup, deep sleep's ext0) -- independent of
+# the interrupt_pin/polling decision above: both wake mechanisms are raw
+# hardware-level pin watches,
 # unrelated to whether ESPHome's touchscreen driver is using this pin for
 # interrupt-driven reads. They work because the FT6336U's INT pin still
 # pulses low on every touch (~1ms pulses while held) whenever the chip's
@@ -87,38 +89,42 @@ esphome:
     - priority: -100
       then:
         - output.turn_on: backlight_output
+        - globals.set:
+            id: boot_count
+            value: !lambda 'return id(boot_count) + 1;'
         - lambda: |-
             id(tft_touch).write_byte(0xA4, 0x01);  // G_MODE = trigger, see note above
 
-# Idle-timeout deep sleep (COM-214 option 1, currently dormant as a tier --
-# see common/dashboard.yaml). No sleep_duration/run_duration is set here --
-# deep_sleep.enter is called explicitly by app logic, never on a timer of
-# its own.
+# Idle-timeout deep sleep (COM-214 tier 3, entered by common/dashboard.yaml's
+# deep_sleep_countdown script). No sleep_duration/run_duration: it only ever
+# sleeps when the app calls deep_sleep.enter, and only a touch wakes it.
 #
-# Deliberately NO esp32_ext1_wakeup config here (removed after on-device
-# testing showed repeated spurious wakes within seconds of entering deep
-# sleep, once light_sleep's own gpio_wakeup_enable/esp_sleep_enable_gpio_wakeup
-# was also active on the same GPIO17). ESP-IDF documents
-# esp_sleep_enable_gpio_wakeup() and esp_sleep_enable_ext1_wakeup() as
-# alternatives, not something meant to run together on one pin --
-# https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-reference/system/sleep_modes.html.
-# deep_sleep_1 now relies entirely on the GPIO wake source light_sleep
-# already registers at boot (valid for deep sleep too on an RTC-capable pin
-# like GPIO17, confirmed in the same doc) -- esp_deep_sleep_start() just
-# uses whatever wake sources are currently enabled, so deep_sleep_1 doesn't
-# need to configure its own.
+# ext0 on GPIO17 (the FT6336U's INT, pulsed low on touch) is the only wake
+# source. On the ESP32-S3 a pin can wake deep sleep only through ext0/ext1:
+# light_sleep's GPIO wakeup is light-sleep only, and light_sleep disarms it in
+# on_powerdown() before this arms ext0 (see light_sleep_component.h for the
+# self-wake bug that came from leaving it armed). On entry ESPHome sets the
+# pin's sleep pull-up from `pullup: true`, makes it an input and holds it
+# through deep sleep. `inverted: true` makes it wake on LOW. KEEP_AWAKE makes
+# deep_sleep.enter wait while INT is already low (a finger still down)
+# instead of sleeping straight into a wake.
 deep_sleep:
   id: deep_sleep_1
+  wakeup_pin:
+    number: GPIO17
+    inverted: true
+    mode:
+      input: true
+      pullup: true
+  wakeup_pin_mode: KEEP_AWAKE
 
-# COM-214 option 3: automatic light sleep, additive to option 2's
-# backlight-off-on-idle logic in common/dashboard.yaml (not a replacement --
-# that logic still turns the backlight off/on; this separately lets the
-# CPU/WiFi themselves drop into low-power light sleep during idle gaps,
-# something backlight control alone can't do). See
-# components/light_sleep/light_sleep_component.h for what this does and its
-# current caveats -- first attempt flickered the backlight and dropped the
-# USB serial connection, both addressed above (gpio backlight output,
-# CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION).
+# COM-214 tier 1: automatic light sleep, running underneath the dashboard's
+# backlight-off (tier 2) and deep sleep (tier 3) tiers -- it lets the
+# CPU/WiFi drop into light sleep during idle gaps, which backlight control
+# alone can't do. It also records why each boot happened (see the
+# diagnostics below). See components/light_sleep/light_sleep_component.h.
+# Needs the gpio backlight output and CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION
+# above.
 external_components:
   - source:
       type: local
@@ -126,7 +132,32 @@ external_components:
     components: [light_sleep]
 
 light_sleep:
+  id: light_sleep_1
   wakeup_pin: 17
+
+# Deep-sleep diagnostics, readable in HA and the web portal with no serial
+# console attached (battery testing). Boot Count lives in NVS, so it keeps
+# counting across power loss and reflashes; Sleep Log lives in RTC memory, so
+# it covers boots since the last power loss.
+globals:
+  - id: boot_count
+    type: int
+    restore_value: true
+    initial_value: "0"
+
+text_sensor:
+  - platform: template
+    name: "Wake Reason"
+    entity_category: diagnostic
+    icon: "mdi:power-sleep"
+    update_interval: 60s
+    lambda: 'return id(light_sleep_1).wake_reason();'
+  - platform: template
+    name: "Sleep Log"
+    entity_category: diagnostic
+    icon: "mdi:history"
+    update_interval: 60s
+    lambda: 'return id(light_sleep_1).sleep_log();'
 
 # Battery voltage/percentage (COM-214): this exact board (Freenove ESP32-S3
 # CYD 2.8", product fnk0104) has a built-in BAT JST connector wired through a
@@ -175,6 +206,14 @@ sensor:
       - clamp:
           min_value: 0.0
           max_value: 100.0
+  - platform: template
+    name: "Boot Count"
+    entity_category: diagnostic
+    icon: "mdi:counter"
+    accuracy_decimals: 0
+    state_class: total_increasing
+    update_interval: 60s
+    lambda: 'return id(boot_count);'
 
 output:
   - platform: gpio
