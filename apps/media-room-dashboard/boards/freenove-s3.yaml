@@ -86,6 +86,27 @@ psram:
 
 esphome:
   on_boot:
+    # Wake guard (COM-214): after a deep-sleep wake on the touch INT pin, check
+    # that a finger is or just was down before wifi starts. If not, go back
+    # to deep sleep without a reconnect. Runs after the touchscreen's setup
+    # (priority 600) and before wifi's (250). Polls for ~200ms because the
+    # tap that woke it may still be landing; a finger still down shows as
+    # TD_STATUS > 0, and one that already lifted as a lift-up event (P1_XH
+    # bits 7:6 == 01).
+    - priority: 300
+      then:
+        - lambda: |-
+            if (!id(light_sleep_1).woke_on_touch_pin())
+              return;
+            for (int i = 0; i < 10; i++) {
+              uint8_t td = 0, xh = 0xFF;
+              if (id(tft_touch).read_byte(0x02, &td) && (td & 0x0F) > 0)
+                return;
+              if (id(tft_touch).read_byte(0x03, &xh) && (xh >> 6) == 0x01)
+                return;
+              delay(20);
+            }
+            id(light_sleep_1).sleep_again_no_touch();
     - priority: -100
       then:
         - output.turn_on: backlight_output
@@ -138,6 +159,10 @@ light_sleep:
   # the backlight and floated the panel's control lines (screen flicker on
   # battery/charger, see light_sleep_component.h).
   keep_level_pins: [45, 10, 46]
+  # Touch RST high and touch I2C pulled up through deep sleep, instead of
+  # isolated and floating (spurious ext0 wakes, see light_sleep_component.h).
+  sleep_hold_high_pins: [18]
+  sleep_hold_pullup_pins: [15, 16]
 
 # Deep-sleep diagnostics, readable in HA and the web portal with no serial
 # console attached (battery testing). Boot Count lives in NVS, so it keeps

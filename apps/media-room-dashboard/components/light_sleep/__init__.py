@@ -12,6 +12,8 @@ LightSleepComponent = light_sleep_ns.class_("LightSleepComponent", cg.Component)
 
 CONF_WAKEUP_PIN = "wakeup_pin"
 CONF_KEEP_LEVEL_PINS = "keep_level_pins"
+CONF_SLEEP_HOLD_HIGH_PINS = "sleep_hold_high_pins"
+CONF_SLEEP_HOLD_PULLUP_PINS = "sleep_hold_pullup_pins"
 
 # A plain pin number rather than a full GPIO pin schema: this talks to the
 # ESP-IDF GPIO/sleep APIs directly rather than through ESPHome's own GPIOPin
@@ -27,6 +29,10 @@ CONFIG_SCHEMA = cv.Schema(
         # (backlight, display CS/DC). See keep_level_pins in
         # light_sleep_component.h.
         cv.Optional(CONF_KEEP_LEVEL_PINS, default=[]): cv.ensure_list(cv.int_range(min=0, max=48)),
+        # Pins held through deep sleep instead of isolated: driven high (e.g.
+        # an active-low reset line), or inputs with a pull-up (e.g. I2C).
+        cv.Optional(CONF_SLEEP_HOLD_HIGH_PINS, default=[]): cv.ensure_list(cv.int_range(min=0, max=48)),
+        cv.Optional(CONF_SLEEP_HOLD_PULLUP_PINS, default=[]): cv.ensure_list(cv.int_range(min=0, max=48)),
     }
 ).extend(cv.COMPONENT_SCHEMA)
 
@@ -37,4 +43,8 @@ async def to_code(config):
     cg.add(var.set_wakeup_pin(config[CONF_WAKEUP_PIN]))
     for pin in config[CONF_KEEP_LEVEL_PINS]:
         cg.add(var.add_keep_level_pin(pin))
+    for pin in config[CONF_SLEEP_HOLD_HIGH_PINS]:
+        cg.add(var.add_sleep_hold_high_pin(pin))
+    for pin in config[CONF_SLEEP_HOLD_PULLUP_PINS]:
+        cg.add(var.add_sleep_hold_pullup_pin(pin))
     cg.add_global(cg.RawStatement('#include "esphome/components/light_sleep/light_sleep_component.h"'))

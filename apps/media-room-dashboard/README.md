@@ -74,6 +74,15 @@ build woke itself within seconds of sleeping, for two reasons:
   high)`): ext0 moves GPIO17 to the RTC mux, where the digital pull-up no
   longer applies, so the touch INT line floated. `on_powerdown()` now turns
   on the RTC pull-up.
+- After a touch wake the screen stayed black: the S3 can't hold one pin
+  through deep sleep, so ESP-IDF isolates and holds every digital pad, and
+  on wake only releases the wake pin. `setup()` now releases the global
+  hold before anything else configures its pins.
+- That isolation also floated the touch chip's RST and I2C lines, and it
+  still woke on its own every minute or two. They're now held (RST high,
+  I2C pulled up) through deep sleep. As a backstop, a wake with no touch
+  behind it (checked over I2C before wifi starts) goes straight back to
+  sleep, logged as `no-touch` in the Sleep Log.
 
 **Light sleep and the screen.** ESP-IDF's `CONFIG_PM_SLP_DISABLE_GPIO`
 disables every pin during each light sleep, which flickered the backlight.
@@ -90,7 +99,9 @@ portal:
 - **Sleep Log**: the last 5 boots, newest first, e.g.
   `#7 EXT0 after 42s (pin high)`: what woke it, how long it was down, and
   GPIO17's level as it went down (`LOW` there means it slept with the touch
-  line already asserted). Kept in RTC memory, so it resets on power loss.
+  line already asserted). `no-touch` marks a wake the guard sent straight
+  back to sleep. Kept in RTC memory; it starts over at `#1 power-on` after
+  a power loss (e.g. moving the board to a charger).
 - **Boot Count**: total boots, kept in flash, so it survives power loss.
   A device that keeps self-waking shows this climbing every ~30s.
 

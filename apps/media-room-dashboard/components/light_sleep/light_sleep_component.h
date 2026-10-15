@@ -39,6 +39,29 @@
 // enables the RTC pull-up (ext0 keeps the RTC_PERIPH domain powered, so it
 // holds), and setup() hands the pin back to the digital mux after a wake.
 //
+// Every other pin is latched through deep sleep too. The S3 can't hold a
+// single digital pin in deep sleep (no SOC_GPIO_SUPPORT_HOLD_SINGLE_IO_IN_DSLP),
+// so deep_sleep_1's ext0 setup calls gpio_deep_sleep_hold_en(), and ESP-IDF
+// then isolates and holds every digital pad (backlight off, display SPI/CS/DC
+// and touch I2C disabled). On wake ESP-IDF only releases the wake pins, so
+// the firmware ran normally after a touch wake but the screen stayed black
+// (confirmed on-device). setup() releases the global hold, at a priority
+// above the display, backlight and buses, so their setup drives real pins.
+//
+// That isolation also left the FT6336U's RST (GPIO18) and I2C lines floating
+// with their pulls off, and deep sleep still woke on ext0 every minute or two
+// with no touch (pin high at entry). on_powerdown() now drives
+// sleep_hold_high_pins high (touch RST) and gives sleep_hold_pullup_pins
+// (touch I2C) a pull-up, each with its own gpio_hold_en, which the isolation
+// pass skips. setup() releases them again.
+//
+// Wake guard. Anything that still pulses INT low without a touch would
+// reboot the device and reconnect wifi/HA. check_touch_wake() runs early in
+// boot (an on_boot lambda in boards/freenove-s3.yaml, before wifi starts):
+// after an ext0 wake it asks the touch chip whether a finger is (or just
+// was) down, and if not, sleep_again_no_touch() goes straight back to deep
+// sleep, logged as "no-touch" in the Sleep Log.
+//
 // Pins that keep their level through light sleep. With PM enabled, ESP-IDF
 // sets CONFIG_PM_SLP_DISABLE_GPIO by default: at startup it gives every pin a
 // "disabled, floating" sleep config and switches to it on every light sleep.
@@ -84,7 +107,7 @@ namespace esphome::light_sleep {
 
 static const char *const TAG = "light_sleep";
 
-static constexpr uint32_t LOG_MAGIC = 0xC0214A11;
+static constexpr uint32_t LOG_MAGIC = 0xC0214A12;  // bump when SleepLog changes
 static constexpr int LOG_SIZE = 5;
 
 struct SleepLogEntry {
@@ -93,6 +116,7 @@ struct SleepLogEntry {
   uint8_t reset_reason;
   uint8_t wake_cause;
   uint8_t pin_level_at_entry;  // 0/1, or 2 if unknown
+  uint8_t no_touch;            // 1 if the wake guard sent it back to sleep
 };
 
 struct SleepLog {
@@ -170,15 +194,26 @@ class LightSleepComponent : public Component {
  public:
   void set_wakeup_pin(uint8_t pin) { this->wakeup_pin_ = pin; }
   void add_keep_level_pin(uint8_t pin) { this->keep_level_pins_.push_back(pin); }
+  void add_sleep_hold_high_pin(uint8_t pin) { this->sleep_hold_high_pins_.push_back(pin); }
+  void add_sleep_hold_pullup_pin(uint8_t pin) { this->sleep_hold_pullup_pins_.push_back(pin); }
 
-  // Before most components, so the wake record exists before anything that
-  // publishes it.
-  float get_setup_priority() const override { return setup_priority::BUS; }
+  // Before every other component: the deep-sleep pad hold has to be released
+  // before the buses, display and backlight configure their pins, and the
+  // wake record has to exist before anything publishes it.
+  float get_setup_priority() const override { return setup_priority::BUS + 100.0f; }
 
   void setup() override {
     auto pin = static_cast<gpio_num_t>(this->wakeup_pin_);
 
     this->record_boot_();
+
+    // Release the digital pad hold left over from deep sleep, and the touch
+    // lines' own holds (see the file comment). Harmless when not set.
+    gpio_deep_sleep_hold_dis();
+    for (uint8_t p : this->sleep_hold_high_pins_)
+      gpio_hold_dis(static_cast<gpio_num_t>(p));
+    for (uint8_t p : this->sleep_hold_pullup_pins_)
+      gpio_hold_dis(static_cast<gpio_num_t>(p));
 
     // deep_sleep_1 holds GPIO17's config through deep sleep (gpio_hold_en)
     // and ext0 leaves it on the RTC mux with an RTC pull-up; release both so
@@ -231,6 +266,22 @@ class LightSleepComponent : public Component {
     rtc_gpio_pullup_en(pin);
     rtc_gpio_pulldown_dis(pin);
 
+    // Keep the touch chip's RST and I2C lines defined through deep sleep
+    // instead of isolated and floating (see the file comment).
+    for (uint8_t p : this->sleep_hold_high_pins_) {
+      auto gp = static_cast<gpio_num_t>(p);
+      gpio_set_direction(gp, GPIO_MODE_OUTPUT);
+      gpio_set_level(gp, 1);
+      gpio_hold_en(gp);
+    }
+    for (uint8_t p : this->sleep_hold_pullup_pins_) {
+      auto gp = static_cast<gpio_num_t>(p);
+      gpio_set_direction(gp, GPIO_MODE_INPUT);
+      gpio_pullup_en(gp);
+      gpio_pulldown_dis(gp);
+      gpio_hold_en(gp);
+    }
+
     int level = gpio_get_level(pin);
     s_sleep_log.pending = true;
     s_sleep_log.pending_at_s = now_s();
@@ -247,6 +298,26 @@ class LightSleepComponent : public Component {
       ESP_LOGCONFIG(TAG, "  Keeps level in light sleep: GPIO%u", keep);
     ESP_LOGCONFIG(TAG, "  This boot: %s", this->wake_reason().c_str());
     ESP_LOGCONFIG(TAG, "  Sleep log: %s", this->sleep_log().c_str());
+  }
+
+  // True when this boot is a deep-sleep wake on the touch INT pin.
+  bool woke_on_touch_pin() const {
+    return this->reset_reason_ == ESP_RST_DEEPSLEEP &&
+           (this->wake_cause_ == ESP_SLEEP_WAKEUP_EXT0 || this->wake_cause_ == ESP_SLEEP_WAKEUP_EXT1);
+  }
+
+  // The wake guard's fallback: no touch behind this wake, so log it and go
+  // straight back to deep sleep. Called before wifi has started, so this
+  // skips ESPHome's teardown and arms ext0 the way deep_sleep_1 does.
+  void sleep_again_no_touch() {
+    s_sleep_log.entries[0].no_touch = 1;
+    ESP_LOGI(TAG, "Woke on GPIO%u with no touch; back to deep sleep", this->wakeup_pin_);
+    this->on_powerdown();
+    auto pin = static_cast<gpio_num_t>(this->wakeup_pin_);
+    gpio_hold_en(pin);
+    gpio_deep_sleep_hold_en();
+    esp_sleep_enable_ext0_wakeup(pin, 0);
+    esp_deep_sleep_start();
   }
 
   // e.g. "deep sleep, woke on EXT0" or "power-on".
@@ -269,8 +340,8 @@ class LightSleepComponent : public Component {
       const char *what = e.reset_reason == ESP_RST_DEEPSLEEP ? wake_cause_str(e.wake_cause)
                                                               : reset_reason_str(e.reset_reason);
       if (e.down_s >= 0) {
-        snprintf(buf, sizeof(buf), "#%" PRIu32 " %s after %" PRId32 "s (pin %s)", e.seq, what, e.down_s,
-                 e.pin_level_at_entry == 0 ? "LOW" : "high");
+        snprintf(buf, sizeof(buf), "#%" PRIu32 " %s%s after %" PRId32 "s (pin %s)", e.seq, what,
+                 e.no_touch ? " no-touch" : "", e.down_s, e.pin_level_at_entry == 0 ? "LOW" : "high");
       } else {
         snprintf(buf, sizeof(buf), "#%" PRIu32 " %s", e.seq, what);
       }
@@ -286,7 +357,10 @@ class LightSleepComponent : public Component {
     this->reset_reason_ = static_cast<uint8_t>(esp_reset_reason());
     this->wake_cause_ = static_cast<uint8_t>(esp_sleep_get_wakeup_cause());
 
-    if (s_sleep_log.magic != LOG_MAGIC || s_sleep_log.count < 0 || s_sleep_log.count > LOG_SIZE) {
+    // A power-on starts a fresh log, so each test run (e.g. moving the board
+    // to a charger) reads cleanly from "#1 power-on".
+    if (s_sleep_log.magic != LOG_MAGIC || s_sleep_log.count < 0 || s_sleep_log.count > LOG_SIZE ||
+        this->reset_reason_ == ESP_RST_POWERON) {
       s_sleep_log = {};
       s_sleep_log.magic = LOG_MAGIC;
     }
@@ -314,6 +388,8 @@ class LightSleepComponent : public Component {
 
   uint8_t wakeup_pin_{0};
   std::vector<uint8_t> keep_level_pins_;
+  std::vector<uint8_t> sleep_hold_high_pins_;
+  std::vector<uint8_t> sleep_hold_pullup_pins_;
   uint8_t reset_reason_{0};
   uint8_t wake_cause_{0};
 };
