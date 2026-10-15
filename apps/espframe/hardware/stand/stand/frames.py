@@ -7,13 +7,28 @@ from . import params as p
 # Screen frame: x across, y up the glass from its bottom edge, z = -depth behind
 # the glass front. Rotating by (90 - tilt) about X maps it onto the world frame.
 # The ledge surface is the screen-frame plane y = -SEAT (the bottom edge of the frame's
-# face sits on felt on it), and the point (y = -SEAT, depth 0) lands at world (Y=0, Z=LEDGE_H).
-SCREEN_TO_WORLD: Location = Pos(0, 0, p.LEDGE_H) * Rot(X=90 - p.TILT_DEG) * Pos(0, p.SEAT, 0)
+# face sits on felt on it), and the point (y = -SEAT, depth 0) lands at world (Y=0, Z=SCREEN_Z0):
+# LEDGE_H for the ledge variant, lower for the desk variant (glass at DESK_GLASS_Z).
+SCREEN_TO_WORLD: Location = Pos(0, 0, p.SCREEN_Z0) * Rot(X=90 - p.TILT_DEG) * Pos(0, p.SEAT, 0)
+# The ledge variant's placement, whichever variant is built: the tray, deck and lid heights come from
+# it in both, so the two feet share one lid.
+LEDGE_TO_WORLD: Location = Pos(0, 0, p.LEDGE_H) * Rot(X=90 - p.TILT_DEG) * Pos(0, p.SEAT, 0)
 
 
 def screen_point(x: float, y: float, depth: float) -> Vector:
     """World position of a screen-frame point given as (x, up, depth behind glass)."""
     return (SCREEN_TO_WORLD * Pos(x, y, -depth)).position
+
+
+def ledge_point(x: float, y: float, depth: float) -> Vector:
+    """screen_point() with the ledge variant's placement (see LEDGE_TO_WORLD)."""
+    return (LEDGE_TO_WORLD * Pos(x, y, -depth)).position
+
+
+def plane_y(depth: float, z: float) -> float:
+    """World Y where the screen-frame plane at `depth` behind the glass front crosses height z."""
+    a, b = screen_point(0, 0, depth), screen_point(0, 10, depth)
+    return a.Y + (z - a.Z) / (b.Z - a.Z) * (b.Y - a.Y)
 
 
 def box(x0, x1, y0, y1, z0, z1):
