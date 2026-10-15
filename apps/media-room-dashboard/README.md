@@ -59,9 +59,12 @@ Three power tiers, layered:
    blank. The tap that wakes the screen only wakes it (LVGL is paused while
    the finger is down, and resumes on release); buttons respond from the
    next tap.
-3. **Deep sleep** `deep_sleep_timeout` (30min) after the last touch, and
-   only while wifi is connected. The panel goes into its own sleep mode
-   (SLPIN) first. Touching the screen wakes it (ext0 on the touch
+3. **Deep sleep** `deep_sleep_timeout` (30min) after the last touch while
+   wifi is connected, or `disconnected_sleep_timeout` (5min) after it while
+   wifi is down (router off, out of range), so a lost network can't run the
+   battery flat. The connecting and setup pages stay lit until then. Only
+   first-time setup (no saved wifi credentials) never sleeps. The panel goes
+   into its own sleep mode (SLPIN) first. Touching the screen wakes it (ext0 on the touch
    controller's INT line, GPIO17), but that's a full reboot and reconnect.
 
 **Firmware updates and deep sleep.** The update check runs on every boot,
@@ -77,10 +80,10 @@ the second just returns.
 
 For a quick on-device test, build with shorter timeouts from the command
 line rather than editing them:
-`scripts/espframe-esphome.sh -s idle_timeout 20s -s deep_sleep_timeout 30s compile apps/media-room-dashboard/builds/freenove-s3.yaml`.
+`scripts/espframe-esphome.sh -s idle_timeout 20s -s deep_sleep_timeout 30s -s disconnected_sleep_timeout 1min compile apps/media-room-dashboard/builds/freenove-s3.yaml`.
 
-**Deep sleep self-wake (being tested).** The first deep sleep + light sleep
-build woke itself within seconds of sleeping, for two reasons:
+**Deep sleep on the ESP32-S3: what it took.** The first deep sleep + light
+sleep build woke itself within seconds of sleeping, for two reasons:
 
 - On the ESP32-S3, light sleep's GPIO wakeup doesn't work for deep sleep
   (only ext0/ext1 do), and it was left armed going into deep sleep. Light
@@ -101,7 +104,7 @@ build woke itself within seconds of sleeping, for two reasons:
 
 **Light sleep and the screen.** ESP-IDF's `CONFIG_PM_SLP_DISABLE_GPIO`
 disables every pin during each light sleep, which flickered the backlight.
-The light_sleep component's `keep_level_pins` (backlight, display CS/DC)
+The light_sleep component's `keep_level_pins` (backlight, display CS/DC, touch I2C)
 opts those pins out. Light sleep never runs while a USB host (a PC) is
 attached (`CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION`), so test light sleep on a
 charger or battery, not on PC USB.
@@ -118,7 +121,7 @@ portal:
   back to sleep. Kept in RTC memory; it starts over at `#1 power-on` after
   a power loss (e.g. moving the board to a charger).
 - **Boot Count**: total boots, kept in flash, so it survives power loss.
-  A device that keeps self-waking shows this climbing every ~30s.
+  A device that keeps self-waking shows this climbing with no touches.
 
 Battery voltage and a rough LiPo percentage come from the board's GPIO9
 divider (`boards/freenove-s3.yaml`). The percentage is only an estimate from

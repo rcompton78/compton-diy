@@ -41,16 +41,27 @@ substitutions:
   #     respond from the next one.
   #  3. deep_sleep_timeout after the last touch (with wifi connected), deep
   #     sleep. A touch wakes it, but that's a full reboot + reconnect.
-  # Both count from the last touch. For a quick on-device test, override
+  #     While wifi is down, disconnected_sleep_timeout applies instead (the
+  #     connecting/setup pages stay lit until then), so a lost network can't
+  #     run the battery flat. First-time setup (no saved credentials) never
+  #     sleeps.
+  # All count from the last touch. For a quick on-device test, override
   # them on the command line instead of editing them here, e.g.
-  #   scripts/espframe-esphome.sh -s idle_timeout 20s -s deep_sleep_timeout 30s compile ...
+  #   scripts/espframe-esphome.sh -s idle_timeout 20s -s deep_sleep_timeout 30s -s disconnected_sleep_timeout 1min compile ...
   idle_timeout: "30s"
   deep_sleep_timeout: "30min"
+  disconnected_sleep_timeout: "5min"
 
 esphome:
   project:
     name: "compton-diy.media-room-dashboard"
     version: "${firmware_version}"
+  # Start the sleep clock at boot: if wifi never connects, on_connect and
+  # on_disconnect never fire to start it.
+  on_boot:
+    - priority: -200
+      then:
+        - script.execute: restart_sleep_timer
 
 # No compile-time ssid/password: this device relies entirely on the
 # captive-portal flow below to get station wifi credentials at runtime
@@ -91,14 +102,16 @@ wifi:
     # been skipped) on connecting_page, and it won't fire again until the
     # clock restarts, so main_page would otherwise never blank.
     - lambda: 'lv_display_trigger_activity(nullptr);'
-    # Start the deep-sleep clock; touches restart it from here on.
-    - script.execute: deep_sleep_countdown
+    # Switch to the connected sleep clock; touches restart it from here on.
+    - script.execute: restart_sleep_timer
   on_disconnect:
     - globals.set:
         id: setup_page_shown
         value: "false"
     # Only main_page ever blanks; make sure a status page is visible.
     - script.execute: wake_screen
+    # Switch to the (shorter) disconnected sleep clock.
+    - script.execute: restart_sleep_timer
     # Never leave a stale address in the footer; the ip_address sensor
     # repaints it on the next connect.
     - lvgl.label.update:
@@ -379,12 +392,48 @@ script:
             - lvgl.resume:
             - output.turn_on: backlight_output
 
-  # COM-214 tier 3: deep sleep deep_sleep_timeout after the last touch.
-  # Started on wifi connect and restarted on every touch release. Only
-  # sleeps while wifi is connected, so it can never drop the fallback AP
-  # mid-setup (setup activity happens on a phone, not this screen); after a
-  # drop, on_connect restarts it. deep_sleep_1 itself waits while the touch
-  # INT line is low.
+  # COM-214 tier 3's clock. Run at boot, on every wifi connect/disconnect
+  # and on every touch release: starts whichever countdown matches the wifi
+  # state and stops the other, so both count from the last touch.
+  - id: restart_sleep_timer
+    then:
+      - if:
+          condition:
+            wifi.connected:
+          then:
+            - script.stop: offline_sleep_countdown
+            - script.execute: deep_sleep_countdown
+          else:
+            - script.stop: deep_sleep_countdown
+            - script.execute: offline_sleep_countdown
+
+  # COM-214 tier 3 while wifi is down: deep sleep after
+  # disconnected_sleep_timeout untouched, so an unreachable network (router
+  # off, out of range) can't run the battery flat; the next touch wake
+  # retries wifi from scratch. ESPHome raises the fallback AP 90s after any
+  # failed connect, even with saved credentials, so the AP being up doesn't
+  # mean setup is happening. Only a device with no saved credentials (first
+  # -time setup, where the activity is on a phone, not this screen) stays
+  # awake.
+  - id: offline_sleep_countdown
+    mode: restart
+    then:
+      - delay: ${disconnected_sleep_timeout}
+      - if:
+          condition:
+            and:
+              - not:
+                  wifi.connected:
+              - lambda: 'return wifi::global_wifi_component->has_sta();'
+          then:
+            - logger.log:
+                format: "Offline and idle: entering deep sleep"
+                level: INFO
+            - deep_sleep.enter: deep_sleep_1
+
+  # COM-214 tier 3: deep sleep deep_sleep_timeout after the last touch while
+  # connected (see restart_sleep_timer). deep_sleep_1 itself waits while the
+  # touch INT line is low.
   #
   # If a firmware update is available (versioned builds only, see the update
   # entity), install it here instead of sleeping: the device has been idle
@@ -422,15 +471,16 @@ script:
 
 # Wake from tier 2 on release rather than on touch: LVGL is still paused
 # while the finger is down, so the whole waking tap is swallowed. The
-# deep-sleep countdown stops while a finger is down and restarts from the
+# deep-sleep countdowns stop while a finger is down and restart from the
 # release.
 touchscreen:
   - id: !extend tft_touch
     on_touch:
       - script.stop: deep_sleep_countdown
+      - script.stop: offline_sleep_countdown
     on_release:
       - script.execute: wake_screen
-      - script.execute: deep_sleep_countdown
+      - script.execute: restart_sleep_timer
 
 # -----------------------------------------------------------------------------
 # Three LVGL pages. `connecting_page` (the default, i.e. at boot, and again

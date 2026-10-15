@@ -92,19 +92,32 @@ esphome:
     # (priority 600) and before wifi's (250). Polls for ~200ms because the
     # tap that woke it may still be landing; a finger still down shows as
     # TD_STATUS > 0, and one that already lifted as a lift-up event (P1_XH
-    # bits 7:6 == 01).
+    # bits 7:6 == 01). Fails open: if the chip never answers over I2C, boot
+    # normally rather than leave a wedged chip sending every touch wake
+    # straight back to sleep.
     - priority: 300
       then:
         - lambda: |-
             if (!id(light_sleep_1).woke_on_touch_pin())
               return;
+            bool answered = false;
             for (int i = 0; i < 10; i++) {
               uint8_t td = 0, xh = 0xFF;
-              if (id(tft_touch).read_byte(0x02, &td) && (td & 0x0F) > 0)
-                return;
-              if (id(tft_touch).read_byte(0x03, &xh) && (xh >> 6) == 0x01)
-                return;
+              if (id(tft_touch).read_byte(0x02, &td)) {
+                answered = true;
+                if ((td & 0x0F) > 0)
+                  return;
+              }
+              if (id(tft_touch).read_byte(0x03, &xh)) {
+                answered = true;
+                if ((xh >> 6) == 0x01)
+                  return;
+              }
               delay(20);
+            }
+            if (!answered) {
+              ESP_LOGW("wake_guard", "Touch controller didn't answer; booting normally");
+              return;
             }
             // ESPHome's powerdown hooks (which send the panel SLPIN) don't
             // run on this path, and the display is already initialised.
@@ -171,8 +184,9 @@ light_sleep:
   wakeup_pin: 17
   # Backlight, display CS, display DC: without this, every light sleep cut
   # the backlight and floated the panel's control lines (screen flicker on
-  # battery/charger, see light_sleep_component.h).
-  keep_level_pins: [45, 10, 46]
+  # battery/charger, see light_sleep_component.h). Touch I2C SDA/SCL too, so
+  # the bus keeps its pull-ups instead of floating on every light sleep.
+  keep_level_pins: [45, 10, 46, 16, 15]
   # Touch RST high and touch I2C pulled up through deep sleep, instead of
   # isolated and floating (spurious ext0 wakes, see light_sleep_component.h).
   sleep_hold_high_pins: [18]
