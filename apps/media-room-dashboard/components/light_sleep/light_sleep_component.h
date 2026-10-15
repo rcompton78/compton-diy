@@ -30,6 +30,27 @@
 // disarmed. deep_sleep_1 (boards/freenove-s3.yaml) arms its own ext0 wake on
 // GPIO17 after that, as the only wake source.
 //
+// GPIO17 also needs an RTC pull-up in deep sleep. On the S3 (where
+// SOC_GPIO_SUPPORT_RTC_INDEPENDENT is set) gpio_pullup_en() and ESPHome's
+// gpio_sleep_set_pull_mode() only set the digital pad's pull, and arming ext0
+// switches the pin to the RTC mux, where that pull no longer applies. The
+// FT6336U's INT line then floated and woke ext0 3-20s into every deep sleep
+// with no touch (confirmed on-device with the Sleep Log below). on_powerdown()
+// enables the RTC pull-up (ext0 keeps the RTC_PERIPH domain powered, so it
+// holds), and setup() hands the pin back to the digital mux after a wake.
+//
+// Pins that keep their level through light sleep. With PM enabled, ESP-IDF
+// sets CONFIG_PM_SLP_DISABLE_GPIO by default: at startup it gives every pin a
+// "disabled, floating" sleep config and switches to it on every light sleep.
+// That cut the gpio backlight (and floated the display's CS/DC) dozens of
+// times a second, which showed as screen flicker -- only off a USB host,
+// since CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION suppresses light sleep while one
+// is attached (confirmed on a phone charger). gpio_sleep_sel_dis() opts the
+// pins in keep_level_pins out of that switch so they keep their normal
+// config; it runs in setup(), after ESP-IDF's startup isolation, and
+// gpio_config() never turns it back on. The wakeup pin is already opted out
+// by gpio_wakeup_enable().
+//
 // Diagnostics. Battery-only testing has no serial console, so the reason for
 // every boot is kept where HA can show it:
 //  - wake_reason(): this boot's esp_reset_reason() + esp_sleep_get_wakeup_cause().
@@ -45,12 +66,14 @@
 #include <cinttypes>
 #include <cstdio>
 #include <string>
+#include <vector>
 #include <sys/time.h>
 
 #include "esphome/core/component.h"
 #include "esphome/core/log.h"
 
 #include "driver/gpio.h"
+#include "driver/rtc_io.h"
 #include "esp_attr.h"
 #include "esp_err.h"
 #include "esp_pm.h"
@@ -146,6 +169,7 @@ static const char *wake_cause_str(uint8_t cause) {
 class LightSleepComponent : public Component {
  public:
   void set_wakeup_pin(uint8_t pin) { this->wakeup_pin_ = pin; }
+  void add_keep_level_pin(uint8_t pin) { this->keep_level_pins_.push_back(pin); }
 
   // Before most components, so the wake record exists before anything that
   // publishes it.
@@ -156,9 +180,12 @@ class LightSleepComponent : public Component {
 
     this->record_boot_();
 
-    // deep_sleep_1 holds GPIO17's config through deep sleep (gpio_hold_en);
-    // release it so the pin can be configured again.
+    // deep_sleep_1 holds GPIO17's config through deep sleep (gpio_hold_en)
+    // and ext0 leaves it on the RTC mux with an RTC pull-up; release both so
+    // the digital config below applies again.
     gpio_hold_dis(pin);
+    rtc_gpio_pullup_dis(pin);
+    rtc_gpio_deinit(pin);
     // ESPHome never configures this pin: the touchscreen runs in polling mode
     // (interrupt_pin unset, see boards/freenove-s3.yaml) and deep_sleep_1 only
     // reads it. Make it a pulled-up input so light sleep's wake and
@@ -181,6 +208,9 @@ class LightSleepComponent : public Component {
 
     gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
     esp_sleep_enable_gpio_wakeup();
+
+    for (uint8_t keep : this->keep_level_pins_)
+      gpio_sleep_sel_dis(static_cast<gpio_num_t>(keep));
   }
 
   // Runs after teardown, just before deep_sleep_1 arms ext0 and calls
@@ -196,6 +226,11 @@ class LightSleepComponent : public Component {
     gpio_wakeup_disable(pin);
     esp_err_t src_err = esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
 
+    // The digital pull-up from setup() stops applying once ext0 moves the pin
+    // to the RTC mux; this one keeps INT from floating in deep sleep.
+    rtc_gpio_pullup_en(pin);
+    rtc_gpio_pulldown_dis(pin);
+
     int level = gpio_get_level(pin);
     s_sleep_log.pending = true;
     s_sleep_log.pending_at_s = now_s();
@@ -208,6 +243,8 @@ class LightSleepComponent : public Component {
   void dump_config() override {
     ESP_LOGCONFIG(TAG, "Light Sleep (COM-214):");
     ESP_LOGCONFIG(TAG, "  Wakeup pin: GPIO%u", this->wakeup_pin_);
+    for (uint8_t keep : this->keep_level_pins_)
+      ESP_LOGCONFIG(TAG, "  Keeps level in light sleep: GPIO%u", keep);
     ESP_LOGCONFIG(TAG, "  This boot: %s", this->wake_reason().c_str());
     ESP_LOGCONFIG(TAG, "  Sleep log: %s", this->sleep_log().c_str());
   }
@@ -276,6 +313,7 @@ class LightSleepComponent : public Component {
   }
 
   uint8_t wakeup_pin_{0};
+  std::vector<uint8_t> keep_level_pins_;
   uint8_t reset_reason_{0};
   uint8_t wake_cause_{0};
 };

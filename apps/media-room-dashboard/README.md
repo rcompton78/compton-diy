@@ -65,11 +65,22 @@ Three power tiers, layered:
    reboot and reconnect. The 30s is a test value.
 
 **Deep sleep self-wake (being tested).** The first deep sleep + light sleep
-build woke itself within seconds of sleeping. The likely cause: on the
-ESP32-S3, light sleep's GPIO wakeup doesn't work for deep sleep (only
-ext0/ext1 do), and it was left armed going into deep sleep. Light sleep now
-disarms itself in `on_powerdown()` and `deep_sleep_1` uses ext0. The other
-suspect is the PC's USB host, since every earlier test ran on PC USB.
+build woke itself within seconds of sleeping, for two reasons:
+
+- On the ESP32-S3, light sleep's GPIO wakeup doesn't work for deep sleep
+  (only ext0/ext1 do), and it was left armed going into deep sleep. Light
+  sleep now disarms itself in `on_powerdown()` and `deep_sleep_1` uses ext0.
+- With ext0 alone it still woke after 3-20s (Sleep Log: `EXT0 ... (pin
+  high)`): ext0 moves GPIO17 to the RTC mux, where the digital pull-up no
+  longer applies, so the touch INT line floated. `on_powerdown()` now turns
+  on the RTC pull-up.
+
+**Light sleep and the screen.** ESP-IDF's `CONFIG_PM_SLP_DISABLE_GPIO`
+disables every pin during each light sleep, which flickered the backlight.
+The light_sleep component's `keep_level_pins` (backlight, display CS/DC)
+opts those pins out. Light sleep never runs while a USB host (a PC) is
+attached (`CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION`), so test light sleep on a
+charger or battery, not on PC USB.
 
 Diagnostics for testing without a serial console, all in HA and the web
 portal:

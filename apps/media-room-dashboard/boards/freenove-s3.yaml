@@ -134,6 +134,10 @@ external_components:
 light_sleep:
   id: light_sleep_1
   wakeup_pin: 17
+  # Backlight, display CS, display DC: without this, every light sleep cut
+  # the backlight and floated the panel's control lines (screen flicker on
+  # battery/charger, see light_sleep_component.h).
+  keep_level_pins: [45, 10, 46]
 
 # Deep-sleep diagnostics, readable in HA and the web portal with no serial
 # console attached (battery testing). Boot Count lives in NVS, so it keeps
