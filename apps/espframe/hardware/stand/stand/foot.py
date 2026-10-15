@@ -103,7 +103,7 @@ def build_foot() -> Part:
         foot -= _detent_prism(x0 - g, x1 + g, y_edge, out, p.LID_DETENT_H + g)
 
     # Cable tunnel under the wedge (or the desk variant's shelf), from the deck slot back into the tray.
-    foot -= box(p.PORT_X - p.TUNNEL_W / 2, p.PORT_X + p.TUNNEL_W / 2, tunnel_front(), L.front_zone_end + 1,
+    foot -= box(p.PORT_X - p.TUNNEL_W / 2, p.PORT_X + p.TUNNEL_W / 2, tunnel_front(L), L.front_zone_end + 1,
                 p.FLOOR, L.z_cavity_top)
 
     # Deck slot through the ledge, big enough for the plug to pass during assembly,
@@ -142,10 +142,9 @@ def build_foot() -> Part:
     return foot
 
 
-def tunnel_front() -> float:
+def tunnel_front(L: FootLayout) -> float:
     """World Y where the cable tunnel starts: behind the ledge's front wall, or the desk variant's
     shelf front (measured at the tunnel roof, where the sloping shelf front is closest)."""
-    L = layout()
     if p.DESK:
         return plane_y(shelf_front_depth(), L.z_cavity_top) + p.SHELF_TUNNEL_SKIN
     return L.y_front + p.WALL + 2

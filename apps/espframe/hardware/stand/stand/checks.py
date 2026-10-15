@@ -7,8 +7,8 @@ from build123d import Vertex
 from . import params as p
 from . import reference as ref
 from .cable import build_path
-from .foot import build_rail, layout, lid_detents, lift_slot_x, lid_outline
-from .frames import SCREEN_TO_WORLD, box, ledge_point, screen_box, screen_point
+from .foot import build_rail, layout, lid_detents, lift_slot_x
+from .frames import SCREEN_TO_WORLD, box, screen_box, screen_point
 from .plate import plate_outline
 
 
@@ -219,10 +219,6 @@ def run(parts: dict) -> list:
         pl_gap = plate_w.distance_to(foot & under)
         add("Plate clears the shelf", (plate_w & foot).volume < 1e-3 and pl_gap >= p.SHELF_PLATE_GAP - 0.05,
             f"plate bottom edge {pl_gap:.2f} mm above the shelf (design {p.SHELF_PLATE_GAP:g})")
-        z_ledge = ledge_point(0, -p.SEAT, p.D_PLATE_BACK + p.POST_FACE_CLEAR).Z
-        add("Shared lid", abs(layout().z_deck - z_ledge) < 1e-6,
-            f"deck at {layout().z_deck:.2f} mm and lid outline "
-            + " / ".join(f"{v:.2f}" for v in lid_outline()) + ", the same as the ledge foot's, so one lid fits both")
     else:
         seat_ok = lf.distance_to(foot) < 1e-3 and lf.distance_to(frame_w) < 1e-3 and ff_over < 1e-3
         add("Frame face seats on the ledge", seat_ok,

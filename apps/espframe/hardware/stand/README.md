@@ -100,7 +100,7 @@ Every dimension is a named constant in [`stand/params.py`](stand/params.py), tag
 
 ## Checks
 
-`out/checks.txt` has a section per variant. Ledge:
+`out/checks.txt` has a section per variant, plus a `shared` one comparing the two passes' lids. Ledge:
 
 | Check | Result |
 |---|---|
@@ -140,7 +140,7 @@ On-desk, where it differs from the ledge (every other check gives the same resul
 | Frame clears the foot | closest 0.20 mm, no overlap: the frame carries the device on the desk |
 | Plug bend clears the shelf | no plug overlap; the cable's bend stays a cable radius off the shelf; **0.1 mm** of straight drop to spare |
 | Plate clears the shelf | 0.60 mm under the plate's bottom edge |
-| Shared lid | deck at 14.12 mm and the same lid outline as the ledge foot |
+| Shared lid (in the `shared` section) | the lid each pass builds is identical (volume and box), and the lid detent check seats it in the desk foot too, so the one printed lid fits both feet |
 | Cable length | 261 mm path of 300 mm (39 mm slack) |
 | Tip-over | **4.41 N** (need ≥ 4.25); sideways tip at 35° |
 | Every part fits the P1S bed | yes (frame 130 × 216 × 28) |

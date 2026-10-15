@@ -11,6 +11,7 @@ Exits non-zero if any check fails.
 """
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -58,11 +59,11 @@ def main(argv=None) -> int:
     ap.add_argument("--no-render", action="store_true")
     ap.add_argument("--variant", choices=p.VARIANTS)
     args = ap.parse_args(argv)
-    out, docs = Path(args.out), Path(args.docs)
+    out, docs = Path(args.out).resolve(), Path(args.docs).resolve()
     out.mkdir(parents=True, exist_ok=True)
     docs.mkdir(parents=True, exist_ok=True)
     if args.variant is None:
-        return _build_all(args, out)
+        return _build_all(args, out, docs)
     if args.variant != p.VARIANT:
         print(f"--variant {args.variant} needs STAND_VARIANT={args.variant} (params were loaded as {p.VARIANT})",
               file=sys.stderr)
@@ -70,13 +71,18 @@ def main(argv=None) -> int:
     return _build_variant(args, out, docs)
 
 
-def _build_all(args, out: Path) -> int:
-    """Build each variant in its own process, then merge their checks into out/checks.txt."""
+def _build_all(args, out: Path, docs: Path) -> int:
+    """Build each variant in its own process, then merge their checks into out/checks.txt.
+
+    Also checks the two passes built the same lid (the ledge pass exports it, the desk foot reuses it):
+    each pass writes its lid's volume and bounding box, and they must match."""
     failed = []
     sections = []
+    lids = {}
     for v in p.VARIANTS:
         print(f"=== variant: {v} ===", flush=True)
-        cmd = [sys.executable, "-m", "stand.build", "--variant", v, "--out", args.out, "--docs", args.docs]
+        # Absolute paths: the child runs from HERE, which may not be the caller's cwd.
+        cmd = [sys.executable, "-m", "stand.build", "--variant", v, "--out", str(out), "--docs", str(docs)]
         if args.no_render:
             cmd.append("--no-render")
         rc = subprocess.run(cmd, cwd=HERE, env={**os.environ, "STAND_VARIANT": v}).returncode
@@ -84,8 +90,24 @@ def _build_all(args, out: Path) -> int:
         if part.exists():
             sections.append(f"# {v}\n" + part.read_text(encoding="utf-8"))
             part.unlink()
+        else:
+            sections.append(f"# {v}\nFAIL  {v} variant build did not complete (exit {rc}), so it has no checks\n")
+        lid = out / f"lid-{v}.json"
+        if lid.exists():
+            lids[v] = json.loads(lid.read_text(encoding="utf-8"))
+            lid.unlink()
         if rc != 0:
             failed.append(v)
+    if len(lids) == len(p.VARIANTS):
+        ref_lid = lids[p.VARIANTS[0]]
+        same = all(abs(a - b) < 1e-3 for l in lids.values() for a, b in zip(l, ref_lid))
+        line = (f"{'PASS' if same else 'FAIL'}  Shared lid: one lid fits every foot  "
+                + "; ".join(f"{v} lid volume {l[0]:.1f} mm³, box " + " / ".join(f"{x:.2f}" for x in l[1:])
+                            for v, l in lids.items()))
+        sections.append(f"# shared\n{line}\n")
+        print("  " + line)
+        if not same:
+            failed.append("shared lid")
     (out / "checks.txt").write_text("\n".join(sections), encoding="utf-8")
     if failed:
         print(f"variant(s) failed: {', '.join(failed)}", file=sys.stderr)
@@ -129,6 +151,10 @@ def _build_variant(args, out: Path, docs: Path) -> int:
         print("  " + line)
         report.append(line)
     (out / f"checks-{p.VARIANT}.txt").write_text("\n".join(report) + "\n", encoding="utf-8")
+    # The lid as this pass built it (world frame), for _build_all's shared-lid check.
+    bb = lid.bounding_box()
+    (out / f"lid-{p.VARIANT}.json").write_text(json.dumps(
+        [lid.volume, bb.min.X, bb.max.X, bb.min.Y, bb.max.Y, bb.min.Z, bb.max.Z]), encoding="utf-8")
 
     if not args.no_render:
         print("rendering previews…", flush=True)
