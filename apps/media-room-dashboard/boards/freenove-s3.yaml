@@ -285,6 +285,9 @@ sensor:
 # which is only a flag read and adds no wakeups. delayed_off rides out the
 # brief gap in host frames when the PC re-enumerates the port, so a reset
 # from esptool doesn't restart the sleep timers mid-flash.
+# trigger_on_initial_state: ESPHome skips on_state for a binary sensor's
+# first published state by default, so booting (or resetting after a USB
+# flash) with the PC already attached would never turn dev mode on.
 binary_sensor:
   - platform: template
     id: usb_host_connected
@@ -292,6 +295,7 @@ binary_sensor:
     entity_category: diagnostic
     device_class: connectivity
     icon: "mdi:usb"
+    trigger_on_initial_state: true
     lambda: 'return id(light_sleep_1).usb_host_connected();'
     filters:
       - delayed_off: 3s
