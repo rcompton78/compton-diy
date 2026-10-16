@@ -15,7 +15,7 @@ This is **variant 1**: the BQ25185 charger with no fuel gauge (build A of the re
 
 Left and right are as seen from the front, with the screen upright.
 
-- **Shape.** 55 × 130 × 22 mm. The screen sits in the top part, and a grip below it holds the charger. Plan corners are R6 and the front and back edges are rounded R1.6.
+- **Shape.** 55 × 130 × 21.5 mm. The screen sits in the top part, and a grip below it holds the charger. Plan corners are R6 and the front and back edges are rounded R1.6.
 - **Front shell (PETG).** One piece, holding everything except the cell.
   - **Bezel.** The 1.5 mm front wall has a 43.6 × 58.05 opening: exactly the screen's visible window, 0.16–0.2 mm outside the lit pixels, with a 45° × 1 mm chamfer on the front. Its lip rests on the glass's black border (≥ 2.74 mm all round).
   - **Freenove.** It drops in face down onto four Ø6.4 bosses on its 42 × 78 hole pattern and is fixed with M3 × 6 screws from behind into M3 × 4 heat-set inserts. The boss faces stop the PCB so the glass floats 0.1 mm behind the bezel instead of being clamped.
@@ -27,11 +27,11 @@ Left and right are as seen from the front, with the screen upright.
   - Between those, it rests on 45° ledges along both side walls.
 - **Cell.** Taped to the cover inside a ribbed pocket: 1 mm clearance per side, and room for 10% swelling.
   - The pocket sits against the left wall, leaving a wire channel down the right.
-  - It starts 15.5 mm up the Freenove from its antenna end, so the PCB antenna has no LiPo behind it.
-  - The cell's front face is 1.5 mm behind the tallest part on the Freenove's back (the drawing's 4.7 mm max).
+  - It starts 16.5 mm up the Freenove from its antenna end, so the PCB antenna has no LiPo behind it.
+  - The measured cell is 61 × 40 × 5 mm. Its front face is 1.5 mm behind the tallest part on the Freenove's back (the drawing's 4.7 mm max).
 - **Wiring** (cable map build A):
-  - **Pigtail.** The MX1.25 pigtail leaves the charger's `4.5V max` terminal along the remote, turns rearwards behind the Freenove's antenna end, runs up the right-hand channel beside the cell and plugs into the Freenove's `BAT` socket. About 96 mm of run.
-  - **Cell lead.** The cell's JST-PH lead leaves between the two stubs of the pocket's bottom rib and drops into a bay beside the charger, which leaves room for the plug and the lead's turn. About 44 mm of run.
+  - **Pigtail.** The MX1.25 pigtail leaves the charger's `4.5V max` terminal along the remote, turns rearwards behind the Freenove's antenna end, runs up the right-hand channel beside the cell and plugs into the Freenove's `BAT` socket. About 94 mm of run.
+  - **Cell lead.** The cell's JST-PH lead leaves between the two stubs of the pocket's bottom rib and drops into a bay beside the charger, which leaves room for the plug and the lead's turn. About 45 mm of run.
   - The `3.3V` terminal stays unused.
 - **Extras in the cover.** Two Ø2 paperclip holes over the Freenove's RESET and BOOT buttons, so you can reach download mode without opening the case, and a Ø2.5 window over the charger's orange CHG LED.
 
@@ -71,18 +71,18 @@ Every dimension is a named constant in [`remote/params.py`](remote/params.py), t
 | Flashing port / charge port | 12 × 6.5 overmold seats against the receptacle mouth with 0.5 mm all round, on the connector's axis |
 | Charger seats on its standoffs | 4 standoffs, pegs 0.15 mm per side in the holes, no overlap |
 | Charger snap hooks | 0.5 mm barbs; 8.2 mm arms flex 0.65 mm at 1.8% strain (limit 2%) |
-| Terminal screws reachable with the cover off | nothing of the shell above them |
-| Cell pocket clearance / swelling | 1.0 mm per side; a cell swollen 10% still clears everything |
-| Cell kept off the antenna end | pocket starts 15.5 mm up the PCB (keep-out 15) |
-| Pigtail run | 96 mm of a 150 mm (EST) pigtail; ≥ 1.2 mm from any part; stays off the Freenove's back until the socket |
-| Wire channel beside the cell | 3.0 × 7.4 mm |
-| Cell lead run | 44 mm of a 70 mm (EST) lead |
+| Terminal screws reachable with the cover off | nothing of the shell above them; 1.1 mm from the terminal top to the cover (terminal height EST) |
+| Cell pocket clearance / swelling | measured 61 × 40 × 5 cell: 1.0 mm per side; swollen 10% it still clears everything |
+| Cell kept off the antenna end | pocket starts 16.5 mm up the PCB (keep-out 15) |
+| Pigtail run | 94 mm of a 150 mm (EST) pigtail; ≥ 1.2 mm from any part; stays off the Freenove's back until the socket |
+| Wire channel beside the cell | 4.0 × 6.9 mm |
+| Cell lead run | 45 mm of a 70 mm (EST) lead |
 | JST-PH plug bay | plug plus 8 mm for the lead to turn, clear |
 | Cover fits the shell | 0.2 mm round the edge; rests on the ledges and bosses |
 | Cover tongues | 1.2 mm into the top wall's slots, 0.8 mm of swing room, 1.4 mm of wall behind |
 | Cover screw engagement | M3 × 8 countersunk flush in the 2.4 mm cover, 5.6 mm into an insert |
-| RESET / BOOT reachable | straight 12.5 mm paperclip run through each hole |
-| Every part fits the P1S bed | shell 55 × 130 × 22, cover 50 × 126 × 7 |
+| RESET / BOOT reachable | straight 12.0 mm paperclip run through each hole |
+| Every part fits the P1S bed | shell 55 × 130 × 21.5, cover 50 × 126 × 7.4 (ribs included) |
 
 ## Parts to print
 
@@ -133,8 +133,8 @@ Only variant 1 exists. Variant 2's gauge (and divider, or a BQ24074) will need a
 
 Still estimates until the parts are measured; each is a parameter in `remote/params.py`.
 
-- **Cell:** real length × width × thickness, including the protection-circuit end (`CELL_L/W/T`, now 62 × 41 × 5.5). Also which end and corner the lead leaves from, and the lead's length (`CELL_LEAD_L`, 70 mm).
-- **Pigtail length:** `PIGTAIL_L`, 150 mm. The run needs about 96 mm.
+- **Cell lead:** which end and corner the lead leaves from, and its length (`CELL_LEAD_L`, 70 mm). The cell itself is measured (61 × 40 × 5).
+- **Pigtail length:** `PIGTAIL_L`, 150 mm. The run needs about 94 mm.
 - **Freenove USB-C:** how far it overhangs the PCB end (`FN_USB_OVERHANG`, 1.5) and its height (`FN_USB_H`, 3.26). The drawing gives its centre as mid-width.
 - **RESET / BOOT:** distance from the top end (`BUTTON_FROM_TOP`, 2.1) and height. Check the paperclip holes line up.
 - **BAT socket:** size and which way its plug enters.

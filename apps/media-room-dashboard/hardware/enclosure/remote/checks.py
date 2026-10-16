@@ -108,7 +108,7 @@ def run(parts: dict, ch: p.Charger) -> list:
     s_over = (swollen & shell).volume + (swollen & cover).volume + (swollen & keepout).volume
     gap = cell.distance_to(keepout)
     add("Cell pocket clearance", side >= p.CELL_CLEAR - 1e-6 and (cell & cover).volume < EPS,
-        f"EST {p.CELL_W:g} × {p.CELL_L:g} × {p.CELL_T:g} cell: {side:.2f} mm per side in the pocket")
+        f"{p.CELL_W:g} × {p.CELL_L:g} × {p.CELL_T:g} cell (measured): {side:.2f} mm per side in the pocket")
     add("Cell swelling allowance", s_over < EPS,
         f"cell swollen {p.CELL_SWELL * 100:.0f}% to {p.CELL_POCKET_T:.2f} mm still clears everything ({s_over:.4f} mm³); "
         f"unswollen it sits {gap:.2f} mm behind the Freenove's back parts")

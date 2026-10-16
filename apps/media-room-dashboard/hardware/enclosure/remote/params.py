@@ -12,7 +12,7 @@ Sources:
     Datasheet/ES3C28P_ES2N28P_Specification_V1.0.pdf in github.com/Freenove/Freenove_ESP32_S3_Display.
   * Adafruit 6092 (BQ25185 + 3.3V buck): the Eagle board file in
     github.com/adafruit/Adafruit-bq25185-with-3.3V-Buck-PCB, and the product page (height).
-  * 504060 LiPo: nominal 5 × 40 × 60 cell; real cells vary, so the pocket is sized from EST values.
+  * 504060 LiPo: measured by the user, 61 × 40 × 5.
 
 Coordinate frame (every part is built in it, assembled):
   x = across the remote, left to right seen from the front, 0 on the centreline;
@@ -76,9 +76,9 @@ BUTTON_FROM_TOP = 2.1             # EST: read off the drawing's scale
 BUTTON_H = 2.0                    # EST: tactile switch height above the PCB back
 
 # --- 504060 LiPo (1200 mAh) ------------------------------------------------------
-CELL_W = 41.0                     # EST: 40 nominal, real cells run to ~41
-CELL_L = 62.0                     # EST: 60 nominal, plus the folded protection PCB
-CELL_T = 5.5                      # EST: 5.0 nominal, real cells run to ~5.5
+CELL_W = 40.0                     # MEASURED
+CELL_L = 61.0                     # MEASURED: including the folded protection PCB
+CELL_T = 5.0                      # MEASURED
 CELL_SWELL = 0.10                 # DESIGN: room for 10% swelling in thickness
 CELL_TAPE_T = 0.4                 # DESIGN: thin double-sided tape holding the cell on the cover
 CELL_LEAD_L = 70.0                # EST: JST-PH lead length from the cell end
