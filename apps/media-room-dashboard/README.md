@@ -4,8 +4,9 @@ ESPHome-based 6-button touchscreen remote for the media room. Each button
 calls a Home Assistant service directly over the native API, and lights up
 to reflect the real state of what it controls (TV power, active HDMI input,
 light on/off). Apart from a few diagnostics (IP address, firmware version,
-firmware update, battery voltage/level, and the wake reason / sleep log /
-boot count used for battery testing), the device has no entities of its own
+firmware update, battery voltage/level, USB host connected, the Dev Mode
+switch, and the wake reason / sleep log / boot count used for battery
+testing), the device has no entities of its own
 in HA: it's a remote with feedback, not a general dashboard. Its IP is always on screen,
 and it serves an admin portal with a firmware upload page at that address
 (see "IP address and admin portal").
@@ -30,10 +31,13 @@ UI or HA wiring:
 
 - `boards/<name>.yaml` — hardware only: chip/PSRAM, backlight, SPI display
   + touch controller + pins. Must define `tft_display`, `tft_touch`,
-  `backlight_output` (an on/off output), and `deep_sleep_1` (deep_sleep with
-  a touch wake source) component ids — nothing else in the app depends on
-  board-specific detail beyond those four ids. Battery sensing, light sleep
-  and the sleep diagnostics are board-specific too, so they live there.
+  `backlight_output` (an on/off output), `deep_sleep_1` (deep_sleep with
+  a touch wake source), `battery_level` (battery % sensor),
+  `usb_host_connected` (binary sensor, on while a PC is attached) and a
+  `set_light_sleep_allowed` script (parameter `allowed: bool`) — nothing
+  else in the app depends on board-specific detail beyond those ids. Battery
+  sensing, light sleep and the sleep diagnostics are board-specific too, so
+  they live there.
 - `common/dashboard.yaml` — everything else: wifi/api/ota, the 6-button LVGL
   UI, and the HA service calls. Board-agnostic.
 - `builds/<name>.yaml` — thin entrypoint combining the two as ESPHome
@@ -131,6 +135,50 @@ Battery voltage and a rough LiPo percentage come from the board's GPIO9
 divider (`boards/freenove-s3.yaml`). The percentage is only an estimate from
 voltage; a MAX17048 fuel gauge would be more accurate.
 
+### Battery on screen (COM-446)
+
+The right end of `main_page`'s footer shows a battery glyph (full, 3/4, 1/2,
+1/4, empty) and the %, e.g. `87%`. It turns amber below `battery_low_pct`
+(20%) and red below `battery_critical_pct` (10%), and shows `--%` until the
+first reading. It's driven by the existing `Battery Level` sensor, so it
+costs no extra ADC reads or wakeups: the sensor reads once at boot (so every
+deep-sleep wake shows a fresh value) and every 60s while awake.
+
+While a PC is attached the glyph is a USB plug and the colour stays grey: the
+battery is charging then, so it reads near its 4.2V charge voltage and the %
+isn't a real charge level. A wall charger can't be told apart from battery
+(the BQ25185 charger exposes no power-good or charge-status pin), so on a
+charger it shows the normal readout, which reads high while charging. The
+same battery can read several points apart on a PC and on a charger (85%
+vs 91% in testing): charge current and load both shift the measured
+voltage, and dev mode keeps the screen and CPU busy with no light sleep.
+
+### Dev mode (COM-446)
+
+While developing, blanking and deep sleep drop the USB connection and make
+flashing and logging painful. Dev mode turns all three sleep tiers off:
+
+- **On** while a PC is attached to the board's USB-C (the S3's native
+  USB-Serial/JTAG), shown as the `USB Host Connected` diagnostic. ESP-IDF's
+  `usb_serial_jtag_is_connected()` only sees a USB *host* sending frames,
+  so a charger (the BQ25185's USB-C, or a plain charger on the board's
+  port) never counts and battery use still sleeps. It turns off 3s after the
+  host goes away, so esptool's reset mid-flash doesn't count as an unplug.
+- **Or** while the `Dev Mode` switch (HA and the web portal) is on, for an
+  OTA or log session over wifi. It's off at every boot and turns itself off
+  after `dev_mode_timeout` (1h).
+
+While it's on, the screen never blanks, neither deep-sleep countdown runs
+(so the idle-time firmware auto-install doesn't either), and automatic light
+sleep is blocked (an `ESP_PM_NO_LIGHT_SLEEP` lock in the light_sleep
+component; a PC on USB already blocks it). An amber `DEV` badge shows in the
+footer. When it turns off, the 30s blank and 30min deep sleep count from that
+moment, as if the screen had just been touched.
+
+A remote already in deep sleep doesn't notice being plugged in until it's
+touched once; after that it stays awake, so USB flashing works without
+holding BOOT.
+
 ## Setup
 
 ```bash
@@ -211,7 +259,8 @@ this app's initial bring-up) since nothing in the logs points to it.
 The device's current IP is always on its own screen, so you never need the
 router or HA to find it:
 
-- **Main page:** a grey footer under the buttons shows `http://<ip>`, which
+- **Main page:** a grey footer under the buttons shows `http://<ip>` on the
+  left (next to the battery readout and, in dev mode, the DEV badge), which
   is also the admin portal's address. It's blanked the moment wifi drops, so
   it never shows a stale address.
 - **Connecting page:** "Not connected", plus "Last IP: <ip>" once the device
