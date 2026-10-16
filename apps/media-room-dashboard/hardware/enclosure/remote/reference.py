@@ -207,13 +207,13 @@ def pigtail_path(ch: p.Charger) -> np.ndarray:
 
 
 def cell_lead_path(ch: p.Charger) -> np.ndarray:
-    """JST-PH cell lead: out of the cell's bottom end (EST position) → behind the antenna end →
+    """JST-PH cell lead: out of the cell's bottom-right corner → behind the antenna end →
     down into the bay beside the charger → into the JST-PH socket."""
     f = ChargerFrame(ch)
     pk = cell_pocket(ch)
     c = cell(ch).bounding_box()
     d_mid = (c.min.Z + c.max.Z) / -2
-    x_exit = (pk.x0 + pk.x1) / 2 + 10.0          # EST: lead leaves near the right of the bottom end
+    x_exit = c.max.X - p.CELL_LEAD_INSET         # bottom-right corner (label towards the board, PCB end down)
     bxc = (ch.jst[0] + ch.jst[1]) / 2
     x_plug = f.x(ch.jst[3]) + p.JST_PLUG[2]
     d_plug = f.d(0) + 0.3 + p.JST_PLUG[1] / 2

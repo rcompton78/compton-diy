@@ -31,7 +31,7 @@ Left and right are as seen from the front, with the screen upright.
   - The measured cell is 61 × 40 × 5 mm. Its front face is 1.5 mm behind the tallest part on the Freenove's back (the drawing's 4.7 mm max).
 - **Wiring** (cable map build A):
   - **Pigtail.** The MX1.25 pigtail leaves the charger's `4.5V max` terminal along the remote, turns rearwards behind the Freenove's antenna end, runs up the right-hand channel beside the cell and plugs into the Freenove's `BAT` socket. About 94 mm of run.
-  - **Cell lead.** The cell's JST-PH lead leaves between the two stubs of the pocket's bottom rib and drops into a bay beside the charger, which leaves room for the plug and the lead's turn. About 45 mm of run.
+  - **Cell lead.** The cell sits with its protection-PCB end down and its label towards the board, so the JST-PH lead leaves at the pocket's bottom-right corner. It passes a 10 mm gap in the bottom rib and drops almost straight into a bay beside the charger, with room for the plug and the lead's turn. About 42 mm of run.
   - The `3.3V` terminal stays unused.
 - **Extras in the cover.** Two Ø2 paperclip holes over the Freenove's RESET and BOOT buttons, so you can reach download mode without opening the case, and a Ø2.5 window over the charger's orange CHG LED.
 
@@ -76,7 +76,7 @@ Every dimension is a named constant in [`remote/params.py`](remote/params.py), t
 | Cell kept off the antenna end | pocket starts 16.5 mm up the PCB (keep-out 15) |
 | Pigtail run | 94 mm of a 150 mm (EST) pigtail; ≥ 1.2 mm from any part; stays off the Freenove's back until the socket |
 | Wire channel beside the cell | 4.0 × 6.9 mm |
-| Cell lead run | 45 mm of a 70 mm (EST) lead |
+| Cell lead run | 42 mm of a 70 mm (EST) lead, out through a 10 mm gap in the bottom rib |
 | JST-PH plug bay | plug plus 8 mm for the lead to turn, clear |
 | Cover fits the shell | 0.2 mm round the edge; rests on the ledges and bosses |
 | Cover tongues | 1.2 mm into the top wall's slots, 0.8 mm of swing room, 1.4 mm of wall behind |
@@ -115,7 +115,7 @@ Heat-set inserts go in at 220–240 °C, pressed square and flush (hole Ø4.0 = 
 3. **Charger.** Lay the shell face down. Line the charger's USB-C up with the bottom opening, component side up, and press it straight down over the four pegs until both hooks click over its edges. The pigtail points up the remote.
 4. **Freenove.** Lower the board face down onto the four bosses, USB-C to the top opening, and fix it with four M3 × 6 screws. Don't overtighten: the glass must stay free behind the bezel.
 5. **Pigtail.** Run it along the remote from the terminal, behind the Freenove's bottom (antenna) end, then up the channel on the `BAT` socket's side (the remote's right, so on your left as you look into the open back) and onto the socket.
-6. **Cell.** Tape the cell into the cover's pocket, lead towards the bottom, so the lead leaves between the two stubs of the bottom rib. Plug the lead into the charger's JST-PH socket: the plug sits in the bay on the charger's right (on your left looking into the back).
+6. **Cell.** Lay the cover on the bench ribs up, tongues away from you. Put tape on the **unlabelled** face of the cell and press it into the pocket **label side up** (towards the board once closed), protection-PCB end towards you (the screw end). The lead then comes out of the near right-hand corner, through the gap in the bottom rib. Plug it into the charger's JST-PH socket: the plug sits in the bay on the charger's right (on your left looking into the back).
 7. **Cover.** Hook the cover's top tongues into the slots in the top wall, swing the bottom down onto the ledges, and fit two M3 × 8 countersunk screws.
 8. **Check.** Plug a charger into the bottom port: the orange CHG LED shows through the window in the cover. Unplug it and the remote runs from the cell.
 
@@ -133,7 +133,7 @@ Only variant 1 exists. Variant 2's gauge (and divider, or a BQ24074) will need a
 
 Still estimates until the parts are measured; each is a parameter in `remote/params.py`.
 
-- **Cell lead:** which end and corner the lead leaves from, and its length (`CELL_LEAD_L`, 70 mm). The cell itself is measured (61 × 40 × 5).
+- **Cell lead:** its exact offset from the cell's long edge (`CELL_LEAD_INSET`, 2.5 mm from the photo) and its length (`CELL_LEAD_L`, 70 mm). The cell (61 × 40 × 5, EASYLANDER 504060) and the lead's corner are confirmed.
 - **Pigtail length:** `PIGTAIL_L`, 150 mm. The run needs about 94 mm.
 - **Freenove USB-C:** how far it overhangs the PCB end (`FN_USB_OVERHANG`, 1.5) and its height (`FN_USB_H`, 3.26). The drawing gives its centre as mid-width.
 - **RESET / BOOT:** distance from the top end (`BUTTON_FROM_TOP`, 2.1) and height. Check the paperclip holes line up.

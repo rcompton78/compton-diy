@@ -16,12 +16,12 @@ def cover_outline(ch: p.Charger):
 
 
 def pocket_ribs(ch: p.Charger) -> Part:
-    """Ribs round the cell pocket. The bottom rib is two corner stubs: the lead leaves between them."""
+    """Ribs round the cell pocket. The bottom rib stops short of the right-hand corner, where the lead leaves."""
     pk = ref.cell_pocket(ch)
     t, d0, d1 = p.RIB_T, p.D_COVER_INNER - p.RIB_H, p.D_COVER_INNER + 0.01
     x0, x1, y0, y1 = pk.x0 - t, pk.x1 + t, pk.y0 - t, pk.y1 + t
     ribs = dbox(x0, pk.x0, y0, y1, d0, d1) + dbox(pk.x1, x1, y0, y1, d0, d1) + dbox(x0, x1, pk.y1, y1, d0, d1)
-    ribs += dbox(x0, x0 + p.RIB_STUB, y0, pk.y0, d0, d1) + dbox(x1 - p.RIB_STUB, x1, y0, pk.y0, d0, d1)
+    ribs += dbox(x0, pk.x1 - p.LEAD_GAP, y0, pk.y0, d0, d1)
     return ribs
 
 

@@ -82,6 +82,10 @@ CELL_T = 5.0                      # MEASURED
 CELL_SWELL = 0.10                 # DESIGN: room for 10% swelling in thickness
 CELL_TAPE_T = 0.4                 # DESIGN: thin double-sided tape holding the cell on the cover
 CELL_LEAD_L = 70.0                # EST: JST-PH lead length from the cell end
+CELL_LEAD_INSET = 2.5             # EST (user's photo: 2–3 mm): lead centre in from the cell's long edge. It leaves the
+                                  #   protection-PCB short end at a corner: top-left with the label up and that end at the top.
+                                  #   Fitted label towards the board, PCB end down, it lands at the remote's right-hand corner,
+                                  #   right above the charger's JST-PH bay.
 CELL_CLEAR = 1.0                  # DESIGN: pocket clearance per side, x and y
 CELL_TO_PARTS = 1.0               # DESIGN: air gap from the cell face to the Freenove's back parts
 
@@ -118,7 +122,7 @@ COVER_T = 2.4                     # DESIGN: takes an M3 countersunk head flush
 COVER_CLEAR = 0.2                 # DESIGN: cover edge to the shell walls
 RIB_T = 1.2                       # DESIGN: cell-pocket ribs
 RIB_H = 5.0                       # DESIGN: rib height above the cover's inner face
-RIB_STUB = 8.0                    # DESIGN: bottom rib is two corner stubs; the lead leaves between them
+LEAD_GAP = 10.0                   # DESIGN: the bottom rib stops this far short of the right-hand rib, where the lead leaves
 LEDGE_W = 1.0                     # DESIGN: cover-support ledge on the side walls (45° underside)
 TONGUE_W = 8.0                    # DESIGN: two tongues on the cover's top edge
 TONGUE_X = 15.0                   # DESIGN: ± from the centreline, clear of the USB opening

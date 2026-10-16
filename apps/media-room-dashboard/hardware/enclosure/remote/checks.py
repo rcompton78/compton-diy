@@ -150,6 +150,12 @@ def run(parts: dict, ch: p.Charger) -> list:
     j_over = (jz & shell).volume + (jz & cover).volume
     add("Cell lead run (cell → JST-PH)", ll <= p.CELL_LEAD_L and lw >= p.WIRE_D / 2,
         f"{ll:.0f} mm of the EST {p.CELL_LEAD_L:g} mm lead; nearest part {lw:.2f} mm from its centreline ({lwho})")
+    x_exit = lead[0][0]
+    rib_end = pk.x1 - p.LEAD_GAP
+    margin = min(x_exit - rib_end, pk.x1 - x_exit)
+    add("Cell lead clears the bottom rib", margin >= 2.0,
+        f"lead leaves the bottom-right corner {p.CELL_LEAD_INSET:g} mm in (EST), through the {p.LEAD_GAP:g} mm gap with "
+        f"{margin:.1f} mm to spare (need ≥ 2)")
     add("JST-PH plug bay", j_over < EPS,
         f"plug {p.JST_PLUG[0]:g} × {p.JST_PLUG[1]:g} × {p.JST_PLUG[2]:g} plus {p.JST_BEND:g} mm for the lead to turn: "
         f"overlap {j_over:.4f} mm³")
