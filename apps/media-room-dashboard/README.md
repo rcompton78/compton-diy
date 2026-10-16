@@ -23,6 +23,12 @@ board instead, but board bring-up stalled on an unknown display pinout (see
 `docs/diy-102-bringup/HANDOFF.md`) — the Freenove S3 was swapped in so the
 dashboard itself could get built and used while that's unresolved.
 
+### Handheld enclosure (COM-445)
+
+A 3D-printable remote-shaped case for the Freenove, the BQ25185 charger and a 504060 LiPo lives in
+[`hardware/enclosure/`](hardware/enclosure/README.md) (Nx project `media-room-remote-enclosure`):
+a parametric build123d model with fit checks, renders, print settings and assembly order.
+
 ### Board HAL
 
 Hardware config is isolated from app logic so a future board swap (e.g. once
