@@ -121,7 +121,8 @@ portal:
   `#7 EXT0 after 42s (pin high)`: what woke it, how long it was down, and
   GPIO17's level as it went down (`LOW` there means it slept with the touch
   line already asserted). `no-touch` marks a wake the guard sent straight
-  back to sleep. Kept in RTC memory; it starts over at `#1 power-on` after
+  back to sleep, and `E<n>` that n GPIO/RTC/sleep calls failed while
+  going down (Wake Reason likewise reports failed calls in setup). Kept in RTC memory; it starts over at `#1 power-on` after
   a power loss (e.g. moving the board to a charger).
 - **Boot Count**: total boots, kept in flash, so it survives power loss.
   A device that keeps self-waking shows this climbing with no touches.

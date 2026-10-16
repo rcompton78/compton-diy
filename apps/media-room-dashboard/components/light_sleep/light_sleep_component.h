@@ -88,6 +88,7 @@
 
 #include <cinttypes>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 #include <sys/time.h>
@@ -107,8 +108,10 @@ namespace esphome::light_sleep {
 
 static const char *const TAG = "light_sleep";
 
-static constexpr uint32_t LOG_MAGIC = 0xC0214A12;  // bump when SleepLog changes
+static constexpr uint32_t LOG_MAGIC = 0xC0214A13;  // bump when SleepLog changes
 static constexpr int LOG_SIZE = 5;
+// Home Assistant truncates text sensor states past 255 characters.
+static constexpr size_t LOG_TEXT_MAX = 255;
 
 struct SleepLogEntry {
   uint32_t seq;
@@ -117,6 +120,7 @@ struct SleepLogEntry {
   uint8_t wake_cause;
   uint8_t pin_level_at_entry;  // 0/1, or 2 if unknown
   uint8_t no_touch;            // 1 if the wake guard sent it back to sleep
+  uint8_t powerdown_errors;    // failed GPIO/RTC/sleep calls while going down
 };
 
 struct SleepLog {
@@ -126,6 +130,7 @@ struct SleepLog {
   bool pending;
   int64_t pending_at_s;
   uint8_t pending_pin_level;
+  uint8_t pending_errors;
   int count;
   SleepLogEntry entries[LOG_SIZE];  // entries[0] is the newest
 };
@@ -211,24 +216,24 @@ class LightSleepComponent : public Component {
     // lines' own holds (see the file comment). Harmless when not set.
     gpio_deep_sleep_hold_dis();
     for (uint8_t p : this->sleep_hold_high_pins_)
-      gpio_hold_dis(static_cast<gpio_num_t>(p));
+      this->setup_errors_ += !this->check_(gpio_hold_dis(static_cast<gpio_num_t>(p)), "gpio_hold_dis", p);
     for (uint8_t p : this->sleep_hold_pullup_pins_)
-      gpio_hold_dis(static_cast<gpio_num_t>(p));
+      this->setup_errors_ += !this->check_(gpio_hold_dis(static_cast<gpio_num_t>(p)), "gpio_hold_dis", p);
 
     // deep_sleep_1 holds GPIO17's config through deep sleep (gpio_hold_en)
     // and ext0 leaves it on the RTC mux with an RTC pull-up; release both so
     // the digital config below applies again.
-    gpio_hold_dis(pin);
-    rtc_gpio_pullup_dis(pin);
-    rtc_gpio_deinit(pin);
+    this->setup_errors_ += !this->check_(gpio_hold_dis(pin), "gpio_hold_dis", pin);
+    this->setup_errors_ += !this->check_(rtc_gpio_pullup_dis(pin), "rtc_gpio_pullup_dis", pin);
+    this->setup_errors_ += !this->check_(rtc_gpio_deinit(pin), "rtc_gpio_deinit", pin);
     // ESPHome never configures this pin: the touchscreen runs in polling mode
     // (interrupt_pin unset, see boards/freenove-s3.yaml) and deep_sleep_1 only
     // reads it. Make it a pulled-up input so light sleep's wake and
     // deep_sleep_1's KEEP_AWAKE check both read the real INT level, not a
     // floating or input-disabled pin.
-    gpio_set_direction(pin, GPIO_MODE_INPUT);
-    gpio_pullup_en(pin);
-    gpio_pulldown_dis(pin);
+    this->setup_errors_ += !this->check_(gpio_set_direction(pin, GPIO_MODE_INPUT), "gpio_set_direction", pin);
+    this->setup_errors_ += !this->check_(gpio_pullup_en(pin), "gpio_pullup_en", pin);
+    this->setup_errors_ += !this->check_(gpio_pulldown_dis(pin), "gpio_pulldown_dis", pin);
 
     esp_pm_config_t pm_config = {};
     // 160MHz/40MHz(XTAL) matches ESP-IDF's own documented reference config for
@@ -236,16 +241,13 @@ class LightSleepComponent : public Component {
     pm_config.max_freq_mhz = 160;
     pm_config.min_freq_mhz = 40;
     pm_config.light_sleep_enable = true;
-    esp_err_t err = esp_pm_configure(&pm_config);
-    if (err != ESP_OK) {
-      ESP_LOGE(TAG, "esp_pm_configure failed: %s", esp_err_to_name(err));
-    }
+    this->setup_errors_ += !this->check_(esp_pm_configure(&pm_config), "esp_pm_configure", pin);
 
-    gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL);
-    esp_sleep_enable_gpio_wakeup();
+    this->setup_errors_ += !this->check_(gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL), "gpio_wakeup_enable", pin);
+    this->setup_errors_ += !this->check_(esp_sleep_enable_gpio_wakeup(), "esp_sleep_enable_gpio_wakeup", pin);
 
     for (uint8_t keep : this->keep_level_pins_)
-      gpio_sleep_sel_dis(static_cast<gpio_num_t>(keep));
+      this->setup_errors_ += !this->check_(gpio_sleep_sel_dis(static_cast<gpio_num_t>(keep)), "gpio_sleep_sel_dis", keep);
   }
 
   // Runs after teardown, just before deep_sleep_1 arms ext0 and calls
@@ -253,42 +255,48 @@ class LightSleepComponent : public Component {
   void on_powerdown() override {
     auto pin = static_cast<gpio_num_t>(this->wakeup_pin_);
 
+    // Failures here are counted into the Sleep Log entry the next boot
+    // writes (shown as "E<n>"): there's no console on battery, and a failed
+    // call here is exactly what brings back floating pins and self-wakes.
+    unsigned errors = 0;
+
     esp_pm_config_t pm_config = {};
     pm_config.max_freq_mhz = 160;
     pm_config.min_freq_mhz = 160;
     pm_config.light_sleep_enable = false;
-    esp_err_t pm_err = esp_pm_configure(&pm_config);
-    gpio_wakeup_disable(pin);
-    esp_err_t src_err = esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO);
+    errors += !this->check_(esp_pm_configure(&pm_config), "esp_pm_configure", pin);
+    errors += !this->check_(gpio_wakeup_disable(pin), "gpio_wakeup_disable", pin);
+    errors += !this->check_(esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO), "disable GPIO wake source", pin);
 
     // The digital pull-up from setup() stops applying once ext0 moves the pin
     // to the RTC mux; this one keeps INT from floating in deep sleep.
-    rtc_gpio_pullup_en(pin);
-    rtc_gpio_pulldown_dis(pin);
+    errors += !this->check_(rtc_gpio_pullup_en(pin), "rtc_gpio_pullup_en", pin);
+    errors += !this->check_(rtc_gpio_pulldown_dis(pin), "rtc_gpio_pulldown_dis", pin);
 
     // Keep the touch chip's RST and I2C lines defined through deep sleep
     // instead of isolated and floating (see the file comment).
     for (uint8_t p : this->sleep_hold_high_pins_) {
       auto gp = static_cast<gpio_num_t>(p);
-      gpio_set_direction(gp, GPIO_MODE_OUTPUT);
-      gpio_set_level(gp, 1);
-      gpio_hold_en(gp);
+      errors += !this->check_(gpio_set_direction(gp, GPIO_MODE_OUTPUT), "gpio_set_direction", p);
+      errors += !this->check_(gpio_set_level(gp, 1), "gpio_set_level", p);
+      errors += !this->check_(gpio_hold_en(gp), "gpio_hold_en", p);
     }
     for (uint8_t p : this->sleep_hold_pullup_pins_) {
       auto gp = static_cast<gpio_num_t>(p);
-      gpio_set_direction(gp, GPIO_MODE_INPUT);
-      gpio_pullup_en(gp);
-      gpio_pulldown_dis(gp);
-      gpio_hold_en(gp);
+      errors += !this->check_(gpio_set_direction(gp, GPIO_MODE_INPUT), "gpio_set_direction", p);
+      errors += !this->check_(gpio_pullup_en(gp), "gpio_pullup_en", p);
+      errors += !this->check_(gpio_pulldown_dis(gp), "gpio_pulldown_dis", p);
+      errors += !this->check_(gpio_hold_en(gp), "gpio_hold_en", p);
     }
 
     int level = gpio_get_level(pin);
     s_sleep_log.pending = true;
     s_sleep_log.pending_at_s = now_s();
     s_sleep_log.pending_pin_level = static_cast<uint8_t>(level);
+    s_sleep_log.pending_errors = static_cast<uint8_t>(errors > 255 ? 255 : errors);
 
-    ESP_LOGI(TAG, "Powering down: GPIO%u=%s, auto light sleep off (%s), GPIO wake disarmed (%s)",
-             this->wakeup_pin_, level ? "high" : "LOW", esp_err_to_name(pm_err), esp_err_to_name(src_err));
+    ESP_LOGI(TAG, "Powering down: GPIO%u=%s, %u failed sleep call(s)", this->wakeup_pin_, level ? "high" : "LOW",
+             errors);
   }
 
   void dump_config() override {
@@ -300,15 +308,19 @@ class LightSleepComponent : public Component {
     ESP_LOGCONFIG(TAG, "  Sleep log: %s", this->sleep_log().c_str());
   }
 
-  // True when this boot is a deep-sleep wake on the touch INT pin.
+  // True when this boot is a deep-sleep wake on the touch INT pin (ext0, the
+  // only pin wake deep_sleep_1 arms).
   bool woke_on_touch_pin() const {
-    return this->reset_reason_ == ESP_RST_DEEPSLEEP &&
-           (this->wake_cause_ == ESP_SLEEP_WAKEUP_EXT0 || this->wake_cause_ == ESP_SLEEP_WAKEUP_EXT1);
+    return this->reset_reason_ == ESP_RST_DEEPSLEEP && this->wake_cause_ == ESP_SLEEP_WAKEUP_EXT0;
   }
 
   // The wake guard's fallback: no touch behind this wake, so log it and go
   // straight back to deep sleep. Called before wifi has started, so this
-  // skips ESPHome's teardown and arms ext0 the way deep_sleep_1 does.
+  // skips ESPHome's teardown (deep_sleep_1.begin_sleep() would tear down
+  // components that haven't set up yet) and re-implements the end of
+  // deep_sleep_1's sequence instead. COUPLED TO deep_sleep_1 in
+  // boards/freenove-s3.yaml: ext0 on wakeup_pin_, wake on LOW (`inverted:
+  // true`), pin held through sleep. Change one, change the other.
   void sleep_again_no_touch() {
     s_sleep_log.entries[0].no_touch = 1;
     ESP_LOGI(TAG, "Woke on GPIO%u with no touch; back to deep sleep", this->wakeup_pin_);
@@ -320,31 +332,42 @@ class LightSleepComponent : public Component {
     esp_deep_sleep_start();
   }
 
-  // e.g. "deep sleep, woke on EXT0" or "power-on".
+  // e.g. "deep sleep, woke on EXT0" or "power-on", plus a failure count if
+  // any of setup()'s GPIO/RTC/sleep calls failed.
   std::string wake_reason() const {
     std::string out = reset_reason_str(this->reset_reason_);
     if (this->wake_cause_ != ESP_SLEEP_WAKEUP_UNDEFINED) {
       out += ", woke on ";
       out += wake_cause_str(this->wake_cause_);
     }
+    if (this->setup_errors_ > 0)
+      out += ", " + std::to_string(this->setup_errors_) + " sleep setup call(s) failed";
     return out;
   }
 
-  // Newest first, e.g. "#7 EXT0 after 42s (pin high) | #6 power-on". Kept
-  // well under HA's 255-character state limit.
+  // Newest first, e.g. "#7 EXT0 after 42s (pin high) | #6 power-on". "E<n>"
+  // marks failed calls while going down. Entries that would push it past
+  // HA's 255-character state limit are dropped.
   std::string sleep_log() const {
     std::string out;
-    char buf[64];
+    char buf[96];
     for (int i = 0; i < s_sleep_log.count; i++) {
       const SleepLogEntry &e = s_sleep_log.entries[i];
       const char *what = e.reset_reason == ESP_RST_DEEPSLEEP ? wake_cause_str(e.wake_cause)
                                                               : reset_reason_str(e.reset_reason);
       if (e.down_s >= 0) {
-        snprintf(buf, sizeof(buf), "#%" PRIu32 " %s%s after %" PRId32 "s (pin %s)", e.seq, what,
-                 e.no_touch ? " no-touch" : "", e.down_s, e.pin_level_at_entry == 0 ? "LOW" : "high");
+        const char *level = e.pin_level_at_entry == 0 ? "LOW" : e.pin_level_at_entry == 1 ? "high" : "?";
+        char errs[8] = "";
+        if (e.powerdown_errors > 0)
+          snprintf(errs, sizeof(errs), " E%u", e.powerdown_errors);
+        snprintf(buf, sizeof(buf), "#%" PRIu32 " %s%s after %" PRId32 "s (pin %s)%s", e.seq, what,
+                 e.no_touch ? " no-touch" : "", e.down_s, level, errs);
       } else {
         snprintf(buf, sizeof(buf), "#%" PRIu32 " %s", e.seq, what);
       }
+      size_t add = strlen(buf) + (out.empty() ? 0 : 3);
+      if (out.size() + add > LOG_TEXT_MAX)
+        break;
       if (!out.empty())
         out += " | ";
       out += buf;
@@ -374,6 +397,7 @@ class LightSleepComponent : public Component {
     if (s_sleep_log.pending) {
       entry.down_s = static_cast<int32_t>(now_s() - s_sleep_log.pending_at_s);
       entry.pin_level_at_entry = s_sleep_log.pending_pin_level;
+      entry.powerdown_errors = s_sleep_log.pending_errors;
       s_sleep_log.pending = false;
     }
 
@@ -386,7 +410,16 @@ class LightSleepComponent : public Component {
     ESP_LOGI(TAG, "Boot: %s", this->wake_reason().c_str());
   }
 
+  // Logs a failed ESP-IDF call; returns whether it succeeded.
+  bool check_(esp_err_t err, const char *what, unsigned pin) {
+    if (err == ESP_OK)
+      return true;
+    ESP_LOGW(TAG, "%s(GPIO%u) failed: %s", what, pin, esp_err_to_name(err));
+    return false;
+  }
+
   uint8_t wakeup_pin_{0};
+  unsigned setup_errors_{0};
   std::vector<uint8_t> keep_level_pins_;
   std::vector<uint8_t> sleep_hold_high_pins_;
   std::vector<uint8_t> sleep_hold_pullup_pins_;

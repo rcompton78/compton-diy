@@ -156,6 +156,11 @@ esphome:
 # through deep sleep. `inverted: true` makes it wake on LOW. KEEP_AWAKE makes
 # deep_sleep.enter wait while INT is already low (a finger still down)
 # instead of sleeping straight into a wake.
+#
+# COUPLED TO light_sleep's sleep_again_no_touch() (the no-touch wake guard's
+# early-boot re-sleep, which can't go through this component before wifi has
+# set up): it re-arms ext0 on the same pin, wake on LOW, with the same hold.
+# Change one, change the other.
 deep_sleep:
   id: deep_sleep_1
   wakeup_pin:
