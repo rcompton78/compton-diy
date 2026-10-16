@@ -1,12 +1,31 @@
 # Espframe 7" portrait desk stand
 
-A 3D-printable portrait desk stand for the 7" espframe (Waveshare ESP32-S3-Touch-LCD-7, Rev1.2), with a wood-look picture frame round the screen. It's a parametric Python model built with [build123d](https://github.com/gumyr/build123d). One command rebuilds every print file, the preview images, and a set of fit and stability checks. The 10" Guition version will follow once this one has been printed and checked; everything known about it so far is in [docs/10-inch.md](docs/10-inch.md).
+A 3D-printable portrait desk stand for the 7" espframe (Waveshare ESP32-S3-Touch-LCD-7, Rev1.2), with a wood-look picture frame round the screen. It's a parametric Python model built with [build123d](https://github.com/gumyr/build123d). One command rebuilds every print file, the preview images, and a set of fit and stability checks. It comes in two variants (see below): the frame sits on a ledge on the foot, or stands on the desk in front of it. The 10" Guition version will follow once this one has been printed and checked; everything known about it so far is in [docs/10-inch.md](docs/10-inch.md).
 
 | | |
 |---|---|
 | ![Front three-quarter](docs/assembly-front.png) | ![Rear three-quarter](docs/assembly-rear.png) |
 | ![Frame over the glass](docs/frame-front.png) | ![Side](docs/side.png) |
 | ![Foot plan section](docs/foot-plan.png) | ![Frame print pose](docs/frame.png) |
+| ![On-desk front three-quarter](docs/assembly-front-desk.png) | ![On-desk side](docs/side-desk.png) |
+| ![On-desk bottom-front corner](docs/detail-desk.png) | ![On-desk foot](docs/foot-desk.png) |
+
+## Two variants
+
+Both are built from the same model (`STAND_VARIANT=ledge|desk`, see Building) and share the plate, the lid, the cable and the jack. Pick one.
+
+| | Ledge | On-desk |
+|---|---|---|
+| Frame sits on | felt on a 20 mm ledge on the foot | felt on the desk, in front of the foot |
+| Glass bottom above the desk | 23.6 mm | 19.0 mm |
+| Bottom border of the frame | 21 mm, like the other three sides | about 38 mm (21 on the other three) |
+| Tip-over push at the screen centre | 4.28 N | 4.39 N |
+| Plug bend drop to spare | 4.9 mm | **0.1 mm**: test-fit the real plug and cable first |
+| Frame print | `frame` (130 × 198 mm) | `frame-desk` (130 × 216 mm) |
+| Foot print | `foot` | `foot-desk` |
+| Shared prints | `plate`, `lid`, coupons | `plate`, `lid`, coupons |
+
+The on-desk foot has no ledge: its body starts just behind the plate, and a low shelf between the frame's side walls carries the deck slot and the plug's bend. The shelf stops 0.5 mm behind the frame face and 0.6 mm under the plate's bottom edge, so the frame (which carries the device on the desk) never bears on the foot. The screen can't come lower than about 19 mm with this straight plug: its R18 bend under the screen sets the floor.
 
 ## How it works
 
@@ -19,7 +38,8 @@ A 3D-printable portrait desk stand for the 7" espframe (Waveshare ESP32-S3-Touch
   - Four printed risers (Ø9 × 4.5) sit on the spacers, lifting the plate to 14.5 mm above the panel back. That clears the tallest part, the 12 mm UART2 JST, by 2 mm (designed to 12.5).
   - It fills the frame out to its walls (0.3 mm clear), so the back is closed at the sides and top, with a 2.3 mm gap left along the bottom between the plate edge and the ledge felt (the frame has no bottom wall since COM-431), and carries the frame on four screws near its side edges.
   - Two rows of vent slots low down and two near the top (4 slots of 20 × 3 mm each) let air through, since the back is otherwise closed.
-- **Foot (PETG).** The plate slides down onto a dovetail rail on the foot's post, and the frame's face settles on the felted ledge (20 mm high). The screen leans back at 15°, like a desktop picture frame (10° before COM-417).
+- **Foot (PETG).** The plate slides down onto a dovetail rail on the foot's post, and the frame's face settles on the felted ledge (20 mm high). In the on-desk variant the frame stands on felt on the desk instead, and the foot only holds the lean through the dovetail. The screen leans back at 15°, like a desktop picture frame (10° before COM-417).
+  - It's centred on the frame, not the glass (COM-442), so the frame lines up with both ends of the foot.
   - No ballast: the printed stand was sturdy without it, and the front under the ledge is solid. The foot is 120 mm deep.
   - The tray is open on top and closed with a lid that clicks in: two small ridges on each long edge snap into grooves in the tray's rim. Prise it out at the slot in its front-right corner.
 - **Power and data.** A Poyiccot USB 3.1 panel-mount extension (straight, 30 cm) passes every pin through:
@@ -27,6 +47,17 @@ A 3D-printable portrait desk stand for the 7" espframe (Waveshare ESP32-S3-Touch
   - The lead drops through a notch in the plate, past the open bottom of the frame and through the deck slot, bends at R18, lies as one loose coil in the tray, and ends at the panel jack in the rear wall.
   - Any USB-C charger works, and you can flash or read logs through the stand without taking it apart.
 - **Orientation.** The board's USB edge goes down: the landscape panel turned 90° counter-clockwise, seen from the front. Pick the matching rotation in the espframe settings (COM-362).
+
+## Changes in COM-442
+
+- **Foot centred on the frame.** The foot was centred on the glass, but the frame follows the picture area, which sits 1 mm left of the glass centre. On the printed stand, the frame overhung the foot's left end by 1.1 mm and the foot stuck out 0.9 mm past the frame on the right. The foot (130 mm wide) is now centred on the frame (130.2 mm), so the frame overhangs by 0.11 mm at each end. A new check keeps the two on one centre line.
+- The foot's outline, tray and lid rabbet move 1.02 mm left. The dovetail post, cable tunnel, deck slot and jack stay where they were under the screen. Every other check result is unchanged. The coil keeps 1.9 mm to the tray's right wall (was 2.9).
+
+**What to reprint:** only the foot. The lid only moves with the tray and its shape is unchanged, so keep yours. The frame and plate don't change.
+
+- **On-desk variant (new).** A second variant, alongside the ledge one: the frame's face and side walls run down to 1 mm felt on the desk with a level bottom, and the foot loses the ledge for a low shelf under the glass. The glass comes down from 23.6 to 19.0 mm, the bottom border grows to about 38 mm, and tip-over improves to 4.39 N. Same straight cable: its R18 bend now has only 0.1 mm of drop to spare. The deck, tray and lid keep the ledge foot's heights, so the lid is shared.
+
+**To build the on-desk variant:** print `frame-desk` and `foot-desk`, and reuse your plate and lid. Test-fit the plug and cable under the shelf before anything else (see Open items).
 
 ## Changes in COM-431
 
@@ -55,10 +86,10 @@ Every merge to `master` that changes the stand attaches `espframe-stand-<version
 pnpm nx run espframe-stand:cad
 ```
 
-This creates (or refreshes) a local Python venv (`setup.sh`, Python 3.10–3.13, pinned `requirements.txt`) and then runs `python -m stand.build`, which:
-- builds every part and writes `out/espframe-7in-stand-<part>.{stl,3mf,step}`. `out/` is gitignored;
+This creates (or refreshes) a local Python venv (`setup.sh`, Python 3.10–3.13, pinned `requirements.txt`) and then runs `python -m stand.build`, which builds both variants, each in its own process (`STAND_VARIANT=ledge|desk python -m stand.build --variant <v>` builds just one). For each, it:
+- builds every part and writes `out/espframe-7in-stand-<part>.{stl,3mf,step}`. The on-desk frame and foot get a `-desk` suffix, and the shared parts are written once. `out/` is gitignored;
 - runs the checks below, writes `out/checks.txt`, and exits non-zero if any check fails;
-- renders the preview PNGs into `docs/`. These are committed so this README shows them.
+- renders the preview PNGs into `docs/` (`-desk` suffix for the on-desk ones). These are committed so this README shows them.
 
 `pnpm nx run espframe-stand:release` runs `cad` and then packs the tarball into `dist/espframe-stand/` (`scripts/pack-hardware-release.sh`, which refuses to pack if `checks.txt` has any `FAIL`). On merge to `master`, `.github/workflows/release.yml` runs it on the self-hosted runner, with the venv cached outside the checkout, and attaches the tarball to the GitHub release.
 
@@ -67,6 +98,8 @@ The targets aren't called `build`, `test` or `install`, so PR CI, the firmware b
 Every dimension is a named constant in [`stand/params.py`](stand/params.py), tagged `MEASURED`, `SOURCED`, `DESIGN` or `EST`. Change a value and re-run the target. Material densities are parameters too: `PETG_DENSITY` for the structural parts, and `FRAME_DENSITY` for the wood-fill frame.
 
 ## Checks
+
+`out/checks.txt` has a section per variant, plus a `shared` one comparing the two passes' lids. Ledge:
 
 | Check | Result |
 |---|---|
@@ -90,6 +123,7 @@ Every dimension is a named constant in [`stand/params.py`](stand/params.py), tag
 | Only the picture shows through the opening | head-on, nothing but glass inside the opening: no frame, felt, plate, spacers or plug |
 | Plate edges meet the frame bosses | flush contact, no overlap |
 | Frame screw engagement | M3 × 8 through the 3 mm plate: 5 mm into a 6 mm hole with an M3 × 4 insert |
+| Frame and foot share a centre line | the frame overhangs each end of the foot by 0.11 mm (need equal within 0.1) |
 | Frame face seats on the ledge | square bottom edge of the face and the side walls on 1 mm felt; frame to foot never closer than 1.0 mm elsewhere |
 | Jack fits its recess and window | measured flange 25 × 8 × 6.5 bears on the 1.2 mm web inside the rear wall; no overlap |
 | Receptacle flush with the rear face | the metal USB-C receptacle (1.2 mm proud of the flange) pokes through a 9.3 × 3.7 window and ends flush |
@@ -97,20 +131,36 @@ Every dimension is a named constant in [`stand/params.py`](stand/params.py), tag
 | Foot-lock screw (optional) | M3 × 12 engages 5.8 mm in an M3 × 4 insert |
 | Every part fits the P1S bed | yes (frame 130 × 198 × 28) |
 
+On-desk, where it differs from the ledge (every other check gives the same result):
+
+| Check | Result |
+|---|---|
+| Frame bottom on the desk | the face and both side walls are cut level and sit on 1 mm felt; glass bottom 19.0 mm off the desk; bottom border 38 mm |
+| Frame clears the foot | closest 0.20 mm, no overlap: the frame carries the device on the desk |
+| Plug bend clears the shelf | no plug overlap; the cable's bend stays a cable radius off the shelf; **0.1 mm** of straight drop to spare |
+| Plate clears the shelf | 0.60 mm under the plate's bottom edge |
+| Shared lid (in the `shared` section) | the lid each pass builds is identical (volume and box), and the lid detent check seats it in the desk foot too, so the one printed lid fits both feet |
+| Cable length | 261 mm path of 300 mm (39 mm slack) |
+| Tip-over | **4.39 N** (need ≥ 4.25); sideways tip at 35° |
+| Every part fits the P1S bed | yes (frame 130 × 216 × 28) |
+
 The tip-over figure uses the modelled part volumes, each part's material density and an estimated fill fraction (`PRINT_FILL` 0.55 for PETG, `FRAME_FILL` 0.85 for the thin frame), plus the 354 g screen. Weigh your printed parts and update the fill values to tighten it.
 
 ## Parts to print
 
 Structural parts are PETG on the stock Bambu P1S profile with the 0.4 mm nozzle. The frame is wood-look PLA (see below).
 
+- **Ledge variant:** `frame`, `foot`, plus the shared `plate` and `lid`.
+- **On-desk variant:** `frame-desk`, `foot-desk`, plus the shared `plate` and `lid`.
+
 | File | Orientation | Settings |
 |---|---|---|
 | `coupon-dovetail` | As exported: the groove block lies groove-down (like the plate), and the five rail blocks stand on end so each rail runs straight up (like the foot post). Don't lay the rails flat: their angled sides print as undersized steps and every fit reads too loose. | 4 walls. **Print first.** 1–3 notches on top of each rail block mark 0.02 / 0.03 / 0.04 mm clearance per side (round 3; round 2's 0.05 was closest but a touch loose). `coupon-dovetail-rails` is the rails alone, to reuse an already-printed groove block. Pick the tightest that slides through by hand and set `SLIDE_CLEAR` to it. The rail tip keeps 0.4 mm off the groove floor (`DOVE_TIP_CLEAR`) whatever the clearance, in case the bridged floor sags. |
 | `coupon-receptacle` | Flat as exported | 100% infill, 0.2 mm layers. Three thin plates (1–3 notches = 1.0 / 1.2 / 1.4 mm), each a copy of the rear-wall web: receptacle window and two holes at the measured 16.5 mm flange pitch. Screw one onto the flange with the jack's own screws: the screws threading straight in confirms the pitch, and the plate the metal receptacle ends flush with sets `JACK_RECEPTACLE_PROUD` (plate 2, 1.2 mm). Plug your chargers into it to check the screw heads don't stop them seating. |
 | `plate` | As exported: back face on the bed, risers and spine up. The dovetail groove's undercut faces the bed and prints without supports. | 4 walls, 40% infill (the risers end up solid), 0.2 mm layers |
-| `foot` | As exported: upright on its base | 4 walls, 25% infill, no supports. |
+| `foot` / `foot-desk` | As exported: upright on its base | 4 walls, 25% infill, no supports. |
 | `lid` | Flat | 3 walls. If the detents are too stiff or too loose, tune `LID_DETENT_H` (0.3 mm). |
-| `frame` | As exported: face down on the bed, walls and bosses up. The bevel and outer chamfer are 45° overhangs: no supports. The bottom end of the frame is open. | Wood-look PLA, 3 walls, 20% infill. See the wood-look notes. |
+| `frame` / `frame-desk` | As exported: face down on the bed, walls and bosses up. The bevel and outer chamfer are 45° overhangs: no supports. The bottom end of the frame is open. | Wood-look PLA, 3 walls, 20% infill. See the wood-look notes. |
 
 ### Wood-look frame
 
@@ -134,8 +184,9 @@ Structural parts are PETG on the stock Bambu P1S profile with the 0.4 mm nozzle.
 | 4 | LUKAISEN M3 × 4 × 4.2 heat-set inserts (user's kit) | Frame side-wall bosses |
 | 1 | LUKAISEN M3 × 4 × 4.2 heat-set insert + 1 M3 × 12 | Optional foot lock (plate spine) |
 | 1 | 1 mm adhesive felt, ≈ 540 × 6 mm | Back of the frame face, over the black bezel only |
-| 1 | 1 mm adhesive felt, ≈ 130 × 28 mm | Ledge seat under the frame's face and side walls |
-| 4 | Small rubber feet | Under the foot |
+| 1 | 1 mm adhesive felt, ≈ 130 × 28 mm | Ledge variant: ledge seat under the frame's face and side walls |
+| 1 | 1 mm adhesive felt, ≈ 130 × 5 mm plus two ≈ 2 × 24 mm strips | On-desk variant: under the frame face's bottom and the side walls' bottoms |
+| 4 | Small rubber feet | Ledge variant only, under the foot. The on-desk foot stands straight on the desk: anything under it lifts the shelf towards the plate, which has only 0.6 mm to spare |
 
 No heat-set kit? Buy an M3 assortment. Inserts go in with a soldering iron, pressed in square and flush. Use **220–240 °C for PETG** (plate, foot) and **about 190–200 °C for the PLA frame**. The wood-fill frame is more brittle than PETG, so snug its M3 × 8 screws and don't crank them. Hole size is `INSERT_HOLE_D` (OD − 0.2 = 4.0 mm); confirmed snug and flush in PETG on a test print. The wood-fill frame is untested; if its inserts go in loose or crack a boss, tune it there.
 
@@ -144,12 +195,12 @@ No heat-set kit? Buy an M3 assortment. Inserts go in with a soldering iron, pres
 1. **Inserts.**
    - Four M3 × 4 inserts go into the frame's side-wall bosses, at PLA temperature.
    - If you're using the foot lock, one M3 × 4 insert goes into the plate spine from the groove floor.
-2. **Felt.** Stick the 6 mm felt strip on the back of the frame face, on the band that covers the black bezel. Keep its inner edge at least 1 mm outside the opening (`FELT_INSET`) so it stays hidden at an angle. Stick the wide strip on the foot's ledge.
+2. **Felt.** Stick the 6 mm felt strip on the back of the frame face, on the band that covers the black bezel. Keep its inner edge at least 1 mm outside the opening (`FELT_INSET`) so it stays hidden at an angle. Ledge variant: stick the wide strip on the foot's ledge. On-desk variant: stick the narrow strips under the frame's bottom edge, along the face and the two side walls, trimmed flush.
 3. **Jack.** With the lid off, set the jack inside the tray against the rear wall, receptacle outwards, so the flange drops into its recess and the receptacle pokes through the window. Fit the jack's own two screws from outside through the wall into the flange's threaded holes.
 4. **Cable.** Lay the spare cable as one loose coil in the tray beside the jack, no tighter than about 40 mm across. Then run it forward through the tunnel and push the plug up through the deck slot. Both are 16 mm wide, so the 12.5 × 6.5 plug passes with 1.75 mm each side.
 5. **Plate.** Screw the plate to the four brass spacers with M3 × 12 + washers. The spine and dovetail groove go to the bottom, near the USB edge.
 6. **Frame.** **Screw the frame to the plate now, before the plate goes on the foot.** The dovetail doesn't stop the plate on its own: the frame resting on the ledge felt sets the height. Slid on without the frame, the plate drops 2.3 mm until its own bottom edge lands on the felt, and the frame's holes no longer line up with the plate's. Lay the screen face down on a soft cloth and lower the frame over it. Fix it with four M3 × 8 + washers from behind, through the plate's edge holes into the frame inserts. Check the even border, and that the felt only rests on the black bezel.
-7. **Plug and mount.** Plug the straight plug into the board's UART USB-C. Lower the plate's groove onto the foot's rail and let it slide down until the frame's face sits on the felted ledge. The plug's lead runs down through the notch in the plate, past the frame's open bottom and into the deck slot.
+7. **Plug and mount.** Plug the straight plug into the board's UART USB-C. Lower the plate's groove onto the foot's rail and let it slide down until the frame's face sits on the felted ledge (on-desk: until the frame's felt meets the desk, with the foot standing on the desk too). The plug's lead runs down through the notch in the plate, past the frame's open bottom and into the deck slot.
    - Optionally, fit the foot-lock M3 × 12 from the back of the post.
    - Fit the lid front edge first, so its front ridges drop into their grooves, then press the rear edge down until it clicks. Only the thin rear wall flexes, and a lid pressed in flat makes it flex twice as far.
 8. **Rotation.** In the espframe settings, pick the rotation (90 or 270) that shows the picture upright.
@@ -160,7 +211,7 @@ These are estimated until the parts arrive. Each is a parameter in `stand/params
 
 - **Poyiccot jack:** measured and confirmed on test prints (flange 25 × 8 × 6.5, threaded M3 holes 16.5 apart, body 12.5 × 8, 34.5 long, receptacle 1.2 mm proud). Still to check: your chargers seat fully between the screw heads.
 - **Plug length:** confirm the 35 mm includes the 7.5 mm tip, so 27.5 mm sticks out.
-- **Cable:** confirm the diameter (4.5) and that it takes an R18 bend without levering on the board's port. There's 4.9 mm of drop to spare under the plug.
+- **Cable:** confirm the diameter (4.5) and that it takes an R18 bend without levering on the board's port. There's 4.9 mm of drop to spare under the plug on the ledge stand, but only **0.1 mm** on the on-desk stand: before printing its frame, test-fit the real plug and cable under the printed `foot-desk` shelf (if it's tight, raise `DESK_GLASS_Z`: each 1 mm up adds about 1 mm of drop, and lengthens the bottom border by the same).
 - **UART port:** confirm which of the two USB-C ports is the UART (CH343) one, and that the pair is on the left edge seen from the front.
 - **Weights:** weigh the printed parts, update `PRINT_FILL` / `FRAME_FILL`, and re-run to refresh the tip-over number.
 - **Frame fit:** print the frame and check that the border looks even on your panel. Tune `REVEAL` and `FRAME_FACE_W` if needed.

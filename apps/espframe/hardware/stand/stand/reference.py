@@ -7,7 +7,7 @@ from build123d import Align, Cylinder, Part, Pos, RectangleRounded, extrude
 
 from . import params as p
 from .foot import layout
-from .frames import box, screen_box
+from .frames import SCREEN_TO_WORLD, box, screen_box
 
 
 def panel() -> Part:
@@ -61,8 +61,16 @@ def face_felt() -> Part:
     return ring - hole
 
 
-def ledge_felt() -> Part:
-    """1 mm felt between the ledge and the frame's face and side walls (screen frame)."""
+def seat_felt() -> Part:
+    """1 mm felt under the frame's face and side walls (screen frame): on the ledge, or on the desk
+    for the desk variant."""
+    if p.DESK:
+        w = p.FRAME_WALL
+        footprint = (screen_box(p.FRAME_X[0], p.FRAME_X[1], -80, 0, -(p.FRAME_FACE_GAP + p.FRAME_FACE_T), -p.FRAME_FACE_GAP)
+                     + screen_box(p.FRAME_X[0], p.FRAME_X[0] + w, -80, 0, -p.FRAME_FACE_GAP, p.D_PLATE_BACK)
+                     + screen_box(p.FRAME_X[1] - w, p.FRAME_X[1], -80, 0, -p.FRAME_FACE_GAP, p.D_PLATE_BACK))
+        to_screen = SCREEN_TO_WORLD.inverse()
+        return footprint & (to_screen * box(-50, 250, -100, 300, 0, p.DESK_FELT_T))
     return screen_box(p.FRAME_X[0], p.FRAME_X[1], -p.SEAT, -p.RISE,
                       -(p.FRAME_FACE_GAP + p.FRAME_FACE_T), p.D_PLATE_BACK)
 

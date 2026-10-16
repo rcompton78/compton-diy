@@ -1,12 +1,18 @@
 """Foot: felted ledge, dovetail post, cable tunnel and open tray for a free cable coil,
-a solid front, the panel jack behind a thin web in the rear wall, and the click-in tray lid."""
+a solid front, the panel jack behind a thin web in the rear wall, and the click-in tray lid.
+
+The desk variant (params.DESK) has no ledge: the body starts behind the plate, and a low
+shelf between the frame's side walls carries the deck slot and the plug bend. The tray,
+lid, jack, post and dovetail are the same in both."""
 
 from dataclasses import dataclass
 
 from build123d import Align, Cylinder, Part, Pos, Rot
 
 from . import params as p
-from .frames import SCREEN_TO_WORLD, box, dovetail_prism, screen_box, screen_point, side_profile
+from .plate import plate_outline
+from .frames import (SCREEN_TO_WORLD, box, dovetail_prism, ledge_point, plane_y, screen_box, screen_point,
+                     side_profile)
 
 
 @dataclass(frozen=True)
@@ -16,7 +22,7 @@ class FootLayout:
     x1: float            # foot outer right edge
     in_x0: float         # tray inner left wall
     in_x1: float         # tray inner right wall
-    y_front: float       # front face of the lip (world Y)
+    y_front: float       # front face of the foot at the desk (world Y)
     z_deck: float        # deck height behind the plate (world Z)
     z_cavity_top: float  # underside of the lid
     front_zone_end: float
@@ -24,15 +30,42 @@ class FootLayout:
 
 
 def layout() -> FootLayout:
-    side = (p.FOOT_W - p.GLASS_W) / 2
-    x0, x1 = -side, p.GLASS_W + side
+    # Centred on the picture frame, not the glass: the frame follows the active area, which sits
+    # 1 mm left of the glass centre (COM-442).
+    cx = sum(p.FRAME_X) / 2
+    x0, x1 = cx - p.FOOT_W / 2, cx + p.FOOT_W / 2
     in_x0, in_x1 = x0 + p.WALL, x1 - p.WALL
-    front = screen_point(0, -p.SEAT, -(p.FRAME_FACE_GAP + p.FRAME_FACE_T + p.LEDGE_OVER))
-    z_deck = screen_point(0, -p.SEAT, p.D_PLATE_BACK + p.POST_FACE_CLEAR).Z
+    # Deck (and so tray and lid) heights from the ledge placement in both variants, so they share a lid.
+    z_deck = ledge_point(0, -p.SEAT, p.D_PLATE_BACK + p.POST_FACE_CLEAR).Z
+    front = plane_y(shelf_front_depth(), 0) if p.DESK else \
+        screen_point(0, -p.SEAT, -(p.FRAME_FACE_GAP + p.FRAME_FACE_T + p.LEDGE_OVER)).Y
     rc = p.COIL_W / 2 + p.CABLE_D / 2
     coil_cx = p.PORT_X + rc + (p.COIL_LEN - p.COIL_W) / 2
-    return FootLayout(x0, x1, in_x0, in_x1, front.Y, z_deck, z_deck - p.LID_T,
+    return FootLayout(x0, x1, in_x0, in_x1, front, z_deck, z_deck - p.LID_T,
                       p.FRONT_ZONE_D, coil_cx)
+
+
+def shelf_front_depth() -> float:
+    """Desk variant: depth of the shelf's front face (negative: in front of the glass front)."""
+    return -(p.FRAME_FACE_GAP - p.SHELF_FACE_GAP)
+
+
+def shelf_x() -> tuple:
+    """Desk variant: (x0, x1) of the shelf, inside the frame's side walls."""
+    w, g = p.FRAME_WALL, p.SHELF_WALL_GAP
+    return p.FRAME_X[0] + w + g, p.FRAME_X[1] - w - g
+
+
+def _desk_body(L: FootLayout) -> Part:
+    """Desk variant body: a block behind the plate up to the deck, plus the shelf under the glass."""
+    d_back = p.D_PLATE_BACK + p.POST_FACE_CLEAR
+    body = box(L.x0, L.x1, -60, p.FOOT_D, 0, L.z_deck) & (
+        SCREEN_TO_WORLD * screen_box(-50, 250, -300, 400, d_back, 400))
+    sx0, sx1 = shelf_x()
+    shelf_top = plate_outline()[2] - p.SHELF_PLATE_GAP     # screen y, under the plate's bottom edge
+    shelf = box(sx0, sx1, -60, p.FOOT_D, 0, L.z_deck) & (SCREEN_TO_WORLD * screen_box(
+        -50, 250, -300, shelf_top, shelf_front_depth(), d_back + 0.01))
+    return body + shelf
 
 
 def _sp(y, d):
@@ -43,18 +76,21 @@ def _sp(y, d):
 def build_foot() -> Part:
     L = layout()
 
-    # Body: side profile extruded across the width. The ledge is a flat seat (with felt)
-    # under the picture frame's face and side walls, from just in front of the frame face back
-    # to the plate; no lip, so nothing touches the glass.
-    seat_front = _sp(-p.SEAT, -(p.FRAME_FACE_GAP + p.FRAME_FACE_T + p.LEDGE_OVER))
-    profile = [
-        (seat_front[0], 0.0),
-        (p.FOOT_D, 0.0),
-        (p.FOOT_D, L.z_deck),
-        _sp(-p.SEAT, p.D_PLATE_BACK + p.POST_FACE_CLEAR),
-        seat_front,
-    ]
-    foot = side_profile(profile, L.x0, L.x1)
+    if p.DESK:
+        foot = _desk_body(L)
+    else:
+        # Body: side profile extruded across the width. The ledge is a flat seat (with felt)
+        # under the picture frame's face and side walls, from just in front of the frame face back
+        # to the plate; no lip, so nothing touches the glass.
+        seat_front = _sp(-p.SEAT, -(p.FRAME_FACE_GAP + p.FRAME_FACE_T + p.LEDGE_OVER))
+        profile = [
+            (seat_front[0], 0.0),
+            (p.FOOT_D, 0.0),
+            (p.FOOT_D, L.z_deck),
+            _sp(-p.SEAT, p.D_PLATE_BACK + p.POST_FACE_CLEAR),
+            seat_front,
+        ]
+        foot = side_profile(profile, L.x0, L.x1)
 
     # Open-topped tray behind the front zone, with a rabbet for the lid.
     tray = box(L.in_x0, L.in_x1, L.front_zone_end, p.FOOT_D - p.WALL, p.FLOOR, L.z_deck + 1)
@@ -66,8 +102,8 @@ def build_foot() -> Part:
         g = p.LID_DETENT_GROOVE_CLEAR
         foot -= _detent_prism(x0 - g, x1 + g, y_edge, out, p.LID_DETENT_H + g)
 
-    # Cable tunnel under the wedge, from the deck slot back into the tray.
-    foot -= box(p.PORT_X - p.TUNNEL_W / 2, p.PORT_X + p.TUNNEL_W / 2, L.y_front + p.WALL + 2, L.front_zone_end + 1,
+    # Cable tunnel under the wedge (or the desk variant's shelf), from the deck slot back into the tray.
+    foot -= box(p.PORT_X - p.TUNNEL_W / 2, p.PORT_X + p.TUNNEL_W / 2, tunnel_front(L), L.front_zone_end + 1,
                 p.FLOOR, L.z_cavity_top)
 
     # Deck slot through the ledge, big enough for the plug to pass during assembly,
@@ -104,6 +140,14 @@ def build_foot() -> Part:
     # Keep the post's buried lower end above the desk.
     foot = foot & box(L.x0 - 1, L.x1 + 1, -50, p.FOOT_D + 1, 0, 300)
     return foot
+
+
+def tunnel_front(L: FootLayout) -> float:
+    """World Y where the cable tunnel starts: behind the ledge's front wall, or the desk variant's
+    shelf front (measured at the tunnel roof, where the sloping shelf front is closest)."""
+    if p.DESK:
+        return plane_y(shelf_front_depth(), L.z_cavity_top) + p.SHELF_TUNNEL_SKIN
+    return L.y_front + p.WALL + 2
 
 
 def build_rail(clear: float = p.SLIDE_CLEAR) -> Part:
