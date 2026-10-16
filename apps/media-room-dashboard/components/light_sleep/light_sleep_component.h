@@ -241,10 +241,10 @@ class LightSleepComponent : public Component {
     pm_config.max_freq_mhz = 160;
     pm_config.min_freq_mhz = 40;
     pm_config.light_sleep_enable = true;
-    this->setup_errors_ += !this->check_(esp_pm_configure(&pm_config), "esp_pm_configure", pin);
+    this->setup_errors_ += !this->check_(esp_pm_configure(&pm_config), "esp_pm_configure", -1);
 
     this->setup_errors_ += !this->check_(gpio_wakeup_enable(pin, GPIO_INTR_LOW_LEVEL), "gpio_wakeup_enable", pin);
-    this->setup_errors_ += !this->check_(esp_sleep_enable_gpio_wakeup(), "esp_sleep_enable_gpio_wakeup", pin);
+    this->setup_errors_ += !this->check_(esp_sleep_enable_gpio_wakeup(), "esp_sleep_enable_gpio_wakeup", -1);
 
     for (uint8_t keep : this->keep_level_pins_)
       this->setup_errors_ += !this->check_(gpio_sleep_sel_dis(static_cast<gpio_num_t>(keep)), "gpio_sleep_sel_dis", keep);
@@ -264,9 +264,9 @@ class LightSleepComponent : public Component {
     pm_config.max_freq_mhz = 160;
     pm_config.min_freq_mhz = 160;
     pm_config.light_sleep_enable = false;
-    errors += !this->check_(esp_pm_configure(&pm_config), "esp_pm_configure", pin);
+    errors += !this->check_(esp_pm_configure(&pm_config), "esp_pm_configure", -1);
     errors += !this->check_(gpio_wakeup_disable(pin), "gpio_wakeup_disable", pin);
-    errors += !this->check_(esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO), "disable GPIO wake source", pin);
+    errors += !this->check_(esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_GPIO), "disable GPIO wake source", -1);
 
     // The digital pull-up from setup() stops applying once ext0 moves the pin
     // to the RTC mux; this one keeps INT from floating in deep sleep.
@@ -410,11 +410,16 @@ class LightSleepComponent : public Component {
     ESP_LOGI(TAG, "Boot: %s", this->wake_reason().c_str());
   }
 
-  // Logs a failed ESP-IDF call; returns whether it succeeded.
-  bool check_(esp_err_t err, const char *what, unsigned pin) {
+  // Logs a failed ESP-IDF call; returns whether it succeeded. Pass pin < 0
+  // for calls that aren't scoped to a single GPIO.
+  bool check_(esp_err_t err, const char *what, int pin) {
     if (err == ESP_OK)
       return true;
-    ESP_LOGW(TAG, "%s(GPIO%u) failed: %s", what, pin, esp_err_to_name(err));
+    if (pin >= 0) {
+      ESP_LOGW(TAG, "%s(GPIO%d) failed: %s", what, pin, esp_err_to_name(err));
+    } else {
+      ESP_LOGW(TAG, "%s failed: %s", what, esp_err_to_name(err));
+    }
     return false;
   }
 
