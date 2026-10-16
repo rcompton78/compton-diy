@@ -63,7 +63,10 @@ Three power tiers, layered:
    wifi is connected, or `disconnected_sleep_timeout` (5min) after it while
    wifi is down (router off, out of range), so a lost network can't run the
    battery flat. The connecting and setup pages stay lit until then. Only
-   first-time setup (no saved wifi credentials) never sleeps. The panel goes
+   first-time setup (no saved wifi credentials) never sleeps, and a phone
+   joined to the fallback AP (re-entering wifi details) holds it awake. The
+   api's `reboot_timeout` is off, so a device on wifi that can't reach HA
+   still reaches deep sleep instead of rebooting every 15 minutes. The panel goes
    into its own sleep mode (SLPIN) first. Touching the screen wakes it (ext0 on the touch
    controller's INT line, GPIO17), but that's a full reboot and reconnect.
 

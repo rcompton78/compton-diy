@@ -56,6 +56,8 @@ esphome:
   project:
     name: "compton-diy.media-room-dashboard"
     version: "${firmware_version}"
+  includes:
+    - ../common/ap_clients.h
   # Start the sleep clock at boot: if wifi never connects, on_connect and
   # on_disconnect never fire to start it.
   on_boot:
@@ -146,6 +148,16 @@ interval:
                 value: "true"
             - script.execute: wake_screen
             - lvgl.page.show: setup_page
+      # Someone joined to the fallback AP is re-entering wifi details from a
+      # phone, so nothing touches this screen: keep restarting the offline
+      # deep-sleep countdown while they're connected (COM-214).
+      - if:
+          condition:
+            and:
+              - wifi.ap_active:
+              - lambda: 'return fallback_ap_has_clients();'
+          then:
+            - script.execute: restart_sleep_timer
 
 captive_portal:
 
@@ -175,6 +187,12 @@ logger:
 api:
   encryption:
     key: !secret api_encryption_key
+  # No reboot when HA stays away. The default 15min would reboot a device
+  # that's on wifi but can't reach HA every 15 minutes, so it never reached
+  # the 30min deep sleep (COM-214). Deep sleep's reboot-on-wake retries the
+  # connection anyway. (wifi's own reboot_timeout never applies here: ESPHome
+  # skips it when a fallback AP is configured.)
+  reboot_timeout: 0s
   # Once HA is gone the imported states below are frozen at whatever they
   # last were, so drop every button back to neutral rather than show state
   # that may no longer be true. HA re-sends every subscribed state when it
@@ -414,7 +432,7 @@ script:
   # failed connect, even with saved credentials, so the AP being up doesn't
   # mean setup is happening. Only a device with no saved credentials (first
   # -time setup, where the activity is on a phone, not this screen) stays
-  # awake.
+  # awake, plus any time a phone is joined to the AP (see the AP interval).
   - id: offline_sleep_countdown
     mode: restart
     then:
