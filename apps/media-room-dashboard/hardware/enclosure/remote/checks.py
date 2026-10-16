@@ -135,27 +135,39 @@ def run(parts: dict, ch: p.Charger) -> list:
     pl = ref.path_length(pig)
     pw, pwho = clearance(pig, 0, 2)
     in_keep = any(keepout.distance_to(Vertex(*pt)) < p.WIRE_D / 2 for pt in ref.path_xyz(pig)[1:-2])
-    add("Pigtail run (terminal → BAT socket)", pl <= p.PIGTAIL_L and pw >= p.WIRE_D / 2 and not in_keep,
-        f"{pl:.0f} mm of the EST {p.PIGTAIL_L:g} mm pigtail; nearest part {pw:.2f} mm from the wire's centreline ({pwho}); "
+    add("Pigtail run (terminal → BAT socket)", pw >= p.WIRE_D / 2 and not in_keep,
+        f"{pl:.0f} mm run, so buy a pigtail of at least {ref.pigtail_min_length(ch)} mm "
+        f"(+{p.PIGTAIL_STRIP:g} stripped into the terminal, +{p.PIGTAIL_SLACK:g} slack); "
+        f"nearest part {pw:.2f} mm from the wire's centreline ({pwho}); "
         f"{'crosses' if in_keep else 'stays out of'} the back-parts keep-out until the socket")
     x_chan0 = pk.x1 + p.RIB_T
     chan_w = p.INNER_HALF_W - p.LEDGE_W - x_chan0
     chan_d = p.D_COVER_INNER - p.D_PARTS_BACK
     add("Wire channel beside the cell", min(chan_w, chan_d) >= p.MIN_CHANNEL,
         f"{chan_w:.1f} wide × {chan_d:.1f} deep (above the ledge; need ≥ {p.MIN_CHANNEL:g} for the 2-wire pigtail)")
-    lead = ref.cell_lead_path(ch)
-    ll = ref.path_length(lead)
-    lw, lwho = clearance(lead, 1, 1)   # starts on the cell, ends in the plug
     jz = ref.jst_plug_zone(ch)
     j_over = (jz & shell).volume + (jz & cover).volume
-    add("Cell lead run (cell → JST-PH)", ll <= p.CELL_LEAD_L and lw >= p.WIRE_D / 2,
-        f"{ll:.0f} mm of the EST {p.CELL_LEAD_L:g} mm lead; nearest part {lw:.2f} mm from its centreline ({lwho})")
-    x_exit = lead[0][0]
-    rib_end = pk.x1 - p.LEAD_GAP
-    margin = min(x_exit - rib_end, pk.x1 - x_exit)
-    add("Cell lead clears the bottom rib", margin >= 2.0,
-        f"lead leaves the bottom-right corner {p.CELL_LEAD_INSET:g} mm in (EST), through the {p.LEAD_GAP:g} mm gap with "
-        f"{margin:.1f} mm to spare (need ≥ 2)")
+    # Fitted label towards the board, the photo's taped corner is the right-hand one: the centre and
+    # right-corner runs must fit. The left-corner run only happens with the cell flipped.
+    runs = ref.cell_lead_paths(ch)
+    worst_len, worst_clear, notes = 0.0, math.inf, []
+    for name in ("centre", "via right corner"):
+        ln = ref.path_length(runs[name])
+        cl, who = clearance(runs[name], 1, 1)   # starts on the cell, ends in the plug
+        worst_len, worst_clear = max(worst_len, ln), min(worst_clear, cl)
+        notes.append(f"{name} {ln:.0f} mm ({cl:.2f} from {who})")
+    flipped = ref.path_length(runs["via left corner"])
+    flipped_note = ("fits too" if flipped <= p.CELL_LEAD_L else
+                    "too long, so peel the lead off the end and run it from the centre")
+    add("Cell lead run (cell → JST-PH)", worst_len <= p.CELL_LEAD_L and worst_clear >= p.WIRE_D / 2,
+        f"longest {worst_len:.0f} mm of the measured {p.CELL_LEAD_L:g} mm lead: " + "; ".join(notes)
+        + f". Cell flipped (lead via the left corner): {flipped:.0f} mm, {flipped_note}")
+    rib_top = p.D_COVER_INNER - p.BOTTOM_RIB_H
+    over_rib = rib_top - (ref.cell_lead_d() + p.WIRE_D / 2)
+    catch = p.BOTTOM_RIB_H - p.CELL_TAPE_T
+    add("Cell lead clears the bottom rib", over_rib >= 0.3 and catch >= 1.0,
+        f"the {p.BOTTOM_RIB_H:g} mm bottom rib passes {over_rib:.2f} mm under the lead wherever it leaves the cell end "
+        f"(need ≥ 0.3), and still catches {catch:.1f} mm of the cell's end")
     add("JST-PH plug bay", j_over < EPS,
         f"plug {p.JST_PLUG[0]:g} × {p.JST_PLUG[1]:g} × {p.JST_PLUG[2]:g} plus {p.JST_BEND:g} mm for the lead to turn: "
         f"overlap {j_over:.4f} mm³")

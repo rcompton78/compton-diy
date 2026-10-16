@@ -206,29 +206,55 @@ def pigtail_path(ch: p.Charger) -> np.ndarray:
     return np.array(pts)
 
 
-def cell_lead_path(ch: p.Charger) -> np.ndarray:
-    """JST-PH cell lead: out of the cell's bottom-right corner → behind the antenna end →
-    down into the bay beside the charger → into the JST-PH socket."""
+def cell_lead_d() -> float:
+    """Depth of the lead where it leaves the cell: mid-thickness of the cell's end."""
+    back = p.D_COVER_INNER - p.CELL_TAPE_T
+    return back - p.CELL_T / 2
+
+
+def cell_lead_paths(ch: p.Charger) -> dict:
+    """JST-PH cell lead runs, out of the protection-PCB end (bottom) → over the low bottom rib →
+    behind the antenna end → down into the bay beside the charger → into the JST-PH socket.
+
+    The exit is measured at CELL_LEAD_FROM_EDGE (≈ centred); the wires may also be taped along
+    the end to either corner first, so all three runs are returned.
+    """
     f = ChargerFrame(ch)
-    pk = cell_pocket(ch)
     c = cell(ch).bounding_box()
-    d_mid = (c.min.Z + c.max.Z) / -2
-    x_exit = c.max.X - p.CELL_LEAD_INSET         # bottom-right corner (label towards the board, PCB end down)
+    d_mid = cell_lead_d()
+    x_exit = c.max.X - p.CELL_LEAD_FROM_EDGE
     bxc = (ch.jst[0] + ch.jst[1]) / 2
     x_plug = f.x(ch.jst[3]) + p.JST_PLUG[2]
     d_plug = f.d(0) + 0.3 + p.JST_PLUG[1] / 2
-    pts = [
-        (x_exit, c.min.Y, d_mid),
-        (x_exit, c.min.Y - 6.0, d_mid),
+    off = p.WIRE_D / 2 + 0.1          # wire centreline just off the cell's end face
+    tail = [
         (x_plug + 2.5, f.y(ch.length) + 2.0, d_mid),
         (x_plug + 3.5, f.y(bxc) + 5.0, d_plug + 1.0),
         (x_plug + 0.5, f.y(bxc), d_plug),
     ]
-    return np.array(pts)
+    runs = {}
+    for name, x_turn in (("centre", x_exit), ("via left corner", c.min.X + 1.0), ("via right corner", c.max.X - 1.0)):
+        pts = [(x_exit, c.min.Y, d_mid), (x_exit, c.min.Y - off, d_mid)]
+        if x_turn != x_exit:
+            pts.append((x_turn, c.min.Y - off, d_mid))
+        pts.append((x_turn, c.min.Y - 6.0, d_mid))
+        runs[name] = np.array(pts + tail)
+    return runs
+
+
+def cell_lead_path(ch: p.Charger) -> np.ndarray:
+    """The straight (centre) run, for renders."""
+    return cell_lead_paths(ch)["centre"]
 
 
 def path_length(pts: np.ndarray) -> float:
     return float(np.sum(np.linalg.norm(np.diff(pts, axis=0), axis=1)))
+
+
+def pigtail_min_length(ch: p.Charger) -> int:
+    """Shortest MX1.25 pigtail to buy (socket to bare ends): run + strip + slack, rounded up to 5 mm."""
+    need = path_length(pigtail_path(ch)) + p.PIGTAIL_STRIP + p.PIGTAIL_SLACK
+    return int(-(-need // 5) * 5)
 
 
 def path_xyz(pts: np.ndarray) -> np.ndarray:
