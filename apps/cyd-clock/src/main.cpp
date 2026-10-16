@@ -1094,7 +1094,7 @@ static constexpr int GRYFFINDOR_LION_W = 13;
  */
 static void drawGryffindorBadge(int cx, int cy) {
     int x0 = cx - 10, y = cy + BADGE_TOP_DY;
-    const int rows = sizeof(GRYFFINDOR_SHIELD_INSET);
+    const int rows = sizeof(GRYFFINDOR_SHIELD_INSET) / sizeof(GRYFFINDOR_SHIELD_INSET[0]);
     for (int r = 0; r < rows; r++) {
         int in = GRYFFINDOR_SHIELD_INSET[r], w = 21 - 2 * in;
         tft.drawFastHLine(x0 + in, y + r, w, C_DARK);
