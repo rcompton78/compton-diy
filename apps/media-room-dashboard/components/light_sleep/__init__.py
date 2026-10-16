@@ -1,0 +1,50 @@
+"""ESPHome component for ESP-IDF automatic light sleep and deep-sleep wake diagnostics (COM-214)."""
+
+import esphome.codegen as cg
+import esphome.config_validation as cv
+from esphome.const import CONF_ID
+
+CODEOWNERS = ["@rcompton78"]
+DEPENDENCIES = ["esp32"]
+
+light_sleep_ns = cg.esphome_ns.namespace("light_sleep")
+LightSleepComponent = light_sleep_ns.class_("LightSleepComponent", cg.Component)
+
+CONF_WAKEUP_PIN = "wakeup_pin"
+CONF_KEEP_LEVEL_PINS = "keep_level_pins"
+CONF_SLEEP_HOLD_HIGH_PINS = "sleep_hold_high_pins"
+CONF_SLEEP_HOLD_PULLUP_PINS = "sleep_hold_pullup_pins"
+
+# A plain pin number rather than a full GPIO pin schema: this talks to the
+# ESP-IDF GPIO/sleep APIs directly rather than through ESPHome's own GPIOPin
+# abstraction, so it deliberately sits outside ESPHome's pin-reuse tracking --
+# the same physical pin (GPIO17, the FT6336U's INT line) is also deep_sleep_1's
+# ext0 `wakeup_pin` in boards/freenove-s3.yaml, and a full pin schema here
+# would collide with that.
+CONFIG_SCHEMA = cv.Schema(
+    {
+        cv.GenerateID(): cv.declare_id(LightSleepComponent),
+        cv.Required(CONF_WAKEUP_PIN): cv.int_range(min=0, max=48),
+        # Output pins that must hold their level through each light sleep
+        # (backlight, display CS/DC). See keep_level_pins in
+        # light_sleep_component.h.
+        cv.Optional(CONF_KEEP_LEVEL_PINS, default=[]): cv.ensure_list(cv.int_range(min=0, max=48)),
+        # Pins held through deep sleep instead of isolated: driven high (e.g.
+        # an active-low reset line), or inputs with a pull-up (e.g. I2C).
+        cv.Optional(CONF_SLEEP_HOLD_HIGH_PINS, default=[]): cv.ensure_list(cv.int_range(min=0, max=48)),
+        cv.Optional(CONF_SLEEP_HOLD_PULLUP_PINS, default=[]): cv.ensure_list(cv.int_range(min=0, max=48)),
+    }
+).extend(cv.COMPONENT_SCHEMA)
+
+
+async def to_code(config):
+    var = cg.new_Pvariable(config[CONF_ID])
+    await cg.register_component(var, config)
+    cg.add(var.set_wakeup_pin(config[CONF_WAKEUP_PIN]))
+    for pin in config[CONF_KEEP_LEVEL_PINS]:
+        cg.add(var.add_keep_level_pin(pin))
+    for pin in config[CONF_SLEEP_HOLD_HIGH_PINS]:
+        cg.add(var.add_sleep_hold_high_pin(pin))
+    for pin in config[CONF_SLEEP_HOLD_PULLUP_PINS]:
+        cg.add(var.add_sleep_hold_pullup_pin(pin))
+    cg.add_global(cg.RawStatement('#include "esphome/components/light_sleep/light_sleep_component.h"'))

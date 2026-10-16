@@ -7,7 +7,8 @@
 # To port this app to a different board (e.g. the AliExpress 2.8" board this
 # card was originally targeting, see docs/diy-102-bringup/HANDOFF.md), add a
 # new file here — `boards/<name>.yaml` — that provides the same component
-# ids this file provides (`tft_display`, `tft_touch`, `backlight_output`) and
+# ids this file provides (`tft_display`, `tft_touch`, `backlight_output`,
+# `deep_sleep_1` with a touch wake source) and
 # point a new `builds/<name>.yaml` at it instead of this file. Nothing in
 # common/dashboard.yaml needs to change.
 #
@@ -36,13 +37,48 @@
 # setup() runs) stand in for it. interrupt_pin is also left unset (polling
 # mode) since it's optional and this isolates the fix to the one thing that
 # was actually broken.
+#
+# GPIO17 (touch INT) doubles as the wake source for both of COM-214's sleep
+# tiers below (light sleep's GPIO wakeup, deep sleep's ext0) -- independent of
+# the interrupt_pin/polling decision above: both wake mechanisms are raw
+# hardware-level pin watches,
+# unrelated to whether ESPHome's touchscreen driver is using this pin for
+# interrupt-driven reads. They work because the FT6336U's INT pin still
+# pulses low on every touch (~1ms pulses while held) whenever the chip's
+# G_MODE register (0xA4) is in "trigger" mode, regardless of ESPHome's
+# interrupt_pin setting -- see the on_boot lambda below, which writes that
+# register explicitly rather than relying on it defaulting to trigger mode
+# out of reset (true for this chip family per its datasheet, but not worth
+# depending on across chip revisions/batches).
+#
+# backlight_output is a plain gpio output (on/off only), not ledc/PWM, even
+# though it's never dimmed to anything but 0%/100% either way -- this
+# matters for COM-214 option 3 (see components/light_sleep/): light sleep
+# clock-gates APB, which stops LEDC's PWM waveform generation entirely and
+# showed up as the backlight visibly flickering in testing. A static GPIO
+# level doesn't need a running clock to hold its state, so it isn't affected.
 # =============================================================================
 
 esp32:
   variant: ESP32S3
   flash_size: 16MB
+  # 160MHz (down from the board's default 240MHz) plus the sdkconfig options
+  # below are ESP-IDF's own documented reference config for automatic light
+  # sleep (COM-214 option 3, see components/light_sleep/) --
+  # https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/low-power-mode/low-power-mode-wifi.html
+  # CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION keeps the native USB-Serial/JTAG
+  # console usable while a host is attached (light sleep otherwise gates the
+  # USB PHY clock too and drops the serial connection on every sleep cycle,
+  # per https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/usb-serial-jtag-console.html)
+  # -- dev/debugging aid only, irrelevant once running standalone on battery
+  # with nothing plugged into USB.
+  cpu_frequency: 160MHZ
   framework:
     type: esp-idf
+    sdkconfig_options:
+      CONFIG_PM_ENABLE: "y"
+      CONFIG_FREERTOS_USE_TICKLESS_IDLE: "y"
+      CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION: "y"
 
 psram:
   mode: octal
@@ -50,14 +86,199 @@ psram:
 
 esphome:
   on_boot:
+    # Wake guard (COM-214): after a deep-sleep wake on the touch INT pin, check
+    # that a finger is or just was down before wifi starts. If not, go back
+    # to deep sleep without a reconnect. Runs after the touchscreen's setup
+    # (priority 600) and before wifi's (250). Polls for ~200ms because the
+    # tap that woke it may still be landing; a finger still down shows as
+    # TD_STATUS > 0, and one that already lifted as a lift-up event (P1_XH
+    # bits 7:6 == 01). Fails open: if the chip never answers over I2C, boot
+    # normally rather than leave a wedged chip sending every touch wake
+    # straight back to sleep.
+    - priority: 300
+      then:
+        - lambda: |-
+            if (!id(light_sleep_1).woke_on_touch_pin())
+              return;
+            bool answered = false;
+            for (int i = 0; i < 10; i++) {
+              uint8_t td = 0, xh = 0xFF;
+              if (id(tft_touch).read_byte(0x02, &td)) {
+                answered = true;
+                if ((td & 0x0F) > 0)
+                  return;
+              }
+              if (id(tft_touch).read_byte(0x03, &xh)) {
+                answered = true;
+                if ((xh >> 6) == 0x01)
+                  return;
+              }
+              delay(20);
+            }
+            if (!answered) {
+              ESP_LOGW("wake_guard", "Touch controller didn't answer; booting normally");
+              return;
+            }
+            // ESPHome's powerdown hooks (which send the panel SLPIN) don't
+            // run on this path, and the display is already initialised.
+            id(tft_display).on_powerdown();
+            id(light_sleep_1).sleep_again_no_touch();
+    # The panel spends deep sleep in SLPIN (ili9xxx's on_powerdown()). The
+    # ILI9341 wants ~120ms after SLPOUT before DISPON takes reliably, but a
+    # CUSTOM init_sequence can't express that delay (its delay entry needs a
+    # 0xFF length byte), so init sends SLPOUT then DISPON back to back. It has
+    # come back fine on-device; resending DISPON after the settle time makes
+    # it datasheet-correct. Runs right after the display's setup (800).
+    - priority: 790
+      then:
+        - lambda: |-
+            delay(120);
+            id(tft_display).command(0x29);  // DISPON
     - priority: -100
       then:
-        - output.set_level:
-            id: backlight_output
-            level: 100%
+        - output.turn_on: backlight_output
+        - globals.set:
+            id: boot_count
+            value: !lambda 'return id(boot_count) + 1;'
+        - lambda: |-
+            id(tft_touch).write_byte(0xA4, 0x01);  // G_MODE = trigger, see note above
+
+# Idle-timeout deep sleep (COM-214 tier 3, entered by common/dashboard.yaml's
+# deep_sleep_countdown script). No sleep_duration/run_duration: it only ever
+# sleeps when the app calls deep_sleep.enter, and only a touch wakes it.
+#
+# ext0 on GPIO17 (the FT6336U's INT, pulsed low on touch) is the only wake
+# source. On the ESP32-S3 a pin can wake deep sleep only through ext0/ext1:
+# light_sleep's GPIO wakeup is light-sleep only, and light_sleep disarms it in
+# on_powerdown() before this arms ext0 (see light_sleep_component.h for the
+# self-wake bug that came from leaving it armed). On entry ESPHome sets the
+# pin's sleep pull-up from `pullup: true`, makes it an input and holds it
+# through deep sleep. `inverted: true` makes it wake on LOW. KEEP_AWAKE makes
+# deep_sleep.enter wait while INT is already low (a finger still down)
+# instead of sleeping straight into a wake.
+#
+# COUPLED TO light_sleep's sleep_again_no_touch() (the no-touch wake guard's
+# early-boot re-sleep, which can't go through this component before wifi has
+# set up): it re-arms ext0 on the same pin, wake on LOW, with the same hold.
+# Change one, change the other.
+deep_sleep:
+  id: deep_sleep_1
+  wakeup_pin:
+    number: GPIO17
+    inverted: true
+    mode:
+      input: true
+      pullup: true
+  wakeup_pin_mode: KEEP_AWAKE
+
+# COM-214 tier 1: automatic light sleep, running underneath the dashboard's
+# backlight-off (tier 2) and deep sleep (tier 3) tiers -- it lets the
+# CPU/WiFi drop into light sleep during idle gaps, which backlight control
+# alone can't do. It also records why each boot happened (see the
+# diagnostics below). See components/light_sleep/light_sleep_component.h.
+# Needs the gpio backlight output and CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION
+# above.
+external_components:
+  - source:
+      type: local
+      path: ../components
+    components: [light_sleep]
+
+light_sleep:
+  id: light_sleep_1
+  wakeup_pin: 17
+  # Backlight, display CS, display DC: without this, every light sleep cut
+  # the backlight and floated the panel's control lines (screen flicker on
+  # battery/charger, see light_sleep_component.h). Touch I2C SDA/SCL too, so
+  # the bus keeps its pull-ups instead of floating on every light sleep.
+  keep_level_pins: [45, 10, 46, 16, 15]
+  # Touch RST high and touch I2C pulled up through deep sleep, instead of
+  # isolated and floating (spurious ext0 wakes, see light_sleep_component.h).
+  sleep_hold_high_pins: [18]
+  sleep_hold_pullup_pins: [15, 16]
+
+# Deep-sleep diagnostics, readable in HA and the web portal with no serial
+# console attached (battery testing). Boot Count lives in NVS, so it keeps
+# counting across power loss and reflashes; Sleep Log lives in RTC memory, so
+# it covers boots since the last power loss.
+globals:
+  - id: boot_count
+    type: int
+    restore_value: true
+    initial_value: "0"
+
+text_sensor:
+  - platform: template
+    name: "Wake Reason"
+    entity_category: diagnostic
+    icon: "mdi:power-sleep"
+    update_interval: 60s
+    lambda: 'return id(light_sleep_1).wake_reason();'
+  - platform: template
+    name: "Sleep Log"
+    entity_category: diagnostic
+    icon: "mdi:history"
+    update_interval: 60s
+    lambda: 'return id(light_sleep_1).sleep_log();'
+
+# Battery voltage/percentage (COM-214): this exact board (Freenove ESP32-S3
+# CYD 2.8", product fnk0104) has a built-in BAT JST connector wired through a
+# factory 2:1 voltage divider into GPIO9, scaling the battery's up-to-4.2V
+# range down to a safe 0-2.1V for the ADC -- confirmed via Freenove's own docs
+# for this board: https://docs.freenove.com/projects/fnk0104/en/latest/fnk0104/codes/MAIN/5_Battery_Voltage.html
+# (their own example reads raw millivolts and multiplies by 2.0 to undo the
+# divider, matched here via the `multiply: 2.0` filter). The percentage below
+# is a standard 1S LiPo discharge-curve approximation (calibrate_linear) --
+# it isn't calibrated to any specific cell and will drift under load or at
+# temperature extremes; a real fuel-gauge IC (e.g. MAX17048) would be
+# meaningfully more accurate if this needs to be trustworthy rather than
+# roughly-indicative.
+sensor:
+  - platform: adc
+    pin: GPIO9
+    id: battery_voltage
+    name: "Battery Voltage"
+    entity_category: diagnostic
+    device_class: voltage
+    unit_of_measurement: "V"
+    accuracy_decimals: 2
+    update_interval: 60s
+    attenuation: 12db
+    filters:
+      - multiply: 2.0
+  - platform: copy
+    source_id: battery_voltage
+    name: "Battery Level"
+    id: battery_level
+    entity_category: diagnostic
+    device_class: battery
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
+    filters:
+      - calibrate_linear:
+          - 3.30 -> 0.0
+          - 3.50 -> 10.0
+          - 3.66 -> 25.0
+          - 3.79 -> 45.0
+          - 3.87 -> 60.0
+          - 3.95 -> 72.0
+          - 4.02 -> 82.0
+          - 4.11 -> 92.0
+          - 4.20 -> 100.0
+      - clamp:
+          min_value: 0.0
+          max_value: 100.0
+  - platform: template
+    name: "Boot Count"
+    entity_category: diagnostic
+    icon: "mdi:counter"
+    accuracy_decimals: 0
+    state_class: total_increasing
+    update_interval: 60s
+    lambda: 'return id(boot_count);'
 
 output:
-  - platform: ledc
+  - platform: gpio
     id: backlight_output
     pin: GPIO45
 

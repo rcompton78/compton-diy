@@ -13,8 +13,10 @@
 # address) and firmware update controls, also shown in the unprotected web
 # portal at http://<device-ip>/ (see web_server below).
 #
-# Requires a board package to have already defined `tft_display` (display)
-# and `tft_touch` (touchscreen) — see boards/freenove-s3.yaml.
+# Requires a board package to have already defined `tft_display` (display),
+# `tft_touch` (touchscreen), `backlight_output` (on/off output) and
+# `deep_sleep_1` (deep_sleep with a touch wake source) — see
+# boards/freenove-s3.yaml.
 # =============================================================================
 
 substitutions:
@@ -30,11 +32,38 @@ substitutions:
   tv_media_player: "media_player.living_room_tv"
   tv_game_app_id: "tvinput.hdmi1"
   tv_watch_app_id: "tvinput.hdmi3"
+  # COM-214 power tiers (see the README's "Battery power" section):
+  #  1. automatic light sleep runs all the time underneath the others (the
+  #     board's light_sleep component).
+  #  2. after idle_timeout with no touch on main_page, the screen blanks:
+  #     backlight off and LVGL paused. WiFi and the HA connection stay up, so
+  #     a tap wakes it instantly. That tap only wakes the screen; buttons
+  #     respond from the next one.
+  #  3. deep_sleep_timeout after the last touch (with wifi connected), deep
+  #     sleep. A touch wakes it, but that's a full reboot + reconnect.
+  #     While wifi is down, disconnected_sleep_timeout applies instead (the
+  #     connecting/setup pages stay lit until then), so a lost network can't
+  #     run the battery flat. First-time setup (no saved credentials) never
+  #     sleeps.
+  # All count from the last touch. For a quick on-device test, override
+  # them on the command line instead of editing them here, e.g.
+  #   scripts/espframe-esphome.sh -s idle_timeout 20s -s deep_sleep_timeout 30s -s disconnected_sleep_timeout 1min compile ...
+  idle_timeout: "30s"
+  deep_sleep_timeout: "30min"
+  disconnected_sleep_timeout: "5min"
 
 esphome:
   project:
     name: "compton-diy.media-room-dashboard"
     version: "${firmware_version}"
+  includes:
+    - ../common/ap_clients.h
+  # Start the sleep clock at boot: if wifi never connects, on_connect and
+  # on_disconnect never fire to start it.
+  on_boot:
+    - priority: -200
+      then:
+        - script.execute: restart_sleep_timer
 
 # No compile-time ssid/password: this device relies entirely on the
 # captive-portal flow below to get station wifi credentials at runtime
@@ -44,6 +73,13 @@ esphome:
 # mechanism as apps/espframe's factory image (apps/espframe/builds/
 # freenove-s3.yaml).
 wifi:
+  # Skips the AP scan on connect, going straight for the BSSID+channel saved
+  # from the last successful connection (persisted to NVS, survives
+  # reboots) -- shaves a meaningful chunk off the deep-sleep wake reconnect
+  # (COM-214 tier 3), which is a full ESP32 reboot each time. Falls back
+  # to a normal scan if the saved AP can't be reached (e.g. router reboot
+  # changed channel), so this doesn't add a new failure mode.
+  fast_connect: true
   # No AP password: it's a short, physically-supervised setup window, and an
   # open network is one less thing to type on a phone.
   ap:
@@ -64,10 +100,20 @@ wifi:
         id: setup_page_shown
         value: "false"
     - lvgl.page.show: main_page
+    # Restart LVGL's inactivity clock: on_idle may already have fired (and
+    # been skipped) on connecting_page, and it won't fire again until the
+    # clock restarts, so main_page would otherwise never blank.
+    - lambda: 'lv_display_trigger_activity(nullptr);'
+    # Switch to the connected sleep clock; touches restart it from here on.
+    - script.execute: restart_sleep_timer
   on_disconnect:
     - globals.set:
         id: setup_page_shown
         value: "false"
+    # Only main_page ever blanks; make sure a status page is visible.
+    - script.execute: wake_screen
+    # Switch to the (shorter) disconnected sleep clock.
+    - script.execute: restart_sleep_timer
     # Never leave a stale address in the footer; the ip_address sensor
     # repaints it on the next connect.
     - lvgl.label.update:
@@ -77,6 +123,10 @@ wifi:
 
 globals:
   - id: setup_page_shown
+    type: bool
+    initial_value: "false"
+  # True while the screen is blanked (COM-214 tier 2), see blank_screen.
+  - id: screen_dark
     type: bool
     initial_value: "false"
 
@@ -96,7 +146,18 @@ interval:
             - globals.set:
                 id: setup_page_shown
                 value: "true"
+            - script.execute: wake_screen
             - lvgl.page.show: setup_page
+      # Someone joined to the fallback AP is re-entering wifi details from a
+      # phone, so nothing touches this screen: keep restarting the offline
+      # deep-sleep countdown while they're connected (COM-214).
+      - if:
+          condition:
+            and:
+              - wifi.ap_active:
+              - lambda: 'return fallback_ap_has_clients();'
+          then:
+            - script.execute: restart_sleep_timer
 
 captive_portal:
 
@@ -126,6 +187,12 @@ logger:
 api:
   encryption:
     key: !secret api_encryption_key
+  # No reboot when HA stays away. The default 15min would reboot a device
+  # that's on wifi but can't reach HA every 15 minutes, so it never reached
+  # the 30min deep sleep (COM-214). Deep sleep's reboot-on-wake retries the
+  # connection anyway. (wifi's own reboot_timeout never applies here: ESPHome
+  # skips it when a fallback AP is configured.)
+  reboot_timeout: 0s
   # Once HA is gone the imported states below are frozen at whatever they
   # last were, so drop every button back to neutral rather than show state
   # that may no longer be true. HA re-sends every subscribed state when it
@@ -160,30 +227,29 @@ update:
     name: "Firmware Update"
     source: ${firmware_manifest_url}
     update_interval: 6h
-    on_update_available:
-      then:
-        # firmware_version is never substituted with the real RELEASE_VERSION
-        # at build time (generate_release.py's --version only feeds
-        # manifest.json, not the compiled binary), so every "dev" build
-        # always mismatches the published manifest version and would
-        # otherwise auto-install on every boot forever, including a fresh
-        # ota.perform right after the one that just ran (since the OTA'd
-        # binary is also always "dev"). Skip auto-install entirely for
-        # unversioned/local builds -- matches libs/ota-update-client's
-        # existing currentVersion=="dev" skip for the same reason.
-        - if:
-            condition:
-              lambda: 'return strcmp("${firmware_version}", "dev") != 0;'
-            then:
-              - update.perform: firmware_update
+    # No install here. The check runs on every boot, and since COM-214's deep
+    # sleep every touch wake is a boot, so installing here would tie the
+    # remote up (download, flash, reboot) right when someone picks it up.
+    # deep_sleep_countdown installs it instead, once the device has sat idle
+    # for deep_sleep_timeout, in place of that deep sleep.
+    #
+    # Auto-install also skips unversioned "dev" builds: firmware_version is
+    # never substituted with the real RELEASE_VERSION at build time
+    # (generate_release.py's --version only feeds manifest.json, not the
+    # compiled binary), so every "dev" build always mismatches the published
+    # manifest version and would otherwise auto-install on every boot
+    # forever, including a fresh install right after the one that just ran
+    # (since the OTA'd binary is also always "dev"). Matches
+    # libs/ota-update-client's existing currentVersion=="dev" skip for the
+    # same reason.
 
 # Manual check/install from the web portal. The stock web_server v3 UI shows
 # the update entity's state but has no install control for it (HA's own
 # update card does), so these buttons are the portal's way to act on an
-# "UPDATE AVAILABLE" without waiting for the 6-hourly check. Install is a
-# deliberate press, so unlike on_update_available above it isn't skipped on
-# "dev" builds -- pressing it on a local build replaces it with the
-# published release.
+# "UPDATE AVAILABLE" without waiting for the next check. Install is a
+# deliberate press, so unlike the idle auto-install in deep_sleep_countdown
+# it runs immediately and isn't skipped on "dev" builds -- pressing it on a
+# local build replaces it with the published release.
 button:
   - platform: template
     name: "Check for Firmware Update"
@@ -317,6 +383,123 @@ script:
           state:
             checked: false
 
+  # COM-214 tier 2: blank the screen. Pausing LVGL (with resume_on_input
+  # off, see lvgl: below) stops it reading touch at all, so the touch that
+  # wakes the screen never reaches a button. Pausing also stops LVGL's idle
+  # callbacks, so the deep-sleep tier runs off its own countdown (restarted
+  # by every touch) instead of a second on_idle timeout.
+  - id: blank_screen
+    then:
+      - globals.set:
+          id: screen_dark
+          value: "true"
+      - output.turn_off: backlight_output
+      - lvgl.pause:
+
+  # Undo blank_screen. lvgl.resume also restarts LVGL's inactivity clock, so
+  # the screen doesn't blank again straight away.
+  - id: wake_screen
+    then:
+      - if:
+          condition:
+            lambda: 'return id(screen_dark);'
+          then:
+            - globals.set:
+                id: screen_dark
+                value: "false"
+            - lvgl.resume:
+            - output.turn_on: backlight_output
+
+  # COM-214 tier 3's clock. Run at boot, on every wifi connect/disconnect
+  # and on every touch release: starts whichever countdown matches the wifi
+  # state and stops the other, so both count from the last touch.
+  - id: restart_sleep_timer
+    then:
+      - if:
+          condition:
+            wifi.connected:
+          then:
+            - script.stop: offline_sleep_countdown
+            - script.execute: deep_sleep_countdown
+          else:
+            - script.stop: deep_sleep_countdown
+            - script.execute: offline_sleep_countdown
+
+  # COM-214 tier 3 while wifi is down: deep sleep after
+  # disconnected_sleep_timeout untouched, so an unreachable network (router
+  # off, out of range) can't run the battery flat; the next touch wake
+  # retries wifi from scratch. ESPHome raises the fallback AP 90s after any
+  # failed connect, even with saved credentials, so the AP being up doesn't
+  # mean setup is happening. Only a device with no saved credentials (first
+  # -time setup, where the activity is on a phone, not this screen) stays
+  # awake, plus any time a phone is joined to the AP (see the AP interval).
+  - id: offline_sleep_countdown
+    mode: restart
+    then:
+      - delay: ${disconnected_sleep_timeout}
+      - if:
+          condition:
+            and:
+              - not:
+                  wifi.connected:
+              - lambda: 'return wifi::global_wifi_component->has_sta();'
+          then:
+            - logger.log:
+                format: "Offline and idle: entering deep sleep"
+                level: INFO
+            - deep_sleep.enter: deep_sleep_1
+
+  # COM-214 tier 3: deep sleep deep_sleep_timeout after the last touch while
+  # connected (see restart_sleep_timer). deep_sleep_1 itself waits while the
+  # touch INT line is low.
+  #
+  # If a firmware update is available (versioned builds only, see the update
+  # entity), install it here instead of sleeping: the device has been idle
+  # for deep_sleep_timeout, so nobody is waiting on it. A successful install
+  # reboots before the delay below ends. If it fails, the update is still
+  # "available" and the next idle stretch retries; this one sleeps anyway.
+  - id: deep_sleep_countdown
+    mode: restart
+    then:
+      - delay: ${deep_sleep_timeout}
+      - if:
+          condition:
+            wifi.connected:
+          then:
+            - if:
+                condition:
+                  and:
+                    - update.is_available: firmware_update
+                    - lambda: 'return strcmp("${firmware_version}", "dev") != 0;'
+                then:
+                  - logger.log:
+                      format: "Idle: installing firmware update instead of deep sleep"
+                      level: INFO
+                  - update.perform: firmware_update
+                  # flash() blocks the main loop and reboots on success, so
+                  # this only finishes after a failed install.
+                  - delay: 5s
+                  - logger.log:
+                      format: "Idle: firmware update failed, entering deep sleep"
+                      level: WARN
+            - logger.log:
+                format: "Idle: entering deep sleep"
+                level: INFO
+            - deep_sleep.enter: deep_sleep_1
+
+# Wake from tier 2 on release rather than on touch: LVGL is still paused
+# while the finger is down, so the whole waking tap is swallowed. The
+# deep-sleep countdowns stop while a finger is down and restart from the
+# release.
+touchscreen:
+  - id: !extend tft_touch
+    on_touch:
+      - script.stop: deep_sleep_countdown
+      - script.stop: offline_sleep_countdown
+    on_release:
+      - script.execute: wake_screen
+      - script.execute: restart_sleep_timer
+
 # -----------------------------------------------------------------------------
 # Three LVGL pages. `connecting_page` (the default, i.e. at boot, and again
 # whenever wifi drops) says the device is retrying its saved network;
@@ -345,6 +528,18 @@ lvgl:
       checked:
         bg_color: 0xF5A623
         text_color: 0x000000
+  # The wake touch is handled by wake_screen, not LVGL (see blank_screen).
+  resume_on_input: false
+  # Tier 2: blank only on main_page. The connecting and setup pages stay lit
+  # so their wifi instructions stay readable.
+  on_idle:
+    - timeout: ${idle_timeout}
+      then:
+        - if:
+            condition:
+              lambda: 'return id(main_page)->is_showing();'
+            then:
+              - script.execute: blank_screen
   pages:
     - id: connecting_page
       bg_color: 0x000000

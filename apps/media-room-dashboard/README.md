@@ -4,8 +4,9 @@ ESPHome-based 6-button touchscreen remote for the media room. Each button
 calls a Home Assistant service directly over the native API, and lights up
 to reflect the real state of what it controls (TV power, active HDMI input,
 light on/off). Apart from a few diagnostics (IP address, firmware version,
-firmware update), the device has no entities of its own in HA: it's a
-remote with feedback, not a general dashboard. Its IP is always on screen,
+firmware update, battery voltage/level, and the wake reason / sleep log /
+boot count used for battery testing), the device has no entities of its own
+in HA: it's a remote with feedback, not a general dashboard. Its IP is always on screen,
 and it serves an admin portal with a firmware upload page at that address
 (see "IP address and admin portal").
 
@@ -28,9 +29,11 @@ the AliExpress board's pinout is known) doesn't require touching the button
 UI or HA wiring:
 
 - `boards/<name>.yaml` — hardware only: chip/PSRAM, backlight, SPI display
-  + touch controller + pins. Must define `tft_display`, `tft_touch`, and
-  `backlight_output` component ids — nothing else in the app depends on
-  board-specific detail beyond those three ids.
+  + touch controller + pins. Must define `tft_display`, `tft_touch`,
+  `backlight_output` (an on/off output), and `deep_sleep_1` (deep_sleep with
+  a touch wake source) component ids — nothing else in the app depends on
+  board-specific detail beyond those four ids. Battery sensing, light sleep
+  and the sleep diagnostics are board-specific too, so they live there.
 - `common/dashboard.yaml` — everything else: wifi/api/ota, the 6-button LVGL
   UI, and the HA service calls. Board-agnostic.
 - `builds/<name>.yaml` — thin entrypoint combining the two as ESPHome
@@ -40,6 +43,93 @@ To add a board: write `boards/<new-name>.yaml`, copy `builds/freenove-s3.yaml`
 to `builds/<new-name>.yaml` swapping the `board:` package include, then add
 matching `build-<new-name>`/`flash-<new-name>`/`monitor-<new-name>` targets
 to `project.json` (see the `freenove-s3` ones for the pattern).
+
+## Battery power (COM-214)
+
+Three power tiers, layered:
+
+1. **Automatic light sleep** (`components/light_sleep/`, always on): ESP-IDF
+   power management drops the CPU/WiFi into light sleep during idle gaps.
+   No reboot and no dropped HA connection. Requires the backlight to be a
+   plain `gpio` output (light sleep stops LEDC PWM, which flickered the
+   screen) and `CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION` (keeps the USB serial
+   console alive while a host is attached). The CPU runs at 160MHz.
+2. **Screen blank** after `idle_timeout` (30s) untouched, on `main_page`
+   only: backlight off and LVGL paused. The connecting and setup pages never
+   blank. The tap that wakes the screen only wakes it (LVGL is paused while
+   the finger is down, and resumes on release); buttons respond from the
+   next tap.
+3. **Deep sleep** `deep_sleep_timeout` (30min) after the last touch while
+   wifi is connected, or `disconnected_sleep_timeout` (5min) after it while
+   wifi is down (router off, out of range), so a lost network can't run the
+   battery flat. The connecting and setup pages stay lit until then. Only
+   first-time setup (no saved wifi credentials) never sleeps, and a phone
+   joined to the fallback AP (re-entering wifi details) holds it awake. The
+   api's `reboot_timeout` is off, so a device on wifi that can't reach HA
+   still reaches deep sleep instead of rebooting every 15 minutes. The panel goes
+   into its own sleep mode (SLPIN) first. Touching the screen wakes it (ext0 on the touch
+   controller's INT line, GPIO17), but that's a full reboot and reconnect.
+
+**Firmware updates and deep sleep.** The update check runs on every boot,
+which now means every touch wake (the 6-hourly poll never gets a chance:
+the device sleeps 30 minutes after the last touch). An available update is
+not installed on wake, which would tie the remote up right when it's picked
+up. Instead it installs once the device has been idle for
+`deep_sleep_timeout`, in place of that deep sleep (versioned builds only,
+like before). The portal's **Install Firmware Update** button still installs
+immediately. The `Update check already in progress` warning right after a
+wake is harmless: the boot-time check and the first poll land together, and
+the second just returns.
+
+For a quick on-device test, build with shorter timeouts from the command
+line rather than editing them:
+`scripts/espframe-esphome.sh -s idle_timeout 20s -s deep_sleep_timeout 30s -s disconnected_sleep_timeout 1min compile apps/media-room-dashboard/builds/freenove-s3.yaml`.
+
+**Deep sleep on the ESP32-S3: what it took.** The first deep sleep + light
+sleep build woke itself within seconds of sleeping, for two reasons:
+
+- On the ESP32-S3, light sleep's GPIO wakeup doesn't work for deep sleep
+  (only ext0/ext1 do), and it was left armed going into deep sleep. Light
+  sleep now disarms itself in `on_powerdown()` and `deep_sleep_1` uses ext0.
+- With ext0 alone it still woke after 3-20s (Sleep Log: `EXT0 ... (pin
+  high)`): ext0 moves GPIO17 to the RTC mux, where the digital pull-up no
+  longer applies, so the touch INT line floated. `on_powerdown()` now turns
+  on the RTC pull-up.
+- After a touch wake the screen stayed black: the S3 can't hold one pin
+  through deep sleep, so ESP-IDF isolates and holds every digital pad, and
+  on wake only releases the wake pin. `setup()` now releases the global
+  hold before anything else configures its pins.
+- That isolation also floated the touch chip's RST and I2C lines, and it
+  still woke on its own every minute or two. They're now held (RST high,
+  I2C pulled up) through deep sleep. As a backstop, a wake with no touch
+  behind it (checked over I2C before wifi starts) goes straight back to
+  sleep, logged as `no-touch` in the Sleep Log.
+
+**Light sleep and the screen.** ESP-IDF's `CONFIG_PM_SLP_DISABLE_GPIO`
+disables every pin during each light sleep, which flickered the backlight.
+The light_sleep component's `keep_level_pins` (backlight, display CS/DC, touch I2C)
+opts those pins out. Light sleep never runs while a USB host (a PC) is
+attached (`CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION`), so test light sleep on a
+charger or battery, not on PC USB.
+
+Diagnostics for testing without a serial console, all in HA and the web
+portal:
+
+- **Wake Reason**: why this boot happened, e.g. `deep sleep, woke on EXT0`
+  (a touch), `power-on`, `USB`, `software` (OTA/restart).
+- **Sleep Log**: the last 5 boots, newest first, e.g.
+  `#7 EXT0 after 42s (pin high)`: what woke it, how long it was down, and
+  GPIO17's level as it went down (`LOW` there means it slept with the touch
+  line already asserted). `no-touch` marks a wake the guard sent straight
+  back to sleep, and `E<n>` that n GPIO/RTC/sleep calls failed while
+  going down (Wake Reason likewise reports failed calls in setup). Kept in RTC memory; it starts over at `#1 power-on` after
+  a power loss (e.g. moving the board to a charger).
+- **Boot Count**: total boots, kept in flash, so it survives power loss.
+  A device that keeps self-waking shows this climbing with no touches.
+
+Battery voltage and a rough LiPo percentage come from the board's GPIO9
+divider (`boards/freenove-s3.yaml`). The percentage is only an estimate from
+voltage; a MAX17048 fuel gauge would be more accurate.
 
 ## Setup
 
@@ -137,8 +227,9 @@ The same address is also an `IP Address` diagnostic text sensor
 
 ESPHome's stock `web_server` (v3, port 80) at `http://<device-ip>/`. It
 lists the diagnostic entities (IP, firmware version), the `Firmware Update`
-entity's state (checked against the GitHub Pages manifest every 6 hours),
-**Check for Firmware Update** / **Install Firmware Update** buttons (the
+entity's state (checked against the GitHub Pages manifest on every boot and
+every 6 hours awake), **Check for Firmware Update** / **Install Firmware
+Update** buttons (the
 stock UI has no install control on the update entity itself; Install is a
 no-op unless an update is available, and does run on "dev" builds since it's
 a deliberate press), and an **OTA Update** upload form (`ota: platform:
