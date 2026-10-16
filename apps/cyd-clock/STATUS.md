@@ -874,6 +874,32 @@ every form submit is handled the same as before. The one deliberate behaviour ch
   whose face creases went faint at 1×, from a rendered mockup of both on every dark theme.
 - It stays distinct from the witch hat (pure black, lavender rim, orange band, tip bending right).
 
+## Gryffindor Badge (COM-448, 2026-10-16)
+
+A second legendary chest badge, appended to `BADGES[]` after the Hogwarts Crest as
+`{"gryffindor_badge", "Gryffindor Badge", STORE_COST_LEGENDARY, "#E04848", drawGryffindorBadge}`.
+The user picked it from three candidates (lion rampant, lion head, roundel) in the COM-448 mockup
+Artifact.
+
+- **Art:** a 21×25 px shield in the crest's box (x cx−10..+10, y cy+6..+30). It has a C_DARK
+  outline, a gold rim (`C_CREST_GOLD`, 2 px around the point), a scarlet field (`C_CREST_RED`) and
+  a 13 px gold lion rampant facing left, with a dark eye pixel and a tufted tail clear of its
+  back. The square-topped shield with a rounded point, one field and a big lion keep it distinct
+  from the crest's quartered, sharp-pointed shield at 1×. No new colours.
+- **Drawing:** `GRYFFINDOR_SHIELD_INSET[]` (each row's inset) drives one outline/rim/field
+  `drawFastHLine` per row, and `GRYFFINDOR_LION[]` is one 13-bit mask per row, painted as runs.
+  No bitmap asset.
+- **No logic change.** This is the first slot with two badges, but every badge path was already
+  catalog-driven: the store section, the purchase handler, the dressing-room radio group
+  (`buildPickGroup()`), `applyEquipField()`, the "new store items!" flash (`seenBadgeCount` vs
+  `BADGE_STORE_COUNT`, so crest owners see it once), the sleep-scene redraw over the blanket and
+  the moved hunger lines. `equippedBadge` holds one index, so buying the badge equips it and
+  picking either badge in the dressing room replaces the other. The crest keeps index 0, so its
+  owners keep their bit and their choice.
+- **Store label:** a lifted scarlet (`#E04848`) that reads on the dark store cards and doesn't
+  match the crest's gold label. At 350 it gets the ★ LEGENDARY tag automatically.
+- **Flash:** +472 B on `cyd` (1,198,869 → 1,199,341 B, 91.5%).
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`
