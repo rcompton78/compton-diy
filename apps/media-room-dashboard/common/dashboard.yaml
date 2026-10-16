@@ -10,13 +10,15 @@
 # control -- all `internal: true`, so the device still exposes no entities of
 # its own to HA. It's a remote with feedback, not a general HA dashboard.
 # The only entities it does expose are diagnostics (firmware version, IP
-# address) and firmware update controls, also shown in the unprotected web
-# portal at http://<device-ip>/ (see web_server below).
+# address), firmware update controls and the Dev Mode switch, also shown in
+# the unprotected web portal at http://<device-ip>/ (see web_server below).
 #
 # Requires a board package to have already defined `tft_display` (display),
-# `tft_touch` (touchscreen), `backlight_output` (on/off output) and
-# `deep_sleep_1` (deep_sleep with a touch wake source) — see
-# boards/freenove-s3.yaml.
+# `tft_touch` (touchscreen), `backlight_output` (on/off output),
+# `deep_sleep_1` (deep_sleep with a touch wake source), `battery_level`
+# (battery % sensor), `usb_host_connected` (binary sensor, on while a PC is
+# attached) and a `set_light_sleep_allowed` script taking `allowed: bool` —
+# see boards/freenove-s3.yaml.
 # =============================================================================
 
 substitutions:
@@ -51,6 +53,14 @@ substitutions:
   idle_timeout: "30s"
   deep_sleep_timeout: "30min"
   disconnected_sleep_timeout: "5min"
+  # COM-446 dev mode (see update_dev_mode): how long the Dev Mode switch
+  # keeps the device awake before turning itself off. A PC on USB keeps it
+  # awake for as long as it's attached, with no timeout.
+  dev_mode_timeout: "1h"
+  # Battery % on main_page (COM-446): amber below battery_low_pct, red below
+  # battery_critical_pct.
+  battery_low_pct: "20"
+  battery_critical_pct: "10"
 
 esphome:
   project:
@@ -127,6 +137,10 @@ globals:
     initial_value: "false"
   # True while the screen is blanked (COM-214 tier 2), see blank_screen.
   - id: screen_dark
+    type: bool
+    initial_value: "false"
+  # True while dev mode is on (COM-446), see update_dev_mode.
+  - id: dev_mode
     type: bool
     initial_value: "false"
 
@@ -358,6 +372,42 @@ text_sensor:
           state:
             checked: !lambda 'return x == "on";'
 
+# Battery % in the main_page footer (COM-446). Driven only by the board's
+# existing battery_level reading, so no extra ADC reads or wakeups.
+sensor:
+  - id: !extend battery_level
+    on_value:
+      - script.execute: refresh_battery_label
+
+# COM-446 dev mode trigger #1: a PC on USB (see the board's
+# usb_host_connected). A charger never turns it on.
+binary_sensor:
+  - id: !extend usb_host_connected
+    on_state:
+      - script.execute: update_dev_mode
+      # The footer shows a USB glyph instead of the battery one while a PC
+      # is attached.
+      - script.execute: refresh_battery_label
+
+# COM-446 dev mode trigger #2: forced on from HA or the web portal, for an
+# OTA or log session over wifi with no USB attached. Off at every boot (never
+# restored, so a forgotten switch can't keep a battery remote awake past a
+# reboot) and off again by itself after dev_mode_timeout.
+switch:
+  - platform: template
+    id: dev_mode_switch
+    name: "Dev Mode"
+    icon: "mdi:developer-board"
+    entity_category: config
+    optimistic: true
+    restore_mode: ALWAYS_OFF
+    on_turn_on:
+      - script.execute: dev_mode_auto_off
+      - script.execute: update_dev_mode
+    on_turn_off:
+      - script.stop: dev_mode_auto_off
+      - script.execute: update_dev_mode
+
 script:
   # The Roku can keep reporting its last input's app_id while in standby, so
   # the input buttons are gated on power as well -- re-run whenever either
@@ -412,18 +462,110 @@ script:
 
   # COM-214 tier 3's clock. Run at boot, on every wifi connect/disconnect
   # and on every touch release: starts whichever countdown matches the wifi
-  # state and stops the other, so both count from the last touch.
+  # state and stops the other, so both count from the last touch. In dev
+  # mode it stops both instead.
   - id: restart_sleep_timer
     then:
       - if:
           condition:
-            wifi.connected:
+            lambda: 'return id(dev_mode);'
           then:
-            - script.stop: offline_sleep_countdown
-            - script.execute: deep_sleep_countdown
-          else:
             - script.stop: deep_sleep_countdown
-            - script.execute: offline_sleep_countdown
+            - script.stop: offline_sleep_countdown
+          else:
+            - if:
+                condition:
+                  wifi.connected:
+                then:
+                  - script.stop: offline_sleep_countdown
+                  - script.execute: deep_sleep_countdown
+                else:
+                  - script.stop: deep_sleep_countdown
+                  - script.execute: offline_sleep_countdown
+
+  # COM-446 dev mode: on while a PC is on USB or the Dev Mode switch is on.
+  # While on, the screen never blanks (on_idle skips it), neither deep-sleep
+  # countdown runs (restart_sleep_timer stops them, and both re-check before
+  # sleeping), and automatic light sleep is blocked, so serial logs, USB
+  # flashing and OTA keep working. The footer shows a DEV badge. Turning off
+  # restarts the blank and deep-sleep clocks from that moment, as if the
+  # screen had just been touched. Re-run on every change to either trigger;
+  # it only acts when the combined state flips.
+  - id: update_dev_mode
+    then:
+      - if:
+          condition:
+            lambda: 'return (id(usb_host_connected).state || id(dev_mode_switch).state) != id(dev_mode);'
+          then:
+            - globals.set:
+                id: dev_mode
+                value: !lambda 'return !id(dev_mode);'
+            - if:
+                condition:
+                  lambda: 'return id(dev_mode);'
+                then:
+                  - logger.log:
+                      format: "Dev mode on: no screen blank or sleep"
+                      level: INFO
+                  - script.execute:
+                      id: set_light_sleep_allowed
+                      allowed: false
+                  - lvgl.widget.show: lbl_dev_badge
+                  - script.execute: wake_screen
+                  - script.execute: restart_sleep_timer
+                else:
+                  - logger.log:
+                      format: "Dev mode off: normal sleep timers restart now"
+                      level: INFO
+                  - script.execute:
+                      id: set_light_sleep_allowed
+                      allowed: true
+                  - lvgl.widget.hide: lbl_dev_badge
+                  # Restart LVGL's inactivity clock: on_idle already fired
+                  # (and was skipped) during dev mode, and won't fire again
+                  # until the clock restarts.
+                  - lambda: 'lv_display_trigger_activity(nullptr);'
+                  - script.execute: restart_sleep_timer
+
+  - id: dev_mode_auto_off
+    mode: restart
+    then:
+      - delay: ${dev_mode_timeout}
+      - logger.log:
+          format: "Dev Mode switch timed out"
+          level: INFO
+      - switch.turn_off: dev_mode_switch
+
+  # Footer battery readout: a battery glyph stepped by charge plus the %, in
+  # amber below battery_low_pct and red below battery_critical_pct. While a PC
+  # is attached the glyph is a USB plug and the colour stays grey: the battery
+  # is charging then and reads near its 4.2V charge voltage, so the % isn't a
+  # real charge level. A wall charger can't be detected (the BQ25185 exposes
+  # no power-good/charge pin), so it shows the normal readout.
+  - id: refresh_battery_label
+    then:
+      - lambda: |-
+          float pct = id(battery_level).state;
+          bool usb = id(usb_host_connected).state;
+          int rounded = std::isnan(pct) ? -1 : (int) roundf(pct);
+          const char *glyph = LV_SYMBOL_BATTERY_EMPTY;
+          if (usb) glyph = LV_SYMBOL_USB;
+          else if (rounded >= 85) glyph = LV_SYMBOL_BATTERY_FULL;
+          else if (rounded >= 60) glyph = LV_SYMBOL_BATTERY_3;
+          else if (rounded >= 35) glyph = LV_SYMBOL_BATTERY_2;
+          else if (rounded >= ${battery_critical_pct}) glyph = LV_SYMBOL_BATTERY_1;
+          uint32_t color = 0x909090;
+          if (!usb && rounded >= 0) {
+            if (rounded < ${battery_critical_pct}) color = 0xE5484D;
+            else if (rounded < ${battery_low_pct}) color = 0xF5A623;
+          }
+          char buf[24];
+          if (rounded < 0)
+            snprintf(buf, sizeof(buf), "%s --%%", glyph);
+          else
+            snprintf(buf, sizeof(buf), "%s %d%%", glyph, rounded);
+          lv_label_set_text(id(lbl_battery), buf);
+          lv_obj_set_style_text_color(id(lbl_battery), lv_color_hex(color), LV_PART_MAIN);
 
   # COM-214 tier 3 while wifi is down: deep sleep after
   # disconnected_sleep_timeout untouched, so an unreachable network (router
@@ -443,6 +585,7 @@ script:
               - not:
                   wifi.connected:
               - lambda: 'return wifi::global_wifi_component->has_sta();'
+              - lambda: 'return !id(dev_mode);'
           then:
             - logger.log:
                 format: "Offline and idle: entering deep sleep"
@@ -464,7 +607,9 @@ script:
       - delay: ${deep_sleep_timeout}
       - if:
           condition:
-            wifi.connected:
+            and:
+              - wifi.connected:
+              - lambda: 'return !id(dev_mode);'
           then:
             - if:
                 condition:
@@ -531,13 +676,13 @@ lvgl:
   # The wake touch is handled by wake_screen, not LVGL (see blank_screen).
   resume_on_input: false
   # Tier 2: blank only on main_page. The connecting and setup pages stay lit
-  # so their wifi instructions stay readable.
+  # so their wifi instructions stay readable. Never in dev mode.
   on_idle:
     - timeout: ${idle_timeout}
       then:
         - if:
             condition:
-              lambda: 'return id(main_page)->is_showing();'
+              lambda: 'return id(main_page)->is_showing() && !id(dev_mode);'
             then:
               - script.execute: blank_screen
   pages:
@@ -716,15 +861,51 @@ lvgl:
                   service: switch.toggle
                   data:
                     entity_id: switch.media_room_plug
-        # Footer under the 3 button rows: the device's web portal address.
-        # Filled in by the ip_address sensor, cleared by wifi on_disconnect.
-        - label:
-            id: lbl_ip_footer
-            x: 0
-            y: 296
-            width: 240
-            text: ""
-            text_font: montserrat_14
-            text_color: 0x909090
-            align: TOP_MID
-            text_align: CENTER
+        # Footer under the 3 button rows, laid out as a flex row so the
+        # pieces share the 232px however long the address is: the web portal
+        # address on the left (filled in by the ip_address sensor, cleared by
+        # wifi on_disconnect; truncated with "..." only if it would overlap),
+        # the DEV badge while dev mode is on, and the battery readout on the
+        # right (refresh_battery_label). The DEV badge is hidden, and so
+        # left out of the layout, the rest of the time.
+        - obj:
+            id: footer_row
+            x: 4
+            y: 294
+            width: 232
+            height: 22
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            layout:
+              type: flex
+              pad_column: 6
+              flex_flow: ROW
+              flex_align_main: START
+              flex_align_cross: CENTER
+              flex_align_track: CENTER
+            widgets:
+              - label:
+                  id: lbl_ip_footer
+                  flex_grow: 1
+                  long_mode: DOT
+                  text: ""
+                  text_font: montserrat_14
+                  text_color: 0x909090
+              - label:
+                  id: lbl_dev_badge
+                  hidden: true
+                  text: "DEV"
+                  text_font: montserrat_14
+                  text_color: 0x000000
+                  bg_color: 0xF5A623
+                  bg_opa: COVER
+                  radius: 3
+                  pad_left: 4
+                  pad_right: 4
+              - label:
+                  id: lbl_battery
+                  text: "\uF244 --%"
+                  text_font: montserrat_14
+                  text_color: 0x909090

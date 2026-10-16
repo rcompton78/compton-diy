@@ -85,6 +85,15 @@
 // on_powerdown() also runs on a safe reboot (OTA, the restart button), not
 // just deep sleep, so the entry it opens is only labelled a sleep if the next
 // boot's reset reason says it woke from deep sleep.
+//
+// Dev mode (COM-446). usb_host_connected() reports whether a USB host (a PC)
+// is talking to the native USB-Serial/JTAG port. ESP-IDF's connection monitor
+// tracks USB start-of-frame packets, which only a host sends, so a charger
+// (the BQ25185's USB-C or a dumb charger on the board's port) never counts.
+// While a host is attached, CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION already keeps
+// light sleep off. set_light_sleep_allowed(false) does the same without one
+// (the dashboard's forced Dev Mode switch, for OTA/log sessions over wifi) by
+// holding an ESP_PM_NO_LIGHT_SLEEP lock.
 
 #include <cinttypes>
 #include <cstdio>
@@ -98,6 +107,7 @@
 
 #include "driver/gpio.h"
 #include "driver/rtc_io.h"
+#include "driver/usb_serial_jtag.h"
 #include "esp_attr.h"
 #include "esp_err.h"
 #include "esp_pm.h"
@@ -248,6 +258,9 @@ class LightSleepComponent : public Component {
 
     for (uint8_t keep : this->keep_level_pins_)
       this->setup_errors_ += !this->check_(gpio_sleep_sel_dis(static_cast<gpio_num_t>(keep)), "gpio_sleep_sel_dis", keep);
+
+    this->setup_errors_ += !this->check_(
+        esp_pm_lock_create(ESP_PM_NO_LIGHT_SLEEP, 0, "dev_mode", &this->no_light_sleep_lock_), "esp_pm_lock_create", -1);
   }
 
   // Runs after teardown, just before deep_sleep_1 arms ext0 and calls
@@ -306,6 +319,23 @@ class LightSleepComponent : public Component {
       ESP_LOGCONFIG(TAG, "  Keeps level in light sleep: GPIO%u", keep);
     ESP_LOGCONFIG(TAG, "  This boot: %s", this->wake_reason().c_str());
     ESP_LOGCONFIG(TAG, "  Sleep log: %s", this->sleep_log().c_str());
+  }
+
+  // True while a USB host is attached to the native USB-Serial/JTAG port (see
+  // the file comment). Cheap: it reads a flag ESP-IDF's monitor keeps.
+  bool usb_host_connected() const { return usb_serial_jtag_is_connected(); }
+
+  // Dev mode: hold or release the lock that keeps automatic light sleep off.
+  void set_light_sleep_allowed(bool allowed) {
+    if (this->no_light_sleep_lock_ == nullptr || allowed != this->light_sleep_blocked_)
+      return;
+    if (allowed) {
+      this->check_(esp_pm_lock_release(this->no_light_sleep_lock_), "esp_pm_lock_release", -1);
+    } else {
+      this->check_(esp_pm_lock_acquire(this->no_light_sleep_lock_), "esp_pm_lock_acquire", -1);
+    }
+    this->light_sleep_blocked_ = !allowed;
+    ESP_LOGI(TAG, "Automatic light sleep %s", allowed ? "allowed" : "blocked (dev mode)");
   }
 
   // True when this boot is a deep-sleep wake on the touch INT pin (ext0, the
@@ -430,6 +460,8 @@ class LightSleepComponent : public Component {
   std::vector<uint8_t> sleep_hold_pullup_pins_;
   uint8_t reset_reason_{0};
   uint8_t wake_cause_{0};
+  esp_pm_lock_handle_t no_light_sleep_lock_{nullptr};
+  bool light_sleep_blocked_{false};
 };
 
 }  // namespace esphome::light_sleep

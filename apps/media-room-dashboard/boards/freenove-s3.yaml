@@ -8,7 +8,8 @@
 # card was originally targeting, see docs/diy-102-bringup/HANDOFF.md), add a
 # new file here — `boards/<name>.yaml` — that provides the same component
 # ids this file provides (`tft_display`, `tft_touch`, `backlight_output`,
-# `deep_sleep_1` with a touch wake source) and
+# `deep_sleep_1` with a touch wake source, `battery_level`,
+# `usb_host_connected` and the `set_light_sleep_allowed` script) and
 # point a new `builds/<name>.yaml` at it instead of this file. Nothing in
 # common/dashboard.yaml needs to change.
 #
@@ -276,6 +277,34 @@ sensor:
     state_class: total_increasing
     update_interval: 60s
     lambda: 'return id(boot_count);'
+
+# Dev mode's trigger (COM-446): on while a PC (a USB host) is attached to the
+# native USB-Serial/JTAG port, never for a charger -- see usb_host_connected()
+# in light_sleep_component.h. common/dashboard.yaml's on_state keeps the
+# device awake while it's on. A template binary sensor re-reads it every loop,
+# which is only a flag read and adds no wakeups. delayed_off rides out the
+# brief gap in host frames when the PC re-enumerates the port, so a reset
+# from esptool doesn't restart the sleep timers mid-flash.
+binary_sensor:
+  - platform: template
+    id: usb_host_connected
+    name: "USB Host Connected"
+    entity_category: diagnostic
+    device_class: connectivity
+    icon: "mdi:usb"
+    lambda: 'return id(light_sleep_1).usb_host_connected();'
+    filters:
+      - delayed_off: 3s
+
+# Dev mode's light-sleep hook, called by common/dashboard.yaml. A host on USB
+# already blocks light sleep (CONFIG_USJ_NO_AUTO_LS_ON_CONNECTION); this
+# covers the forced Dev Mode switch over wifi.
+script:
+  - id: set_light_sleep_allowed
+    parameters:
+      allowed: bool
+    then:
+      - lambda: 'id(light_sleep_1).set_light_sleep_allowed(allowed);'
 
 output:
   - platform: gpio
