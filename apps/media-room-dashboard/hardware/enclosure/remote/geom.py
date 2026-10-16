@@ -6,7 +6,10 @@ from . import params as p
 
 
 def box(x0, x1, y0, y1, z0, z1):
-    """Axis-aligned box from min/max coordinates."""
+    """Axis-aligned box between two corners (in either order)."""
+    x0, x1 = sorted((x0, x1))
+    y0, y1 = sorted((y0, y1))
+    z0, z1 = sorted((z0, z1))
     return Pos(x0, y0, z0) * Box(x1 - x0, y1 - y0, z1 - z0, align=(Align.MIN, Align.MIN, Align.MIN))
 
 

@@ -40,6 +40,32 @@ def fn_back_keepout(ch: p.Charger) -> Part:
     return Pos(0, y0 + p.PCB_L / 2, -p.D_PARTS_BACK) * extrude(RectangleRounded(p.PCB_W, p.PCB_L, p.PCB_R), p.BACK_PARTS_H)
 
 
+def fn_usb_envelope(ch: p.Charger) -> Part:
+    """Room reserved for the USB-C receptacle, whatever its real size."""
+    _, y1, y_top, _ = p.layout(ch)
+    w, h = p.FN_USB_ENV_W, p.FN_USB_ENV_H
+    return dbox(p.FN_USB_X - w / 2, p.FN_USB_X + w / 2, y1 - p.FN_USB_L - 1, y_top, p.D_PCB_BACK, p.D_PCB_BACK + h)
+
+
+def top_access_zone(ch: p.Charger) -> Part:
+    """The back of the board's top end (USB-C, RESET, BOOT), out past the back: open once the cover's off."""
+    _, y1, y_top, _ = p.layout(ch)
+    hw = p.PCB_W / 2 - 1.5
+    return dbox(-hw, hw, y1 - p.TOP_ACCESS, y_top + 30, p.D_PCB_BACK, p.D_BACK_OUTER + 30)
+
+
+def bat_envelope(ch: p.Charger) -> Part:
+    x, y = bat_socket_xy(ch)
+    ex, ey, eh = p.BAT_ENVELOPE
+    return dbox(x - ex / 2, min(x + ex / 2, p.INNER_HALF_W - 0.1), y - ey / 2, y + ey / 2, p.D_PCB_BACK, p.D_PCB_BACK + eh)
+
+
+def terminal_pins(ch: p.Charger) -> Part:
+    f = ChargerFrame(ch)
+    bx0, bx1, by0, by1, ln = ch.terminal_pins
+    return f.box(bx0, bx1, by0, by1, -ch.pcb_t - ln, -ch.pcb_t)
+
+
 def fn_usb_mouth_y(ch: p.Charger) -> float:
     _, y1, _, _ = p.layout(ch)
     return y1 + p.FN_USB_OVERHANG
@@ -104,7 +130,7 @@ def charger(ch: p.Charger) -> Part:
     usb = f.box(ch.usb[0], ch.usb[1], ch.usb[2], ch.usb[3], 0, ch.usb_h)
     jst = f.box(ch.jst[0], ch.jst[1], ch.jst[2], ch.jst[3], 0, ch.jst_h)
     term = f.box(ch.terminal[0], ch.terminal[1], ch.terminal[2], ch.terminal[3], 0, ch.terminal_h)
-    return pcb + usb + jst + term
+    return pcb + usb + jst + term + terminal_pins(ch)
 
 
 def charger_usb_axis(ch: p.Charger):
@@ -143,8 +169,8 @@ def cell_pocket(ch: p.Charger) -> Pocket:
     its top rib just below the RESET / BOOT pinholes."""
     x0 = -p.INNER_HALF_W + p.LEDGE_W + p.COVER_CLEAR + p.RIB_T   # left rib clears the cover ledge
     x1 = x0 + p.CELL_W + 2 * p.CELL_CLEAR
-    y_btn = button_xy(ch)[0][2]
-    y1 = y_btn - p.PINHOLE_D / 2 - 1.0 - p.RIB_T
+    _, pcb_top, _, _ = p.layout(ch)
+    y1 = pcb_top - 4.1 - p.RIB_T   # top rib ends 4.1 mm below the PCB's top end, as before the end wall moved
     return Pocket(x0, x1, y1 - (p.CELL_L + 2 * p.CELL_CLEAR), y1)
 
 

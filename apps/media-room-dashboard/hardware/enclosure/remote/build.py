@@ -101,7 +101,7 @@ def _render_all(shell, cover, printed, ch, docs: Path):
     flip = Rot(Y=180)
     flipped_wires = [(pts * [-1, 1, -1], c, w) for pts, c, w in wires]
     render([(flip * shell, SHELL, 1.0), (flip * cover, COVER, 1.0)], docs / "back.png", view=(35, -115),
-           title="Back: cover with RESET / BOOT pinholes, CHG window, two screws")
+           title="Back: cover with the top end wall, CHG window, two screws")
     # Cover off: boards, cell (taped to the cover in reality) and both wire runs.
     render([(flip * s, c, a) for s, c, a in [(shell, SHELL, 1.0)] + inside], docs / "inside.png", view=(90, -90),
            title="Cover off, from behind: cell, charger, pigtail (red) and cell lead (orange)", lines=flipped_wires)
@@ -115,10 +115,16 @@ def _render_all(shell, cover, printed, ch, docs: Path):
     render([(printed["shell"], SHELL, 1.0)], docs / "shell-print.png", view=(40, -60),
            title="Front shell print pose: bezel face down, bosses and hooks up")
     render([(printed["cover"], COVER, 1.0)], docs / "cover-print.png", view=(40, -60),
-           title="Back cover print pose: outer face down, pocket ribs and tongues up")
+           title="Back cover print pose: outer face down; end wall, pocket ribs and tongue webs up")
     # Exploded: shell, then the cover lifted off behind.
-    render([(shell, SHELL, 1.0)] + inside + [(Pos(0, 0, -30) * cover, COVER, 1.0)], docs / "exploded.png",
-           view=(-25, -55), title="Exploded: cover off for battery service")
+    # The cell is taped to the cover, so it comes away with it.
+    boards = [item for item in inside if item[0] is not cell]
+    render([(flip * s, c, a) for s, c, a in [(shell, SHELL, 1.0)] + boards], docs / "cover-off.png", view=(35, -115),
+           title="Cover off: USB-C, RESET and BOOT open at the top end for flashing")
+    lift = Pos(0, 0, -30)
+    render([(flip * s, c, a) for s, c, a in [(shell, SHELL, 1.0)] + boards
+            + [(lift * cover, COVER, 1.0), (lift * cell, CELL, 1.0)]],
+           docs / "exploded.png", view=(35, -115), title="Exploded: the cover (end wall and cell) lifted off")
 
 
 if __name__ == "__main__":

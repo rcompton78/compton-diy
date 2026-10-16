@@ -57,23 +57,26 @@ AA_W, AA_L = 43.20, 57.60         # SOURCED: active area (lit pixels)
 AA_FROM_BOTTOM = 11.12            # SOURCED
 ANTENNA_KEEPOUT = 15.0            # DESIGN: the PCB antenna sits in the last ~10 mm of the bottom end
                                   #   (drawing); no LiPo within 15 mm of that end.
-# USB-C (flashing port) on the back face, centred on the top end. The drawing puts its
-# centre 25.00 from either long edge; its overhang and body height are read off the
-# drawing's scale, so they're EST.
+# USB-C (flashing port) on the back face, centred on the top end. Flashing is done with the
+# back cover off (the top end wall is on the cover), so its exact size doesn't matter: the
+# model reserves a generous envelope round it instead of a measured body.
 FN_USB_X = 0.0                    # SOURCED: 11.57 + 13.43 = 25.00 from the long edge
-FN_USB_OVERHANG = 1.5             # EST: receptacle mouth past the PCB's top end
-FN_USB_GAP = 0.2                  # DESIGN: receptacle mouth to the top wall, so the board drops straight in
-FN_USB_W, FN_USB_H = 8.94, 3.26   # SOURCED (typical mid-size USB-C receptacle body), EST on this board
-FN_USB_L = 7.3                    # EST: receptacle depth into the PCB
+FN_USB_OVERHANG = 1.5             # DESIGN (drawing scale): nominal mouth past the PCB's top end, for renders
+FN_USB_ENVELOPE = 3.0             # DESIGN: room past the PCB's top end for the receptacle (any overhang up to 2.8)
+FN_USB_W, FN_USB_H = 8.94, 3.26   # DESIGN: nominal USB-C receptacle body, for renders
+FN_USB_ENV_W, FN_USB_ENV_H = 11.0, 4.5   # DESIGN: envelope checked clear of the cover's end wall
+FN_USB_L = 7.3                    # DESIGN: nominal receptacle depth into the PCB
 # BAT socket (MX1.25 2-pin) on the back, 23.18 from the top end and 5.18 in from the right
 # long edge (seen from the front). RESET and BOOT buttons on the back next to the USB-C.
 BAT_FROM_TOP = 23.18              # SOURCED: 86 − (11.82 + 15.97 + 35.03)
 BAT_FROM_EDGE = 5.18              # SOURCED
-BAT_SOCKET = (6.0, 4.5, 3.5)      # EST: MX1.25 2P right-angle socket (along x, along y, height)
+BAT_SOCKET = (6.0, 4.5, 3.5)      # DESIGN: nominal MX1.25 2P socket (along x, along y, height), for renders
+BAT_ENVELOPE = (12.0, 12.0, 6.0)  # DESIGN: room round the BAT socket and its plug, checked clear of the cover
 RESET_X = -11.56                  # SOURCED: 25 − 36.56
 BOOT_X = 11.57                    # SOURCED: 25 − 13.43
-BUTTON_FROM_TOP = 2.1             # EST: read off the drawing's scale
-BUTTON_H = 2.0                    # EST: tactile switch height above the PCB back
+BUTTON_FROM_TOP = 2.1             # DESIGN (drawing scale), for renders
+BUTTON_H = 2.0                    # DESIGN: nominal tactile switch height, for renders
+TOP_ACCESS = 8.0                  # DESIGN: the board's top 8 mm (USB-C, RESET, BOOT) is open once the cover is off
 
 # --- 504060 LiPo (1200 mAh) ------------------------------------------------------
 CELL_W = 40.0                     # MEASURED
@@ -93,21 +96,22 @@ PIGTAIL_STRIP = 6.0               # DESIGN: bare ends stripped into the screw te
 PIGTAIL_SLACK = 10.0              # DESIGN: service slack on top of the modelled run
                                   #   The pigtail isn't bought yet: the build reports the minimum length to buy
                                   #   (run + strip + slack, rounded up to 5 mm). Splice one if it's shorter.
-WIRE_D = 1.1                      # EST: 28 AWG with insulation
+WIRE_D = 1.1                      # DESIGN: 28 AWG with insulation, rounded up
 MIN_CHANNEL = 3.0                 # DESIGN: smallest wire-channel side for the 2-wire pigtail
 JST_PLUG = (6.0, 4.5, 6.0)        # SOURCED (JST PHR-2 housing: 6.0 wide, 4.5 tall, 6.0 long)
 JST_BEND = 8.0                    # DESIGN: free length behind the plug for the lead to turn
 
 # --- USB-C plug overmold -----------------------------------------------------------
-PLUG_OVERMOLD = (12.0, 6.5)       # EST: typical USB-C cable overmold, width × height
-PLUG_CLEAR = 0.5                  # DESIGN: per side round the overmold
+PLUG_OVERMOLD = (12.5, 7.0)       # DESIGN: a generous USB-C cable overmold, width × height; fatter than most
+PLUG_CLEAR = 0.5                  # DESIGN: per side round it, so the charge opening is 13.5 × 8
 
 # --- Shell -----------------------------------------------------------------------
 WALL = 2.2                        # DESIGN: side and bottom walls
-TOP_WALL = 3.0                    # DESIGN: top wall, thicker to take the cover's tongue slots
+TOP_WALL = 4.0                    # DESIGN: top end wall, part of the back cover
 FRONT_T = 1.5                     # DESIGN: bezel / front wall thickness
 BEZEL_CHAMFER = 1.0               # DESIGN: 45° chamfer round the screen opening, on the front
-OUTER_R = 6.0                     # DESIGN: plan-view corner radius
+OUTER_R = 4.0                     # DESIGN: plan-view corner radius; ≤ TOP_WALL so the side walls run straight
+                                  #   to the cover's end wall, which keeps full wall behind the tongue slots
 EDGE_FILLET = 1.6                 # DESIGN: round-over on the front and back outer edges
 SIDE_CLEAR = 0.3                  # DESIGN: Freenove board / glass to the side walls
 GLASS_FLOAT = 0.1                 # DESIGN: boss face stops the PCB this far short of clamping the glass
@@ -126,20 +130,20 @@ RIB_T = 1.2                       # DESIGN: cell-pocket ribs
 RIB_H = 5.0                       # DESIGN: rib height above the cover's inner face
 BOTTOM_RIB_H = 1.5                # DESIGN: the bottom rib is low, so the lead passes over it wherever it leaves the cell end
 LEDGE_W = 1.0                     # DESIGN: cover-support ledge on the side walls (45° underside)
-TONGUE_W = 8.0                    # DESIGN: two tongues on the cover's top edge
-TONGUE_X = 15.0                   # DESIGN: ± from the centreline, clear of the USB opening
-TONGUE_L = 1.2                    # DESIGN: how far a tongue reaches into its slot
-TONGUE_T = 1.2                    # DESIGN
-SLOT_DEPTH = 1.6                  # DESIGN: slot depth into the top wall
-SLOT_H = 2.0                      # DESIGN: slot height (depth axis) for the tongue to swing in
-SLOT_CLEAR = 0.2                  # DESIGN: per side across the slot
+END_GAP = 0.2                     # DESIGN: seam between the cover's end wall and the shell
+# The cover's end wall carries two tongues that slide down into slots in the side walls'
+# inner faces: lay the cover in TOP_TONGUE_L + 0.5 mm high, slide it down, screw the bottom.
+TOP_TONGUE_L = 5.0                # DESIGN: tongue length along the remote
+TOP_TONGUE_D = (14.2, 15.8)       # DESIGN: tongue depth range (behind the Freenove's back parts)
+TOP_TONGUE_IN = 0.9               # DESIGN: how far a tongue reaches into its side-wall slot
+TOP_SLOT_CLEAR = 0.2              # DESIGN: slot clearance round the tongue (depth and reach)
+FIN_T = 0.9                       # DESIGN: web carrying each tongue, from the cover plate
 COVER_SCREW_L = 8.0               # DESIGN: M3 × 8 countersunk (ISO 10642), two at the bottom
 CSK_D = 6.0                       # SOURCED: ISO 10642 M3 head Ø (5.54 max actual; 6.0 cut)
 CSK_DEPTH = 1.7                   # SOURCED: M3 countersunk head height
 COVER_BOSS_D = 7.6                # DESIGN: overlaps the side wall (a boss tangent to it breaks the 3MF mesh)
 COVER_BOSS_INSET = 3.5            # DESIGN: boss centre in from the side wall
 COVER_BOSS_Y = 9.0                # DESIGN: cover screw bosses, centred this far up from the outside bottom
-PINHOLE_D = 2.0                   # DESIGN: RESET / BOOT pinholes in the cover (paperclip)
 LED_HOLE_D = 2.5                  # DESIGN: CHG LED window in the cover
 
 
@@ -162,7 +166,8 @@ class Charger:
     jst: tuple                    # (bx0, bx1, by0, by1) battery socket body; opening faces +by
     jst_h: float
     terminal: tuple               # (bx0, bx1, by0, by1) screw terminal; wires enter from +bx
-    terminal_h: float
+    terminal_h: float             # above the component face
+    terminal_pins: tuple          # (bx0, bx1, by0, by1, length) solder pins below the PCB
     terminal_wire_by: tuple       # by of the screw terminal's + and − wires
     terminal_wire_h: float        # wire entry height above the component face
     chg_led: tuple                # (bx, by) of the charge LED on the component side
@@ -174,19 +179,22 @@ BQ25185 = Charger(
     length=29.21, width=19.05, pcb_t=1.6,                                      # SOURCED: board outline (Eagle)
     holes=((2.54, 2.54), (26.67, 2.54), (2.54, 16.51), (26.67, 16.51)),       # SOURCED
     hole_d=2.5,                                                                # SOURCED: MOUNTINGHOLE2.5
-    usb=(-1.14, 6.20, 5.055, 13.995), usb_h=3.26,                              # SOURCED footprint; height EST
+    usb=(-1.14, 6.20, 5.055, 13.995), usb_h=3.26,                              # SOURCED footprint; height DESIGN (the opening has 0.5 to spare)
     jst=(9.97, 17.97, 10.997, 18.497), jst_h=6.0,                              # SOURCED footprint; height SOURCED (PH SMD)
-    terminal=(21.71, 27.97, 4.0, 15.05), terminal_h=8.4,                       # SOURCED footprint; 10 mm total − PCB (listing)
-    terminal_wire_by=(6.985, 12.065), terminal_wire_h=3.5,                     # SOURCED pins; entry height EST
+    terminal=(21.71, 27.97, 4.0, 15.05), terminal_h=8.4,                       # SOURCED footprint; MEASURED 10.0 from the PCB underside
+    terminal_pins=(24.0, 25.6, 6.2, 12.9, 1.5),                                # SOURCED pin rows; MEASURED 1.5 below the PCB
+    terminal_wire_by=(6.985, 12.065), terminal_wire_h=3.5,                     # SOURCED pins; entry height DESIGN
     chg_led=(6.985, 18.288),                                                   # SOURCED
     hooks=((14.5, -1), (22.5, 1)),                                             # DESIGN: clear of the JST and pads
 )
 CHARGER_STANDOFF_D = 4.5          # DESIGN: printed standoffs under the charger's four holes
 PEG_D = 2.2                       # DESIGN: locating pegs through the 2.5 mm holes
 PEG_PROUD = 1.0                   # DESIGN: pegs stand this far past the PCB's top face
-D_CHARGER_FRONT = 8.0             # DESIGN: depth of the charger PCB's bottom (non-component) face
+D_CHARGER_FRONT = 7.0             # DESIGN: depth of the charger PCB's bottom (non-component) face; leaves 2.1 mm
+                                  #   over the terminal block and 4 mm under its solder pins (no relief needed)
+MIN_TERMINAL_CLEAR = 2.0          # DESIGN: terminal block top to the cover
 CHARGER_EDGE_CLEAR = 0.15         # DESIGN: PCB edge to its snap hooks
-HOOK_T = 1.2                      # DESIGN: hook arm thickness
+HOOK_T = 1.0                      # DESIGN: hook arm thickness
 HOOK_W = 3.0                      # DESIGN
 HOOK_BARB = 0.5                   # DESIGN: barb overhang onto the PCB's component face
 HOOK_MAX_STRAIN = 0.02            # DESIGN: PETG cantilever limit for one snap
@@ -238,5 +246,5 @@ def layout(ch: Charger):
     """Plan-view y positions that depend on the charger: PCB ends, inner top, outer length."""
     y0 = pcb_y0(ch)
     y1 = y0 + PCB_L
-    y_inner_top = y1 + FN_USB_OVERHANG + FN_USB_GAP
+    y_inner_top = y1 + FN_USB_ENVELOPE
     return y0, y1, y_inner_top, y_inner_top + TOP_WALL

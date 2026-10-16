@@ -8,7 +8,10 @@ from . import params as p
 from . import reference as ref
 from .cover import cover_outline
 from .geom import ChargerFrame, dcyl
-from .shell import cover_boss_xy, hook_strain, outline, tongue_slot_x
+from build123d import Pos
+
+from .cover import slide_in
+from .shell import cover_boss_xy, hook_strain, outline
 
 EPS = 1e-3
 
@@ -68,22 +71,31 @@ def run(parts: dict, ch: p.Charger) -> list:
         f"line of sight onto the pixels blocked by {aa_over:.4f} mm³")
     add("Bezel lip rests on the glass border", lip >= 2.0, f"lip overlaps the glass by ≥ {lip:.2f} mm on every side (need ≥ 2)")
 
-    # 6. Both USB-C openings: on the connector's axis, and the overmold reaches the mouth.
-    for name, plug, wall in (("Flashing port (Freenove)", ref.fn_overmold(ch), p.TOP_WALL),
-                             ("Charge port (BQ25185)", ref.charge_overmold(ch), p.WALL)):
-        o_over = (plug & shell).volume + (plug & cover).volume
-        o_gap = min(plug.distance_to(shell), plug.distance_to(cover))
-        add(name, o_over < EPS and o_gap >= p.PLUG_CLEAR - 0.01,
-            f"{p.PLUG_OVERMOLD[0]:g} × {p.PLUG_OVERMOLD[1]:g} overmold seats against the receptacle mouth through the "
-            f"{wall:g} mm wall with {o_gap:.2f} mm clear all round (need ≥ {p.PLUG_CLEAR})")
-    fx = p.FN_USB_X
+    # 6. Flashing with the cover off, and the charge port.
+    cover_off = (shell & ref.fn_overmold(ch)).volume
+    off_gap = shell.distance_to(ref.fn_overmold(ch))
+    env = ref.fn_usb_envelope(ch)
+    env_gap = cover.distance_to(env)
+    add("Flashing port reachable with the cover off", cover_off < EPS and off_gap >= p.PLUG_CLEAR - 0.01,
+        f"a {p.PLUG_OVERMOLD[0]:g} × {p.PLUG_OVERMOLD[1]:g} overmold plugs into the Freenove's USB-C from the open top end "
+        f"with {off_gap:.2f} mm to the shell (the bezel lip)")
+    add("End wall closes over the USB-C", (cover & env).volume < EPS and env_gap >= p.END_GAP - 0.01,
+        f"{p.FN_USB_ENV_W:g} × {p.FN_USB_ENV_H:g} envelope reaching {p.FN_USB_ENVELOPE:g} mm past the PCB end "
+        f"(nominal overhang {p.FN_USB_OVERHANG:g}); {env_gap:.2f} mm to the cover's end wall")
+    access = ref.top_access_zone(ch)
+    a_over = (shell & access).volume
+    add("RESET / BOOT / USB-C open with the cover off", a_over < EPS,
+        f"nothing of the shell behind the board's top {p.TOP_ACCESS:g} mm ({a_over:.4f} mm³): press RESET / BOOT by hand")
+    plug = ref.charge_overmold(ch)
+    o_over = (plug & shell).volume + (plug & cover).volume
+    o_gap = min(plug.distance_to(shell), plug.distance_to(cover))
+    ow, oh = p.PLUG_OVERMOLD
+    add("Charge port (BQ25185)", o_over < EPS and o_gap >= p.PLUG_CLEAR - 0.01,
+        f"{ow + 2 * p.PLUG_CLEAR:g} × {oh + 2 * p.PLUG_CLEAR:g} opening: a {ow:g} × {oh:g} overmold seats against the "
+        f"receptacle mouth through the {p.WALL:g} mm wall with {o_gap:.2f} mm clear all round")
     cx, cd, cy = ref.charger_usb_axis(ch)
-    usb = ref.fn_usb(ch).bounding_box()
-    add("Ports sit on their connector axes",
-        abs((usb.min.X + usb.max.X) / 2 - fx) < 1e-6 and abs(-(usb.min.Z + usb.max.Z) / 2 - ref.fn_usb_axis_d()) < 1e-6
-        and abs(cy - (p.Y_INNER_BOTTOM + 0.1)) < 1e-6 and abs(y_top - usb.max.Y - p.FN_USB_GAP) < 1e-6,
-        f"flash port x {fx:.2f}, depth {ref.fn_usb_axis_d():.2f}, mouth {p.FN_USB_GAP:g} inside the wall; "
-        f"charge port x {cx:.2f}, depth {cd:.2f}, mouth 0.1 inside the wall")
+    add("Charge port on the connector's axis", abs(cy - (p.Y_INNER_BOTTOM + 0.1)) < 1e-6,
+        f"x {cx:.2f}, depth {cd:.2f}, mouth 0.1 inside the wall")
 
     # 7. Charger: standoffs and pegs on its holes, snap hooks grip it, nothing interferes.
     c_over = (charger & shell).volume + (charger & cover).volume
@@ -97,9 +109,14 @@ def run(parts: dict, ch: p.Charger) -> list:
         f"at {strain * 100:.1f}% strain (limit {p.HOOK_MAX_STRAIN * 100:.0f}%)")
     term = ref.terminal_screw_column(ch)
     t_over = (term & shell).volume
-    add("Terminal screws reachable with the cover off", t_over < EPS,
-        f"nothing of the shell over the 4.5V-max terminal's screws ({t_over:.4f} mm³); "
-        f"{p.D_COVER_INNER - f.d(ch.terminal_h):.1f} mm above them to the cover")
+    t_clear = p.D_COVER_INNER - f.d(ch.terminal_h)
+    add("Terminal block under the cover", t_over < EPS and t_clear >= p.MIN_TERMINAL_CLEAR,
+        f"measured {ch.terminal_h + ch.pcb_t:g} mm block: {t_clear:.1f} mm to the cover (need ≥ {p.MIN_TERMINAL_CLEAR:g}); "
+        f"nothing of the shell over its screws")
+    pins = ref.terminal_pins(ch)
+    pin_gap = shell.distance_to(pins)
+    add("Terminal solder pins clear the front wall", (pins & shell).volume < EPS and pin_gap >= 1.0,
+        f"{ch.terminal_pins[4]:g} mm pins below the PCB: nearest shell part {pin_gap:.1f} mm away, {p.D_CHARGER_FRONT - ch.terminal_pins[4] - p.FRONT_T:.1f} mm to the front wall; no relief needed")
 
     # 8. Cell pocket: clearance, swelling, and gap to the board.
     pk = ref.cell_pocket(ch)
@@ -178,32 +195,30 @@ def run(parts: dict, ch: p.Charger) -> list:
     add("Cover fits the shell", cs_over < EPS and cs_gap < EPS,
         f"overlap {cs_over:.4f} mm³; rests on the ledges and screw bosses ({cs_gap:.3f} mm); "
         f"{p.COVER_CLEAR:g} mm round the edge")
-    tongue_in = p.TONGUE_L
-    slot_room = p.SLOT_DEPTH - (p.COVER_CLEAR + p.TONGUE_L) + 0.5
-    add("Cover tongues hook into the top wall", tongue_in >= 1.0 and slot_room >= 0.3 and p.SLOT_H - p.TONGUE_T >= 0.5,
-        f"2 × {p.TONGUE_W:g} mm tongues reach {tongue_in:g} mm past the wall's inner face, {slot_room:.1f} mm short of the "
-        f"slot end, with {p.SLOT_H - p.TONGUE_T:.1f} mm of slot height to swing in; "
-        f"{p.TOP_WALL - p.SLOT_DEPTH:.1f} mm of top wall behind the slots")
+    slide = slide_in()
+    hits = [s for s in [i * 0.5 for i in range(int(slide / 0.5) + 1)] if (Pos(0, s, 0) * cover & shell).volume > EPS]
+    lowered = [k for k in range(0, 31, 2) if (Pos(0, slide, -k) * cover & shell).volume > EPS]
+    skin = p.WALL - p.TOP_TONGUE_IN - p.TOP_SLOT_CLEAR
+    add("Cover slides into its tongue slots", not hits and not lowered and skin >= 1.0,
+        f"laid in {slide:g} mm high, it drops straight down and slides {slide:g} mm into place without touching the shell"
+        + (f" (collides at slide {hits})" if hits else "") + (f" (collides lowering at {lowered} mm)" if lowered else "")
+        + f"; 2 tongues {p.TOP_TONGUE_L:g} mm long reach {p.TOP_TONGUE_IN:g} mm into the side walls, leaving {skin:.1f} mm of wall")
     engage = p.COVER_SCREW_L - p.COVER_T
     hole = p.COVER_SCREW_L - p.COVER_T + 1.0
     add("Cover screw engagement", p.INSERT_L - 0.5 <= engage <= hole - 0.5 and p.CSK_DEPTH <= p.COVER_T - 0.5,
         f"M3 × {p.COVER_SCREW_L:g} countersunk: head flush in the {p.COVER_T:g} mm cover, {engage:.1f} mm into a "
         f"{hole:.1f} mm boss hole with an M3 × 4 insert")
 
-    # 11. Paperclip holes reach RESET / BOOT without hitting anything.
-    blocked = []
-    for name, x, y in ref.button_xy(ch):
-        pin = dcyl(x, y, p.D_PCB_BACK + p.BUTTON_H + 0.2, p.D_BACK_OUTER + 1, p.PINHOLE_D * 0.9)
-        v = (pin & shell).volume + (pin & cover).volume + (pin & cell).volume + (pin & ref.fn_usb(ch)).volume
-        if v > EPS:
-            blocked.append(name)
-    add("RESET / BOOT reachable through the cover", not blocked,
-        f"Ø{p.PINHOLE_D:g} holes, a straight paperclip run of {p.D_BACK_OUTER - p.D_PCB_BACK - p.BUTTON_H:.1f} mm"
-        + (f"; blocked: {', '.join(blocked)}" if blocked else ""))
+    # 11. Room round the BAT socket and its plug.
+    be = ref.bat_envelope(ch)
+    b_over = (be & shell).volume + (be & cover).volume
+    add("BAT socket and plug clear", b_over < EPS,
+        f"{p.BAT_ENVELOPE[0]:g} × {p.BAT_ENVELOPE[1]:g} × {p.BAT_ENVELOPE[2]:g} mm round the socket: overlap {b_over:.4f} mm³")
 
     # 12. Walls and overall size.
     add("Wall thickness", min(p.WALL, p.TOP_WALL, p.FRONT_T + 0.5) >= 2.0 and p.COVER_T >= 2.0,
-        f"side/bottom {p.WALL:g}, top {p.TOP_WALL:g}, cover {p.COVER_T:g}, bezel {p.FRONT_T:g} mm (+{p.BEZEL_CHAMFER:g} chamfer)")
+        f"side/bottom {p.WALL:g}, top end (on the cover) {p.TOP_WALL:g}, cover {p.COVER_T:g}, "
+        f"bezel {p.FRONT_T:g} mm (+{p.BEZEL_CHAMFER:g} chamfer)")
     bb = shell.bounding_box()
     add("Overall size", True,
         f"{bb.max.X - bb.min.X:.1f} × {bb.max.Y - bb.min.Y:.1f} × {bb.max.Z - bb.min.Z:.1f} mm (w × l × thick)")

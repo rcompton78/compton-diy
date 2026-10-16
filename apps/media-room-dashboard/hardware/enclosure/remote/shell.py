@@ -1,4 +1,8 @@
-"""Front shell: bezel, side walls, Freenove bosses, charger standoffs and snap hooks, both USB-C openings."""
+"""Front shell: bezel, side and bottom walls, Freenove bosses, charger standoffs and snap hooks, charge port.
+
+The top end is open behind the bezel: its end wall is part of the back cover, so taking the
+cover off exposes the Freenove's USB-C, RESET and BOOT for flashing.
+"""
 
 from build123d import Axis, Part, Plane, Pos, RectangleRounded, Rot, Rectangle, extrude, fillet, loft
 
@@ -23,11 +27,15 @@ def outer_body(ch: p.Charger) -> Part:
 
 
 def cavity(ch: p.Charger, grow: float = 0.0) -> Part:
-    """Inside of the walls, from behind the front wall to past the back (open for the cover)."""
+    """Inside of the walls, from behind the front wall to past the back (open for the cover).
+
+    It runs on past the open top end, so its rounded top corners don't leave slivers of wall there.
+    """
     _, y_top = outline(ch)
+    y_end = y_top + 5.0
     w = 2 * p.INNER_HALF_W + 2 * grow
-    ln = y_top - p.Y_INNER_BOTTOM + 2 * grow
-    sk = Pos(0, (p.Y_INNER_BOTTOM + y_top) / 2, -p.D_BACK_OUTER - 1) * RectangleRounded(w, ln, INNER_R + grow)
+    ln = y_end - p.Y_INNER_BOTTOM + 2 * grow
+    sk = Pos(0, (p.Y_INNER_BOTTOM + y_end) / 2, -p.D_BACK_OUTER - 1) * RectangleRounded(w, ln, INNER_R + grow)
     return extrude(sk, p.D_BACK_OUTER + 1 - p.FRONT_T)
 
 
@@ -75,8 +83,21 @@ def cover_boss_xy():
     return [(-bx, p.COVER_BOSS_Y), (bx, p.COVER_BOSS_Y)]
 
 
-def tongue_slot_x():
-    return [(-p.TONGUE_X), p.TONGUE_X]
+def end_region(ch: p.Charger, grow: float = 0.0) -> Part:
+    """Everything above the side walls' ends and behind the bezel: the cover's end wall lives here."""
+    length, y_top = outline(ch)
+    return dbox(-p.OUTER_W, p.OUTER_W, y_top + grow, length + 5, p.FRONT_T + grow, p.D_BACK_OUTER + 5)
+
+
+def top_slot(ch: p.Charger, sx: int) -> Part:
+    """Slot in a side wall's inner face, open at its top end, for one of the cover's tongues."""
+    _, y_top = outline(ch)
+    c = p.TOP_SLOT_CLEAR
+    x0, x1 = p.INNER_HALF_W - 0.5, p.INNER_HALF_W + p.TOP_TONGUE_IN + c
+    if sx < 0:
+        x0, x1 = -x1, -x0
+    d0, d1 = p.TOP_TONGUE_D
+    return dbox(x0, x1, y_top - p.TOP_TONGUE_L - 0.5, y_top + 1, d0 - c, d1 + c)
 
 
 def build_shell(ch: p.Charger) -> Part:
@@ -111,19 +132,20 @@ def build_shell(ch: p.Charger) -> Part:
         xw = sx * p.INNER_HALF_W
         prof = [(xw, -p.D_COVER_INNER), (xw - sx * w, -p.D_COVER_INNER), (xw, -p.D_COVER_INNER + w)]
         prof = [(x + sx * 0.01, z) for x, z in prof]
-        y0, y1 = p.COVER_BOSS_Y + p.COVER_BOSS_D / 2, y_top
+        # They stop short of the cover's tongues, which slide down past them.
+        y0, y1 = p.COVER_BOSS_Y + p.COVER_BOSS_D / 2, y_top - p.TOP_TONGUE_L - 1.0
         shell += prism_y(prof, y0, y1)
 
-    # Tongue slots in the top wall: the cover's top edge hooks in here.
-    for tx in tongue_slot_x():
-        hw = p.TONGUE_W / 2 + p.SLOT_CLEAR
-        shell -= dbox(tx - hw, tx + hw, y_top - 0.5, y_top + p.SLOT_DEPTH,
-                      p.D_COVER_INNER - p.SLOT_H, p.D_COVER_INNER + p.COVER_CLEAR)
+    # Open top end (the cover's end wall closes it), leaving the bezel running to the end as a lip.
+    shell -= end_region(ch)
 
-    # USB-C openings: sized for the cable's overmold, which reaches through the wall to the mouth.
+    # Slots for the cover's two tongues in the side walls' inner faces.
+    for sx in (-1, 1):
+        shell -= top_slot(ch, sx)
+
+    # Charge port: sized for a generous cable overmold, which reaches through the wall to the mouth.
     ow, oh = p.PLUG_OVERMOLD
     cw, chh = ow + 2 * p.PLUG_CLEAR, oh + 2 * p.PLUG_CLEAR
-    shell -= stadium_y(p.FN_USB_X, ref.fn_usb_axis_d(), cw, chh, y_top - 1.0, y_top + p.TOP_WALL + 2)
     x, d, _ = ref.charger_usb_axis(ch)
     shell -= stadium_y(x, d, cw, chh, -2, p.Y_INNER_BOTTOM + 1.0)
     return shell
