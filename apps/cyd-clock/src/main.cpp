@@ -449,6 +449,7 @@ static constexpr int GLASSES_IDX_CANDY_CORN = GLASSES_STORE_COUNT + 1;
 
 // Forward-declared for the same reason as the bow functions above.
 static void drawHogwartsCrest(int cx, int cy);
+static void drawGryffindorBadge(int cx, int cy);
 
 // Chest badge catalog (COM-382) — a fourth worn-cosmetic slot alongside ACCESSORIES[] (head),
 // GLASSES[] (face) and the right-arm items, with its own store section, dressing-room control and
@@ -464,6 +465,7 @@ struct Badge {
 };
 static constexpr Badge BADGES[] = {
     {"hogwarts_crest", "Hogwarts Crest", STORE_COST_LEGENDARY, "#E8B030", drawHogwartsCrest},
+    {"gryffindor_badge", "Gryffindor Badge", STORE_COST_LEGENDARY, "#E04848", drawGryffindorBadge},  // COM-448
 };
 static constexpr int BADGE_COUNT = sizeof(BADGES) / sizeof(BADGES[0]);
 static_assert(BADGE_COUNT <= 8, "ownedBadges bitmask is uint8_t");
@@ -1053,6 +1055,67 @@ static void drawHogwartsCrest(int cx, int cy) {
     tft.drawFastVLine(cx - 2, y + 6, 6, C_DARK);
     tft.drawFastVLine(cx + 2, y + 6, 6, C_DARK);
     tft.drawFastHLine(cx - 2, y + 8, 5, C_DARK);
+}
+
+// Gryffindor badge shield (COM-448): how far each of its 25 rows is inset from the 21px-wide box
+// on each side. Square for the top 15 rows, then a rounded point. Each step is at most 1px, so the
+// C_DARK outline stays unbroken and the gold rim never touches the fur.
+static constexpr uint8_t GRYFFINDOR_SHIELD_INSET[] = {
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8,
+};
+static_assert(sizeof(GRYFFINDOR_SHIELD_INSET) / sizeof(GRYFFINDOR_SHIELD_INSET[0]) == BADGE_BOTTOM_DY - BADGE_TOP_DY + 1,
+              "GRYFFINDOR_SHIELD_INSET needs exactly one inset per badge row");
+
+// Gold lion rampant, 13px wide, facing left: one row bitmask per row, bit 12 = leftmost pixel.
+// Drawn as horizontal runs; the eye is punched out afterwards in C_DARK.
+static constexpr uint16_t GRYFFINDOR_LION[] = {
+    0b0000110000000,
+    0b0001111000000,
+    0b0011111100001,
+    0b0111111100010,
+    0b0000111110010,
+    0b0010111111010,
+    0b0110111111100,
+    0b0011111111100,
+    0b0000111111100,
+    0b0000011111100,
+    0b0000111011100,
+    0b0001100001100,
+    0b0011100011100,
+};
+static constexpr int GRYFFINDOR_LION_W = 13;
+
+/**
+ * Gryffindor chest badge (legendary, COM-448): a 21×25 px shield with a C_DARK outline, a gold
+ * rim and a scarlet field, with a gold lion rampant. It sits in the same chest box as
+ * drawHogwartsCrest() (cx-10..+10, cy+6..+30). The rounded point, single field and big lion
+ * keep it distinct from the crest's quartered, pointed shield at 1×.
+ *
+ * @param cx Cat center x (CAT_CX).
+ * @param cy Cat center y, including any bounce offset.
+ */
+static void drawGryffindorBadge(int cx, int cy) {
+    int x0 = cx - 10, y = cy + BADGE_TOP_DY;
+    const int rows = sizeof(GRYFFINDOR_SHIELD_INSET) / sizeof(GRYFFINDOR_SHIELD_INSET[0]);
+    for (int r = 0; r < rows; r++) {
+        int in = GRYFFINDOR_SHIELD_INSET[r], w = 21 - 2 * in;
+        tft.drawFastHLine(x0 + in, y + r, w, C_DARK);
+        if (r == 0 || r == rows - 1) continue;  // solid outline at the top edge and the tip
+        tft.drawFastHLine(x0 + in + 1, y + r, w - 2, C_CREST_GOLD);
+        int rim = r >= 18 ? 2 : 1;  // the rim thickens around the point
+        if (r >= 2 && w - 2 - 2 * rim > 0)
+            tft.drawFastHLine(x0 + in + 1 + rim, y + r, w - 2 - 2 * rim, C_CREST_RED);
+    }
+    int lx = x0 + 4, ly = y + 3;
+    for (int r = 0; r < (int)(sizeof(GRYFFINDOR_LION) / sizeof(GRYFFINDOR_LION[0])); r++) {
+        for (int c = 0; c < GRYFFINDOR_LION_W;) {
+            if (!(GRYFFINDOR_LION[r] & (1u << (GRYFFINDOR_LION_W - 1 - c)))) { c++; continue; }
+            int start = c;
+            while (c < GRYFFINDOR_LION_W && (GRYFFINDOR_LION[r] & (1u << (GRYFFINDOR_LION_W - 1 - c)))) c++;
+            tft.drawFastHLine(lx + start, ly + r, c - start, C_CREST_GOLD);
+        }
+    }
+    tft.drawPixel(lx + 4, ly + 2, C_DARK);  // eye
 }
 
 // Draws just the eye shapes (sclera/pupil/glint, or a closed dash) into an already

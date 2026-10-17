@@ -48,9 +48,13 @@ COM-382 introduced the legendary tier: `STORE_COST_LEGENDARY` (350 points, the t
 - **Hogwarts Crest**, the first item in the new **chest badge** slot (`BADGES[]`). The slot is
   general, so more badges are now cheap to add: one catalog row plus its draw function, inside
   the shield-sized area on the chest (x cx−10..+10, y cy+6..+30). Ideas:
-  - single-house crests (Gryffindor lion, etc.);
+  - more single-house crests (Slytherin serpent, Ravenclaw eagle, Hufflepuff badger), now that
+    the Gryffindor one exists;
   - a gold star or sheriff badge;
   - a Pokémon gym badge to go with the Pikachu/Eevee stuffies.
+
+- **Gryffindor Badge** (COM-448), the second chest badge: a gold-rimmed scarlet shield with a
+  gold lion rampant.
 
 - **Hogwarts at Night** room theme (COM-378): a castle on the Black Lake under a starry sky,
   with windows that flicker and a rare shooting star. Its two animations are the first periodic
