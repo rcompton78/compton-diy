@@ -898,7 +898,7 @@ Artifact.
   owners keep their bit and their choice.
 - **Store label:** a lifted scarlet (`#E04848`) that reads on the dark store cards and doesn't
   match the crest's gold label. At 350 it gets the ★ LEGENDARY tag automatically.
-- **Flash:** +472 B on `cyd` (1,198,869 → 1,199,341 B, 91.5%).
+- **Flash:** +472 B on `cyd` (1,198,865 → 1,199,337 B, 91.5%).
 
 ## Branch & Files
 
