@@ -628,10 +628,10 @@ on every fur colour and room theme with the store listing, is in the COM-382 Art
   - **Hunger lines move.** The tummy rumble lines normally sit exactly where the crest goes, and
     their fur-colour erase would punch through it. With a badge equipped, `drawHungerLines()`
     moves them below the shield (cy+33/+38/+43, 5 px apart instead of 8).
-- **Sorting Hat** (`ACCESSORIES[]`): a patched brown hat with a wide, droopy brim and a cone
-  crumpled at a kink. The tip flops to the left, and a face is creased in (brow folds and a seam
-  mouth). It has a 1px near-black outline and no band or buckle, so it reads differently from
-  the black, right-bending witch hat.
+- **Sorting Hat** (`ACCESSORIES[]`): a patched charcoal hat (shipped brown, recoloured by COM-447,
+  below) with a wide, droopy brim and a cone crumpled at a kink. The tip flops to the left, and a
+  face is creased in (brow folds and a seam mouth). It has a 1px grey outline and no band or
+  buckle, so it reads differently from the black, right-bending witch hat.
   - **Placement:** the brim sits low on the brow (cy−57), which buys extra height under the
     cy−87 apex limit. The brim's lowest row is cy−52, above the blink rect (cy−50).
   - **Size:** the user asked for it a little bigger than the first mockup. It is now 65 px
@@ -859,6 +859,20 @@ every form submit is handled the same as before. The one deliberate behaviour ch
   reset. Restoring the original backup then brought the config back byte-identical to the
   pre-flash export (setupComplete=true). A full filesystem wasn't reproduced on hardware.
 - **Flash:** +1,672 B on `cyd` (1,196,849 → 1,198,521 B, 91.3% → 91.4%).
+
+## Sorting Hat Recoloured Black (COM-447, 2026-10-16)
+
+- The Sorting Hat is now charcoal instead of brown, to match the films' hat. Only its colours
+  changed: `C_SORTING_HAT` 0x39E7 (~#3c3c3c body), `C_SORTING_HAT_PATCH` 0x2104 (~#202020 flank
+  and brim fold) and `C_SORTING_HAT_LINE` 0x7BCF (~#787878). The store/dressing-room label colour
+  went from `#C8955A` to `#A8A8A8`. Id, index, price and shape are unchanged, so owners keep it.
+- **Why a grey rim:** most backdrops behind the hat are near-black (no theme, Starry Night, 6-7,
+  Hogwarts at Night, Haunted Night, Midnight, Twilight), and so is the black cat. The old brown
+  fill was what separated the hat from them. The existing outline pass and the crumple/face
+  creases share `C_SORTING_HAT_LINE`, so making it a mid grey gives the hat a rim on dark themes
+  and lighter creases that read on the charcoal. The user picked it over a darker `#5a5a5a` rim,
+  whose face creases went faint at 1×, from a rendered mockup of both on every dark theme.
+- It stays distinct from the witch hat (pure black, lavender rim, orange band, tip bending right).
 
 ## Branch & Files
 

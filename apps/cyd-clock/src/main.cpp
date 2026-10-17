@@ -196,13 +196,15 @@ static constexpr uint16_t C_WITCH_HAT_RIM    = 0x9B5A;  // 1px lavender outline 
 static constexpr uint16_t C_WITCH_HAT_BAND   = 0xFC40;  // witch hat band, candy-corn temple arms (~#ff8a00)
 static constexpr uint16_t C_CANDY_CORN_TOP   = 0xFE83;  // candy-corn lens wide yellow band (~#ffd21f)
 
-// Legendary Harry Potter items (COM-382). The Sorting Hat is a patched brown with a near-black
-// outline, so it reads on pale furs and pale themes; its mid-brown fill is what separates it from a
-// black cat and the dark themes. The crest's house colors are saturated flat fills inside a C_DARK
-// outline, the same contrast recipe as the candy-corn lenses above.
-static constexpr uint16_t C_SORTING_HAT       = 0x8B07;  // hat body (~#8a6038)
-static constexpr uint16_t C_SORTING_HAT_PATCH = 0x51C3;  // shaded flank and brim fold (~#56391f)
-static constexpr uint16_t C_SORTING_HAT_LINE  = 0x28E2;  // outline, crumple and face creases (~#2b1d12)
+// Legendary Harry Potter items (COM-382). The Sorting Hat is charcoal (COM-447, brown before), so
+// its dark fill reads on pale furs and pale themes, while its mid-grey outline and creases are what
+// separate it from a black cat and the dark themes (black, navy, plum) and keep the crumples and
+// face legible. It stays distinct from the witch hat's pure black and lavender rim. The crest's
+// house colors are saturated flat fills inside a C_DARK outline, the same contrast recipe as the
+// candy-corn lenses above.
+static constexpr uint16_t C_SORTING_HAT       = 0x39E7;  // charcoal hat body (~#3c3c3c)
+static constexpr uint16_t C_SORTING_HAT_PATCH = 0x2104;  // darker shaded flank and brim fold (~#202020)
+static constexpr uint16_t C_SORTING_HAT_LINE  = 0x7BCF;  // grey rim, crumple and face creases (~#787878)
 static constexpr uint16_t C_CREST_RED    = 0xA8C4;  // Gryffindor quarter (~#ae1820)
 static constexpr uint16_t C_CREST_GREEN  = 0x1BC7;  // Slytherin quarter (~#1c7a3c)
 static constexpr uint16_t C_CREST_BLUE   = 0x2298;  // Ravenclaw quarter (~#2350c0)
@@ -365,7 +367,7 @@ static constexpr Accessory ACCESSORIES[] = {
     // down a slot would hand their bits to a different item on any device (or backup) that owned
     // one mid-theme-week. Store code skips the theme-week entries with isStoreAccessory() instead
     // of assuming the purchasable entries are a contiguous prefix.
-    {"sorting_hat", "Sorting Hat", STORE_COST_LEGENDARY, "#C8955A", drawSortingHat},
+    {"sorting_hat", "Sorting Hat", STORE_COST_LEGENDARY, "#A8A8A8", drawSortingHat},
 };
 static constexpr int ACCESSORY_COUNT = sizeof(ACCESSORIES) / sizeof(ACCESSORIES[0]);
 static_assert(ACCESSORY_COUNT <= 16, "ownedAccessories bitmask is uint16_t");
@@ -892,13 +894,15 @@ static void drawWitchHat(int cx, int cy) {
 }
 
 /**
- * Sorting Hat (legendary, COM-382): a patched brown hat with a wide, droopy brim, a cone crumpled
- * at a kink, a tip that flops to the left, and a face creased into it. It differs from the witch
- * hat above in colour (brown, not black), silhouette (the tip bends left and droops) and detail
+ * Sorting Hat (legendary, COM-382): a patched charcoal hat (COM-447, brown before) with a wide,
+ * droopy brim, a cone crumpled at a kink, a tip that flops to the left, and a face creased into it.
+ * It differs from the witch hat above in colour (charcoal with a grey rim, not pure black with a
+ * lavender one), silhouette (the tip bends left and droops) and detail
  * (no band or buckle). It sits low over the brow (brim at cy-57), as the Sorting Hat slumps onto
  * Harry, which buys extra height under the cy-87 apex limit that drawCat()'s clear rect sets. The
  * brim outline's lowest row is cy-52, just above drawEyes()'s blink rect (cy-50), so blinking
- * never erases part of the hat. Each body shape is first painted 1px larger in the outline colour.
+ * never erases part of the hat. Each body shape is first painted 1px larger in the outline colour,
+ * a mid grey that also draws the creases, so the hat doesn't vanish on black or navy themes.
  *
  * @param cx Cat center x (CAT_CX).
  * @param cy Cat center y, including any bounce offset.
