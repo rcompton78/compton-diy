@@ -1060,9 +1060,11 @@ static void drawHogwartsCrest(int cx, int cy) {
 // Gryffindor badge shield (COM-448): how far each of its 25 rows is inset from the 21px-wide box
 // on each side. Square for the top 15 rows, then a rounded point. Each step is at most 1px, so the
 // C_DARK outline stays unbroken and the gold rim never touches the fur.
-static constexpr uint8_t GRYFFINDOR_SHIELD_INSET[BADGE_BOTTOM_DY - BADGE_TOP_DY + 1] = {
+static constexpr uint8_t GRYFFINDOR_SHIELD_INSET[] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 3, 4, 5, 6, 7, 8,
 };
+static_assert(sizeof(GRYFFINDOR_SHIELD_INSET) / sizeof(GRYFFINDOR_SHIELD_INSET[0]) == BADGE_BOTTOM_DY - BADGE_TOP_DY + 1,
+              "GRYFFINDOR_SHIELD_INSET needs exactly one inset per badge row");
 
 // Gold lion rampant, 13px wide, facing left: one row bitmask per row, bit 12 = leftmost pixel.
 // Drawn as horizontal runs; the eye is punched out afterwards in C_DARK.
