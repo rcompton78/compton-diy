@@ -72,10 +72,8 @@ BAT_FROM_TOP = 23.18              # SOURCED: 86 − (11.82 + 15.97 + 35.03)
 BAT_FROM_EDGE = 5.18              # SOURCED
 BAT_SOCKET = (6.0, 4.5, 3.5)      # DESIGN: nominal MX1.25 2P socket (along x, along y, height), for renders
 BAT_ENVELOPE = (12.0, 12.0, 6.0)  # DESIGN: room round the BAT socket and its plug, checked clear of the cover
-RESET_X = -11.56                  # SOURCED: 25 − 36.56
-BOOT_X = 11.57                    # SOURCED: 25 − 13.43
-BUTTON_FROM_TOP = 2.1             # DESIGN (drawing scale), for renders
-BUTTON_H = 2.0                    # DESIGN: nominal tactile switch height, for renders
+# RESET (x −11.56) and BOOT (x +11.57, SOURCED) sit on the back ~2 mm from the top end, beside the
+# USB-C: inside TOP_ACCESS, so they're reachable by hand with the cover off.
 TOP_ACCESS = 8.0                  # DESIGN: the board's top 8 mm (USB-C, RESET, BOOT) is open once the cover is off
 
 # --- 504060 LiPo (1200 mAh) ------------------------------------------------------

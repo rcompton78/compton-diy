@@ -15,6 +15,8 @@ LIGHT = LIGHT / np.linalg.norm(LIGHT)
 def _mesh(shape, tol=0.25):
     verts, tris = shape.tessellate(tol, 0.3)
     v = np.array([[q.X, q.Y, q.Z] for q in verts])
+    if not len(tris):
+        return np.empty((0, 3, 3))
     t = np.array(tris)
     return _subdivide(v[t])
 
@@ -35,8 +37,10 @@ def _subdivide(tri, max_edge=6.0):
         a, b, c = big[:, 0], big[:, 1], big[:, 2]
         ab, bc, ca = (a + b) / 2, (b + c) / 2, (c + a) / 2
         todo = np.concatenate([np.stack(q, axis=1) for q in ((a, ab, ca), (ab, b, bc), (ca, bc, c), (ab, bc, ca))])
+    if not len(tri):
+        return np.empty((0, 3, 3))
     out.append(todo)
-    return np.concatenate([o for o in out if len(o)]) if out else tri
+    return np.concatenate([o for o in out if len(o)])
 
 
 def render(items, path, view=(20, -60), title=None, lines=(), size=(9, 7), ortho=True, zshade=False):

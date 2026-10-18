@@ -106,13 +106,6 @@ def fn_bat_socket(ch: p.Charger) -> Part:
     return dbox(x - sx / 2, x + sx / 2, y - sy / 2, y + sy / 2, p.D_PCB_BACK, p.D_PCB_BACK + sh)
 
 
-def button_xy(ch: p.Charger):
-    """(name, x, y) of the RESET and BOOT buttons on the Freenove's back."""
-    _, y1, _, _ = p.layout(ch)
-    y = y1 - p.BUTTON_FROM_TOP
-    return [("RESET", p.RESET_X, y), ("BOOT", p.BOOT_X, y)]
-
-
 def fn_screw_heads(ch: p.Charger) -> Part:
     """M3 × 6 pan heads on the PCB back."""
     out = None

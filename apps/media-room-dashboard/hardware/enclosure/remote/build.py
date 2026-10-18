@@ -25,7 +25,6 @@ GLASS = (0.10, 0.11, 0.13)
 BOARD = (0.12, 0.40, 0.25)
 CHARGER = (0.15, 0.25, 0.55)
 CELL = (0.80, 0.78, 0.70)
-METAL = (0.70, 0.71, 0.73)
 PIGTAIL = "#d62728"
 LEAD = "#ff7f0e"
 
@@ -80,7 +79,7 @@ def main(argv=None) -> int:
 
     if not args.no_render:
         print("rendering previews…", flush=True)
-        _render_all(shell, cover, printed, ch, docs)
+        _render_all(shell, cover, printed, variant, docs)
 
     failed = [n for n, ok, _ in results if not ok]
     if failed:
@@ -90,8 +89,10 @@ def main(argv=None) -> int:
     return 0
 
 
-def _render_all(shell, cover, printed, ch, docs: Path):
+def _render_all(shell, cover, printed, variant, docs: Path):
     from .render import render
+
+    ch = variant.charger
 
     fn = ref.freenove(ch)
     glass = ref.fn_glass(ch)
@@ -101,7 +102,7 @@ def _render_all(shell, cover, printed, ch, docs: Path):
     inside = [(fn - glass, BOARD, 1.0), (glass, GLASS, 1.0), (charger, CHARGER, 1.0), (cell, CELL, 1.0)]
 
     render([(shell, SHELL, 1.0), (glass, GLASS, 1.0)], docs / "front.png", view=(25, -115),
-           title="Media remote (variant 1): front three-quarter")
+           title=f"Media remote (variant {variant.number}): front three-quarter")
     # Back views: turn everything over (x → −x, z → −z) and look from above, so the remote
     # reads the way you hold it face down: top end up, its right side on your left.
     flip = Rot(Y=180)

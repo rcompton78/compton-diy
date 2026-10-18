@@ -3,15 +3,13 @@
 import math
 
 from build123d import Vertex
+from build123d import Pos
 
 from . import params as p
 from . import reference as ref
-from .cover import cover_outline
-from .geom import ChargerFrame, dcyl
-from build123d import Pos
-
 from .cover import slide_in
-from .shell import cover_boss_xy, hook_strain, outline
+from .geom import ChargerFrame
+from .shell import hook_strain
 
 EPS = 1e-3
 
@@ -62,7 +60,7 @@ def run(parts: dict, ch: p.Charger) -> list:
         f"{skin:.2f} mm of bezel left in front of it (need ≥ {p.MIN_SKIN})")
 
     # 5. Bezel: the opening shows all the lit pixels, and its lip rests on the glass's black border.
-    y0, y1, y_top, y_out = p.layout(ch)
+    y0, _, _, _ = p.layout(ch)
     va0 = y0 + p.VA_FROM_BOTTOM
     aa0 = y0 + p.AA_FROM_BOTTOM
     reveal = min((p.VA_W - p.AA_W) / 2, aa0 - va0, (va0 + p.VA_L) - (aa0 + p.AA_L))
@@ -75,8 +73,9 @@ def run(parts: dict, ch: p.Charger) -> list:
     add("Bezel lip rests on the glass border", lip >= 2.0, f"lip overlaps the glass by ≥ {lip:.2f} mm on every side (need ≥ 2)")
 
     # 6. Flashing with the cover off, and the charge port.
-    cover_off = (shell & ref.fn_overmold(ch)).volume
-    off_gap = shell.distance_to(ref.fn_overmold(ch))
+    overmold = ref.fn_overmold(ch)
+    cover_off = (shell & overmold).volume
+    off_gap = shell.distance_to(overmold)
     env = ref.fn_usb_envelope(ch)
     env_gap = cover.distance_to(env)
     add("Flashing port reachable with the cover off", cover_off < EPS and off_gap >= p.PLUG_CLEAR - 0.01,
