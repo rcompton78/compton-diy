@@ -340,8 +340,15 @@ display:
     invert_colors: true
     auto_clear_enabled: false
     update_interval: never
+    # Turned 180° from the panel's native portrait (COM-445): in the handheld
+    # enclosure the Freenove's USB-C is at the top end and the charger grip at
+    # the bottom, which is upside down for the native scan. Done as panel scan
+    # flags (MADCTL MX/MY, set by the driver after init_sequence), not
+    # `rotation: 180`, so it costs no CPU or LVGL buffer. Was mirror_x: true
+    # alone; a 180° turn flips both axes.
     transform:
-      mirror_x: true
+      mirror_x: false
+      mirror_y: true
     dimensions:
       width: 240
       height: 320
@@ -385,3 +392,10 @@ touchscreen:
     id: tft_touch
     display: tft_display
     i2c_id: i2c_bus_touch
+    # Matches the display's 180° turn above (COM-445). ESPHome only rotates
+    # touch to follow a display's software `rotation:`, not its panel mirror
+    # flags, so the touch needs its own transform for taps to land on the
+    # button that's drawn there.
+    transform:
+      mirror_x: true
+      mirror_y: true
