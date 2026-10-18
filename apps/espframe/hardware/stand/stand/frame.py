@@ -8,12 +8,15 @@ bottom wall would have to fit between the ledge and the glass. The outer chamfer
 the top and sides, and the bottom edge is square so the face sits flat on the ledge. It
 never touches the glass: felt on the back of the face stays FELT_CLEAR off the glass, and
 the walls clear the glass edges.
+
+The desk variant (params.DESK) carries the face and side walls on down past the glass to felt on
+the desk, with the bottom cut level, so the frame stands on the desk in front of the foot.
 """
 
 from build123d import Align, Cylinder, Part, Plane, Pos, Rectangle, Rot, extrude, loft
 
 from . import params as p
-from .frames import screen_box
+from .frames import SCREEN_TO_WORLD, box, screen_box
 from .plate import frame_tab_spans
 
 
@@ -28,12 +31,14 @@ def build_frame() -> Part:
     z_back = p.FRAME_FACE_GAP                       # face rear surface (towards the glass)
     z_front = z_back + p.FRAME_FACE_T
     ch, bev = p.FRAME_OUTER_CH, p.FRAME_BEVEL
+    # Desk variant: the face and side walls run on down, then get cut level at the desk felt below.
+    fy0 = -60.0 if p.DESK else oy0
 
     # Face: straight outer band, then a 45° outer chamfer to the front surface on the top and
     # sides. The bottom edge stays square, so the face comes right down to the ledge.
-    face = extrude(_rect_at(ox0, ox1, oy0, oy1, z_back), z_front - ch - z_back)
-    face += loft([_rect_at(ox0, ox1, oy0, oy1, z_front - ch),
-                  _rect_at(ox0 + ch, ox1 - ch, oy0, oy1 - ch, z_front)])
+    face = extrude(_rect_at(ox0, ox1, fy0, oy1, z_back), z_front - ch - z_back)
+    face += loft([_rect_at(ox0, ox1, fy0, oy1, z_front - ch),
+                  _rect_at(ox0 + ch, ox1 - ch, fy0, oy1 - ch, z_front)])
     # Opening with a 45° bevel opening out towards the viewer.
     face -= extrude(_rect_at(px0, px1, py0, py1, z_back - 1), z_front - z_back + 2)
     face -= loft([_rect_at(px0, px1, py0, py1, z_front - bev),
@@ -41,8 +46,8 @@ def build_frame() -> Part:
 
     # Side and top walls from the face back to the plate's back face; no bottom wall (COM-431).
     w = p.FRAME_WALL
-    walls = extrude(_rect_at(ox0, ox1, oy0, oy1, -p.D_PLATE_BACK), p.D_PLATE_BACK + z_back)
-    walls -= extrude(_rect_at(ox0 + w, ox1 - w, oy0 - 1, oy1 - w, -p.D_PLATE_BACK - 1), p.D_PLATE_BACK + z_back + 2)
+    walls = extrude(_rect_at(ox0, ox1, fy0, oy1, -p.D_PLATE_BACK), p.D_PLATE_BACK + z_back)
+    walls -= extrude(_rect_at(ox0 + w, ox1 - w, fy0 - 1, oy1 - w, -p.D_PLATE_BACK - 1), p.D_PLATE_BACK + z_back + 2)
     frame = face + walls
 
     # Bosses for the M3 × 4 inserts, tied to the side walls, face at the plate's front face.
@@ -57,6 +62,8 @@ def build_frame() -> Part:
             frame -= Pos(xc, ty, -p.D_PLATE_FRONT - 0.01) * Cylinder(
                 p.INSERT_HOLE_D / 2, p.FRAME_INSERT_DEPTH, align=(Align.CENTER, Align.CENTER, Align.MIN))
 
+    if p.DESK:
+        frame &= SCREEN_TO_WORLD.inverse() * box(-50, 250, -100, 300, p.DESK_FELT_T, 400)
     return frame
 
 

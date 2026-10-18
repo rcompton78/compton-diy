@@ -8,7 +8,8 @@ from . import params as p
 from . import reference as ref
 from .cable import build_path
 from .foot import build_rail, layout, lid_detents, lift_slot_x
-from .frames import SCREEN_TO_WORLD, screen_point
+from .frames import SCREEN_TO_WORLD, box, screen_box, screen_point
+from .plate import plate_outline
 
 
 def run(parts: dict) -> list:
@@ -159,9 +160,10 @@ def run(parts: dict) -> list:
     w = p.FRAME_WALL
     edges = dict(left=0 - (p.FRAME_X[0] + w), right=(p.FRAME_X[1] - w) - p.GLASS_W,
                  top=(p.FRAME_Y[1] - w) - p.GLASS_H)
+    below = (f"B open, the frame stands on felt on the desk {screen_point(0, 0, 0).Z:.1f} mm below the glass"
+             if p.DESK else f"B open, no bottom wall: ledge felt {p.RISE:.2f} mm below the glass")
     add("Glass edge gap", min(edges.values()) >= p.MIN_EDGE_GAP,
-        "L / R / T " + " / ".join(f"{v:.2f}" for v in edges.values()) + f" mm (need ≥ {p.MIN_EDGE_GAP}); "
-        f"B open, no bottom wall: ledge felt {p.RISE:.2f} mm below the glass")
+        "L / R / T " + " / ".join(f"{v:.2f}" for v in edges.values()) + f" mm (need ≥ {p.MIN_EDGE_GAP}); " + below)
     felt = ref.face_felt()
     f_gap = felt.distance_to(panel)
     f_over = (felt & aa).volume
@@ -181,12 +183,53 @@ def run(parts: dict) -> list:
     add("Frame screw engagement", p.INSERT_M3x4_L <= f_engage <= p.FRAME_INSERT_DEPTH - 0.5,
         f"M3 × {p.FRAME_SCREW_L:.0f} through the {p.PLATE_T:.0f} mm tab: {f_engage:.1f} mm into a {p.FRAME_INSERT_DEPTH:.0f} mm hole "
         f"with an M3 × 4 insert")
-    lf = SCREEN_TO_WORLD * ref.ledge_felt()
-    seat_ok = lf.distance_to(foot) < 1e-3 and lf.distance_to(frame_w) < 1e-3 and (frame_w & foot).volume < 1e-3
-    add("Frame face seats on the ledge", seat_ok,
-        f"face bottom edge (square, {p.FRAME_FACE_T:.0f} mm) and side walls sit on {p.FELT_T:.0f} mm felt on the ledge; "
-        f"screen raised {p.RISE:.2f} mm; "
-        f"frame-to-foot overlap {(frame_w & foot).volume:.4f} mm³, closest {frame_w.distance_to(foot):.2f} mm")
+    lf = SCREEN_TO_WORLD * ref.seat_felt()
+    ff_over, ff_gap = (frame_w & foot).volume, frame_w.distance_to(foot)
+    if p.DESK:
+        fbb, lbb = frame_w.bounding_box(), lf.bounding_box()
+        # The level bottom: the face and both side walls reach the felt plane.
+        bottom = frame_w & box(-50, 250, -100, 300, p.DESK_FELT_T - 0.01, p.DESK_FELT_T + 0.01)
+        reach = bottom.bounding_box() if bottom.volume > 0 else None
+        z_face = screen_point(0, 0, -(p.FRAME_FACE_GAP + p.FRAME_FACE_T)).Z   # face front at the glass bottom line
+        border = p.OPEN_Y[0] + (z_face - p.DESK_FELT_T) / p.C
+        level = reach is not None and reach.min.X <= fbb.min.X + 0.01 and reach.max.X >= fbb.max.X - 0.01
+        add("Frame bottom on the desk",
+            abs(fbb.min.Z - p.DESK_FELT_T) < 1e-3 and abs(lbb.min.Z) < 1e-3 and lf.distance_to(frame_w) < 1e-3 and level,
+            f"face and side walls cut level at {fbb.min.Z:.2f} mm, on {p.DESK_FELT_T:g} mm felt on the desk "
+            f"({'both side walls and the face reach it' if level else 'NOT level'}); glass bottom "
+            f"{screen_point(0, 0, 0).Z:.1f} mm off the desk; bottom border {border:.0f} mm up the face "
+            f"(side and top {p.FRAME_FACE_W:g})")
+        add("Frame clears the foot", ff_over < 1e-3 and ff_gap >= 0.1,
+            f"the frame carries the device on the desk, so it never bears on the foot: closest {ff_gap:.2f} mm, "
+            f"overlap {ff_over:.4f} mm³")
+        # The shelf carries the deck slot: the plug and the cable's bend through it must clear it, and the plate
+        # must stay off its top.
+        shelf_cut = box(-50, 250, -100, layout().front_zone_end, 0, 300)
+        shelf = foot & shelf_cut
+        bend_gap = min(shelf.distance_to(Vertex(v.X, v.Y, v.Z)) for v in path.points[: path.bend_end + 1])
+        plug_w = SCREEN_TO_WORLD * plug
+        add("Plug bend clears the shelf",
+            (plug_w & shelf).volume < 1e-3 and bend_gap >= r - 0.3 and path.drop >= 0,
+            f"plug overlap {(plug_w & shelf).volume:.4f} mm³; bend {bend_gap:.2f} mm from centreline to the shelf "
+            f"(cable radius {r:.2f}); {path.drop:.1f} mm of straight drop to spare (check the real plug and cable fit)")
+        # Just the shelf under the plate's bottom edge: in front of the post, and not the dovetail rail.
+        rail_x = (p.DOVE_X - p.DOVE_FLOOR_W / 2 - 1, p.DOVE_X + p.DOVE_FLOOR_W / 2 + 1)
+        under = SCREEN_TO_WORLD * (screen_box(-50, 250, -300, plate_outline()[2], -50, p.D_PLATE_BACK + p.POST_FACE_CLEAR - 0.01)
+                                   - screen_box(*rail_x, -300, 400, -50, 400))
+        pl_gap = plate_w.distance_to(foot & under)
+        add("Plate clears the shelf", (plate_w & foot).volume < 1e-3 and pl_gap >= p.SHELF_PLATE_GAP - 0.05,
+            f"plate bottom edge {pl_gap:.2f} mm above the shelf (design {p.SHELF_PLATE_GAP:g})")
+    else:
+        seat_ok = lf.distance_to(foot) < 1e-3 and lf.distance_to(frame_w) < 1e-3 and ff_over < 1e-3
+        add("Frame face seats on the ledge", seat_ok,
+            f"face bottom edge (square, {p.FRAME_FACE_T:.0f} mm) and side walls sit on {p.FELT_T:.0f} mm felt on the ledge; "
+            f"screen raised {p.RISE:.2f} mm; "
+            f"frame-to-foot overlap {ff_over:.4f} mm³, closest {ff_gap:.2f} mm")
+    fb, ob = frame_w.bounding_box(), foot.bounding_box()
+    over_l, over_r = ob.min.X - fb.min.X, fb.max.X - ob.max.X
+    add("Frame and foot share a centre line", abs(over_l - over_r) <= 0.1,
+        f"frame overhangs the foot by {over_l:.2f} mm left / {over_r:.2f} mm right (need equal within 0.1; "
+        f"negative = foot sticks out)")
     engage = min(p.DOVE_GROOVE_L, p.DOVE_RAIL_L - p.SEAT) - max(0.0, -p.SEAT)
     add("Dovetail engagement", engage >= p.MIN_DOVE_ENGAGE,
         f"{engage:.1f} mm of the {p.DOVE_RAIL_L:.0f} mm rail inside the groove (need ≥ {p.MIN_DOVE_ENGAGE:.0f})")

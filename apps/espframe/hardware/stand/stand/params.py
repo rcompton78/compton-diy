@@ -21,6 +21,19 @@ Coordinate frames used by the model:
 """
 
 import math
+import os
+
+# Stand variant, one per build process (stand.build runs each in its own subprocess, since
+# everything below is fixed at import):
+#   ledge  the frame's face sits on a felted ledge on the foot; glass 23.6 mm off the desk
+#   desk   the frame's face and side walls stand on felt on the desk, and a low shelf between
+#          the side walls carries the plug bend; glass 19.0 mm off the desk (COM-442)
+# The plate and lid are the same part in both.
+VARIANT = os.environ.get("STAND_VARIANT", "ledge")
+VARIANTS = ("ledge", "desk")
+if VARIANT not in VARIANTS:
+    raise ValueError(f"STAND_VARIANT must be one of {VARIANTS}, not {VARIANT!r}")
+DESK = VARIANT == "desk"
 
 # --- Printer / material -------------------------------------------------------
 MATERIAL = "PETG"                 # DESIGN (user choice): plate, risers, foot, lid
@@ -110,7 +123,15 @@ TILT_DEG = 15.0                   # DESIGN (COM-417): a desktop picture frame's 
 S = math.sin(math.radians(TILT_DEG))
 C = math.cos(math.radians(TILT_DEG))
 LEDGE_H = 20.0                    # DESIGN: ledge seat height at the frame's front face (world Z); 18 at 10°, raised
-                                  #   with the 15° lean so the deck (and lid) stays clear of the cable coil
+                                  #   with the 15° lean so the deck (and lid) stays clear of the cable coil. Both
+                                  #   variants take the deck and tray heights from it, so they share the lid.
+DESK_GLASS_Z = 19.0               # DESIGN (desk variant): glass bottom edge above the desk. The straight plug's R18 bend
+                                  #   sets the floor (about 18.9 with FLOOR 3), so this leaves 0.1 mm of drop to spare
+DESK_FELT_T = 1.0                 # DESIGN (desk variant): felt strip under the frame's face and side walls
+SHELF_FACE_GAP = 0.5              # DESIGN (desk variant): shelf front behind the frame face's back
+SHELF_WALL_GAP = 0.5              # DESIGN (desk variant): shelf ends inside the frame's side walls
+SHELF_PLATE_GAP = 0.6             # DESIGN (desk variant): shelf top under the plate's bottom edge
+SHELF_TUNNEL_SKIN = 3.0           # DESIGN (desk variant): solid shelf front ahead of the cable tunnel, at the tunnel roof
 FOOT_W = 130.0                    # DESIGN
 FOOT_D = 120.0                    # DESIGN (user, COM-417): glass corner to rear wall; kept short at 15° and accepted
                                   #   with a lower MIN_TIP_FORCE_N rather than deepened (about 126 would hold 4.5 N)
@@ -195,7 +216,7 @@ REVEAL = 0.75                     # DESIGN: black line left visible around the p
 MIN_REVEAL = 0.5                  # DESIGN: check limit
 FRAME_FACE_W = 21.0               # DESIGN: minimum for an even border (top/bottom bezels are 19.04)
 FRAME_FACE_T = 4.0                # DESIGN
-FRAME_BEVEL = 3.0                 # DESIGN: 45° × 3 into the opening
+FRAME_BEVEL = 3.0                 # DESIGN: 45° bevel into the opening
 FRAME_OUTER_CH = 2.0              # DESIGN: 45° outer chamfer, top and sides; the bottom edge is square (COM-431)
 FRAME_WALL = 2.0                  # DESIGN: side and top walls; no bottom wall (COM-431: it didn't fit between ledge and glass)
 FRAME_FACE_GAP = FELT_T + FELT_CLEAR   # face rear surface in front of the glass (1.2)
@@ -213,6 +234,9 @@ FRAME_X = (OPEN_X[0] - FRAME_FACE_W, OPEN_X[1] + FRAME_FACE_W)
 FRAME_Y = (OPEN_Y[0] - FRAME_FACE_W, OPEN_Y[1] + FRAME_FACE_W)
 RISE = -FRAME_Y[0]                # 2.71: frame bottom below the glass bottom edge
 SEAT = RISE + FELT_T              # glass bottom edge above the ledge surface (screen frame)
+# World Z of the screen-frame point (y = -SEAT, depth 0): the ledge surface at the frame's front face.
+# The desk variant places the screen by its glass height instead and has no ledge.
+SCREEN_Z0 = DESK_GLASS_Z - SEAT * C if DESK else LEDGE_H
 
 # Frame-to-plate fixing: the plate's edges over 4 frame bosses, M3 × 8 + washers into M3 × 4 inserts.
 TAB_Y = (45.0, 150.0)             # DESIGN: screw centres, up the glass from its bottom edge
