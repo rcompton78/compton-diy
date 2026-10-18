@@ -18,6 +18,7 @@ Left and right are as seen from the front, with the screen upright.
 - **Front shell (PETG).** Bezel, side walls and bottom wall, with every board mounted in it. Its top end is open behind the bezel: the top end wall belongs to the back cover.
   - **Bezel.** The 1.5 mm front wall has a 43.6 × 58.05 opening: exactly the screen's visible window, 0.16–0.2 mm outside the lit pixels, with a 45° × 1 mm chamfer on the front. Its lip rests on the glass's black border (≥ 2.74 mm all round). The bezel runs on to the very top as a lip over the cover's end wall.
   - **Freenove.** It drops in face down onto four Ø6.4 bosses on its 42 × 78 hole pattern and is fixed with M3 × 6 screws from behind into M3 × 4 heat-set inserts. The boss faces stop the PCB so the glass floats 0.1 mm behind the bezel instead of being clamped. Its USB-C faces the open top end.
+    - That's upside down for the board's native screen orientation, so the firmware turns the display and touch 180° (`boards/freenove-s3.yaml`, COM-445). The UI reads upright when the remote is held by the grip, charge port down.
   - **Charger.** It sits in the grip, component side towards the back. Four printed standoffs carry Ø2.2 pegs through its 2.5 mm holes, and two cantilever snap hooks catch its long edges (0.5 mm barbs, 1.9% strain on a snap).
     - It sits 7 mm behind the front face. That leaves 2.1 mm between the top of its screw-terminal block (measured 10.0 mm from the PCB underside) and the cover.
     - The block's 1.5 mm solder pins stop 4 mm short of the front wall, so they need no relief.

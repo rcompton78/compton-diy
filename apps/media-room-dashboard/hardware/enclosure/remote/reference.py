@@ -14,12 +14,16 @@ from .geom import ChargerFrame, dbox, dcyl, stadium_y
 
 # --- Freenove FNK0104 ------------------------------------------------------------------
 def fn_hole_xy(ch: p.Charger):
+    """(x, y) of the Freenove's four mounting holes."""
     y0, y1, _, _ = p.layout(ch)
     hx = p.PCB_W / 2 - p.HOLE_INSET
     return [(sx * hx, y) for y in (y0 + p.HOLE_INSET, y1 - p.HOLE_INSET) for sx in (-1, 1)]
 
 
 def fn_pcb(ch: p.Charger) -> Part:
+
+
+    """The Freenove's PCB, with its mounting holes."""
     y0, _, _, _ = p.layout(ch)
     pcb = Pos(0, y0 + p.PCB_L / 2, -p.D_PCB_BACK) * extrude(RectangleRounded(p.PCB_W, p.PCB_L, p.PCB_R), p.PCB_T)
     for x, y in fn_hole_xy(ch):
@@ -72,6 +76,9 @@ def fn_usb_mouth_y(ch: p.Charger) -> float:
 
 
 def fn_usb(ch: p.Charger) -> Part:
+
+
+    """Nominal USB-C receptacle on the Freenove's back, for renders."""
     y_mouth = fn_usb_mouth_y(ch)
     w = p.FN_USB_W
     return dbox(p.FN_USB_X - w / 2, p.FN_USB_X + w / 2, y_mouth - p.FN_USB_L, y_mouth,
@@ -79,10 +86,16 @@ def fn_usb(ch: p.Charger) -> Part:
 
 
 def fn_usb_axis_d() -> float:
+
+
+    """Depth of the Freenove USB-C's axis."""
     return p.D_PCB_BACK + p.FN_USB_H / 2
 
 
 def bat_socket_xy(ch: p.Charger):
+
+
+    """(x, y) of the Freenove's BAT socket centre."""
     _, y1, _, _ = p.layout(ch)
     return p.PCB_W / 2 - p.BAT_FROM_EDGE, y1 - p.BAT_FROM_TOP
 
@@ -123,6 +136,7 @@ def active_area(ch: p.Charger) -> Part:
 
 # --- Charger ------------------------------------------------------------------------------
 def charger(ch: p.Charger) -> Part:
+    """The charger board with its USB-C, JST-PH socket, screw terminal and the terminal's solder pins."""
     f = ChargerFrame(ch)
     pcb = f.box(0, ch.length, 0, ch.width, -ch.pcb_t, 0)
     for bx, by in ch.holes:
@@ -158,6 +172,7 @@ def terminal_screw_column(ch: p.Charger) -> Part:
 # --- Cell -----------------------------------------------------------------------------------
 @dataclass
 class Pocket:
+    """Inner faces of the cell pocket's ribs."""
     x0: float   # inner faces of the ribs
     x1: float
     y0: float
@@ -166,7 +181,7 @@ class Pocket:
 
 def cell_pocket(ch: p.Charger) -> Pocket:
     """Cell pocket inner faces: against the left wall (the wire channel runs down the right),
-    its top rib just below the RESET / BOOT pinholes."""
+    its top rib 4.1 mm below the PCB's top end."""
     x0 = -p.INNER_HALF_W + p.LEDGE_W + p.COVER_CLEAR + p.RIB_T   # left rib clears the cover ledge
     x1 = x0 + p.CELL_W + 2 * p.CELL_CLEAR
     _, pcb_top, _, _ = p.layout(ch)

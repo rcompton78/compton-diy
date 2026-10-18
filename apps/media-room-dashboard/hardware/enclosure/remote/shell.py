@@ -20,6 +20,9 @@ def outline(ch: p.Charger):
 
 
 def outer_body(ch: p.Charger) -> Part:
+
+
+    """The remote's outer form: rounded in plan, with rounded front and back edges."""
     length, _ = outline(ch)
     body = Pos(0, length / 2, -p.D_BACK_OUTER) * extrude(RectangleRounded(p.OUTER_W, length, p.OUTER_R), p.D_BACK_OUTER)
     faces = body.faces().sort_by(Axis.Z)
@@ -79,6 +82,9 @@ def hook_strain(ch: p.Charger) -> tuple:
 
 
 def cover_boss_xy():
+
+
+    """(x, y) of the two cover-screw bosses at the bottom corners."""
     bx = p.INNER_HALF_W - p.COVER_BOSS_INSET
     return [(-bx, p.COVER_BOSS_Y), (bx, p.COVER_BOSS_Y)]
 
@@ -101,6 +107,9 @@ def top_slot(ch: p.Charger, sx: int) -> Part:
 
 
 def build_shell(ch: p.Charger) -> Part:
+
+
+    """Front shell in the assembled frame (front face at z = 0)."""
     _, y_top = outline(ch)
     shell = outer_body(ch) - cavity(ch)
 

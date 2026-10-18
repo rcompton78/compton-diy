@@ -56,6 +56,9 @@ def top_tongues(ch: p.Charger) -> Part:
 
 
 def build_cover(ch: p.Charger) -> Part:
+
+
+    """Back cover in the assembled frame: plate, end wall, cell-pocket ribs, tongues, screw countersinks and CHG window."""
     x0, x1, y0, y1 = cover_outline(ch)
     plate = Pos((x0 + x1) / 2, (y0 + y1) / 2, -p.D_BACK_OUTER) * extrude(
         RectangleRounded(x1 - x0, y1 - y0, INNER_R - p.COVER_CLEAR), p.COVER_T)

@@ -651,8 +651,9 @@ touchscreen:
 # `setup_page` replaces it once that fails and the fallback AP comes up (see
 # the interval above), naming the AP to join; `main_page` -- the 6-button
 # dashboard, hidden until the device is actually reachable from HA -- is a 2
-# column x 3 row grid over the 240x320 portrait panel (this board's native,
-# already-confirmed-working orientation, no rotation transform), with a
+# column x 3 row grid over the 240x320 portrait panel (the board file sets
+# the panel and touch orientation; freenove-s3 turns both 180° for the
+# handheld enclosure, COM-445), with a
 # one-line footer under it showing the web portal's http://<ip> address.
 # Button -> HA service mapping is the finalized list from Jira DIY-102. Every
 # button shares one theme: dim grey by default, lit amber when `checked` --

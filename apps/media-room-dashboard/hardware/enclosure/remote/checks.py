@@ -17,6 +17,9 @@ EPS = 1e-3
 
 
 def run(parts: dict, ch: p.Charger) -> list:
+
+
+    """Run every fit check on the assembled shell and cover (and their print poses); returns [(name, ok, detail)]."""
     shell, cover = parts["shell"], parts["cover"]
     results = []
 

@@ -203,6 +203,7 @@ PETG_E_STRAIN_NOTE = "PETG yields ~4%; keep a one-off snap under 2%"
 
 @dataclass(frozen=True)
 class Variant:
+    """One buildable variant: its number, title, charger board and any extra boards."""
     number: int
     title: str
     charger: Charger

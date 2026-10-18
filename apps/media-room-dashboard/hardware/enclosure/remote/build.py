@@ -31,6 +31,9 @@ LEAD = "#ff7f0e"
 
 
 def export(name, solid, out: Path):
+
+
+    """Write one part as STL, STEP and 3MF into out/."""
     export_stl(solid, str(out / f"{name}.stl"))
     export_step(solid, str(out / f"{name}.step"))
     mesher = Mesher()
@@ -39,6 +42,9 @@ def export(name, solid, out: Path):
 
 
 def main(argv=None) -> int:
+
+
+    """Build the chosen variant: export the print files, run the checks, render the previews. Returns the exit code."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--variant", type=int, default=p.DEFAULT_VARIANT, choices=sorted(p.VARIANTS))
     ap.add_argument("--out", default=str(HERE / "out"))
