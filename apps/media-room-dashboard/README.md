@@ -100,7 +100,7 @@ always differs from the manifest, so it shows "update available" all the time
 and the idle auto-install skips it, so it doesn't replace a build you're
 testing. As a result, a remote flashed from a local build stays on that build
 until you put it back. Press **Install Firmware Update** in the portal once
-(or `curl -X POST http://<device-ip>/button/install_firmware_update/press`).
+(or `curl -X POST "http://<device-ip>/button/Install%20Firmware%20Update/press"`).
 It then runs the published release, and the idle auto-install keeps it
 current from then on.
 
