@@ -2,7 +2,7 @@
 
 A 3D-printable, TV-remote-shaped case for [`apps/media-room-dashboard`](../../README.md) running on battery: the Freenove ESP32-S3 2.8" CYD (FNK0104), an Adafruit BQ25185 charger (6092) and a 1200 mAh 504060 LiPo. It's a parametric Python model built with [build123d](https://github.com/gumyr/build123d), on the same pattern as the [espframe stand](../../../espframe/hardware/stand/README.md). One command rebuilds every print file, the preview images and a set of fit checks.
 
-This is **variant 1**: the BQ25185 charger with no fuel gauge (build A of the remote's cable map, minus the gauge and the USB divider). Variant 2 (a MAX17048 gauge, plus either a VBUS divider on the BQ25185 or a swap to a BQ24074) isn't designed yet. See [Variants](#variants).
+This is **variant 1**: the BQ25185 charger with no fuel gauge (build A of the remote's cable map, minus the gauge and the USB divider). Variant 2 (a MAX17048 gauge, plus either a VBUS divider on the BQ25185 or a swap to a BQ24074) isn't designed yet: it's Linear COM-460. See [Variants](#variants).
 
 | | |
 |---|---|
@@ -158,7 +158,7 @@ Heat-set inserts go in at 220–240 °C, pressed square and flush (hole Ø4.0 = 
 
 `remote/params.py` keeps the boards a variant carries in `VARIANTS`. Each entry names its `Charger` (a dataclass of board size, holes, connector footprints, terminal pins and LED position) and, later, any extra boards. `python -m remote.build --variant N` builds variant N, with output names prefixed `media-remote-vN-`. The parts read everything charger-specific through `geom.ChargerFrame`, so a new charger is a new `Charger` entry and a new `Variant` row.
 
-Only variant 1 exists. Variant 2's gauge (and divider, or a BQ24074) will need a mount and the wiring room added when it's decided.
+Only variant 1 exists. Variant 2 (COM-460) will add the gauge (and divider, or a BQ24074) as a mount and wiring room once its parts are decided.
 
 ## Future options
 
