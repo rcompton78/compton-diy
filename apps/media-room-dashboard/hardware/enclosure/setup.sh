@@ -18,8 +18,11 @@ REQ="$HERE/requirements.txt"
 STAMP="$VENV/.requirements.sha256"
 if command -v sha256sum >/dev/null 2>&1; then
   want="$(sha256sum "$REQ" | cut -d' ' -f1)"
-else
+elif command -v shasum >/dev/null 2>&1; then
   want="$(shasum -a 256 "$REQ" | cut -d' ' -f1)"   # macOS / BSD
+else
+  echo "ERROR: need sha256sum or shasum to hash $REQ" >&2
+  exit 1
 fi
 
 if [ -x "$VENV/bin/python" ] && [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$want" ]; then
