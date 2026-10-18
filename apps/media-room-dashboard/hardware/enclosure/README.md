@@ -163,7 +163,7 @@ Only variant 1 exists. Variant 2's gauge (and divider, or a BQ24074) will need a
 
 ## Open items
 
-- **Test print:** print both parts and test-fit the boards, the cell, the hooks, the cover's slide-in tongues, the charge cable, and a flashing cable with the cover off. If anything is tight or loose, tune:
+- **Test print: done.** Both parts were printed in PETG and test-fitted: everything fitted first time, with no changes needed. If a different printer or filament comes out tight or loose, tune:
   - `HOOK_BARB` and `CHARGER_EDGE_CLEAR` for the charger's snap hooks;
   - `TOP_TONGUE_IN` and `TOP_SLOT_CLEAR` for the cover's tongues;
   - `INSERT_HOLE_D` for the heat-set inserts.
