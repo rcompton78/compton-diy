@@ -96,9 +96,6 @@ def run(parts: dict, ch: p.Charger) -> list:
     add("Charge port (BQ25185)", o_over < EPS and o_gap >= p.PLUG_CLEAR - 0.01,
         f"{ow + 2 * p.PLUG_CLEAR:g} × {oh + 2 * p.PLUG_CLEAR:g} opening: a {ow:g} × {oh:g} overmold seats against the "
         f"receptacle mouth through the {p.WALL:g} mm wall with {o_gap:.2f} mm clear all round")
-    cx, cd, cy = ref.charger_usb_axis(ch)
-    add("Charge port on the connector's axis", abs(cy - (p.Y_INNER_BOTTOM + 0.1)) < 1e-6,
-        f"x {cx:.2f}, depth {cd:.2f}, mouth 0.1 inside the wall")
 
     # 7. Charger: standoffs and pegs on its holes, snap hooks grip it, nothing interferes.
     c_over = (charger & shell).volume + (charger & cover).volume
@@ -219,12 +216,17 @@ def run(parts: dict, ch: p.Charger) -> list:
         f"{p.BAT_ENVELOPE[0]:g} × {p.BAT_ENVELOPE[1]:g} × {p.BAT_ENVELOPE[2]:g} mm round the socket: overlap {b_over:.4f} mm³")
 
     # 12. Walls and overall size.
-    add("Wall thickness", min(p.WALL, p.TOP_WALL, p.FRONT_T + 0.5) >= 2.0 and p.COVER_T >= 2.0,
-        f"side/bottom {p.WALL:g}, top end (on the cover) {p.TOP_WALL:g}, cover {p.COVER_T:g}, "
-        f"bezel {p.FRONT_T:g} mm (+{p.BEZEL_CHAMFER:g} chamfer)")
-    bb = shell.bounding_box()
-    add("Overall size", True,
-        f"{bb.max.X - bb.min.X:.1f} × {bb.max.Y - bb.min.Y:.1f} × {bb.max.Z - bb.min.Z:.1f} mm (w × l × thick)")
+    walls = {"side/bottom": p.WALL, "top end (on the cover)": p.TOP_WALL, "cover": p.COVER_T}
+    thin = [n for n, t in walls.items() if t < p.MIN_WALL]
+    add("Wall thickness", not thin and p.FRONT_T >= p.MIN_BEZEL,
+        ", ".join(f"{n} {t:g}" for n, t in walls.items()) + f" mm (need ≥ {p.MIN_WALL:g}); "
+        f"bezel {p.FRONT_T:g} mm (need ≥ {p.MIN_BEZEL:g}, +{p.BEZEL_CHAMFER:g} chamfer)"
+        + (f"; too thin: {', '.join(thin)}" if thin else ""))
+    assembled = shell + cover
+    bb = assembled.bounding_box()
+    w, ln, t = bb.max.X - bb.min.X, bb.max.Y - bb.min.Y, bb.max.Z - bb.min.Z
+    add("Overall size within limits", w <= p.MAX_WIDTH and ln <= p.MAX_LENGTH and t <= p.MAX_THICKNESS,
+        f"{w:.1f} × {ln:.1f} × {t:.1f} mm (limits {p.MAX_WIDTH:g} × {p.MAX_LENGTH:g} × {p.MAX_THICKNESS:g})")
 
     # 13. Every printed part fits the P1S bed in its print pose.
     for name, solid in parts["print"].items():

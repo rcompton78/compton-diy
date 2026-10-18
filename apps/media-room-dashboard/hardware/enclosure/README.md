@@ -14,7 +14,7 @@ This is **variant 1**: the BQ25185 charger with no fuel gauge (build A of the re
 
 Left and right are as seen from the front, with the screen upright.
 
-- **Shape.** 55 × 132.6 × 21.5 mm. The screen sits in the top part, and a grip below it holds the charger. Plan corners are R4 and the front and back edges are rounded R1.6.
+- **Shape.** 55 × 132.7 × 21.5 mm. The screen sits in the top part, and a grip below it holds the charger. Plan corners are R4 and the front and back edges are rounded R1.6.
 - **Front shell (PETG).** Bezel, side walls and bottom wall, with every board mounted in it. Its top end is open behind the bezel: the top end wall belongs to the back cover.
   - **Bezel.** The 1.5 mm front wall has a 43.6 × 58.05 opening: exactly the screen's visible window, 0.16–0.2 mm outside the lit pixels, with a 45° × 1 mm chamfer on the front. Its lip rests on the glass's black border (≥ 2.74 mm all round). The bezel runs on to the very top as a lip over the cover's end wall.
   - **Freenove.** It drops in face down onto four Ø6.4 bosses on its 42 × 78 hole pattern and is fixed with M3 × 6 screws from behind into M3 × 4 heat-set inserts. The boss faces stop the PCB so the glass floats 0.1 mm behind the bezel instead of being clamped. Its USB-C faces the open top end.
@@ -109,6 +109,8 @@ Every dimension is a named constant in [`remote/params.py`](remote/params.py), t
 | Cover slides into its tongue slots | laid in 5.5 mm high, it drops straight in and slides home without touching the shell; 1.1 mm of side wall left behind each slot |
 | Cover screw engagement | M3 × 8 countersunk flush in the 2.4 mm cover, 5.6 mm into an insert |
 | BAT socket and plug clear | 12 × 12 × 6 mm round the socket |
+| Wall thickness | side/bottom 2.2, top end 4, cover 2.4 (need ≥ 2); bezel 1.5 (need ≥ 1.5) |
+| Overall size within limits | 55.0 × 132.7 × 21.5 mm (limits 56 × 135 × 22) |
 | Every part fits the P1S bed | shell 55 × 133 × 21.5, cover 55 × 130 × 20 |
 
 ## Parts to print

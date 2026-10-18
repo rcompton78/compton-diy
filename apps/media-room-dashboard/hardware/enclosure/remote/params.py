@@ -118,6 +118,11 @@ GLASS_FLOAT = 0.1                 # DESIGN: boss face stops the PCB this far sho
 BOSS_D = 6.4                      # DESIGN: Freenove mount bosses (M3 × 4 insert)
 FN_SCREW_L = 6.0                  # DESIGN: M3 × 6 from behind the Freenove into the boss inserts
 MIN_SKIN = 1.0                    # DESIGN: front skin left under an insert hole
+MIN_WALL = 2.0                    # DESIGN: side, bottom and end walls and the cover
+MIN_BEZEL = 1.5                   # DESIGN: the bezel is thinner on purpose, to keep the screen close to the face
+MAX_THICKNESS = 22.0              # DESIGN: envelope limits; a parameter change that bloats the case fails the build
+MAX_WIDTH = 56.0                  # DESIGN
+MAX_LENGTH = 135.0                # DESIGN
 
 # Gap between the charger's terminal end and the Freenove's bottom end: the pigtail leaves
 # the terminal along +y and turns rearwards past the Freenove's back parts there.
