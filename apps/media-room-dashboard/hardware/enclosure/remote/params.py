@@ -130,6 +130,7 @@ WIRE_TURN_GAP = 7.0               # DESIGN
 COVER_T = 2.4                     # DESIGN: takes an M3 countersunk head flush
 COVER_CLEAR = 0.2                 # DESIGN: cover edge to the shell walls
 RIB_T = 1.2                       # DESIGN: cell-pocket ribs
+RIB_FROM_PCB_TOP = 4.1            # DESIGN: the pocket's top rib ends this far below the Freenove PCB's top end
 RIB_H = 5.0                       # DESIGN: rib height above the cover's inner face
 BOTTOM_RIB_H = 1.5                # DESIGN: the bottom rib is low, so the lead passes over it wherever it leaves the cell end
 LEDGE_W = 1.0                     # DESIGN: cover-support ledge on the side walls (45° underside)

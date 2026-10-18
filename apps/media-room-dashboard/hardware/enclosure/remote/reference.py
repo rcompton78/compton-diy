@@ -174,11 +174,11 @@ class Pocket:
 
 def cell_pocket(ch: p.Charger) -> Pocket:
     """Cell pocket inner faces: against the left wall (the wire channel runs down the right),
-    its top rib 4.1 mm below the PCB's top end."""
+    its top rib RIB_FROM_PCB_TOP below the PCB's top end."""
     x0 = -p.INNER_HALF_W + p.LEDGE_W + p.COVER_CLEAR + p.RIB_T   # left rib clears the cover ledge
     x1 = x0 + p.CELL_W + 2 * p.CELL_CLEAR
     _, pcb_top, _, _ = p.layout(ch)
-    y1 = pcb_top - 4.1 - p.RIB_T   # top rib ends 4.1 mm below the PCB's top end, as before the end wall moved
+    y1 = pcb_top - p.RIB_FROM_PCB_TOP - p.RIB_T   # top rib ends RIB_FROM_PCB_TOP below the PCB's top end
     return Pocket(x0, x1, y1 - (p.CELL_L + 2 * p.CELL_CLEAR), y1)
 
 

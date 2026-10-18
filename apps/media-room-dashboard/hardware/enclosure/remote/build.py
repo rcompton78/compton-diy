@@ -128,10 +128,14 @@ def _render_all(shell, cover, printed, variant, docs: Path):
     boards = [item for item in inside if item[0] is not cell]
     render([(flip * s, c, a) for s, c, a in [(shell, SHELL, 1.0)] + boards], docs / "cover-off.png", view=(35, -115),
            title="Cover off: USB-C, RESET and BOOT open at the top end for flashing")
-    lift = Pos(0, 0, -30)
-    render([(flip * s, c, a) for s, c, a in [(shell, SHELL, 1.0)] + boards
-            + [(lift * cover, COVER, 1.0), (lift * cell, CELL, 1.0)]],
-           docs / "exploded.png", view=(35, -115), title="Exploded: the cover (end wall and cell) lifted off")
+    # The open shell (flipped, back up) with the cover beside it turned over, inner face up, so
+    # its pocket and cell show. A cover hovering over the shell, outer face up, defeats
+    # matplotlib's painter's sort (it paints the ribs underneath over the plate).
+    beside = Pos(p.OUTER_W + 15, 0, p.D_BACK_OUTER)
+    render([(flip * s, c, a) for s, c, a in [(shell, SHELL, 1.0)] + boards]
+            + [(beside * cover, COVER, 1.0), (beside * cell, CELL, 1.0)],
+           docs / "exploded.png", view=(35, -115),
+           title="Cover off: the shell, and the cover turned over beside it (cell in its pocket)")
 
 
 if __name__ == "__main__":

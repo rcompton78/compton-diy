@@ -54,16 +54,18 @@ def render(items, path, view=(20, -60), title=None, lines=(), size=(9, 7), ortho
     # Depth-sort parts unless a line (the cable) must be drawn on top of them.
     ax = fig.add_subplot(111, projection="3d", computed_zorder=not lines)
     allpts, all_tri, all_fc = [], [], []
-    for shape, colour, alpha in items:
-        tri = _mesh(shape)
-        if not len(tri):
-            continue
+    meshes = [(_mesh(shape), colour, alpha) for shape, colour, alpha in items]
+    meshes = [m for m in meshes if len(m[0])]
+    if zshade and meshes:   # one height range for every item, so the same Z gets the same shade
+        zall = np.concatenate([tri[:, :, 2].mean(1) for tri, _, _ in meshes])
+        z_lo, z_span = zall.min(), np.ptp(zall) + 1e-9
+    for tri, colour, alpha in meshes:
         n = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
         n /= np.linalg.norm(n, axis=1, keepdims=True) + 1e-12
         shade = 0.45 + 0.55 * np.abs(n @ LIGHT)
         if zshade:   # plan views: darker = lower, so pockets and floors read clearly
             zc = tri[:, :, 2].mean(1)
-            shade = 0.35 + 0.65 * (zc - zc.min()) / (np.ptp(zc) + 1e-9)
+            shade = 0.35 + 0.65 * (zc - z_lo) / z_span
         fc = np.clip(np.array(colour)[None, :] * shade[:, None], 0, 1)
         all_tri.append(tri)
         all_fc.append(np.c_[fc, np.full(len(fc), alpha)])
@@ -78,6 +80,8 @@ def render(items, path, view=(20, -60), title=None, lines=(), size=(9, 7), ortho
         pts = np.asarray(pts)
         ax.plot(pts[:, 0], pts[:, 1], pts[:, 2], color=colour, linewidth=width, zorder=10)
         allpts.append(pts)
+    if not allpts:
+        raise ValueError(f"render({path}): no geometry to draw (every item tessellated to nothing and no lines given)")
     pts = np.vstack(allpts)
     lo, hi = pts.min(0), pts.max(0)
     ax.set_xlim(lo[0], hi[0])

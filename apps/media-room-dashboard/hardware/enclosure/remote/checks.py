@@ -197,11 +197,11 @@ def run(parts: dict, ch: p.Charger) -> list:
     slide = slide_in()
     hits = [s for s in [i * 0.5 for i in range(int(slide / 0.5) + 1)] if (Pos(0, s, 0) * cover & shell).volume > EPS]
     lowered = [k for k in range(0, 31, 2) if (Pos(0, slide, -k) * cover & shell).volume > EPS]
-    skin = p.WALL - p.TOP_TONGUE_IN - p.TOP_SLOT_CLEAR
-    add("Cover slides into its tongue slots", not hits and not lowered and skin >= 1.0,
+    tongue_skin = p.WALL - p.TOP_TONGUE_IN - p.TOP_SLOT_CLEAR
+    add("Cover slides into its tongue slots", not hits and not lowered and tongue_skin >= 1.0,
         f"laid in {slide:g} mm high, it drops straight down and slides {slide:g} mm into place without touching the shell"
         + (f" (collides at slide {hits})" if hits else "") + (f" (collides lowering at {lowered} mm)" if lowered else "")
-        + f"; 2 tongues {p.TOP_TONGUE_L:g} mm long reach {p.TOP_TONGUE_IN:g} mm into the side walls, leaving {skin:.1f} mm of wall")
+        + f"; 2 tongues {p.TOP_TONGUE_L:g} mm long reach {p.TOP_TONGUE_IN:g} mm into the side walls, leaving {tongue_skin:.1f} mm of wall")
     engage = p.COVER_SCREW_L - p.COVER_T
     hole = p.COVER_SCREW_L - p.COVER_T + 1.0
     add("Cover screw engagement", p.INSERT_L - 0.5 <= engage <= hole - 0.5 and p.CSK_DEPTH <= p.COVER_T - 0.5,

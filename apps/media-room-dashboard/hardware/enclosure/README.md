@@ -7,7 +7,7 @@ This is **variant 1**: the BQ25185 charger with no fuel gauge (build A of the re
 | | |
 |---|---|
 | ![Front three-quarter](docs/front.png) | ![Back three-quarter](docs/back.png) |
-| ![Cover off: the top end opens for flashing](docs/cover-off.png) | ![Exploded](docs/exploded.png) |
+| ![Cover off: the top end opens for flashing](docs/cover-off.png) | ![The cover turned over beside the shell](docs/exploded.png) |
 | ![Cover off, from behind](docs/inside.png) | ![Section on the centreline](docs/section.png) |
 
 ## How it works
