@@ -247,15 +247,19 @@ update:
     # deep_sleep_countdown installs it instead, once the device has sat idle
     # for deep_sleep_timeout, in place of that deep sleep.
     #
-    # Auto-install also skips unversioned "dev" builds: firmware_version is
-    # never substituted with the real RELEASE_VERSION at build time
-    # (generate_release.py's --version only feeds manifest.json, not the
-    # compiled binary), so every "dev" build always mismatches the published
-    # manifest version and would otherwise auto-install on every boot
-    # forever, including a fresh install right after the one that just ran
-    # (since the OTA'd binary is also always "dev"). Matches
-    # libs/ota-update-client's existing currentVersion=="dev" skip for the
-    # same reason.
+    # Auto-install also skips unversioned "dev" builds. Release builds carry
+    # the real version: scripts/espframe-esphome.sh passes
+    # `-s firmware_version "${RELEASE_VERSION:-dev}"` on every compile, which
+    # overrides the "dev" default above, and release-run.sh sets
+    # RELEASE_VERSION to the same value generate_release.py writes into
+    # manifest.json. Local and PR builds have no RELEASE_VERSION, so they
+    # stay "dev" and always mismatch the manifest; installing on that
+    # mismatch would replace a build someone is testing on its next idle
+    # stretch. Matches libs/ota-update-client's currentVersion=="dev" skip.
+    # A side effect (COM-461): a remote flashed with a local build reports
+    # "dev" and shows "update available" forever, and never moves back onto
+    # releases by itself. Press Install Firmware Update once to put it back;
+    # after that the idle auto-install keeps it current.
 
 # Manual check/install from the web portal. The stock web_server v3 UI shows
 # the update entity's state but has no install control for it (HA's own

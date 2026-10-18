@@ -90,7 +90,21 @@ not installed on wake, which would tie the remote up right when it's picked
 up. Instead it installs once the device has been idle for
 `deep_sleep_timeout`, in place of that deep sleep (versioned builds only,
 like before). The portal's **Install Firmware Update** button still installs
-immediately. The `Update check already in progress` warning right after a
+immediately.
+
+**Release vs. local builds.** Release builds report their release version
+(the `Firmware Version` sensor, e.g. `2026.10.16-143`): CI sets
+`RELEASE_VERSION`, and `scripts/espframe-esphome.sh` passes it to the compile
+as `-s firmware_version`. Local and PR builds report `dev`. A `dev` build
+always differs from the manifest, so it shows "update available" all the time
+and the idle auto-install skips it, so it doesn't replace a build you're
+testing. As a result, a remote flashed from a local build stays on that build
+until you put it back. Press **Install Firmware Update** in the portal once
+(or `curl -X POST "http://<device-ip>/button/Install%20Firmware%20Update/press"`).
+It then runs the published release, and the idle auto-install keeps it
+current from then on.
+
+The `Update check already in progress` warning right after a
 wake is harmless: the boot-time check and the first poll land together, and
 the second just returns.
 
