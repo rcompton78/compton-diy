@@ -6,7 +6,7 @@
     "write-secrets": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "apps/media-room-dashboard/scripts/write-secrets.sh",
+        "command": "scripts/write-secrets.sh apps/media-room-dashboard",
         "cwd": "."
       }
     },
