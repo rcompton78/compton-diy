@@ -68,10 +68,10 @@ missing=""
 lineno=0
 while IFS= read -r line; do
     lineno=$((lineno + 1))
-    if [[ "$line" =~ ^([a-z0-9_]+):[[:space:]]*[\|\>] ]]; then
+    if [[ "$line" =~ ^([[:lower:][:digit:]_]+):[[:space:]]*[\|\>] ]]; then
         echo "==> $EXAMPLE:$lineno: block scalars aren't supported, use a quoted one-line value" >&2
         exit 1
-    elif [[ "$line" =~ ^([a-z0-9_]+):.*$ ]]; then
+    elif [[ "$line" =~ ^([[:lower:][:digit:]_]+):.*$ ]]; then
         key="${BASH_REMATCH[1]}"
         env_name="${APP_PREFIX}_$(printf '%s' "$key" | tr '[:lower:]' '[:upper:]')"
         env_value="${!env_name:-}"
