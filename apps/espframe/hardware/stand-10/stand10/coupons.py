@@ -14,7 +14,7 @@ from .frames import box, dovetail_prism
 def template_on_back() -> Part:
     """The hole template where it lies on the board, in the screen frame: on the flat back, TEMPLATE_T thick.
     Six rings drop over the six bosses; a band rings the rear box TEMPLATE_BOX_CLEAR off it, with a notch in its
-    bottom edge under the UART port. Two columns join the rings, the bottom rung ties the bottom pair, short stubs
+    bottom edge, the cable opening's width, round the UART port. Two columns join the rings, the bottom rung ties the bottom pair, short stubs
     tie the middle pair to the band and a stub ties the band to the bottom rung. No rung crosses the box, and there's
     none at the top, where the LCD-FPC bracket sits between the top holes (checked: no overlap with the board)."""
     t, bar = p.TEMPLATE_T, p.TEMPLATE_BAR
@@ -37,8 +37,9 @@ def template_on_back() -> Part:
         out += s
     for x, y in p.HOLES:
         out -= Pos(x, y, -1) * Cylinder((p.BOSS_D + 0.4) / 2, t + 2, align=(Align.CENTER, Align.CENTER, Align.MIN))
-    rw = p.JACK_RECEPTACLE[0]
-    out -= box(p.PORT_X - rw / 2, p.PORT_X + rw / 2, by0 - c - w - 1, by0 - c + 0.01, -1, t + 1)
+    # The notch is the cable opening's width (CABLE_GAP_W), so the UART port should sit inside it with margin.
+    gw = p.CABLE_GAP_W
+    out -= box(p.PORT_X - gw / 2, p.PORT_X + gw / 2, by0 - c - w - 1, by0 - c + 0.01, -1, t + 1)
     # Lying on the flat back: its top face against the back, at z = -BODY_T.
     return Pos(0, 0, -p.BODY_T - t) * out
 

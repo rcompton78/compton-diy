@@ -73,7 +73,7 @@ Every dimension is a named constant in [`stand10/params.py`](stand10/params.py),
 | Plug clear of the plate, frame, foot and board | no overlap |
 | Cable | R18 bend, 261 mm of 300, a cable radius clear everywhere, 1.7 mm of straight drop to spare |
 | Tip-over push at the screen centre | **4.99 N** (need ≥ 4.5), 836 g total (board 550); sideways tip at 38° |
-| Plug passes the tunnel and deck slot | 1.75 mm per side in the 16 mm tunnel and slot |
+| Plug passes the tunnel and deck slot | 3.75 mm per side in the 20 mm tunnel and slot (the plate notch is 20 too), for slack in the USB_UART position |
 | Lid detents | as the 7": snap in, 1.25 mm of rear wall left, no overlap once seated |
 | Jack, receptacle and jack screws | the 7"'s measured thin-wall mount, flush receptacle; the screw heads leave 11 mm for a charger plug moulding |
 | Foot-lock screw (optional) | M3 × 12, 5.8 mm into an M3 × 4 insert; its counterbore runs on as an access bore that opens into the tray (the post's back is inside the foot body) |
@@ -93,7 +93,7 @@ Structural parts are PETG on the stock Bambu P1S profile with the 0.4 mm nozzle;
 
 | File | Orientation | Settings |
 |---|---|---|
-| `coupon-template` | Flat as exported | 1.2 mm, 100% infill. Lay it on the board's flat back: the six rings should drop over the six bosses, the band should sit round the rear box with about 1 mm to spare, and the notch in its bottom edge should sit under the USB_UART port. It's mirrored, as seen from the back. |
+| `coupon-template` | Flat as exported | 1.2 mm, 100% infill. Lay it on the board's flat back: the six rings should drop over the six bosses, the band should sit round the rear box with about 1 mm to spare, and the USB_UART port should sit inside the 20 mm notch in its bottom edge (the cable opening's width, so it shows the margin). It's mirrored, as seen from the back. |
 | `coupon-riser` | As exported: plate square on the bed, riser up | As the plate. It should drop over a boss, and an M2.5 × 20 + washer should pull it down snug without bottoming. |
 | `coupon-receptacle` | Flat | Optional: the jack is the 7"'s, so plate 2 (1.2 mm) should end flush with its receptacle. |
 | `coupon-dovetail` | As exported (rail blocks standing on end) | Optional: the 7"'s 0.02 / 0.03 / 0.04 fit, already settled at 0.02 on this printer. |
@@ -122,7 +122,7 @@ The foot stands straight on the desk: no rubber feet (they'd lift the shelf towa
 1. **Inserts.** Four M3 × 4 inserts into the frame's side-wall bosses at PLA temperature (about 190–200 °C); the optional foot-lock insert into the plate spine from the groove floor at PETG temperature (220–240 °C).
 2. **Felt.** The 8 mm strip on the back of the frame face, over the black border, its inner edge at least 1 mm outside the opening. The narrow strips under the frame's bottom edge, along the face and the two side walls, trimmed flush.
 3. **Jack.** Lid off, set the jack inside the tray against the rear wall, receptacle outwards, and fit its own two screws from outside.
-4. **Cable.** One loose coil in the tray, left of the jack, no tighter than about 40 mm across. Run it forward through the tunnel and push the plug up through the shelf slot.
+4. **Cable.** One loose coil in the tray, left of the jack, no tighter than about 40 mm across. Run it forward through the tunnel and push the plug up through the shelf slot (both 20 mm wide).
 5. **Plate.** Lay the board face down on a soft cloth. Set the plate on it so each riser's recess drops over a boss, the spine and groove at the USB-C end. Screw it down with five steel M2.5 × 20 + washers and the **nylon** one in the hole by the antenna. Snug, don't crank: the threads are brass inserts in plastic standoffs.
 6. **Frame.** **Screw the frame to the plate now, before the plate goes on the foot**: the dovetail is a free slide, and the frame on the desk sets the height. Lower the frame over the screen and fix it with four M3 × 8 + washers through the plate's edge holes. Check the even border and that the felt only rests on the black border.
 7. **Plug and mount.** Plug the straight plug into USB_UART. Lower the plate's groove onto the foot's rail and let it slide down until the frame's felt meets the desk, with the foot standing on the desk too. The lead runs down through the plate's notch and the shelf slot. Optionally, with the lid off, fit the foot-lock M3 × 12 from inside the tray, through the access bore in the tray's front wall, into the plate spine's insert. Fit the lid front edge first, then press the rear edge down until it clicks.

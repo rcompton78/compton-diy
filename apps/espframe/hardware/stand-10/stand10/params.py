@@ -95,6 +95,11 @@ PORT_DEPTH = BODY_T + 3.6         # MEASURED (user, approx.): port centre about 
 SCREEN_MASS = 550.0               # g, SOURCED [G-SPEC]
 SCREEN_CG_DEPTH = 10.0            # EST: board centre of mass behind the glass front
 
+# Cable opening across, for the plate notch, the shelf's deck slot, the tunnel and the template's port notch.
+# 20 leaves ±3.75 mm round the 12.5 mm plug at PORT_X (user, COM-396: the port position is hard to measure exactly;
+# the 7" uses 16).
+CABLE_GAP_W = 20.0                # DESIGN
+
 # --- Back-plate: closed, on risers behind the rear box (COM-396 Q1 a) ---------------------------
 PLATE_T = 3.0                     # DESIGN (7")
 PLATE_CLEAR = 2.0                 # DESIGN: plate front behind the rear box
@@ -130,7 +135,7 @@ DOVE_TIP_CLEAR = 0.4              # DESIGN (7")
 DOVE_GROOVE_L = SPINE_TOP_Y - 2.0  # DESIGN: closed by 2 mm of spine at the top (the 7" bug)
 DOVE_RAIL_L = DOVE_GROOVE_L - 2.0  # DESIGN
 LOCK_Y = 18.0                     # DESIGN: optional foot-lock screw height
-PLATE_NOTCH = (16.0, 6.0)         # DESIGN (7"): cable notch in the plate bottom edge
+PLATE_NOTCH = (CABLE_GAP_W, 6.0)  # DESIGN: cable notch in the plate bottom edge (w, h)
 
 # --- Foot (world frame) -------------------------------------------------------------
 TILT_DEG = 15.0                   # DESIGN (7", COM-417)
@@ -172,8 +177,8 @@ PLUG_T = 6.5                      # EST
 CABLE_LEN = 300.0                 # SOURCED
 CABLE_D = 4.5                     # EST
 BEND_R = 4 * CABLE_D              # 18, EST
-SLOT_W = 16.0                     # DESIGN (7", COM-417)
-TUNNEL_W = 16.0                   # DESIGN (7", COM-417)
+SLOT_W = CABLE_GAP_W              # DESIGN: deck slot through the shelf
+TUNNEL_W = CABLE_GAP_W            # DESIGN: cable tunnel from the deck slot into the tray
 SLOT_T = (PORT_DEPTH - 4.0, PORT_DEPTH + 4 * CABLE_D + CABLE_D / 2 + 1.5)
 COIL_W = 32.0                     # DESIGN (7")
 COIL_Y = 68.0                     # DESIGN: coil centre (horizontal depth), behind the tray front wall
