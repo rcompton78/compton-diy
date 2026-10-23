@@ -50,6 +50,7 @@ jobs:
           ln -sfn /hdd/compton-diy/platformio-core-root .platformio-core
           ln -sfn /hdd/compton-diy/platformio-core-espframe apps/espframe/.platformio-core
           ln -sfn /hdd/compton-diy/venv-espframe-stand apps/espframe/hardware/stand/.venv
+          ln -sfn /hdd/compton-diy/venv-espframe-stand-10 apps/espframe/hardware/stand-10/.venv
           ln -sfn /hdd/compton-diy/venv-media-room-remote-enclosure apps/media-room-dashboard/hardware/enclosure/.venv
 
       - name: Compute version
@@ -143,13 +144,14 @@ jobs:
           scripts/release-run.sh "$RUNNER_TEMP/release-versions.json" build
           scripts/release-run.sh "$RUNNER_TEMP/release-versions.json" build-fs
 
-      # build123d + OCP for the hardware projects' print files (espframe stand, media-room
+      # build123d + OCP for the hardware projects' print files (espframe 7" and 10" stands, media-room
       # remote enclosure). Each setup.sh resolves its .venv symlink itself and only
       # rebuilds when its requirements.txt changes.
       - name: Install CAD envs
         timeout-minutes: 30
         run: |
           pnpm nx run espframe-stand:cad-setup
+          pnpm nx run espframe-stand-10:cad-setup
           pnpm nx run media-room-remote-enclosure:cad-setup
 
       - name: Generate releases
