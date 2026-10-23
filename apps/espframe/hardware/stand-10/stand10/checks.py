@@ -7,6 +7,7 @@ from build123d import Vertex
 from . import params as p
 from . import reference as ref
 from .cable import build_path
+from .coupons import template_on_back
 from .foot import build_rail, layout, lid_detents, lift_slot_x
 from .frames import SCREEN_TO_WORLD, box, screen_box, screen_point
 from .plate import frame_tab_spans, plate_outline
@@ -250,6 +251,13 @@ def run(parts: dict) -> list:
     over_l, over_r = ob.min.X - fbb.min.X, fbb.max.X - ob.max.X
     add("Frame and foot share a centre line", abs(over_l - over_r) <= 0.1,
         f"frame overhangs the foot by {over_l:.2f} mm left / {over_r:.2f} mm right (need equal within 0.1)")
+
+    # 13. The hole template lies flat on the board's back: no overlap with the bosses, rear box or FPC bracket.
+    tmpl = template_on_back()
+    t_over = (tmpl & board).volume
+    t_gap = tmpl.distance_to(ref.shell())
+    add("Hole template lies flat on the back", t_over < 1e-3 and t_gap < 1e-3,
+        f"overlap with the board {t_over:.4f} mm³ (bosses, rear box, FPC bracket); resting on the flat back ({t_gap:.3f} mm)")
 
     # 13. Every printed part fits the P1S bed in its print pose.
     for name, solid in parts["print"].items():

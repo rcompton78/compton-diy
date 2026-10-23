@@ -11,40 +11,42 @@ from .foot import build_rail
 from .frames import box, dovetail_prism
 
 
-def template_coupon() -> Part:
-    """A thin ladder in the screen frame's x/y, laid face-down on the board's flat back: six rings drop over
-    the six bosses, a band rings the rear box TEMPLATE_BOX_CLEAR off it, and a notch in the band's
-    bottom edge sits under the UART port. Printed flat; it's the rear view, so it's mirrored here."""
+def template_on_back() -> Part:
+    """The hole template where it lies on the board, in the screen frame: on the flat back, TEMPLATE_T thick.
+    Six rings drop over the six bosses; a band rings the rear box TEMPLATE_BOX_CLEAR off it, with a notch in its
+    bottom edge under the UART port. Two columns join the rings, the bottom rung ties the bottom pair, short stubs
+    tie the middle pair to the band and a stub ties the band to the bottom rung. No rung crosses the box, and there's
+    none at the top, where the LCD-FPC bracket sits between the top holes (checked: no overlap with the board)."""
     t, bar = p.TEMPLATE_T, p.TEMPLATE_BAR
     xs = sorted({x for x, _ in p.HOLES})
     ys = sorted({y for _, y in p.HOLES})
     ring_od = p.BOSS_D + 0.4 + 2 * 2.0
-    out = None
-
-    def add(s):
-        nonlocal out
-        out = s if out is None else out + s
-
-    # Outer ladder through the hole centres: two columns, three rungs.
-    for x in xs:
-        add(box(x - bar / 2, x + bar / 2, ys[0], ys[-1], 0, t))
-    for y in ys:
-        add(box(xs[0], xs[-1], y - bar / 2, y + bar / 2, 0, t))
-    for x, y in p.HOLES:
-        add(Pos(x, y, 0) * Cylinder(ring_od / 2, t, align=(Align.CENTER, Align.CENTER, Align.MIN)))
-    # Band round the rear box, tied to the bottom and middle rungs.
     c, w = p.TEMPLATE_BOX_CLEAR, 3.0
     (bx0, bx1), (by0, by1) = p.BOX_X, p.BOX_Y
-    band = box(bx0 - c - w, bx1 + c + w, by0 - c - w, by1 + c + w, 0, t) - box(bx0 - c, bx1 + c, by0 - c, by1 + c, -1, t + 1)
-    add(band)
-    add(box(sum(p.BOX_X) / 2 - bar / 2, sum(p.BOX_X) / 2 + bar / 2, ys[0], by0 - c, 0, t))
-    # Holes over the bosses, and the UART notch: the port's 8.94 mm receptacle width in the band's bottom edge.
+    parts = [box(x - bar / 2, x + bar / 2, ys[0], ys[-1], 0, t) for x in xs]
+    parts.append(box(xs[0], xs[-1], ys[0] - bar / 2, ys[0] + bar / 2, 0, t))
+    parts += [Pos(x, y, 0) * Cylinder(ring_od / 2, t, align=(Align.CENTER, Align.CENTER, Align.MIN)) for x, y in p.HOLES]
+    parts.append(box(bx0 - c - w, bx1 + c + w, by0 - c - w, by1 + c + w, 0, t)
+                 - box(bx0 - c, bx1 + c, by0 - c, by1 + c, -1, t + 1))
+    parts.append(box(xs[0], bx0 - c - w + 0.5, ys[1] - bar / 2, ys[1] + bar / 2, 0, t))
+    parts.append(box(bx1 + c + w - 0.5, xs[-1], ys[1] - bar / 2, ys[1] + bar / 2, 0, t))
+    mid = sum(p.BOX_X) / 2
+    parts.append(box(mid - bar / 2, mid + bar / 2, ys[0], by0 - c - w + 0.5, 0, t))
+    out = parts[0]
+    for s in parts[1:]:
+        out += s
     for x, y in p.HOLES:
         out -= Pos(x, y, -1) * Cylinder((p.BOSS_D + 0.4) / 2, t + 2, align=(Align.CENTER, Align.CENTER, Align.MIN))
     rw = p.JACK_RECEPTACLE[0]
     out -= box(p.PORT_X - rw / 2, p.PORT_X + rw / 2, by0 - c - w - 1, by0 - c + 0.01, -1, t + 1)
-    # Mirror to the rear view so it reads the right way round lying on the back, then put it on the bed.
-    mirrored = Pos(p.SHELL_W, 0, 0) * Rot(Y=180) * out
+    # Lying on the flat back: its top face against the back, at z = -BODY_T.
+    return Pos(0, 0, -p.BODY_T - t) * out
+
+
+def template_coupon() -> Part:
+    """The hole template in print pose: flat, mirrored to the rear view so it reads the right way round
+    lying on the back."""
+    mirrored = Rot(Y=180) * template_on_back()
     bb = mirrored.bounding_box()
     return Pos(-bb.min.X, -bb.min.Y, -bb.min.Z) * mirrored
 

@@ -15,8 +15,8 @@ Coordinate frames used by the model:
 * Screen frame (plate and frame are built in it): x = across the shell, left to right as
   seen from the front, from the shell's left edge; y = up from the shell's bottom edge;
   z = -depth, so the glass front is z = 0 and the flat metal back is z = -BODY_T.
-* World frame (foot is built in it): X = across, Y = horizontal depth from the frame's
-  bottom-front corner towards the rear, Z = up from the desk.
+* World frame (foot is built in it): X = across, Y = horizontal depth from the glass's
+  bottom-front edge towards the rear, Z = up from the desk.
 
 The 10" stand is on-desk only (COM-396): the frame stands on felt on the desk and the foot
 holds the lean from behind through the dovetail, as the 7"'s COM-442 desk variant does.
