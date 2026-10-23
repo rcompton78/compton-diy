@@ -15,17 +15,6 @@ def shell() -> Part:
                    p.BODY_T)
 
 
-def glass() -> Part:
-    """Touch glass face, inset in the shell (a thin skin at the front, for previews)."""
-    g = p.GLASS_INSET
-    return screen_box(g, p.SHELL_W - g, g, p.SHELL_H - g, p.GLASS_STEP, p.GLASS_STEP + 0.3)
-
-
-def picture() -> Part:
-    """Active area skin just in front of the glass, for previews."""
-    return screen_box(p.AA_X[0], p.AA_X[1], p.AA_Y[0], p.AA_Y[1], p.GLASS_STEP - 0.05, p.GLASS_STEP + 0.01)
-
-
 def rear_box() -> Part:
     """Rear electronics box behind the flat back (screen frame)."""
     return screen_box(p.BOX_X[0], p.BOX_X[1], p.BOX_Y[0], p.BOX_Y[1], p.BODY_T, p.BODY_T + p.BOX_D)

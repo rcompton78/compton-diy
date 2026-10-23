@@ -47,7 +47,7 @@ def build_plate() -> Part:
                         p.D_PLATE_FRONT - p.SPINE_T, p.D_PLATE_FRONT)
 
     # Screw holes over the picture frame's wall bosses (M3 × 8 + washer into an M3 × 4 insert).
-    for x0, x1, xc in frame_tab_spans():
+    for _, _, xc in frame_tab_spans():
         for ty in p.TAB_Y:
             plate -= Pos(xc, ty, -p.D_PLATE_BACK - 1) * Cylinder(
                 p.M3_CLEAR_D / 2, p.PLATE_T + 2, align=(Align.CENTER, Align.CENTER, Align.MIN))

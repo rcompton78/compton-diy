@@ -151,6 +151,7 @@ POST_T = 9.0                      # DESIGN (7")
 POST_H = 45.0                     # DESIGN (7")
 LOCK_HEAD_D = 6.5                 # DESIGN (7")
 LOCK_POST_LEFT = 2.0              # DESIGN (7")
+LOCK_ACCESS_L = 22.0              # DESIGN: counterbore carried rearward from its floor, out into the tray (the post's back is buried)
 DECK_Z = 25.0                     # DESIGN: tray deck (lid top) height
 LID_T = 1.6                       # DESIGN (7")
 LID_RABBET = 1.5                  # DESIGN (7")

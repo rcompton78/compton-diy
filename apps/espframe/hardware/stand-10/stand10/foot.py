@@ -19,11 +19,9 @@ class FootLayout:
     x1: float            # foot outer right edge
     in_x0: float         # tray inner left wall
     in_x1: float         # tray inner right wall
-    y_front: float       # front face of the foot at the desk (world Y)
     z_deck: float        # deck height behind the plate (world Z)
     z_cavity_top: float  # underside of the lid
     front_zone_end: float
-    coil_cx: float       # stadium coil centre X
 
 
 def layout() -> FootLayout:
@@ -31,11 +29,7 @@ def layout() -> FootLayout:
     x0, x1 = p.FRAME_X
     in_x0, in_x1 = x0 + p.WALL, x1 - p.WALL
     z_deck = p.DECK_Z
-    front = plane_y(shelf_front_depth(), 0)
-    rc = p.COIL_W / 2 + p.CABLE_D / 2
-    coil_cx = p.PORT_X + p.COIL_DIR * (rc + (p.COIL_LEN - p.COIL_W) / 2)
-    return FootLayout(x0, x1, in_x0, in_x1, front, z_deck, z_deck - p.LID_T,
-                      p.FRONT_ZONE_D, coil_cx)
+    return FootLayout(x0, x1, in_x0, in_x1, z_deck, z_deck - p.LID_T, p.FRONT_ZONE_D)
 
 
 def shelf_front_depth() -> float:
@@ -103,16 +97,26 @@ def build_foot() -> Part:
     post = screen_box(p.DOVE_X - p.POST_W / 2, p.DOVE_X + p.POST_W / 2, -12 - p.RISE, p.POST_H - p.RISE,
                       post_d0, post_d0 + p.POST_T)
     rail = build_rail()
-    # Optional foot-lock: counterbored M3 clearance hole through post and rail.
-    lock_len = p.POST_T + p.DOVE_DEPTH + 2
-    lock = Pos(p.DOVE_X, p.LOCK_Y, -(post_d0 + p.POST_T) - 1) * Cylinder(
-        p.M3_CLEAR_D / 2, lock_len + 1, align=(Align.CENTER, Align.CENTER, Align.MIN))
-    lock += Pos(p.DOVE_X, p.LOCK_Y, -(post_d0 + p.POST_T) - 1) * Cylinder(
-        p.LOCK_HEAD_D / 2, p.POST_T - p.LOCK_POST_LEFT + 1, align=(Align.CENTER, Align.CENTER, Align.MIN))
-    foot += SCREEN_TO_WORLD * (post + rail - lock)
+    foot += SCREEN_TO_WORLD * (post + rail)
+    # Optional foot-lock, cut after the union: the post's back is buried in the body, so the counterbore carries on
+    # rearward as an access bore into the tray, where the M3 × 12 goes in with the lid off.
+    foot -= SCREEN_TO_WORLD * lock_bore()
     # Keep the post's buried lower end above the desk.
     foot = foot & box(L.x0 - 1, L.x1 + 1, -50, p.FOOT_D + 1, 0, 300)
     return foot
+
+
+def lock_bore() -> Part:
+    """The optional foot-lock's M3 clearance hole through the post and rail, its counterbore, and the access bore
+    from the counterbore rearward into the tray (screen frame)."""
+    post_d0 = p.D_PLATE_BACK + p.POST_FACE_CLEAR
+    back = post_d0 + p.POST_T
+    bore = Pos(p.DOVE_X, p.LOCK_Y, -back - 1) * Cylinder(
+        p.M3_CLEAR_D / 2, p.POST_T + p.DOVE_DEPTH + 3, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    head_d = back - p.LOCK_POST_LEFT                    # counterbore floor depth
+    bore += Pos(p.DOVE_X, p.LOCK_Y, -(head_d + p.LOCK_ACCESS_L)) * Cylinder(
+        p.LOCK_HEAD_D / 2, p.LOCK_ACCESS_L, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    return bore
 
 
 def tunnel_front(L: FootLayout) -> float:

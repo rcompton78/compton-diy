@@ -22,7 +22,7 @@ def _rect_at(x0, x1, y0, y1, z):
 
 def build_frame() -> Part:
     """Frame in the screen frame (z = -depth behind the glass front; the face is at z > 0)."""
-    (ox0, ox1), (oy0, oy1) = p.FRAME_X, p.FRAME_Y
+    (ox0, ox1), (_, oy1) = p.FRAME_X, p.FRAME_Y
     (px0, px1), (py0, py1) = p.OPEN_X, p.OPEN_Y
     z_back = p.FRAME_FACE_GAP                       # face rear surface (towards the glass)
     z_front = z_back + p.FRAME_FACE_T
@@ -48,7 +48,7 @@ def build_frame() -> Part:
 
     # Bosses for the M3 × 4 inserts, tied to the side walls, face at the plate's front face.
     r = p.FRAME_BOSS_D / 2
-    for x0, x1, xc in frame_tab_spans():
+    for _, _, xc in frame_tab_spans():
         wall_x = ox0 + w if xc < p.SHELL_W / 2 else ox1 - w
         for ty in p.TAB_Y:
             boss = Pos(xc, ty, -p.D_PLATE_FRONT) * Cylinder(r, p.FRAME_BOSS_L, align=(Align.CENTER, Align.CENTER, Align.MIN))

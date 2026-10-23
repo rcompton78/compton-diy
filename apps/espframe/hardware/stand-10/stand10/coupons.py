@@ -87,13 +87,13 @@ def dovetail_coupon(include_groove: bool = True) -> Part:
     the groove block groove-down like the back-plate, each rail block standing on end so the
     rail runs up Z like the foot post. 1–3 notches on the top end count the trial."""
     length = 20.0
-    w = 24.0
+    w = p.SPINE_W
     taper = (p.DOVE_FLOOR_W - p.DOVE_MOUTH_W) / p.DOVE_DEPTH
     groove_blk = box(0, w, 0, length, 0, 8)
     groove_blk -= Pos(w / 2 - p.DOVE_X, 0, 0) * dovetail_prism(
         p.DOVE_X, p.DOVE_MOUTH_W - 0.5 * taper, p.DOVE_FLOOR_W, 0.5, -p.DOVE_DEPTH, -1, length + 1)
     parts = groove_blk if include_groove else None
-    post_t = 9.0
+    post_t = p.POST_T
     for i, c in enumerate(p.DOVE_TRIAL_CLEARS):
         post = box(0, w, 0, length, 0, post_t)
         rail = Pos(w / 2 - p.DOVE_X, p.RISE, post_t + (p.D_PLATE_BACK + p.POST_FACE_CLEAR)) * build_rail(c)

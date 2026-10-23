@@ -14,6 +14,8 @@ LIGHT = LIGHT / np.linalg.norm(LIGHT)
 
 def _mesh(shape, tol=0.25):
     verts, tris = shape.tessellate(tol, 0.3)
+    if not len(tris):
+        return np.empty((0, 3, 3))
     v = np.array([[q.X, q.Y, q.Z] for q in verts])
     t = np.array(tris)
     return _subdivide(v[t])
@@ -74,6 +76,13 @@ def render(items, path, view=(20, -60), title=None, lines=(), size=(9, 7), ortho
         pts = np.asarray(pts)
         ax.plot(pts[:, 0], pts[:, 1], pts[:, 2], color=colour, linewidth=width, zorder=10)
         allpts.append(pts)
+    if not allpts:
+        ax.set_axis_off()
+        if title:
+            ax.set_title(title, fontsize=11)
+        fig.savefig(path, facecolor="white")
+        plt.close(fig)
+        return
     pts = np.vstack(allpts)
     lo, hi = pts.min(0), pts.max(0)
     ax.set_xlim(lo[0], hi[0])

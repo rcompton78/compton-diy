@@ -179,6 +179,15 @@ def run(parts: dict) -> list:
     lock_engage = 12.0 - to_floor
     add("Foot-lock screw engagement", p.INSERT_M3x4_L <= lock_engage <= spine_left + 3.0,
         f"M3 × 12 from the counterbore: {lock_engage:.1f} mm past the groove floor into a {p.INSERT_M3x4_L:.0f} mm insert")
+    # The post's back is buried in the foot body, so the counterbore runs on as an access bore into the tray: its
+    # far end must open into the tray cavity, between the floor and the lid, so the screw can go in from there.
+    back = p.D_PLATE_BACK + p.POST_FACE_CLEAR + p.POST_T
+    end = screen_point(p.DOVE_X, p.LOCK_Y, back - p.LOCK_POST_LEFT + p.LOCK_ACCESS_L)
+    rr = p.LOCK_HEAD_D / 2
+    opens = end.Y >= L.front_zone_end + rr and end.Z - rr >= p.FLOOR and end.Z + rr <= L.z_cavity_top
+    add("Foot-lock access bore opens into the tray", opens,
+        f"Ø{p.LOCK_HEAD_D:g} bore from the counterbore ends at Y {end.Y:.1f} (tray front wall {L.front_zone_end:g}), "
+        f"Z {end.Z - rr:.1f}–{end.Z + rr:.1f} (floor {p.FLOOR:g}, lid {L.z_cavity_top:.1f})")
 
     # 12. Picture frame.
     aa = ref.active_area_prism()
@@ -215,9 +224,9 @@ def run(parts: dict) -> list:
     pf_gap = plate.distance_to(frame)
     add("Plate edges meet the frame bosses", pf_over < 1e-3 and pf_gap < 1e-3,
         f"plate-to-boss contact {pf_gap:.3f} mm, overlap {pf_over:.4f} mm³")
-    f_engage = p.FRAME_SCREW_L - p.PLATE_T
+    f_engage = p.FRAME_SCREW_L - p.WASHER_T - p.PLATE_T
     add("Frame screw engagement", p.INSERT_M3x4_L <= f_engage <= p.FRAME_INSERT_DEPTH - 0.5,
-        f"M3 × {p.FRAME_SCREW_L:.0f} through the {p.PLATE_T:.0f} mm plate: {f_engage:.1f} mm into a "
+        f"M3 × {p.FRAME_SCREW_L:.0f} + washer through the {p.PLATE_T:.0f} mm plate: {f_engage:.1f} mm into a "
         f"{p.FRAME_INSERT_DEPTH:.0f} mm hole with an M3 × 4 insert")
     lf = SCREEN_TO_WORLD * ref.desk_felt()
     fbb, lbb = frame_w.bounding_box(), lf.bounding_box()

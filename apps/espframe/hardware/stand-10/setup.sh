@@ -16,7 +16,14 @@ VENV="$(readlink -f "$HERE/.venv" 2>/dev/null)" || VENV=""
 [ -n "$VENV" ] || VENV="$HERE/.venv"
 REQ="$HERE/requirements.txt"
 STAMP="$VENV/.requirements.sha256"
-want="$(sha256sum "$REQ" | cut -d' ' -f1)"
+if command -v sha256sum >/dev/null 2>&1; then
+  want="$(sha256sum "$REQ" | cut -d' ' -f1)"
+elif command -v shasum >/dev/null 2>&1; then
+  want="$(shasum -a 256 "$REQ" | cut -d' ' -f1)"   # macOS / BSD
+else
+  echo "ERROR: need sha256sum or shasum to hash $REQ" >&2
+  exit 1
+fi
 
 if [ -x "$VENV/bin/python" ] && [ -f "$STAMP" ] && [ "$(cat "$STAMP")" = "$want" ]; then
   echo "CAD venv up to date ($VENV)"

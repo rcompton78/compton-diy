@@ -85,7 +85,10 @@ def build_path() -> CablePath:
     jx, jy, jz = p.JACK_X, p.FOOT_D - p.JACK_WEB_T - p.JACK_BODY_L, p.JACK_Z
     sx, sy, sz = loop[-1]
     exitp = []
-    n = int(jy - sy)
+    span = jy - sy
+    if span <= 0:
+        raise ValueError(f"jack inner end Y {jy:.1f} is not behind the coil exit Y {sy:.1f}")
+    n = max(1, int(span))
     for i in range(n + 1):
         t = i / n
         s = (1 - math.cos(math.pi * t)) / 2
