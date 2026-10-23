@@ -106,6 +106,11 @@ def build_foot() -> Part:
     return foot
 
 
+def lock_floor_depth() -> float:
+    """Depth of the foot-lock counterbore's floor: LOCK_POST_LEFT of post left between it and the post front."""
+    return p.D_PLATE_BACK + p.POST_FACE_CLEAR + p.LOCK_POST_LEFT
+
+
 def lock_bore() -> Part:
     """The optional foot-lock's M3 clearance hole through the post and rail, its counterbore, and the access bore
     from the counterbore rearward into the tray (screen frame)."""
@@ -113,7 +118,7 @@ def lock_bore() -> Part:
     back = post_d0 + p.POST_T
     bore = Pos(p.DOVE_X, p.LOCK_Y, -back - 1) * Cylinder(
         p.M3_CLEAR_D / 2, p.POST_T + p.DOVE_DEPTH + 3, align=(Align.CENTER, Align.CENTER, Align.MIN))
-    head_d = back - p.LOCK_POST_LEFT                    # counterbore floor depth
+    head_d = lock_floor_depth()
     bore += Pos(p.DOVE_X, p.LOCK_Y, -(head_d + p.LOCK_ACCESS_L)) * Cylinder(
         p.LOCK_HEAD_D / 2, p.LOCK_ACCESS_L, align=(Align.CENTER, Align.CENTER, Align.MIN))
     return bore

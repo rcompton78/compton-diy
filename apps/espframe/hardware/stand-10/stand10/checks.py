@@ -8,7 +8,7 @@ from . import params as p
 from . import reference as ref
 from .cable import build_path
 from .coupons import template_on_back
-from .foot import build_rail, layout, lid_detents, lift_slot_x
+from .foot import build_rail, layout, lid_detents, lift_slot_x, lock_floor_depth
 from .frames import SCREEN_TO_WORLD, box, screen_box, screen_point
 from .plate import frame_tab_spans, plate_outline
 
@@ -174,15 +174,14 @@ def run(parts: dict) -> list:
         f"{heads_gap:.1f} mm between them (test your chargers)")
 
     # 11. Foot-lock screw (optional, M3 × 12) reaches the M3 × 4 insert in the plate spine.
-    to_floor = p.LOCK_POST_LEFT + p.DOVE_DEPTH + p.POST_FACE_CLEAR
+    to_floor = lock_floor_depth() - (p.D_PLATE_BACK - p.DOVE_DEPTH)   # counterbore floor to the groove floor
     spine_left = (p.D_PLATE_BACK - p.DOVE_DEPTH) - (p.D_PLATE_FRONT - p.SPINE_T)
     lock_engage = 12.0 - to_floor
     add("Foot-lock screw engagement", p.INSERT_M3x4_L <= lock_engage <= spine_left + 3.0,
         f"M3 × 12 from the counterbore: {lock_engage:.1f} mm past the groove floor into a {p.INSERT_M3x4_L:.0f} mm insert")
     # The post's back is buried in the foot body, so the counterbore runs on as an access bore into the tray: its
     # far end must open into the tray cavity, between the floor and the lid, so the screw can go in from there.
-    back = p.D_PLATE_BACK + p.POST_FACE_CLEAR + p.POST_T
-    end = screen_point(p.DOVE_X, p.LOCK_Y, back - p.LOCK_POST_LEFT + p.LOCK_ACCESS_L)
+    end = screen_point(p.DOVE_X, p.LOCK_Y, lock_floor_depth() + p.LOCK_ACCESS_L)
     rr = p.LOCK_HEAD_D / 2
     opens = end.Y >= L.front_zone_end + rr and end.Z - rr >= p.FLOOR and end.Z + rr <= L.z_cavity_top
     add("Foot-lock access bore opens into the tray", opens,
