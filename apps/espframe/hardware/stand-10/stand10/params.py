@@ -109,6 +109,7 @@ RISER_SEAT = (BOSS_D + 0.4, 3.0)  # DESIGN: locating recess over each boss (dia,
                                   #   skirt stops 1.5 mm off the flat back and the riser always seats on the boss top
 SCREW_L = 16.0                    # DESIGN: M2.5 × 16 button head, no washer (the user's pack has × 16 and × 20, COM-396)
 WASHER_T = 0.0                    #   seated on the counterbore floor, SCREW_HEAD_CB[1] down from the back face
+OPTIONAL_WASHER_T = 0.5           # DESIGN: an M2.5 washer someone might still fit under the head (checked to pass too)
 SCREW_HEAD_CB = (5.6, 3.5)        # DESIGN: head counterbore (dia, depth from the back face): fits button heads up to Ø5.0,
                                   #   the head top sits ~2 mm under the back; 12.2 mm of plate and riser to the boss top
                                   #   gives 3.8 mm into the 4.4 mm insert (a Ø5 × 0.5 washer, if fitted, still leaves 3.3)
@@ -261,3 +262,4 @@ FRAME_BOSS_D = 7.0                # DESIGN (7")
 FRAME_BOSS_L = 8.0                # DESIGN (7")
 FRAME_INSERT_DEPTH = INSERT_M3x4_L + 2.0
 FRAME_SCREW_L = 8.0               # DESIGN (7"): M3 × 8 + washer into the M3 × 4 inserts
+FRAME_WASHER_T = 0.5              # DESIGN: the M3 × 8 frame screws keep their washer

@@ -67,17 +67,17 @@ def run(parts: dict) -> list:
     engage = p.SCREW_L - p.WASHER_T - stack
     add(f"M2.5 × {p.SCREW_L:g} engagement in the inserts",
         p.MIN_SCREW_ENGAGE <= engage <= p.BOSS_THREAD - p.MIN_SCREW_BOTTOM
-        and p.SCREW_L - p.WASHER_T - stack - 0.5 >= p.MIN_SCREW_ENGAGE,
+        and engage - p.OPTIONAL_WASHER_T >= p.MIN_SCREW_ENGAGE,
         f"button head on the counterbore floor, {stack:.1f} mm above the boss top: {engage:.1f} mm into the "
         f"{p.BOSS_THREAD:g} mm insert (need {p.MIN_SCREW_ENGAGE:g}–{p.BOSS_THREAD - p.MIN_SCREW_BOTTOM:.1f}); "
-        f"{engage - 0.5:.1f} with an optional 0.5 washer")
+        f"{engage - p.OPTIONAL_WASHER_T:.1f} with an optional {p.OPTIONAL_WASHER_T:g} washer")
 
     head_gap = p.SCREW_HEAD_CB[1] - p.BUTTON_HEAD_K - p.PLUG_BODY
     add("Hole plugs clear the screw heads",
         head_gap >= p.MIN_PLUG_HEAD_GAP and max(p.PLUG_TRIAL_D + [p.PLUG_D]) < p.SCREW_HEAD_CB[0],
         f"{p.PLUG_BODY:g} mm plug body in the {p.SCREW_HEAD_CB[1]:g} mm counterbore stops {head_gap:.1f} mm above a "
         f"{p.BUTTON_HEAD_K:g} mm button head (need ≥ {p.MIN_PLUG_HEAD_GAP:g}); plugs Ø{min(p.PLUG_TRIAL_D):g}–"
-        f"{max(p.PLUG_TRIAL_D):g} in a Ø{p.SCREW_HEAD_CB[0]:g} bore")
+        f"{max(p.PLUG_TRIAL_D):g} (six at Ø{p.PLUG_D:g}) in a Ø{p.SCREW_HEAD_CB[0]:g} bore")
 
     # 3. Antenna keep-out: no metal (plate screws other than the nylon one, frame inserts and screws, foot lock) near it.
     metal = {f"M2.5 at ({x:g}, {y:g})": (x, y) for x, y in p.HOLES if (x, y) != p.NYLON_HOLE}
@@ -231,7 +231,7 @@ def run(parts: dict) -> list:
     pf_gap = plate.distance_to(frame)
     add("Plate edges meet the frame bosses", pf_over < 1e-3 and pf_gap < 1e-3,
         f"plate-to-boss contact {pf_gap:.3f} mm, overlap {pf_over:.4f} mm³")
-    f_engage = p.FRAME_SCREW_L - p.WASHER_T - p.PLATE_T
+    f_engage = p.FRAME_SCREW_L - p.FRAME_WASHER_T - p.PLATE_T
     add("Frame screw engagement", p.INSERT_M3x4_L <= f_engage <= p.FRAME_INSERT_DEPTH - 0.5,
         f"M3 × {p.FRAME_SCREW_L:.0f} + washer through the {p.PLATE_T:.0f} mm plate: {f_engage:.1f} mm into a "
         f"{p.FRAME_INSERT_DEPTH:.0f} mm hole with an M3 × 4 insert")
