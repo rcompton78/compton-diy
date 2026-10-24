@@ -65,7 +65,7 @@ Every dimension is a named constant in [`stand10/params.py`](stand10/params.py),
 |---|---|
 | Plate clears the rear box | 2.00 mm behind its back face |
 | Risers seat on the bosses | recess floor on the boss tops, no overlap with the board; skirts sleeve 3 mm of each boss and stop 1.5 mm off the flat back |
-| M2.5 × 16 engagement | button head, no washer, on the counterbore floor 12.2 mm above the boss top: 3.8 mm into the 4.4 mm insert, 0.6 short of its bottom (3.3 with an optional 0.5 washer) |
+| M2.5 × 16 engagement | button head, no washer, on the counterbore floor 12.2 mm above the boss top: 3.8 mm into the 4.4 mm insert, 0.6 short of its bottom. No washer: one would lift the head into the cover plug |
 | Hole plugs clear the screw heads | the 1.6 mm plug body stops 0.4 mm above a 1.5 mm button head; plugs Ø5.35–5.55 in the Ø5.6 counterbore |
 | No metal near the antenna window | nearest metal 25 mm away (need ≥ 15); nylon screw in the top-left hole |
 | Dovetail clearance | 0.02 mm per side on the flanks (the 7"'s printed coupon), no interference |

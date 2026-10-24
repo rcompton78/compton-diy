@@ -66,13 +66,12 @@ def run(parts: dict) -> list:
     stack = p.PLATE_T + p.RISER_H - p.SCREW_HEAD_CB[1]
     engage = p.SCREW_L - p.WASHER_T - stack
     add(f"M2.5 × {p.SCREW_L:g} engagement in the inserts",
-        p.MIN_SCREW_ENGAGE <= engage <= p.BOSS_THREAD - p.MIN_SCREW_BOTTOM
-        and engage - p.OPTIONAL_WASHER_T >= p.MIN_SCREW_ENGAGE,
+        p.MIN_SCREW_ENGAGE <= engage <= p.BOSS_THREAD - p.MIN_SCREW_BOTTOM,
         f"button head on the counterbore floor, {stack:.1f} mm above the boss top: {engage:.1f} mm into the "
         f"{p.BOSS_THREAD:g} mm insert (need {p.MIN_SCREW_ENGAGE:g}–{p.BOSS_THREAD - p.MIN_SCREW_BOTTOM:.1f}); "
-        f"{engage - p.OPTIONAL_WASHER_T:.1f} with an optional {p.OPTIONAL_WASHER_T:g} washer")
+        "no washer, which would lift the head into the cover plug")
 
-    head_gap = p.SCREW_HEAD_CB[1] - p.BUTTON_HEAD_K - p.PLUG_BODY
+    head_gap = p.SCREW_HEAD_CB[1] - p.WASHER_T - p.BUTTON_HEAD_K - p.PLUG_BODY
     add("Hole plugs clear the screw heads",
         head_gap >= p.MIN_PLUG_HEAD_GAP and max(p.PLUG_TRIAL_D + [p.PLUG_D]) < p.SCREW_HEAD_CB[0],
         f"{p.PLUG_BODY:g} mm plug body in the {p.SCREW_HEAD_CB[1]:g} mm counterbore stops {head_gap:.1f} mm above a "
