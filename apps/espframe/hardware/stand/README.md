@@ -1,6 +1,6 @@
 # Espframe 7" portrait desk stand
 
-A 3D-printable portrait desk stand for the 7" espframe (Waveshare ESP32-S3-Touch-LCD-7, Rev1.2), with a wood-look picture frame round the screen. It's a parametric Python model built with [build123d](https://github.com/gumyr/build123d). One command rebuilds every print file, the preview images, and a set of fit and stability checks. It comes in two variants (see below): the frame sits on a ledge on the foot, or stands on the desk in front of it. The 10" Guition version will follow once this one has been printed and checked; everything known about it so far is in [docs/10-inch.md](docs/10-inch.md).
+A 3D-printable portrait desk stand for the 7" espframe (Waveshare ESP32-S3-Touch-LCD-7, Rev1.2), with a wood-look picture frame round the screen. It's a parametric Python model built with [build123d](https://github.com/gumyr/build123d). One command rebuilds every print file, the preview images, and a set of fit and stability checks. It comes in two variants (see below): the frame sits on a ledge on the foot, or stands on the desk in front of it. The 10" Guition version is its own project in [../stand-10](../stand-10/README.md) (COM-396).
 
 | | |
 |---|---|
