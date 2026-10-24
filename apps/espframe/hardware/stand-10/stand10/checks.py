@@ -63,14 +63,21 @@ def run(parts: dict) -> list:
         f"skirts sleeve {p.RISER_SEAT[1]:g} mm of each boss and stop {back_gap:.2f} mm off the flat back; recess Ø{p.RISER_SEAT[0]:g} × {p.RISER_SEAT[1]:g} over Ø{p.BOSS_D:g} bosses")
 
     # 2. M2.5 screws: through the plate and riser into the board's inserts, never bottoming.
-    stack = p.PLATE_T + p.RISER_H
+    stack = p.PLATE_T + p.RISER_H - p.SCREW_HEAD_CB[1]
     engage = p.SCREW_L - p.WASHER_T - stack
-    add("M2.5 × 20 engagement in the inserts",
+    add(f"M2.5 × {p.SCREW_L:g} engagement in the inserts",
         p.MIN_SCREW_ENGAGE <= engage <= p.BOSS_THREAD - p.MIN_SCREW_BOTTOM
-        and p.SCREW_L - stack <= p.BOSS_THREAD,
-        f"{stack:.1f} mm stack + {p.WASHER_T:g} washer: {engage:.1f} mm into the {p.BOSS_THREAD:g} mm insert "
-        f"(need {p.MIN_SCREW_ENGAGE:g}–{p.BOSS_THREAD - p.MIN_SCREW_BOTTOM:.1f}); {p.SCREW_L - stack:.1f} without the washer, "
-        f"so always fit it")
+        and p.SCREW_L - p.WASHER_T - stack - 0.5 >= p.MIN_SCREW_ENGAGE,
+        f"button head on the counterbore floor, {stack:.1f} mm above the boss top: {engage:.1f} mm into the "
+        f"{p.BOSS_THREAD:g} mm insert (need {p.MIN_SCREW_ENGAGE:g}–{p.BOSS_THREAD - p.MIN_SCREW_BOTTOM:.1f}); "
+        f"{engage - 0.5:.1f} with an optional 0.5 washer")
+
+    head_gap = p.SCREW_HEAD_CB[1] - p.BUTTON_HEAD_K - p.PLUG_BODY
+    add("Hole plugs clear the screw heads",
+        head_gap >= p.MIN_PLUG_HEAD_GAP and max(p.PLUG_TRIAL_D + [p.PLUG_D]) < p.SCREW_HEAD_CB[0],
+        f"{p.PLUG_BODY:g} mm plug body in the {p.SCREW_HEAD_CB[1]:g} mm counterbore stops {head_gap:.1f} mm above a "
+        f"{p.BUTTON_HEAD_K:g} mm button head (need ≥ {p.MIN_PLUG_HEAD_GAP:g}); plugs Ø{min(p.PLUG_TRIAL_D):g}–"
+        f"{max(p.PLUG_TRIAL_D):g} in a Ø{p.SCREW_HEAD_CB[0]:g} bore")
 
     # 3. Antenna keep-out: no metal (plate screws other than the nylon one, frame inserts and screws, foot lock) near it.
     metal = {f"M2.5 at ({x:g}, {y:g})": (x, y) for x, y in p.HOLES if (x, y) != p.NYLON_HOLE}

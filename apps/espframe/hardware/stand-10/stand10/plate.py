@@ -52,10 +52,12 @@ def build_plate() -> Part:
             plate -= Pos(xc, ty, -p.D_PLATE_BACK - 1) * Cylinder(
                 p.M3_CLEAR_D / 2, p.PLATE_T + 2, align=(Align.CENTER, Align.CENTER, Align.MIN))
 
-    # M2.5 clearance holes through riser and plate.
+    # M2.5 clearance holes through riser and plate, each counterbored from the back so its button head sits below it.
+    cd, ch = p.SCREW_HEAD_CB
     for x, y in p.HOLES:
         plate -= Pos(x, y, -p.D_PLATE_BACK - 1) * Cylinder(
             p.M25_CLEAR_D / 2, p.PLATE_T + p.RISER_H + p.RISER_SEAT[1] + 2, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        plate -= Pos(x, y, -p.D_PLATE_BACK - 1) * Cylinder(cd / 2, ch + 1, align=(Align.CENTER, Align.CENTER, Align.MIN))
 
     # Dovetail groove, open at the bottom edge so the plate slides down onto the rail.
     # The prism starts 0.5 behind the back face (extrapolating the flank) so the cut is clean.

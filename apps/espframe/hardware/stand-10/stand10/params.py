@@ -107,11 +107,21 @@ RISER_D = 11.0                    # DESIGN: leaves a 1.55 mm skirt wall round th
 RISER_SEAT = (BOSS_D + 0.4, 3.0)  # DESIGN: locating recess over each boss (dia, depth): a 0.2 mm/side slip fit that sleeves
                                   #   3 of the boss's 4.5 mm (1 mm on the printed coupon gripped too little, COM-396), so the
                                   #   skirt stops 1.5 mm off the flat back and the riser always seats on the boss top
-SCREW_L = 20.0                    # DESIGN: M2.5 × 20 pan head + washer; through the plate and riser (15.7 mm to the boss top),
-WASHER_T = 0.5                    #   so 3.8 mm into the 4.4 mm insert. Always fit the washer: without it, 4.3 leaves 0.1 to the bottom
+SCREW_L = 16.0                    # DESIGN: M2.5 × 16 button head, no washer (the user's pack has × 16 and × 20, COM-396)
+WASHER_T = 0.0                    #   seated on the counterbore floor, SCREW_HEAD_CB[1] down from the back face
+SCREW_HEAD_CB = (5.6, 3.5)        # DESIGN: head counterbore (dia, depth from the back face): fits button heads up to Ø5.0,
+                                  #   the head top sits ~2 mm under the back; 12.2 mm of plate and riser to the boss top
+                                  #   gives 3.8 mm into the 4.4 mm insert (a Ø5 × 0.5 washer, if fitted, still leaves 3.3)
+BUTTON_HEAD_K = 1.5               # EST: tallest M2.5 button head expected (commercial 1.3–1.5)
+PLUG_D = 5.45                     # DESIGN: removable cover plug, a friction fit in the Ø5.6 counterbore (PETG)
+PLUG_TRIAL_D = [5.35, 5.45, 5.55] # DESIGN: plug test set, 1–3 notches in the pull tab
+PLUG_BODY = 1.6                   # DESIGN: plug depth into the counterbore, short of the screw head
+PLUG_FLANGE = (SCREW_HEAD_CB[0] + 0.8, 0.6)  # DESIGN: lip (dia, thickness) proud of the back face
+PLUG_TAB = (2.5, 1.2)             # DESIGN: pull tab on one side of the lip (width, reach past the lip) for a fingernail
+MIN_PLUG_HEAD_GAP = 0.3           # DESIGN: check limit, plug end above the tallest button head
 MIN_SCREW_ENGAGE = 3.0            # DESIGN: check limit, M2.5 thread engaged in the insert (1.2 × D)
 MIN_SCREW_BOTTOM = 0.3            # DESIGN: check limit, screw tip short of the insert's bottom
-# Engagement = SCREW_L − WASHER_T − (PLATE_T + RISER_H); the riser's locating recess sits over the boss, not under the screw.
+# Engagement = SCREW_L − WASHER_T − (PLATE_T + RISER_H − SCREW_HEAD_CB depth); the riser's locating recess sits over the boss, not under the screw.
 D_BOSS_TOP = BODY_T + BOSS_H                       # 12.7
 D_PLATE_FRONT = BODY_T + BOX_D + PLATE_CLEAR       # 25.4
 D_PLATE_BACK = D_PLATE_FRONT + PLATE_T             # 28.4

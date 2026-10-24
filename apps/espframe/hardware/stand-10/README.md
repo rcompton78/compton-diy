@@ -16,7 +16,7 @@ Overall 164 W × 127 D × 245 H mm. The screen leans back 15° and pushing it ba
 - **Picture frame (wood-look PLA).** The outer edge sits tight to the shell (2.7 mm outside it), and the face runs in over the whole black glass border to the picture, so only the picture shows, with a 0.75 mm reveal. Faces are 13.6 mm at the sides and 15.1 at the top; at the bottom the face runs down to the desk, a 20 mm border.
   - It's 164.1 × 253.1 mm printed face-down, within the P1S's 256 bed by 2.9 mm. A lower screen would need a shorter plug; a higher one would make the frame too tall to print in one piece.
   - It hangs on the back-plate: four M3 × 8 screws from behind, through the plate's edges, into inserts in bosses on its side walls. There's no bottom wall (as the 7", COM-431). It never touches the glass: felt on the back of the face stays 0.2 mm off it.
-- **Back-plate (3 mm PETG), closed, behind the rear box.** Six printed risers (Ø11, 12.7 above the boss tops) stand on the board's six bosses (short black standoffs with brass M2.5 inserts) and carry the plate 2 mm behind the rear box. Each riser's skirt has a Ø7.9 × 3 mm recess that sleeves 3 of the boss's 4.5 mm, so the plate can't slide on its screws; the skirt stops 1.5 mm off the flat back, so the riser always seats on the boss top. Vent slots run in two rows low and two near the top.
+- **Back-plate (3 mm PETG), closed, behind the rear box.** Six printed risers (Ø11, 12.7 above the boss tops) stand on the board's six bosses (short black standoffs with brass M2.5 inserts) and carry the plate 2 mm behind the rear box. Each riser's skirt has a Ø7.9 × 3 mm recess that sleeves 3 of the boss's 4.5 mm, so the plate can't slide on its screws; the skirt stops 1.5 mm off the flat back, so the riser always seats on the boss top. Each screw hole is counterbored Ø5.6 × 3.5 mm from the back, so the M2.5 × 16 button heads sit about 2 mm below it, and a printed plug covers each one. Vent slots run in two rows low and two near the top.
 - **Foot (PETG).** The plate's dovetail groove (in a spine left of the USB-C bank) slides down onto a rail on the foot's post. The cable drops through a notch in the plate's bottom edge and a slot in the shelf between the frame's side walls, runs through a tunnel into the tray, lies as one loose coil, and ends at the Poyiccot panel jack in the rear wall. The tray has a click-in lid, as on the 7".
 - **Power and data.** The same Poyiccot USB 3.1 straight panel-mount extension (30 cm) as the 7". Its plug goes into the board's **USB_UART** port (the USB-C beside the white TX/RX/GND header), so any USB-C charger powers it and you can flash or read logs through the stand.
 - **Antenna.** The C6's antenna window is near the top-left corner seen from the front (centre 23 mm from the top and from that edge). Only PETG covers it: the screw nearest it is nylon, and every other screw and insert stays at least 15 mm away (checked).
@@ -65,7 +65,8 @@ Every dimension is a named constant in [`stand10/params.py`](stand10/params.py),
 |---|---|
 | Plate clears the rear box | 2.00 mm behind its back face |
 | Risers seat on the bosses | recess floor on the boss tops, no overlap with the board; skirts sleeve 3 mm of each boss and stop 1.5 mm off the flat back |
-| M2.5 × 20 engagement | 15.7 mm stack + 0.5 washer: 3.8 mm into the 4.4 mm insert. Without the washer it's 4.3, 0.1 from bottoming: always fit the washer |
+| M2.5 × 16 engagement | button head, no washer, on the counterbore floor 12.2 mm above the boss top: 3.8 mm into the 4.4 mm insert, 0.6 short of its bottom (3.3 with an optional 0.5 washer) |
+| Hole plugs clear the screw heads | the 1.6 mm plug body stops 0.4 mm above a 1.5 mm button head; plugs Ø5.35–5.55 in the Ø5.6 counterbore |
 | No metal near the antenna window | nearest metal 25 mm away (need ≥ 15); nylon screw in the top-left hole |
 | Dovetail clearance | 0.02 mm per side on the flanks (the 7"'s printed coupon), no interference |
 | Dovetail groove ends inside the spine | 2 mm of solid spine above the groove end (the 7" groove once cut through the plate) |
@@ -94,9 +95,10 @@ Structural parts are PETG on the stock Bambu P1S profile with the 0.4 mm nozzle;
 | File | Orientation | Settings |
 |---|---|---|
 | `coupon-template` | Flat as exported | 1.2 mm, 100% infill. Lay it on the board's flat back: the six rings should drop over the six bosses, the band should sit round the rear box with about 1 mm to spare, and the USB_UART port should sit inside the 20 mm notch in its bottom edge (the cable opening's width, so it shows the margin). It's mirrored, as seen from the back. |
-| `coupon-riser` | As exported: plate square on the bed, riser up | As the plate. It should drop over a boss, and an M2.5 × 20 + washer should pull it down snug without bottoming. |
+| `coupon-riser` | As exported: plate square on the bed, riser up | As the plate. It should drop over a boss, and an M2.5 × 16 button head, no washer, should pull it down snug without bottoming, its head below the back face. Try the plug test set in its counterbore too. |
 | `coupon-receptacle` | Flat | Optional: the jack is the 7"'s, so plate 2 (1.2 mm) should end flush with its receptacle. |
 | `coupon-dovetail` | As exported (rail blocks standing on end) | Optional: the 7"'s 0.02 / 0.03 / 0.04 fit, already settled at 0.02 on this printer. |
+| `plugs` | Flat as exported: lips on the bed | 100% infill. Six hole plugs at Ø5.45, and below them a test set at Ø5.35 / 5.45 / 5.55 (1 / 2 / 3 notches in the pull tab). Push one into the riser coupon's counterbore: pick the size that holds and still pulls out with a fingernail under the tab, and if it isn't Ø5.45, change `PLUG_D` and reprint the six. |
 | `plate` | As exported: back face on the bed, risers and spine up | 4 walls, 40% infill, 0.2 mm layers |
 | `foot` | As exported: upright on its base | 4 walls, 25% infill, no supports |
 | `lid` | Flat | 3 walls |
@@ -107,8 +109,8 @@ Structural parts are PETG on the stock Bambu P1S profile with the 0.4 mm nozzle;
 | Qty | Part | Notes |
 |---|---|---|
 | 1 | Poyiccot USB 3.1 Type-C panel-mount extension, straight male to female, 30 cm | Into the board's USB_UART port |
-| 5 | M2.5 × 20 pan head + M2.5 washer, steel | Plate to the board's brass inserts. **Always fit the washer** |
-| 1 | M2.5 × 20 pan head + M2.5 washer, **nylon** | The top-left hole seen from the front (top-right from the back), next to the antenna window |
+| 5 | M2.5 × 16 button head, steel, no washer | Plate to the board's brass inserts, heads in the riser counterbores |
+| 1 | M2.5 × 16 button head, **nylon**, no washer | The top-left hole seen from the front (top-right from the back), next to the antenna window |
 | 4 | M3 × 8 pan head + M3 washer | Plate to the frame |
 | 4 | M3 × 4 × 4.2 heat-set inserts | Frame side-wall bosses |
 | 1 | M3 × 4 × 4.2 heat-set insert + 1 M3 × 12 | Optional foot lock (plate spine) |
@@ -123,7 +125,7 @@ The foot stands straight on the desk: no rubber feet (they'd lift the shelf towa
 2. **Felt.** The 8 mm strip on the back of the frame face, over the black border, its inner edge at least 1 mm outside the opening. The narrow strips under the frame's bottom edge, along the face and the two side walls, trimmed flush.
 3. **Jack.** Lid off, set the jack inside the tray against the rear wall, receptacle outwards, and fit its own two screws from outside.
 4. **Cable.** One loose coil in the tray, left of the jack, no tighter than about 40 mm across. Run it forward through the tunnel and push the plug up through the shelf slot (both 20 mm wide).
-5. **Plate.** Lay the board face down on a soft cloth. Set the plate on it so each riser's recess drops over a boss, the spine and groove at the USB-C end. Screw it down with five steel M2.5 × 20 + washers and the **nylon** one in the hole by the antenna. Snug, don't crank: the threads are brass inserts in plastic standoffs.
+5. **Plate.** Lay the board face down on a soft cloth. Set the plate on it so each riser's recess drops over a boss, the spine and groove at the USB-C end. Screw it down with five steel M2.5 × 16 button heads and the **nylon** one in the hole by the antenna, no washers: each head seats in its counterbore. Snug, don't crank: the threads are brass inserts in plastic standoffs. Press a plug into each counterbore, its thin lip against the back and the pull tab where a fingernail can reach it.
 6. **Frame.** **Screw the frame to the plate now, before the plate goes on the foot**: the dovetail is a free slide, and the frame on the desk sets the height. Lower the frame over the screen and fix it with four M3 × 8 + washers through the plate's edge holes. Check the even border and that the felt only rests on the black border.
 7. **Plug and mount.** Plug the straight plug into USB_UART. Lower the plate's groove onto the foot's rail and let it slide down until the frame's felt meets the desk, with the foot standing on the desk too. The lead runs down through the plate's notch and the shelf slot. Optionally, with the lid off, fit the foot-lock M3 × 12 from inside the tray, through the access bore in the tray's front wall, into the plate spine's insert. Fit the lid front edge first, then press the rear edge down until it clicks.
 8. **Rotation.** In the espframe settings, pick the portrait rotation that shows the picture upright.

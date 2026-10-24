@@ -16,7 +16,7 @@ from . import checks
 from . import params as p
 from . import reference as ref
 from .cable import build_path
-from .coupons import dovetail_coupon, receptacle_coupon, riser_coupon, template_coupon
+from .coupons import dovetail_coupon, plugs_coupon, receptacle_coupon, riser_coupon, template_coupon
 from .foot import build_foot, build_lid, layout, lid_print_pose
 from .frame import build_frame, frame_print_pose
 from .frames import SCREEN_TO_WORLD, box, screen_box
@@ -64,6 +64,7 @@ def main(argv=None) -> int:
         "coupon-riser": riser_coupon(),
         "coupon-receptacle": receptacle_coupon(),
         "coupon-dovetail": dovetail_coupon(),
+        "plugs": plugs_coupon(),
     }
     for name, solid in printed.items():
         if not solid.is_valid:
@@ -143,8 +144,10 @@ def _render_all(plate, foot, lid, frame, printed, docs: Path):
            title="Back-plate (print pose: back face down, risers and spine up)")
     render([(printed["plate"], PETG, 1.0)], docs / "plate-underside.png", view=(-55, -60),
            title="Back-plate underside: dovetail groove, cable notch")
-    render([(printed["coupon-template"], PETG, 1.0), (Pos(-40, 0, 0) * printed["coupon-riser"], FOOT, 1.0)],
-           docs / "coupon-template.png", view=(60, -70), title="Hole template (mirrored, lies on the back) and riser coupon")
+    render([(printed["coupon-template"], PETG, 1.0), (Pos(-40, 0, 0) * printed["coupon-riser"], FOOT, 1.0),
+            (Pos(-75, -30, 0) * printed["plugs"], FOOT, 1.0)],
+           docs / "coupon-template.png", view=(60, -70),
+           title="Hole template (mirrored, lies on the back), riser coupon and hole plugs")
     render([(printed["coupon-receptacle"], PETG, 1.0), (Pos(0, 30, 0) * printed["coupon-dovetail"], FOOT, 1.0)],
            docs / "coupons.png", view=(50, -70), title="Test coupons: receptacle web plates, dovetail fit")
 

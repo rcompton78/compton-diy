@@ -54,13 +54,42 @@ def template_coupon() -> Part:
 
 def riser_coupon() -> Part:
     """One riser on a 3 mm square of plate, as on the back-plate: back face on the bed. It should drop over a
-    boss, and the M2.5 × 20 + washer should pull it down without bottoming in the insert."""
+    boss, and an M2.5 × 16 button head, no washer, should pull it down without bottoming in the insert, its head
+    in the counterbore below the back face."""
     from .plate import riser_stack
     s = 22.0
     part = box(-s / 2, s / 2, -s / 2, s / 2, 0, p.PLATE_T) + Pos(0, 0, p.PLATE_T) * riser_stack()
     part -= Pos(0, 0, -1) * Cylinder(p.M25_CLEAR_D / 2, p.PLATE_T + p.RISER_H + p.RISER_SEAT[1] + 2,
                                      align=(Align.CENTER, Align.CENTER, Align.MIN))
+    cd, ch = p.SCREW_HEAD_CB
+    part -= Pos(0, 0, -1) * Cylinder(cd / 2, ch + 1, align=(Align.CENTER, Align.CENTER, Align.MIN))
     return part
+
+
+def hole_plug(d: float, notches: int = 0) -> Part:
+    """One cover plug for a counterbored riser hole, flange down on the bed: a PLUG_BODY friction-fit body of
+    diameter d on a thin lip, with a pull tab on one side for a fingernail. Notches in the tab end count a trial size."""
+    fd, ft = p.PLUG_FLANGE
+    tw, tr = p.PLUG_TAB
+    plug = Cylinder(fd / 2, ft, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    plug += box(0, fd / 2 + tr, -tw / 2, tw / 2, 0, ft)
+    plug += Pos(0, 0, ft) * Cylinder(d / 2, p.PLUG_BODY, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    for k in range(notches):
+        y = -tw / 2 + (k + 1) * tw / (notches + 1)
+        plug -= box(fd / 2 + tr - 0.5, fd / 2 + tr + 1, y - 0.2, y + 0.2, -1, ft + 1)
+    return plug
+
+
+def plugs_coupon() -> Part:
+    """Six cover plugs at PLUG_D in a row, and below them the PLUG_TRIAL_D test set (1–3 notches, smallest first)."""
+    pitch = p.PLUG_FLANGE[0] + p.PLUG_TAB[1] + 3
+    out = None
+    for i in range(len(p.HOLES)):
+        plug = Pos(i * pitch, 0, 0) * hole_plug(p.PLUG_D)
+        out = plug if out is None else out + plug
+    for i, d in enumerate(p.PLUG_TRIAL_D):
+        out += Pos(i * pitch, -pitch, 0) * hole_plug(d, i + 1)
+    return out
 
 
 def receptacle_coupon() -> Part:
