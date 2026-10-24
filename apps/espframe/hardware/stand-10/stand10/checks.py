@@ -57,9 +57,10 @@ def run(parts: dict) -> list:
     b_over = (plate & board).volume
     seat_gap = plate.distance_to(ref.bosses())
     back_gap = plate.distance_to(ref.shell())
-    add("Risers seat on the bosses", b_over < 1e-3 and seat_gap < 1e-3 and back_gap >= 1.0,
+    add("Risers seat on the bosses", b_over < 1e-3 and seat_gap < 1e-3 and back_gap >= 1.0
+        and abs(back_gap - (p.BOSS_H - p.RISER_SEAT[1])) < 0.01,
         f"recess floor on the boss tops ({seat_gap:.3f} mm), overlap with the board {b_over:.4f} mm³; "
-        f"riser rims {back_gap:.2f} mm off the flat back; recess Ø{p.RISER_SEAT[0]:g} × {p.RISER_SEAT[1]:g} over Ø{p.BOSS_D:g} bosses")
+        f"skirts sleeve {p.RISER_SEAT[1]:g} mm of each boss and stop {back_gap:.2f} mm off the flat back; recess Ø{p.RISER_SEAT[0]:g} × {p.RISER_SEAT[1]:g} over Ø{p.BOSS_D:g} bosses")
 
     # 2. M2.5 screws: through the plate and riser into the board's inserts, never bottoming.
     stack = p.PLATE_T + p.RISER_H

@@ -16,7 +16,7 @@ Overall 164 W × 127 D × 245 H mm. The screen leans back 15° and pushing it ba
 - **Picture frame (wood-look PLA).** The outer edge sits tight to the shell (2.7 mm outside it), and the face runs in over the whole black glass border to the picture, so only the picture shows, with a 0.75 mm reveal. Faces are 13.6 mm at the sides and 15.1 at the top; at the bottom the face runs down to the desk, a 20 mm border.
   - It's 164.1 × 253.1 mm printed face-down, within the P1S's 256 bed by 2.9 mm. A lower screen would need a shorter plug; a higher one would make the frame too tall to print in one piece.
   - It hangs on the back-plate: four M3 × 8 screws from behind, through the plate's edges, into inserts in bosses on its side walls. There's no bottom wall (as the 7", COM-431). It never touches the glass: felt on the back of the face stays 0.2 mm off it.
-- **Back-plate (3 mm PETG), closed, behind the rear box.** Six printed risers (Ø10 × 12.7) stand on the board's six bosses (short black standoffs with brass M2.5 inserts) and carry the plate 2 mm behind the rear box. Each riser has a 1 mm recess that drops over its boss, so the plate can't slide on its screws. Vent slots run in two rows low and two near the top.
+- **Back-plate (3 mm PETG), closed, behind the rear box.** Six printed risers (Ø11, 12.7 above the boss tops) stand on the board's six bosses (short black standoffs with brass M2.5 inserts) and carry the plate 2 mm behind the rear box. Each riser's skirt has a Ø7.9 × 3 mm recess that sleeves 3 of the boss's 4.5 mm, so the plate can't slide on its screws; the skirt stops 1.5 mm off the flat back, so the riser always seats on the boss top. Vent slots run in two rows low and two near the top.
 - **Foot (PETG).** The plate's dovetail groove (in a spine left of the USB-C bank) slides down onto a rail on the foot's post. The cable drops through a notch in the plate's bottom edge and a slot in the shelf between the frame's side walls, runs through a tunnel into the tray, lies as one loose coil, and ends at the Poyiccot panel jack in the rear wall. The tray has a click-in lid, as on the 7".
 - **Power and data.** The same Poyiccot USB 3.1 straight panel-mount extension (30 cm) as the 7". Its plug goes into the board's **USB_UART** port (the USB-C beside the white TX/RX/GND header), so any USB-C charger powers it and you can flash or read logs through the stand.
 - **Antenna.** The C6's antenna window is near the top-left corner seen from the front (centre 23 mm from the top and from that edge). Only PETG covers it: the screw nearest it is nylon, and every other screw and insert stays at least 15 mm away (checked).
@@ -64,7 +64,7 @@ Every dimension is a named constant in [`stand10/params.py`](stand10/params.py),
 | Check | Result |
 |---|---|
 | Plate clears the rear box | 2.00 mm behind its back face |
-| Risers seat on the bosses | recess floor on the boss tops, no overlap with the board; rims 3.5 mm off the flat back |
+| Risers seat on the bosses | recess floor on the boss tops, no overlap with the board; skirts sleeve 3 mm of each boss and stop 1.5 mm off the flat back |
 | M2.5 × 20 engagement | 15.7 mm stack + 0.5 washer: 3.8 mm into the 4.4 mm insert. Without the washer it's 4.3, 0.1 from bottoming: always fit the washer |
 | No metal near the antenna window | nearest metal 25 mm away (need ≥ 15); nylon screw in the top-left hole |
 | Dovetail clearance | 0.02 mm per side on the flanks (the 7"'s printed coupon), no interference |

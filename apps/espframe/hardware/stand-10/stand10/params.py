@@ -103,8 +103,10 @@ CABLE_GAP_W = 20.0                # DESIGN
 # --- Back-plate: closed, on risers behind the rear box (COM-396 Q1 a) ---------------------------
 PLATE_T = 3.0                     # DESIGN (7")
 PLATE_CLEAR = 2.0                 # DESIGN: plate front behind the rear box
-RISER_D = 10.0                    # DESIGN
-RISER_SEAT = (BOSS_D + 0.4, 1.0)  # DESIGN: locating recess in the riser face over each boss (dia, depth)
+RISER_D = 11.0                    # DESIGN: leaves a 1.55 mm skirt wall round the recess
+RISER_SEAT = (BOSS_D + 0.4, 3.0)  # DESIGN: locating recess over each boss (dia, depth): a 0.2 mm/side slip fit that sleeves
+                                  #   3 of the boss's 4.5 mm (1 mm on the printed coupon gripped too little, COM-396), so the
+                                  #   skirt stops 1.5 mm off the flat back and the riser always seats on the boss top
 SCREW_L = 20.0                    # DESIGN: M2.5 × 20 pan head + washer; through the plate and riser (15.7 mm to the boss top),
 WASHER_T = 0.5                    #   so 3.8 mm into the 4.4 mm insert. Always fit the washer: without it, 4.3 leaves 0.1 to the bottom
 MIN_SCREW_ENGAGE = 3.0            # DESIGN: check limit, M2.5 thread engaged in the insert (1.2 × D)
