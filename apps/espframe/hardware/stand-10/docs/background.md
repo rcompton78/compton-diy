@@ -1,6 +1,6 @@
-# 10" stand: what's known so far
+# 10" stand: background notes
 
-Everything gathered for a portrait desk stand for the 10" espframe, so the work isn't lost before the 10" model is built. The 7" stand in this folder is the template: same approach, new numbers. Values marked *est.* or *inferred* need checking on the real board before anything is printed.
+What was gathered before the 10" model was built (COM-396): the vendor drawing, sources and the lessons carried over from the 7" stand in `../stand`. Kept for its sources. Where it differs from `stand10/params.py`, params wins: the user has since measured the board (see the README's "Measured on the board" section).
 
 ## Board
 
