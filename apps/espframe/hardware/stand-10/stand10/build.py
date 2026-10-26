@@ -57,7 +57,7 @@ def main(argv=None) -> int:
     plate, foot, lid, frame = build_plate(), build_foot(), build_lid(), build_frame()
     printed = {
         "frame": frame_print_pose(frame),
-        "plate": plate_print_pose(plate),
+        "plate": plate_print_pose(build_plate(fit=True)),   # printed risers carry RISER_FIT_ADD
         "foot": foot,
         "lid": lid_print_pose(lid),
         "coupon-template": template_coupon(),

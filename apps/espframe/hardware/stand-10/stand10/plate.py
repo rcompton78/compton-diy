@@ -16,12 +16,14 @@ def frame_tab_spans():
             (inner_r - p.FRAME_BOSS_D, inner_r - p.PLATE_EDGE_CLEAR, inner_r - r))
 
 
-def riser_stack() -> Part:
+def riser_stack(fit: bool = False) -> Part:
     """One riser, from the plate front face (z = 0) forward: RISER_H to the boss top, then a RISER_SEAT recess
-    that drops over the boss, so the plate can't shift sideways on its screws."""
+    that drops over the boss, so the plate can't shift sideways on its screws. With fit, RISER_FIT_ADD longer:
+    the printed length, from the fit test."""
     sd, sh = p.RISER_SEAT
-    riser = Cylinder(p.RISER_D / 2, p.RISER_H + sh, align=(Align.CENTER, Align.CENTER, Align.MIN))
-    return riser - Pos(0, 0, p.RISER_H) * Cylinder(sd / 2, sh + 0.01, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    h = p.RISER_H + (p.RISER_FIT_ADD if fit else 0.0)
+    riser = Cylinder(p.RISER_D / 2, h + sh, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    return riser - Pos(0, 0, h) * Cylinder(sd / 2, sh + 0.01, align=(Align.CENTER, Align.CENTER, Align.MIN))
 
 
 def plate_outline():
@@ -31,7 +33,7 @@ def plate_outline():
     return (p.FRAME_X[0] + w + c, p.FRAME_X[1] - w - c, p.PLATE_Y0, p.FRAME_Y[1] - w - c)
 
 
-def build_plate() -> Part:
+def build_plate(fit: bool = False) -> Part:
     """Back-plate in the screen frame (z = -depth behind the glass front)."""
     # Fills the frame out to its walls, so the back is closed with no gap round the plate.
     x0, x1, y0, y1 = plate_outline()
@@ -40,7 +42,7 @@ def build_plate() -> Part:
 
     # Risers: from the plate front face forward over the rear box's depth, seated over the boss tops.
     for x, y in p.HOLES:
-        plate += Pos(x, y, -p.D_PLATE_FRONT) * riser_stack()
+        plate += Pos(x, y, -p.D_PLATE_FRONT) * riser_stack(fit)
 
     # Spine: local thickening towards the panel that carries the dovetail groove.
     plate += screen_box(p.SPINE_X[0], p.SPINE_X[1], y0, p.SPINE_TOP_Y,
@@ -56,7 +58,7 @@ def build_plate() -> Part:
     cd, ch = p.SCREW_HEAD_CB
     for x, y in p.HOLES:
         plate -= Pos(x, y, -p.D_PLATE_BACK - 1) * Cylinder(
-            p.M25_CLEAR_D / 2, p.PLATE_T + p.RISER_H + p.RISER_SEAT[1] + 2, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            p.M25_CLEAR_D / 2, p.PLATE_T + p.RISER_H + p.RISER_FIT_ADD + p.RISER_SEAT[1] + 2, align=(Align.CENTER, Align.CENTER, Align.MIN))
         plate -= Pos(x, y, -p.D_PLATE_BACK - 1) * Cylinder(cd / 2, ch + 1, align=(Align.CENTER, Align.CENTER, Align.MIN))
 
     # Dovetail groove, open at the bottom edge so the plate slides down onto the rail.

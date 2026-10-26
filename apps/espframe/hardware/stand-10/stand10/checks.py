@@ -63,13 +63,19 @@ def run(parts: dict) -> list:
         f"skirts sleeve {p.RISER_SEAT[1]:g} mm of each boss and stop {back_gap:.2f} mm off the flat back; recess Ø{p.RISER_SEAT[0]:g} × {p.RISER_SEAT[1]:g} over Ø{p.BOSS_D:g} bosses")
 
     # 2. M2.5 screws: through the plate and riser into the board's inserts, never bottoming.
-    stack = p.PLATE_T + p.RISER_H - p.SCREW_HEAD_CB[1]
+    # The printed risers are RISER_FIT_ADD longer than the nominal model's (fit test), and the counterbore with them.
+    stack = p.PLATE_T + p.RISER_H + p.RISER_FIT_ADD - p.SCREW_HEAD_CB[1]
     engage = p.SCREW_L - p.WASHER_T - stack
     add(f"M2.5 × {p.SCREW_L:g} engagement in the inserts",
         p.MIN_SCREW_ENGAGE <= engage <= p.BOSS_THREAD - p.MIN_SCREW_BOTTOM,
         f"button head on the counterbore floor, {stack:.1f} mm above the boss top: {engage:.1f} mm into the "
         f"{p.BOSS_THREAD:g} mm insert (need {p.MIN_SCREW_ENGAGE:g}–{p.BOSS_THREAD - p.MIN_SCREW_BOTTOM:.1f}); "
         "no washer, which would lift the head into the cover plug")
+
+    fit_gap = p.FIT_FACE_GAP_MEASURED - p.RISER_FIT_ADD
+    add("As-built face gap after the riser fit", 0.1 <= fit_gap <= 0.5,
+        f"fit test: {p.FIT_FACE_GAP_MEASURED:g} mm from the frame face's rear to the glass with nominal risers; printed "
+        f"{p.RISER_FIT_ADD:g} mm longer, {fit_gap:.2f} mm of air, no face felt (need 0.1–0.5)")
 
     head_gap = p.SCREW_HEAD_CB[1] - p.WASHER_T - p.BUTTON_HEAD_K - p.PLUG_BODY
     add("Hole plugs clear the screw heads",

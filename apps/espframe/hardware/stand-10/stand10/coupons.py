@@ -53,13 +53,13 @@ def template_coupon() -> Part:
 
 
 def riser_coupon() -> Part:
-    """One riser on a 3 mm square of plate, as on the back-plate: back face on the bed. It should drop over a
+    """One riser on a 3 mm square of plate, as printed on the back-plate (RISER_FIT_ADD longer than nominal): back face on the bed. It should drop over a
     boss, and an M2.5 × 16 button head, no washer, should pull it down without bottoming in the insert, its head
     in the counterbore below the back face."""
     from .plate import riser_stack
     s = 22.0
-    part = box(-s / 2, s / 2, -s / 2, s / 2, 0, p.PLATE_T) + Pos(0, 0, p.PLATE_T) * riser_stack()
-    part -= Pos(0, 0, -1) * Cylinder(p.M25_CLEAR_D / 2, p.PLATE_T + p.RISER_H + p.RISER_SEAT[1] + 2,
+    part = box(-s / 2, s / 2, -s / 2, s / 2, 0, p.PLATE_T) + Pos(0, 0, p.PLATE_T) * riser_stack(fit=True)
+    part -= Pos(0, 0, -1) * Cylinder(p.M25_CLEAR_D / 2, p.PLATE_T + p.RISER_H + p.RISER_FIT_ADD + p.RISER_SEAT[1] + 2,
                                      align=(Align.CENTER, Align.CENTER, Align.MIN))
     cd, ch = p.SCREW_HEAD_CB
     part -= Pos(0, 0, -1) * Cylinder(cd / 2, ch + 1, align=(Align.CENTER, Align.CENTER, Align.MIN))
