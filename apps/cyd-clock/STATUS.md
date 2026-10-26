@@ -900,6 +900,27 @@ Artifact.
   match the crest's gold label. At 350 it gets the ★ LEGENDARY tag automatically.
 - **Flash:** +472 B on `cyd` (1,198,865 → 1,199,337 B, 91.5%).
 
+## Easier-to-Spot Thirst & Boredom Icons (COM-265, 2026-10-26)
+
+- **Thirsty:** `drawThirstyDroplet()` now draws two drops through a shared `drawWaterDrop()`,
+  the existing one on the right temple (cx+40, cy−38) and a mirror on the left (cx−40). Only the
+  glasses' temple arm is ever on the left, since held stuffies and toys are right-arm only. Each
+  drop gets a 2×3 white glint, so it still reads on Clear Sky's light blue. Size is unchanged
+  because the right drop already fills the only gap between the glasses arm and the held snowman.
+- **Bored:** `drawBoredomZzz()` draws five marks instead of three. They use font 2 instead of
+  font 1, so they're twice as tall, in a brighter `C_ZZZ` (0x7BFF → 0x9CFF) with a 1 px `C_DARK`
+  drop shadow. Text is transparent now: each mark's `zoneFillRect()` already repaints the
+  backdrop, so the old solid `bgColor` box is gone. Font 2's "Zz" inks only 14×10 of its 16 px
+  cell (15×11 with the shadow), and the erase rect is that box plus 1 px, so the shadow never
+  trails. Every rect is erased before any mark is drawn.
+- **Placement:** the right mark and the left pair keep their spots (erase rects x 189–205,
+  y 118–130 and x 49–65, y 59–91). The two new marks sit at x 1–22, y 102–132, the only corner
+  no backdrop art or overlay reaches. It's below the Clear Sky rainbow and every moon, left of
+  the Oct 31 ghost and Hogwarts' left turret, and above Meds. The right side had no free spot
+  left: Birthday's yellow balloon and Hogwarts' right turret fill it. The positions are recorded
+  in CLAUDE.md's backdrop-art note.
+- **Flash:** +56 B on `cyd` (1,199,393 → 1,199,449 B, 91.5%). Checked on a real CYD before the PR.
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`
