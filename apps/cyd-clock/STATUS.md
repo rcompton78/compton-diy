@@ -907,6 +907,8 @@ Artifact.
   glasses' temple arm is ever on the left, since held stuffies and toys are right-arm only. Each
   drop gets a 2×3 white glint, so it still reads on Clear Sky's light blue. Size is unchanged
   because the right drop already fills the only gap between the glasses arm and the held snowman.
+  `drawAnimal()` now draws the drops after the sparkles, whose erase boxes at (cx±40, cy−42)
+  used to clip the top of a drop while the cat was happy and thirsty at once.
 - **Bored:** `drawBoredomZzz()` draws five marks instead of three. They use font 2 instead of
   font 1, so they're twice as tall, in a brighter `C_ZZZ` (0x7BFF → 0x9CFF) with a 1 px `C_DARK`
   drop shadow. Text is transparent now: each mark's `zoneFillRect()` already repaints the

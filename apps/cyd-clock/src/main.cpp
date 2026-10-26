@@ -3002,14 +3002,16 @@ static void drawAnimal() {
         drawCat(CAT_CX, CAT_CY + dy, cat.status, cat.boredom, cat.health, cat.thirst, cat.eyeOpen);
         drawRightArmStuffy(CAT_CX, CAT_CY + dy, /*hasBlanket=*/false);  // no blanket during the day
         drawRightArmToy(CAT_CX, CAT_CY + dy);  // mutually exclusive with the stuffy above
-        // Drawn after the stuffy above (DIY-109) so it's never covered by it — see
-        // drawThirstyDroplet()'s comment.
-        if (cat.thirst == CatThirst::Thirsty) {
-            drawThirstyDroplet(CAT_CX, CAT_CY + dy);
-        }
 
         if (cat.mood == CatMood::Happy || cat.mood == CatMood::Celebrate) {
             drawSparkles(CAT_CX, CAT_CY, cat.frame);
+        }
+
+        // Drawn after the stuffy above (DIY-109) so it's never covered by it — see
+        // drawThirstyDroplet()'s comment — and after the sparkles (COM-265), whose 9x9 erase
+        // boxes at (cx±40, cy−42) would otherwise clip the top of either drop.
+        if (cat.thirst == CatThirst::Thirsty) {
+            drawThirstyDroplet(CAT_CX, CAT_CY + dy);
         }
 
         // Hunger lines on tummy (Peckish or Hungry, only painted when rumbling)
