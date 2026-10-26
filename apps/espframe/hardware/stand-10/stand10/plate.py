@@ -58,7 +58,7 @@ def build_plate(fit: bool = False) -> Part:
     cd, ch = p.SCREW_HEAD_CB
     for x, y in p.HOLES:
         plate -= Pos(x, y, -p.D_PLATE_BACK - 1) * Cylinder(
-            p.M25_CLEAR_D / 2, p.PLATE_T + p.RISER_H + p.RISER_FIT_ADD + p.RISER_SEAT[1] + 2, align=(Align.CENTER, Align.CENTER, Align.MIN))
+            p.M25_CLEAR_D / 2, p.PLATE_T + p.RISER_H + (p.RISER_FIT_ADD if fit else 0.0) + p.RISER_SEAT[1] + 2, align=(Align.CENTER, Align.CENTER, Align.MIN))
         plate -= Pos(x, y, -p.D_PLATE_BACK - 1) * Cylinder(cd / 2, ch + 1, align=(Align.CENTER, Align.CENTER, Align.MIN))
 
     # Dovetail groove, open at the bottom edge so the plate slides down onto the rail.

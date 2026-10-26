@@ -72,10 +72,13 @@ def run(parts: dict) -> list:
         f"{p.BOSS_THREAD:g} mm insert (need {p.MIN_SCREW_ENGAGE:g}–{p.BOSS_THREAD - p.MIN_SCREW_BOTTOM:.1f}); "
         "no washer, which would lift the head into the cover plug")
 
-    fit_gap = p.FIT_FACE_GAP_MEASURED - p.RISER_FIT_ADD
+    # The printed riser's extra length, measured off the exported coupon rather than taken from the parameter.
+    cbb = parts["print"]["coupon-riser"].bounding_box()
+    printed_add = (cbb.max.Z - cbb.min.Z) - p.PLATE_T - p.RISER_H - p.RISER_SEAT[1]
+    fit_gap = p.FIT_FACE_GAP_MEASURED - printed_add
     add("As-built face gap after the riser fit", 0.1 <= fit_gap <= 0.5,
-        f"fit test: {p.FIT_FACE_GAP_MEASURED:g} mm from the frame face's rear to the glass with nominal risers; printed "
-        f"{p.RISER_FIT_ADD:g} mm longer, {fit_gap:.2f} mm of air, no face felt (need 0.1–0.5)")
+        f"fit test: {p.FIT_FACE_GAP_MEASURED:g} mm from the frame face's rear to the glass with nominal risers; the "
+        f"printed riser is {printed_add:.2f} mm longer, leaving {fit_gap:.2f} mm of air, no face felt (need 0.1–0.5)")
 
     head_gap = p.SCREW_HEAD_CB[1] - p.WASHER_T - p.BUTTON_HEAD_K - p.PLUG_BODY
     add("Hole plugs clear the screw heads",
