@@ -374,8 +374,11 @@ pnpm nx run media-room-dashboard:flash-freenove-s3   # --device /dev/ttyACM0 by 
 pnpm nx run media-room-dashboard:monitor-freenove-s3
 ```
 
-Uses `scripts/espframe-esphome.sh` under the hood (apps/espframe's own
-ESPHome venv — no separate install needed).
+Uses `scripts/espframe-esphome.sh` under the hood, which runs the ESPHome
+version pinned in `apps/espframe/product/contract/project.json` and installs
+it into a shared `~/.cache/compton-diy/esphome-<version>` venv on first use if
+neither apps/espframe's own venv nor PATH has it, so no separate install is
+needed.
 
 ## Button mapping
 

@@ -88,9 +88,17 @@ if [ -d "$ESPFRAME_DIR/product/contract" ]; then
     fi
   fi
 
-  if ! "$ESPFRAME_VENV_PYTHON" -m esphome version &>/dev/null 2>&1; then
+  # Compare against the pin, not just "is ESPHome installed": after a pin bump
+  # an existing venv would otherwise keep the old version, and
+  # scripts/espframe-esphome.sh (COM-492) refuses to run a mismatched one.
+  ESPFRAME_CURRENT_ESPHOME="$("$ESPFRAME_VENV_PYTHON" -m esphome version 2>/dev/null | awk '/^Version:/ {print $2}')"
+  if [ -z "$ESPFRAME_CURRENT_ESPHOME" ]; then
     echo "Creating virtualenv at apps/espframe/.venv ($ESPFRAME_PYTHON_BIN) and installing ESPHome $ESPHOME_VERSION..."
     "$ESPFRAME_PYTHON_BIN" -m venv "$ESPFRAME_VENV_DIR"
+    "$ESPFRAME_VENV_DIR/bin/pip" install --quiet "esphome==$ESPHOME_VERSION"
+    echo "ESPHome installed: $("$ESPFRAME_VENV_PYTHON" -m esphome version)"
+  elif [ "$ESPFRAME_CURRENT_ESPHOME" != "$ESPHOME_VERSION" ]; then
+    echo "Updating ESPHome in apps/espframe/.venv: $ESPFRAME_CURRENT_ESPHOME -> $ESPHOME_VERSION..."
     "$ESPFRAME_VENV_DIR/bin/pip" install --quiet "esphome==$ESPHOME_VERSION"
     echo "ESPHome installed: $("$ESPFRAME_VENV_PYTHON" -m esphome version)"
   else
