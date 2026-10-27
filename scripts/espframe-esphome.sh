@@ -68,7 +68,10 @@ if [ "${ESPHOME_SKIP_VERSION_CHECK:-}" = "1" ]; then
     exec esphome "${SUBSTITUTION_ARGS[@]}" "$@"
 fi
 
-ESPHOME_PIN="$(sed -n 's/.*"esphome_version": *"\([^"]*\)".*/\1/p' "$CONTRACT_JSON" | head -n 1)"
+[ -f "$CONTRACT_JSON" ] || die "missing $CONTRACT_JSON"
+# Parsed as JSON like every other reader of the pin (setup.sh, pr-build.yml,
+# release.yml), so they can never disagree on it.
+ESPHOME_PIN="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["esphome_version"])' "$CONTRACT_JSON" 2>/dev/null)"
 [ -n "$ESPHOME_PIN" ] || die "no esphome_version in $CONTRACT_JSON"
 SHARED_VENV="$SHARED_VENV_ROOT/esphome-$ESPHOME_PIN"
 
@@ -94,7 +97,8 @@ else
 fi
 mismatch_msg="ESPHome $ESPHOME_PIN required (apps/espframe/product/contract/project.json), $found_msg."
 
-if [ -n "${CI:-}" ]; then
+# GitHub Actions sets CI=true; CI=false/0 (a common local opt-out) isn't CI.
+if [ -n "${CI:-}" ] && [ "${CI}" != "false" ] && [ "${CI}" != "0" ]; then
     die "$mismatch_msg Install the pinned version before building."
 fi
 
@@ -110,12 +114,26 @@ done
 # Serialized so two builds on a cold machine don't install into the same venv
 # at once. A venv's scripts hardcode its path, so it can't be built elsewhere
 # and moved in; instead .complete marks a finished install, and a venv
-# without one (an interrupted install) is rebuilt.
+# without one (an interrupted install) is rebuilt. The lock is taken by
+# Python's fcntl.flock on fd 9, inherited from this shell: a flock belongs to
+# the open file, so it stays held after Python exits, until fd 9 closes. That
+# works on macOS too, which has no flock(1). The wait is bounded so a stuck
+# install elsewhere fails with a message rather than hanging every build.
 mkdir -p "$SHARED_VENV_ROOT"
 exec 9>"$SHARED_VENV.lock"
-if command -v flock &>/dev/null; then
-    flock 9
-fi
+"$PYTHON_BIN" -c '
+import fcntl, sys, time
+deadline = time.monotonic() + float(sys.argv[1])
+while True:
+    try:
+        fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        break
+    except BlockingIOError:
+        if time.monotonic() > deadline:
+            sys.exit(1)
+        time.sleep(1)
+' "${ESPHOME_LOCK_TIMEOUT:-1800}" \
+    || die "timed out waiting for another ESPHome install ($SHARED_VENV.lock); retry once it finishes"
 if [ ! -f "$SHARED_VENV/.complete" ] || [ "$(esphome_version_of "$SHARED_VENV/bin/esphome")" != "$ESPHOME_PIN" ]; then
     echo "$mismatch_msg" >&2
     echo "espframe-esphome.sh: installing ESPHome $ESPHOME_PIN into $SHARED_VENV (one-time, takes a few minutes)..." >&2
