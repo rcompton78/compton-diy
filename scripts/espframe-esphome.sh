@@ -76,7 +76,8 @@ fi
 # python3 symlink) still works.
 PYTHON_BIN=""
 for candidate in python3.13 python3.12; do
-    if command -v "$candidate" &>/dev/null; then
+    # Must actually run: a stale pyenv shim or dangling symlink also resolves.
+    if command -v "$candidate" &>/dev/null && "$candidate" -c '' &>/dev/null; then
         PYTHON_BIN="$candidate"
         break
     fi
