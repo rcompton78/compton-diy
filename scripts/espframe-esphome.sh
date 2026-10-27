@@ -71,11 +71,21 @@ fi
 [ -f "$CONTRACT_JSON" ] || die "missing $CONTRACT_JSON"
 # Parsed as JSON like every other reader of the pin (setup.sh, pr-build.yml,
 # release.yml), so they can never disagree on it.
-ESPHOME_PIN="$(python3 -c '
+# Probed once up front: the installer below needs 3.12/3.13 (CI's pin), and
+# reusing it here means a machine with only a versioned interpreter (no
+# python3 symlink) still works.
+PYTHON_BIN=""
+for candidate in python3.13 python3.12; do
+    if command -v "$candidate" &>/dev/null; then
+        PYTHON_BIN="$candidate"
+        break
+    fi
+done
+ESPHOME_PIN="$("${PYTHON_BIN:-python3}" -c '
 import json, sys
 v = json.load(open(sys.argv[1])).get("esphome_version")
 print(v if isinstance(v, str) else "")
-' "$CONTRACT_JSON")" || die "could not parse $CONTRACT_JSON (needs python3 and valid JSON)"
+' "$CONTRACT_JSON")" || die "could not parse $CONTRACT_JSON (needs python3.12+/python3 and valid JSON)"
 [ -n "$ESPHOME_PIN" ] || die "no esphome_version string in $CONTRACT_JSON"
 SHARED_VENV="$SHARED_VENV_ROOT/esphome-$ESPHOME_PIN"
 
@@ -106,13 +116,6 @@ if [ -n "${CI:-}" ] && [ "${CI}" != "false" ] && [ "${CI}" != "0" ]; then
     die "$mismatch_msg Install the pinned version before building."
 fi
 
-PYTHON_BIN=""
-for candidate in python3.13 python3.12; do
-    if command -v "$candidate" &>/dev/null; then
-        PYTHON_BIN="$candidate"
-        break
-    fi
-done
 [ -n "$PYTHON_BIN" ] || die "$mismatch_msg No python3.12/3.13 to install it with: run scripts/setup.sh."
 
 # Serialized so two builds on a cold machine don't install into the same venv
@@ -129,9 +132,12 @@ exec 9>"$SHARED_VENV.lock"
 # filesystem without flock support) is reported as a lock failure instead.
 lock_rc=0
 "$PYTHON_BIN" -c '
-import fcntl, sys, time
+import fcntl, math, sys, time
 try:
-    deadline = time.monotonic() + float(sys.argv[1])
+    timeout = float(sys.argv[1])
+    if not math.isfinite(timeout) or timeout < 0:
+        raise ValueError(f"invalid ESPHOME_LOCK_TIMEOUT {sys.argv[1]!r}")
+    deadline = time.monotonic() + timeout
     while True:
         try:
             fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
