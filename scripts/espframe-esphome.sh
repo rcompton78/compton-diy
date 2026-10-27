@@ -71,8 +71,12 @@ fi
 [ -f "$CONTRACT_JSON" ] || die "missing $CONTRACT_JSON"
 # Parsed as JSON like every other reader of the pin (setup.sh, pr-build.yml,
 # release.yml), so they can never disagree on it.
-ESPHOME_PIN="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["esphome_version"])' "$CONTRACT_JSON" 2>/dev/null)"
-[ -n "$ESPHOME_PIN" ] || die "no esphome_version in $CONTRACT_JSON"
+ESPHOME_PIN="$(python3 -c '
+import json, sys
+v = json.load(open(sys.argv[1])).get("esphome_version")
+print(v if isinstance(v, str) else "")
+' "$CONTRACT_JSON")" || die "could not parse $CONTRACT_JSON (needs python3 and valid JSON)"
+[ -n "$ESPHOME_PIN" ] || die "no esphome_version string in $CONTRACT_JSON"
 SHARED_VENV="$SHARED_VENV_ROOT/esphome-$ESPHOME_PIN"
 
 FOUND=()
@@ -121,19 +125,30 @@ done
 # install elsewhere fails with a message rather than hanging every build.
 mkdir -p "$SHARED_VENV_ROOT"
 exec 9>"$SHARED_VENV.lock"
+# Exit 3 means a real timeout; anything else (a bad ESPHOME_LOCK_TIMEOUT, a
+# filesystem without flock support) is reported as a lock failure instead.
+lock_rc=0
 "$PYTHON_BIN" -c '
 import fcntl, sys, time
-deadline = time.monotonic() + float(sys.argv[1])
-while True:
-    try:
-        fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        break
-    except BlockingIOError:
-        if time.monotonic() > deadline:
-            sys.exit(1)
-        time.sleep(1)
-' "${ESPHOME_LOCK_TIMEOUT:-1800}" \
-    || die "timed out waiting for another ESPHome install ($SHARED_VENV.lock); retry once it finishes"
+try:
+    deadline = time.monotonic() + float(sys.argv[1])
+    while True:
+        try:
+            fcntl.flock(9, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except BlockingIOError:
+            if time.monotonic() > deadline:
+                sys.exit(3)
+            time.sleep(1)
+except (ValueError, OSError) as e:
+    print(f"espframe-esphome.sh: {e}", file=sys.stderr)
+    sys.exit(2)
+' "${ESPHOME_LOCK_TIMEOUT:-1800}" || lock_rc=$?
+case "$lock_rc" in
+    0) ;;
+    3) die "timed out after ${ESPHOME_LOCK_TIMEOUT:-1800}s waiting for another ESPHome install ($SHARED_VENV.lock); retry once it finishes" ;;
+    *) die "could not lock $SHARED_VENV.lock (check ESPHOME_LOCK_TIMEOUT is a number of seconds and that $SHARED_VENV_ROOT supports flock)" ;;
+esac
 if [ ! -f "$SHARED_VENV/.complete" ] || [ "$(esphome_version_of "$SHARED_VENV/bin/esphome")" != "$ESPHOME_PIN" ]; then
     echo "$mismatch_msg" >&2
     echo "espframe-esphome.sh: installing ESPHome $ESPHOME_PIN into $SHARED_VENV (one-time, takes a few minutes)..." >&2
