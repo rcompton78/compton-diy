@@ -75,6 +75,11 @@ SHARED_VENV="$SHARED_VENV_ROOT/esphome-$ESPHOME_PIN"
 FOUND=()
 for candidate in "$VENV_ESPHOME" "$SHARED_VENV/bin/esphome" "$(command -v esphome 2>/dev/null)"; do
     [ -n "$candidate" ] && [ -x "$candidate" ] || continue
+    # An unfinished shared venv (no .complete) goes to the locked install
+    # below to be rebuilt, never run, even if its esphome already reports the pin.
+    if [ "$candidate" = "$SHARED_VENV/bin/esphome" ] && [ ! -f "$SHARED_VENV/.complete" ]; then
+        continue
+    fi
     version="$(esphome_version_of "$candidate")"
     if [ "$version" = "$ESPHOME_PIN" ]; then
         exec "$candidate" "${SUBSTITUTION_ARGS[@]}" "$@"
