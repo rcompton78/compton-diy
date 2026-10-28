@@ -215,9 +215,13 @@ touchscreen:
     # a missed lift is still seen within ~100ms; a real hold keeps reporting
     # one finger and stays pressed.
     touch_timeout: 100ms
+    # Maps the GSL3680 onto the panel's native 800x1280 frame (chip X runs
+    # opposite to panel x); LVGL then rotates touch with the display for
+    # every screen_rotation. swap_xy: true here transposed the axes, which
+    # sent double taps to the wrong half (left/right followed tap height).
     transform:
-      swap_xy: true
-      mirror_x: false
+      swap_xy: false
+      mirror_x: true
       mirror_y: false
     on_touch:
       - script.execute: backlight_wake
@@ -226,21 +230,15 @@ touchscreen:
           if (!id(developer_features_enabled).state) return;
           if (touches.empty()) return;
           const auto &touch = touches.front();
+          // Touch points are in the panel's native frame; rotate them the
+          // same way ESPHome's LVGL input device does, so these hit tests
+          // agree with what LVGL widgets and the double-tap halves see in
+          // every screen rotation.
           auto map_visible = [](int x, int y, int &screen_x, int &screen_y) {
-            const std::string rotation = id(screen_rotation_select).current_option();
-            if (rotation == "90") {
-              screen_x = ${display_height} - y;
-              screen_y = x;
-            } else if (rotation == "180") {
-              screen_x = ${display_width} - x;
-              screen_y = ${display_height} - y;
-            } else if (rotation == "270") {
-              screen_x = y;
-              screen_y = ${display_width} - x;
-            } else {
-              screen_x = x;
-              screen_y = y;
-            }
+            int32_t rx = x, ry = y;
+            id(lvgl_comp)->rotate_coordinates(rx, ry);
+            screen_x = rx;
+            screen_y = ry;
           };
           if (id(photo_source_menu_open)) {
             if (id(photo_source_swipe_triggered) || id(photo_source_menu_touch_handled)) return;
@@ -252,7 +250,7 @@ touchscreen:
             int mapped_x, mapped_y;
             map_visible(touch.x, touch.y, mapped_x, mapped_y);
             auto hit = [&](lv_obj_t *obj) -> bool {
-              return hit_at(obj, touch.x, touch.y) || hit_at(obj, mapped_x, mapped_y);
+              return hit_at(obj, mapped_x, mapped_y);
             };
             if (hit(id(photo_source_menu_close_label))) {
               id(photo_source_menu_touch_handled) = true;

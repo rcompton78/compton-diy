@@ -225,11 +225,15 @@ UI. Root cause and fix, found in a later session:
   coupling (`lvgl_esphome.cpp`) — which applies the same rotation transform
   to touch input that LVGL applies to the rendered frame, independent of
   touch chip — works correctly for GT911 out of the box. The P4's static
-  `swap_xy` transform on its `gsl3680` touch config is an unrelated, fixed
-  physical-mounting-orientation correction (that panel's native orientation
-  differs from its as-mounted orientation), not evidence the generic path
-  needed chip-specific handling — this device's GT911 is mounted flush with
-  the panel's native orientation and needed no transform at all.
+  transform on its `gsl3680` touch config is a fixed correction mapping
+  that chip onto the panel's native 800×1280 frame, not evidence the generic
+  path needed chip-specific handling. It must be `swap_xy: false,
+  mirror_x: true`: the original `swap_xy: true` transposed the axes, a
+  reflection no rotation undoes, which broke touch positions in every
+  rotation (COM-493). Note that the tap-to-show-IP gesture can't catch this
+  kind of bug, since it ignores where you tap; check with corner taps. This
+  device's GT911 is mounted flush with the panel's native orientation and
+  needed no transform at all.
 
 ## What's NOT done yet
 
