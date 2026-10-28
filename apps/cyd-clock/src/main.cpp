@@ -133,7 +133,7 @@ static constexpr uint16_t C_DIM   = 0x7BEF;  // dim text
 static constexpr uint16_t C_FISH   = 0xFD20;  // treat button fish (orange)
 static constexpr uint16_t C_RUMBLE = 0xFC98;  // hunger line animation (warm peach)
 static constexpr uint16_t C_YARN   = 0xF811;  // play button yarn ball (magenta/berry)
-static constexpr uint16_t C_ZZZ    = 0x9CFF;  // boredom "Zz" overlay (periwinkle, brightened in COM-265)
+static constexpr uint16_t C_ZZZ    = 0x7BFF;  // boredom "Zz" overlay (dim blue-gray)
 static constexpr uint16_t C_SLEEP_DIM = 0x632C;  // dim gray-blue, for the sleep-screen clock (~40% brightness)
 static constexpr uint16_t C_SICK   = 0x9E66;  // queasy cheek blush (sickly green)
 static constexpr uint16_t C_MEDS   = 0xF800;  // meds button cross (red)
@@ -2292,8 +2292,7 @@ static void drawHauntedNightBackground(int x, int y, int w, int h) {
         // Ghost: round head, a body block and a three-bump hem, with hollow eyes and an "o" mouth.
         // Left side, in the open sky between the moon (bottom y=ANIMAL_Y+52) and the Meds
         // button (top y=MEDS_Y, shown while sick): spans x 23–45, y ANIMAL_Y+61..+90, clear
-        // of the "Zz" column (x>=48), the outer-left "Zz" pair (x<=22), the left sparkle
-        // (x>=61) and the whiskers (x>=74).
+        // of the "Zz" column (x>=48), the left sparkle (x>=61) and the whiskers (x>=74).
         // It used to sit on the right, where the always-on Water button covered it.
         const int gx = 34, gy = ANIMAL_Y + 76;
         tft.fillCircle(gx, gy - 4, 11, C_GHOST);
@@ -2313,8 +2312,8 @@ static void drawHauntedNightBackground(int x, int y, int w, int h) {
 // curtain wall at HOGWARTS_WALL_Y, capped by a pointed roof `roofH` tall that overhangs the
 // walls by 2px. The two tall towers fill the only floor-level gaps no overlay ever covers, between
 // the side buttons and the cat's clear rect (x 56–69 and 171–184). Every roof in the right-hand
-// badge column (x>=168) stays below y=112, since its text prints over a bgColor box that would
-// show against black, and the right turret stays right of the right-hand "Zz" (x<=205).
+// badge column (x>=168) stays below y=112, and the right turret stays right of the right-hand
+// "Zz" (x<=210), since both print text over a bgColor box that would show against black.
 struct HogwartsTower { uint8_t x, top, w, roofH; };
 static constexpr HogwartsTower HOGWARTS_TOWERS[] = {
     {30,  118, 14, 20},  // left turret, peeks over the Meds button
@@ -2575,7 +2574,7 @@ static void drawRightArmStuffy(int cx, int cy, bool hasBlanket) {
     else            STUFFIES[rightArmIdx].drawHeld(cx, cy, accent);
 }
 
-// Thirsty signal — a water drop at each temple, dripping-sweat style (DIY-109: drawn
+// Thirsty signal — a single water drop at the temple, dripping-sweat style (DIY-109: drawn
 // as its own pass, called from drawAnimal() *after* drawRightArmStuffy(), rather than from
 // inside drawCat() itself. Both the equipped glasses (drawn inside drawCat()) and the
 // right-arm stuffy (drawn separately, after drawCat()) can occupy this same temple-ish
@@ -2597,20 +2596,10 @@ static void drawRightArmStuffy(int cx, int cy, bool hasBlanket) {
 // close — the tip grazes 2-3px into the temple arm's line, and the base sits ~1px into the
 // snowman's hat. Both are cosmetic (the droplet still draws on top, so it's never blocked),
 // and far smaller than the double-digit-pixel overlaps of earlier positions.
-//
-// COM-265: one drop alone was easy to miss, so a mirrored one sits on the left temple too
-// (only the glasses' other temple arm is ever there: held stuffies and toys are right-arm
-// only), and each gets a small white glint so it still reads against the light blue Clear
-// Sky backdrop, where plain blue-on-blue didn't.
-static void drawWaterDrop(int tdx, int tdy) {
+static void drawThirstyDroplet(int cx, int cy) {
+    int tdx = cx + 40, tdy = cy - 38;
     tft.fillTriangle(tdx, tdy - 6, tdx - 5, tdy + 4, tdx + 5, tdy + 4, C_WATER);
     tft.fillCircle(tdx, tdy + 5, 5, C_WATER);
-    tft.fillRect(tdx - 3, tdy + 2, 2, 3, TFT_WHITE);
-}
-
-static void drawThirstyDroplet(int cx, int cy) {
-    drawWaterDrop(cx + 40, cy - 38);
-    drawWaterDrop(cx - 40, cy - 38);
 }
 
 static void drawSleepingCat(int cx, int cy) {
@@ -2702,36 +2691,19 @@ static void drawHungerLines(int cx, int cy, bool show) {
     tft.drawFastHLine(bx,      by + 2 * step, 14, col);
 }
 
-// Font 2's "Zz" inks only rows 3-12 of its 16px cell and x 0-13, so with the 1px drop shadow
-// each mark inks a 15x11 box starting ZZZ_INK_DY below its text origin. The erase rect is that
-// box plus a 1px margin, which keeps the shadow inside it (no trails when the marks blink off).
-static constexpr int ZZZ_INK_DY = 3, ZZZ_INK_W = 15, ZZZ_INK_H = 11;
-
 static void drawBoredomZzz(int cx, int cy, bool show) {
-    // "Zz" cloud, entirely outside the head/ears — one to the right, the rest cascading down
-    // and out to the left. The right-side one sits low, between the level/points/sale badge
-    // column (down to ANIMAL_Y+70) and the Water button (from y 136), so they never collide.
-    // COM-265: five marks in font 2 with a dark drop shadow, up from three in the 8px font 1,
-    // which were easy to miss. The two outer-left ones (x 1-22, y 102-132) sit in the only
-    // corner no backdrop art reaches: below the Clear Sky rainbow (y<=100) and the Starry,
-    // Haunted and Hogwarts moons, left of the Oct 31 ghost (x>=23) and Hogwarts' left turret,
-    // above the Meds button. The right side has no such gap left (Birthday's yellow balloon and
-    // Hogwarts' right turret fill it). Text is drawn transparent: zoneFillRect() has already
-    // repainted the backdrop behind it, so no solid bgColor box shows against backdrop art.
-    static const int8_t dx[] = { 70, -70, -70, -113, -118 };
-    static const int8_t dy[] = { -11, -50, -70, -27,   -9 };
-    static constexpr int N = sizeof(dx) / sizeof(dx[0]);
-    for (int i = 0; i < N; i++) {
-        int x = cx + dx[i], y = cy + dy[i] + ZZZ_INK_DY;
-        zoneFillRect(x - 1, y - 1, ZZZ_INK_W + 2, ZZZ_INK_H + 2);
-    }
-    if (!show) return;
-    for (int i = 0; i < N; i++) {
+    // "Zz" cloud, entirely outside the head/ears — one to the right, two cascading
+    // up-and-out to the left. The right-side one sits low, below the level/points/sale
+    // badge column (which now runs from ANIMAL_Y to ANIMAL_Y+70ish), so they never collide.
+    static const int8_t dx[] = { 70, -70, -70 };
+    static const int8_t dy[] = { -3, -40, -60 };
+    for (int i = 0; i < 3; i++) {
         int x = cx + dx[i], y = cy + dy[i];
-        tft.setTextColor(C_DARK);
-        tft.drawString("Zz", x + 1, y + 1, 2);
-        tft.setTextColor(C_ZZZ);
-        tft.drawString("Zz", x, y, 2);
+        zoneFillRect(x - 2, y - 10, 22, 14);
+        if (show) {
+            tft.setTextColor(C_ZZZ, zoneBgColor());
+            tft.drawString("Zz", x, y - 8, 1);
+        }
     }
 }
 
@@ -3002,16 +2974,14 @@ static void drawAnimal() {
         drawCat(CAT_CX, CAT_CY + dy, cat.status, cat.boredom, cat.health, cat.thirst, cat.eyeOpen);
         drawRightArmStuffy(CAT_CX, CAT_CY + dy, /*hasBlanket=*/false);  // no blanket during the day
         drawRightArmToy(CAT_CX, CAT_CY + dy);  // mutually exclusive with the stuffy above
+        // Drawn after the stuffy above (DIY-109) so it's never covered by it — see
+        // drawThirstyDroplet()'s comment.
+        if (cat.thirst == CatThirst::Thirsty) {
+            drawThirstyDroplet(CAT_CX, CAT_CY + dy);
+        }
 
         if (cat.mood == CatMood::Happy || cat.mood == CatMood::Celebrate) {
             drawSparkles(CAT_CX, CAT_CY, cat.frame);
-        }
-
-        // Drawn after the stuffy above (DIY-109) so it's never covered by it — see
-        // drawThirstyDroplet()'s comment — and after the sparkles (COM-265), whose 9x9 erase
-        // boxes at (cx±40, cy−42) would otherwise clip the top of either drop.
-        if (cat.thirst == CatThirst::Thirsty) {
-            drawThirstyDroplet(CAT_CX, CAT_CY + dy);
         }
 
         // Hunger lines on tummy (Peckish or Hungry, only painted when rumbling)
