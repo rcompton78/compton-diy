@@ -2139,8 +2139,9 @@ static void drawSylveonHeldPeeking(int cx, int cy, uint16_t accentColor) {
 
 // One of umbreon's yellow rings across a triangle (COM-508): a band from `t0` to `t1` tenths of
 // the way from the base edge (ax,ay)-(bx,by) toward the apex (tx,ty), filled as two triangles.
-// Cutting the band out of the triangle's own edges keeps it exactly as wide as the ear or tail
-// at that height, with no pixels spilling past the outline.
+// Cutting the band out of the triangle's own edges keeps it about as wide as the ear or tail at
+// that height; integer rounding leaves a 1 px nub just past the outer edge of each ear ring
+// (and one pixel on the tail ring), which was in the approved mockup.
 static void drawUmbreonRing(int ax, int ay, int bx, int by, int tx, int ty, int t0, int t1) {
     int a0x = ax + (tx - ax) * t0 / 10, a0y = ay + (ty - ay) * t0 / 10;
     int b0x = bx + (tx - bx) * t0 / 10, b0y = by + (ty - by) * t0 / 10;

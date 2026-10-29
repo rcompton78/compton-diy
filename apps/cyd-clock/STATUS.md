@@ -1157,7 +1157,8 @@ render; the first pass was drawn from memory and got the colours, leg rings and 
   (`C_UMBREON_DARK`, the black cat's 0x1082). The body isn't pure black for the black cat's
   reason: it has to show on Starry Night, 6-7 and the Hogwarts castle.
 - **Rings.** `drawUmbreonRing()` cuts a band out of a triangle between two fractions of the way to
-  its apex, so the ear and tail rings follow the outline exactly: one partway up each ear, one
+  its apex, so the ear and tail rings follow the outline (integer rounding leaves a 1 px nub past
+  each ear's outer edge, accepted in review): one partway up each ear, one
   across the middle of the tail (and of the tail bit in the peeking poses). `drawUmbreonOval()`
   draws the forehead and leg rings as 5×7 upright ovals with a dark centre slot, the smallest
   `fillEllipse()` that reads as a ring (it draws nothing under a 2 px radius). The leg ovals sit on
@@ -1167,7 +1168,8 @@ render; the first pass was drawn from memory and got the colours, leg rings and 
 - **No logic change.** Store, dressing room, combos and NEW badges all loop over `STUFFY_COUNT`;
   ten stuffies stay inside the `uint16_t` `ownedStuffies` mask.
 - **Flash:** +1,440 B on `cyd` (1,208,153 → 1,209,593 B, 92.3%), +1,452 B on `freenove-s3`
-  (1,161,633 → 1,163,085 B, 34.8%), on top of COM-517.
+  (1,161,633 → 1,163,085 B, 34.8%), on top of COM-517. Baselines were re-measured on master,
+  which is why the `cyd` one is 48 B under the figure recorded in the section above.
 
 ## Branch & Files
 
