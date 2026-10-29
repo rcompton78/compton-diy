@@ -38,6 +38,11 @@ Flash it straight from your browser using the project's web flasher:
 You can revisit settings, the cosmetics store, backups, and firmware update options
 any time afterward at the same IP address.
 
+The store opens on a menu with your points balance and one button per section (Cat
+Colors, Stuffies, Blankets, Room Themes, Head, Glasses, Badges, Toys and the Right Arm
+Slot). Each button opens that section's own page, and buying something keeps you on it.
+A section with an item on flash sale is marked **SALE** in the menu.
+
 ## Staying up to date
 
 Both boards check GitHub for new firmware periodically and can download and install
