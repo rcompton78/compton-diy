@@ -41,7 +41,9 @@ any time afterward at the same IP address.
 The store opens on a menu with your points balance and one button per section (Combos,
 Cat Colors, Stuffies, Blankets, Room Themes, Head, Glasses, Badges, Toys and the Right Arm
 Slot). Each button opens that section's own page, and buying something keeps you on it.
-A section with an item on flash sale is marked **SALE** in the menu.
+A section with an item on flash sale is marked **SALE** in the menu. The first button, **All**,
+lists every section except Combos on one page, like the store before it had a menu, and buying
+from it keeps you on All.
 
 Combos sell a few matching items together for about 20% off, e.g. Pretty in Pink (Pink
 cat, Hot Pink Bow, Pink-Rim Sunglasses, Hot Pink blanket and Flamingo Pink room) for 225

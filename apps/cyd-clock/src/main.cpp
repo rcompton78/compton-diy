@@ -5693,6 +5693,23 @@ static void appendStoreItemTags(String& html, uint32_t baseCost, uint32_t cost) 
     if (cost != baseCost) html += STORE_TAG_SALE;
 }
 
+// The store's All page (COM-516): every section on one page, at /config/store?s=all. It isn't a
+// STORE_SECTIONS[] entry, so no section may use this key (checked below).
+static constexpr char STORE_ALL_KEY[] = "all";
+
+// Opens a buy form posting `item` to /save-config/store. On the All page the form also posts
+// from=all, so redirectToStoreSection() sends the result back to All instead of the item's section.
+static void appendBuyFormOpen(String& html, const char* item, bool fromAll) {
+    html += "<form method='POST' action='/save-config/store'><input type='hidden' name='item' value='";
+    html += item;
+    html += "'>";
+    if (fromAll) {
+        html += "<input type='hidden' name='from' value='";
+        html += STORE_ALL_KEY;
+        html += "'>";
+    }
+}
+
 /**
  * Appends one store row: the label, its tags, then either the owned marker or a buy form that
  * posts `item` to /save-config/store.
@@ -5701,10 +5718,12 @@ static void appendStoreItemTags(String& html, uint32_t baseCost, uint32_t cost) 
  * @param labelPrefix Text before the label (e.g. "Blanket - "), or "".
  * @param ownedText The owned marker's text, or nullptr when the item can still be bought.
  * @param buyText The buy button's text before the price ("Buy for " / "Buy 2nd for ").
+ * @param fromAll Whether the row is on the All page (see appendBuyFormOpen()).
  */
 static void appendStoreItemRow(String& html, const char* item, const char* webColor,
                                const char* labelPrefix, const char* label, uint32_t baseCost,
-                               const char* ownedText, const char* buyText, uint32_t points) {
+                               const char* ownedText, const char* buyText, uint32_t points,
+                               bool fromAll) {
     uint32_t cost = flashSalePrice(item, baseCost);
     html += "<div class='item'><span";
     if (webColor) { html += " style='color:"; html += webColor; html += "'"; }
@@ -5718,9 +5737,8 @@ static void appendStoreItemRow(String& html, const char* item, const char* webCo
         html += ownedText;
         html += "</span>";
     } else {
-        html += "<form method='POST' action='/save-config/store'><input type='hidden' name='item' value='";
-        html += item;
-        html += "'><button type='submit'";
+        appendBuyFormOpen(html, item, fromAll);
+        html += "<button type='submit'";
         if (points < cost) html += " disabled";
         html += ">";
         html += buyText;
@@ -5733,7 +5751,7 @@ static void appendStoreItemRow(String& html, const char* item, const char* webCo
 // Store row for catalog entry `i` of `cat`. Stuffies can be bought twice (DIY-106), so the
 // same item id posts a second purchase once the first copy is owned, labeled "Buy 2nd for N"
 // so it's clear the button re-buys the same item; only owning both copies shows as owned.
-static void appendStoreRow(String& html, ItemCategory cat, int i, uint32_t points) {
+static void appendStoreRow(String& html, ItemCategory cat, int i, uint32_t points, bool fromAll) {
     static const char* const LABEL_PREFIXES[ITEM_CATEGORY_COUNT] = {"", "Blanket - ", "", "Cat - ", "", "", "", ""};
     CatalogEntry e = catalogEntry(cat, i);
     bool owned = ownedItems(cat) & (1u << i);
@@ -5744,13 +5762,13 @@ static void appendStoreRow(String& html, ItemCategory cat, int i, uint32_t point
         ownedText = ownedSecond ? "Owned (x2)" : nullptr;
         if (owned) buyText = "Buy 2nd for ";
     }
-    appendStoreItemRow(html, e.id, e.webColor, LABEL_PREFIXES[cat], e.label, e.cost, ownedText, buyText, points);
+    appendStoreItemRow(html, e.id, e.webColor, LABEL_PREFIXES[cat], e.label, e.cost, ownedText, buyText, points, fromAll);
 }
 
 // Store row for STORE_COMBOS[i] (COM-507): the label and tags, the item list (owned ones ticked),
 // then "Owned" once every item is, or a buy form posting the combo id. The price shows the
 // missing items' full price struck through, then the combo charge.
-static void appendComboRow(String& html, int i, uint32_t points) {
+static void appendComboRow(String& html, int i, uint32_t points, bool fromAll) {
     const StoreCombo& combo = STORE_COMBOS[i];
     ComboPrice p = comboPrice(combo);
     html += "<div class='item'><div><span>";
@@ -5776,9 +5794,8 @@ static void appendComboRow(String& html, int i, uint32_t points) {
     if (p.missing == 0) {
         html += "<span class='owned'>Owned</span>";
     } else {
-        html += "<form method='POST' action='/save-config/store'><input type='hidden' name='item' value='";
-        html += combo.id;
-        html += "'><button type='submit'";
+        appendBuyFormOpen(html, combo.id, fromAll);
+        html += "<button type='submit'";
         if (points < p.charge) html += " disabled";
         html += ">Buy for <s>";
         html += String(p.full);
@@ -5825,6 +5842,16 @@ static constexpr bool storeSectionCatUniqueFrom(int i, int j) {
          : STORE_SECTIONS[i].cat != STORE_SECTIONS[j].cat && storeSectionCatUniqueFrom(i, j + 1);
 }
 static_assert(storeSectionCatUniqueFrom(0, 1), "two STORE_SECTIONS[] entries share an ItemCategory value");
+// No section may use the All page's key: handleConfigStoreGet() checks it first, so that section
+// would be unreachable, and its purchases would land on All.
+static constexpr bool storeKeyEquals(const char* a, const char* b) {
+    return *a != *b ? false : *a == '\0' ? true : storeKeyEquals(a + 1, b + 1);
+}
+static constexpr bool storeSectionKeysAvoidAll(int i) {
+    return i >= STORE_SECTION_COUNT ? true
+         : !storeKeyEquals(STORE_SECTIONS[i].key, STORE_ALL_KEY) && storeSectionKeysAvoidAll(i + 1);
+}
+static_assert(storeSectionKeysAvoidAll(0), "a STORE_SECTIONS[] entry uses the All page's key");
 
 // The section that sells `cat` (or a non-catalog value like ITEM_RIGHT_ARM_SLOT). Every category has one.
 static const StoreSection& storeSectionFor(ItemCategory cat) {
@@ -5844,21 +5871,31 @@ static bool storeSectionHasSale(const StoreSection& section) {
     return findCatalogIndex(section.cat, currentFlashSale.itemId, true) >= 0;
 }
 
-// The landing page: the balance and one button per section (COM-506).
+// The landing page: the balance, an All button (COM-516), which shows SALE whenever a section it
+// lists does, then one button per section (COM-506).
 static void sendStoreLandingPage(uint32_t points) {
     String page = loadPage(CONFIG_STORE_HTML);
     page.replace("%%POINTS%%", String(points));
     String sections;
+    bool anySale = false;
     for (int i = 0; i < STORE_SECTION_COUNT; i++) {
         const StoreSection& section = STORE_SECTIONS[i];
         sections += "<a class='nav' href='/config/store?s=";
         sections += section.key;
         sections += "'>";
         sections += section.title;
-        if (storeSectionHasSale(section)) sections += STORE_TAG_SALE;
+        if (storeSectionHasSale(section)) {
+            sections += STORE_TAG_SALE;
+            if (section.cat != ITEM_COMBO) anySale = true;  // All leaves combos out
+        }
         sections += "</a>\n";
     }
-    page.replace("%%SECTIONS%%", sections);
+    String all = "<a class='nav' href='/config/store?s=";
+    all += STORE_ALL_KEY;
+    all += "'>All";
+    if (anySale) all += STORE_TAG_SALE;
+    all += "</a>\n";
+    page.replace("%%SECTIONS%%", all + sections);
     String msg = "";
     if (wm.server->hasArg("welcome")) {
         msg = "<div class='banner ok'>Welcome! Here's 70 points to get started.</div>";
@@ -5869,43 +5906,89 @@ static void sendStoreLandingPage(uint32_t points) {
     sendHtmlPage(page);
 }
 
-// One section's page: its items, the balance and any purchase result (COM-506).
-static void sendStoreSectionPage(const StoreSection& section, uint32_t points) {
-    String page = loadPage(CONFIG_STORE_SECTION_HTML);
-    page.replace("%%TITLE%%", section.title);
-    page.replace("%%NOTE%%", section.note ? String("<p style='color:#888'>") + section.note + "</p>" : String(""));
-    page.replace("%%POINTS%%", String(points));
-    String rows;
+// Appends `section`'s rows, as shown on its own page and on the All page (`fromAll`).
+static void appendStoreSectionRows(String& rows, const StoreSection& section, uint32_t points, bool fromAll) {
     if (section.cat == ITEM_RIGHT_ARM_SLOT) {
         appendStoreItemRow(rows, "right_arm_slot", nullptr, "", "Right Arm Slot", STORE_COST_RIGHT_ARM_SLOT,
-                           configMgr.config().rightArmSlotUnlocked ? "Owned" : nullptr, "Buy for ", points);
+                           configMgr.config().rightArmSlotUnlocked ? "Owned" : nullptr, "Buy for ", points, fromAll);
     } else if (section.cat == ITEM_COMBO) {
-        for (int i = 0; i < STORE_COMBO_COUNT; i++) appendComboRow(rows, i, points);
+        for (int i = 0; i < STORE_COMBO_COUNT; i++) appendComboRow(rows, i, points, fromAll);
     } else {
         // White isn't a CAT_COLORS[] entry (it's the always-available default, equipped via
         // EQUIP_NONE — see the comment above that catalog) but the wizard and Dress page both
         // list it as an explicit choice, so show it here too rather than have it look missing.
-        if (section.cat == ITEM_CAT_COLOR) rows = "<div class='item'><span>Cat - White</span><span class='owned'>Owned</span></div>\n";
+        if (section.cat == ITEM_CAT_COLOR) rows += "<div class='item'><span>Cat - White</span><span class='owned'>Owned</span></div>\n";
         for (int i = 0; i < ITEM_CATALOG_COUNTS[section.cat]; i++) {
-            if (isStoreItem(section.cat, i)) appendStoreRow(rows, section.cat, i, points);
+            if (isStoreItem(section.cat, i)) appendStoreRow(rows, section.cat, i, points, fromAll);
         }
     }
-    page.replace("%%ITEMS%%", rows);
-    String msg = "";
-    if (wm.server->hasArg("saved")) {
-        msg = "<div class='banner ok'>Purchase complete.</div>";
-    } else if (wm.server->hasArg("err")) {
+}
+
+// A section's note paragraph, or "" if it has none.
+static String storeSectionNote(const StoreSection& section) {
+    return section.note ? String("<p style='color:#888'>") + section.note + "</p>" : String("");
+}
+
+// The purchase-result banner for a section or All page, from the redirect's saved/err args.
+static String storePurchaseMessage() {
+    if (wm.server->hasArg("saved")) return "<div class='banner ok'>Purchase complete.</div>";
+    if (wm.server->hasArg("err")) {
         String err = wm.server->arg("err");
-        if (err == "funds") msg = "<div class='banner err'>Not enough points.</div>";
-        else if (err == "owned") msg = "<div class='banner err'>You already own that item.</div>";
-        else if (err == "save") msg = "<div class='banner err'>Purchase failed to save — please try again.</div>";
+        if (err == "funds") return "<div class='banner err'>Not enough points.</div>";
+        if (err == "owned") return "<div class='banner err'>You already own that item.</div>";
+        if (err == "save") return "<div class='banner err'>Purchase failed to save — please try again.</div>";
     }
-    page.replace("%%MSG%%", msg);
+    return "";
+}
+
+// One section's page: its items, the balance and any purchase result (COM-506).
+static void sendStoreSectionPage(const StoreSection& section, uint32_t points) {
+    String page = loadPage(CONFIG_STORE_SECTION_HTML);
+    page.replace("%%TITLE%%", section.title);
+    page.replace("%%NOTE%%", storeSectionNote(section));
+    page.replace("%%POINTS%%", String(points));
+    String rows;
+    appendStoreSectionRows(rows, section, points, false);
+    page.replace("%%ITEMS%%", rows);
+    page.replace("%%MSG%%", storePurchaseMessage());
     sendHtmlPage(page);
 }
 
-// /config/store shows the section menu; /config/store?s=<key> shows that section. An unknown
-// key falls back to the menu.
+// The All page (COM-516): every section in STORE_SECTIONS[] order except Combos, each under its
+// own heading, through the section page template. Combos are left out because they only repackage
+// items All already lists one by one. The whole catalog is far bigger than one section, so it's
+// streamed as a chunked response, one section at a time, rather than built as one String: the
+// peak heap use stays about one section page's, however many items the store grows to.
+static void sendStoreAllPage(uint32_t points) {
+    String page = loadPage(CONFIG_STORE_SECTION_HTML);
+    page.replace("%%TITLE%%", "All");
+    page.replace("%%NOTE%%", "");
+    page.replace("%%POINTS%%", String(points));
+    page.replace("%%MSG%%", storePurchaseMessage());
+    int split = page.indexOf("%%ITEMS%%");
+    String tail = page.substring(split + strlen("%%ITEMS%%"));
+    page.remove(split);
+    wm.server->sendHeader("Cache-Control", "no-store");  // same reason as sendHtmlPage()
+    wm.server->setContentLength(CONTENT_LENGTH_UNKNOWN);
+    wm.server->send(200, "text/html", "");
+    wm.server->sendContent(page);
+    page = String();  // free the head before building sections
+    for (int i = 0; i < STORE_SECTION_COUNT; i++) {
+        const StoreSection& section = STORE_SECTIONS[i];
+        if (section.cat == ITEM_COMBO) continue;
+        String chunk = "<h3>";
+        chunk += section.title;
+        chunk += "</h3>\n";
+        chunk += storeSectionNote(section);
+        appendStoreSectionRows(chunk, section, points, true);
+        wm.server->sendContent(chunk);
+    }
+    wm.server->sendContent(tail);
+    wm.server->sendContent("");  // ends the chunked response
+}
+
+// /config/store shows the section menu; /config/store?s=<key> shows that section, and
+// ?s=all every section (COM-516). An unknown key falls back to the menu.
 static void handleConfigStoreGet() {
     // Clear the on-device points flash by stamping the current catalog sizes as "seen" —
     // any store visit acknowledges every item added up to this point.
@@ -5923,6 +6006,10 @@ static void handleConfigStoreGet() {
     }
     uint32_t points = configMgr.config().points;
     String key = wm.server->arg("s");
+    if (key == STORE_ALL_KEY) {
+        sendStoreAllPage(points);
+        return;
+    }
     for (int i = 0; i < STORE_SECTION_COUNT; i++) {
         if (key == STORE_SECTIONS[i].key) {
             sendStoreSectionPage(STORE_SECTIONS[i], points);
@@ -6386,10 +6473,12 @@ static void handleConfigCityPost() {
 }
 
 // Sends the purchase result back to the section the item is sold in (COM-506), so buying keeps
-// the user on that section's page. `cat` is ITEM_RIGHT_ARM_SLOT for the Right Arm Slot.
+// the user on that section's page, or to the All page when the form posted from=all (COM-516).
+// Only that exact value is honoured, so the arg can't redirect anywhere else. `cat` is
+// ITEM_RIGHT_ARM_SLOT for the Right Arm Slot.
 static void redirectToStoreSection(ItemCategory cat, const char* query) {
     String location = "/config/store?s=";
-    location += storeSectionFor(cat).key;
+    location += wm.server->arg("from") == STORE_ALL_KEY ? STORE_ALL_KEY : storeSectionFor(cat).key;
     location += "&";
     location += query;
     wm.server->sendHeader("Location", location);
