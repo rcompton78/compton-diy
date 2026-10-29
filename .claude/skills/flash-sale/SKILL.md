@@ -16,7 +16,19 @@ no price is stored in the API itself.
 
 Default to **prod** unless the user says "dev"/"local"/"test":
 
-- **Prod**: `ssh compton@cat-buddy.richcompton.com "docker exec -i cat-buddy-db psql -U postgres -d cat_buddy"` (append `-c "<query>"` for a single statement, or pipe SQL via stdin)
+- **Prod**: `ssh home "docker exec -i cat-buddy-db psql -U postgres -d cat_buddy"` (append `-c "<query>"` for a single statement, or pipe SQL via stdin).
+  `home` is the `~/.ssh/config` alias for the homelab box that runs the cat-buddy containers
+  (`cat-buddy-db`, `cat-buddy-api`, `cat-buddy-nginx`). If it's missing, add:
+  ```
+  Host home
+      Hostname 192.168.1.218
+      HostKeyAlias home.richcompton.com
+      User compton
+  ```
+  Don't SSH to the public name from the LAN: `cat-buddy.richcompton.com` resolves to the
+  router's public IP, which refuses :22 from inside (hairpin NAT, same as COM-233; 443 works),
+  so `ssh compton@cat-buddy.richcompton.com` fails with "Connection refused". That public name
+  is only the fallback for when you're off the LAN and `home` (192.168.1.218) is unreachable.
 - **Dev**: `docker exec -i cat-buddy-db psql -U postgres -d cat_buddy` run locally — only works if the dev container is up (`docker ps --format '{{.Names}}' | grep cat-buddy-db`; if not, tell the user to start it, e.g. via `nx start-infra cat-buddy` in the `compton-apps` repo — don't start it yourself unless asked)
 
 ## Valid item ids
@@ -52,6 +64,18 @@ right-arm buddy slot unlock).
    INSERT INTO flash_sales (item_id, start_at, end_at)
    VALUES ('<item_id>', now(), now() + interval '<duration>');
    ```
+   For a window at specific times, write each bound with an explicit offset, never a bare
+   timestamp:
+   ```sql
+   INSERT INTO flash_sales (item_id, start_at, end_at)
+   VALUES ('<item_id>', '2026-10-28 22:00:00-06', '2026-10-29 22:00:00-06');
+   ```
+   **Time zones:** the prod DB session runs in `America/Edmonton`, the user's local time,
+   which is permanently UTC-6 since Alberta's 2026 change. Read "MST", "Mountain" or an
+   unqualified time in a request as local wall-clock time (UTC-6), not as historical MST.
+   The explicit `-06` keeps the result right even if the container's tzdata predates
+   the 2026 change and still applies DST. When you report back, say which reading you
+   used, e.g. "starts 22:00 local (UTC-6)".
 
 3. **Remove a sale.** From the list in step 1, confirm which row (by `id`) before
    deleting — don't guess which one "the current sale" means if more than one exists.
