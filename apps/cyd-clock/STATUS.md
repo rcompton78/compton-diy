@@ -1109,6 +1109,37 @@ one.
 - **Size:** flash +1,132 B on `cyd` (1,206,581 → 1,207,713 B, 92.1%), +1,292 B on `freenove-s3`
   (1,159,857 → 1,161,149 B), on top of COM-507. No new globals.
 
+## Store NEW Badges (COM-517, 2026-10-29)
+
+Store menu buttons and item rows show a cyan **✨ NEW** tag (`STORE_TAG_NEW`, the same cyan as the
+device's points flash) for anything the user hasn't been shown yet, next to the existing SALE tag.
+
+- **Seen per section, not per visit.** Before, any `/config/store` request, even just the menu,
+  stamped every `seen*Count`, so the menu could never say which section was new. Now the menu marks
+  nothing, a section page marks only its own section (`markStoreSectionSeen()`) and All marks every
+  section (`markAllStoreSectionsSeen()`). The page is sent before it's marked, so its rows still show
+  NEW on that visit, and `save()` only runs when a count actually changed.
+- **One source of truth.** `storeSectionHasNew()` is `storeCatalogStoreCount(cat) > storeSeenCount(cat)`
+  per catalog, `!seenRightArmSlot` for the Right Arm Slot and always false for Combos (they have no seen
+  tracking). `hasNewStoreItems()` is now that over every section, so the **device's points flash stays
+  on until every NEW section has been opened** (or All), instead of stopping at the first store visit.
+- **Rows use store rank, not index.** A `seen*Count` counts store entries, and in `ACCESSORIES[]` and
+  `ROOM_THEMES[]` those aren't a contiguous prefix (Sorting Hat and Hogwarts at Night sit past the
+  theme-week exclusives). So `appendStoreSectionRows()` counts store entries as it walks a catalog
+  (`isStoreCatalogEntry()`, split out of `isStoreItem()` without the October-only Pumpkin Patch gate,
+  matching `*_STORE_COUNT`), and a row is NEW when its rank is at or past the seen count.
+- **First run.** The setup wizard ends on the store menu, which used to clear everything. It now calls
+  `markAllStoreSectionsSeen()` before saving, so a new clock starts with no NEW badges and no flash.
+- **SALE unchanged.** `storeSectionHasSale()` already covered catalog sections, Combos (the combo itself
+  on sale) and the Right Arm Slot. A sale on one item inside a combo doesn't discount the combo, so it
+  deliberately doesn't mark the Combos button. NEW and SALE can show on the same button (NEW first).
+- **Known edge (accepted).** Hidden seasonal entries still count toward a section's store count, as
+  they did in the old stamp. A clock that last opened the store before COM-503 and updates outside
+  October shows NEW on Room Themes with no NEW row (the unseen entry is the hidden Pumpkin Patch),
+  and opening it marks Pumpkin Patch seen, so it isn't NEW the next October.
+- **Size:** flash +488 B on `cyd` (1,207,713 → 1,208,201 B, 92.2%), +484 B on `freenove-s3`
+  (1,161,149 → 1,161,633 B), on top of COM-516. No new globals or config fields.
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`
