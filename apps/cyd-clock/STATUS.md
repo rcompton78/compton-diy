@@ -1106,8 +1106,8 @@ one.
 - **Reserved key.** `all` isn't a `STORE_SECTIONS[]` entry, so the section count and unique-`cat`
   asserts are unchanged; a new `static_assert` (`storeSectionKeysAvoidAll()`) stops a section
   from ever using `all`.
-- **Size:** flash +1,164 B on `cyd` (1,206,581 → 1,207,745 B, 92.1%), +1,320 B on `freenove-s3`
-  (1,159,857 → 1,161,177 B), on top of COM-507. No new globals.
+- **Size:** flash +1,132 B on `cyd` (1,206,581 → 1,207,713 B, 92.1%), +1,292 B on `freenove-s3`
+  (1,159,857 → 1,161,149 B), on top of COM-507. No new globals.
 
 ## Branch & Files
 

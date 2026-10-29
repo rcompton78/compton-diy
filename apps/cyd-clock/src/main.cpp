@@ -5966,6 +5966,10 @@ static void sendStoreAllPage(uint32_t points) {
     page.replace("%%POINTS%%", String(points));
     page.replace("%%MSG%%", storePurchaseMessage());
     int split = page.indexOf("%%ITEMS%%");
+    if (split < 0) {  // the template lost its %%ITEMS%% slot: don't stream a garbled page
+        sendHtmlPage(page);
+        return;
+    }
     String tail = page.substring(split + strlen("%%ITEMS%%"));
     page.remove(split);
     wm.server->sendHeader("Cache-Control", "no-store");  // same reason as sendHtmlPage()
@@ -5983,7 +5987,9 @@ static void sendStoreAllPage(uint32_t points) {
         appendStoreSectionRows(chunk, section, points, true);
         wm.server->sendContent(chunk);
     }
-    wm.server->sendContent(tail);
+    // An empty chunk ends a chunked response, so only the final sendContent("") may be empty
+    // (every section chunk has at least its heading).
+    if (tail.length()) wm.server->sendContent(tail);
     wm.server->sendContent("");  // ends the chunked response
 }
 
