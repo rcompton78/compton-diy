@@ -5754,11 +5754,13 @@ static void appendComboRow(String& html, int i, uint32_t points) {
     if (p.legendary) html += " <span style='color:#ffcc33;font-weight:bold'>\xE2\x98\x85 LEGENDARY</span>";
     if (p.missing > 0 && isFlashSaleActive() && strcmp(currentFlashSale.itemId, combo.id) == 0) html += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
     html += "<div style='font-size:.8rem;color:#888;margin-top:4px'>";
+    bool first = true;
     for (int j = 0; j < combo.itemCount; j++) {
         ItemCategory cat;
         int idx;
         if (!findStoreItem(combo.items[j], cat, idx)) continue;
-        if (j > 0) html += ", ";
+        if (!first) html += ", ";
+        first = false;
         html += storeItemLabel(cat, idx);
         if (cat == ITEM_BLANKET) html += " blanket";
         else if (cat == ITEM_ROOM_THEME) html += " room";
