@@ -83,6 +83,7 @@ static constexpr uint32_t STORE_COST_SNOWMAN  = 150;
 static constexpr uint32_t STORE_COST_PIKACHU  = 300;  // top tier: licensed-character premium, priced above the squirrel/penguin/unicorn/snowman 150 tier
 static constexpr uint32_t STORE_COST_EEVEE    = 300;  // same top tier as Pikachu — also a licensed-character premium
 static constexpr uint32_t STORE_COST_SYLVEON  = 300;  // same top tier as Pikachu/Eevee — also a licensed-character premium
+static constexpr uint32_t STORE_COST_UMBREON  = 300;  // same top tier as Pikachu/Eevee/Sylveon — also a licensed-character premium
 static constexpr uint32_t STORE_COST_BLANKET  = 40;  // per blanket color
 static constexpr uint32_t STORE_COST_ROOM_THEME = 40;  // per flat-color room theme, matches blanket pricing
 static constexpr uint32_t STORE_COST_STARRY_NIGHT = 200;  // premium: has real art (moon + stars), not just a flat fill
@@ -96,7 +97,7 @@ static constexpr uint32_t STORE_COST_RIGHT_ARM_SLOT = 200;  // one-time unlock, 
 static constexpr uint32_t STORE_COST_HOCKEY_STICK = 100;
 static constexpr uint32_t STORE_COST_MAGIC_WAND = 100;
 // Legendary tier (COM-382): the top-of-store price shared by every legendary item (COM-375 to
-// COM-378 reuse it too), just above the Pikachu/Eevee/Sylveon 300 tier. Any item priced at or above it
+// COM-378 reuse it too), just above the Pikachu/Eevee/Sylveon/Umbreon 300 tier. Any item priced at or above it
 // gets the gold "LEGENDARY" store tag — see appendStoreItemTags() — so keep every non-legendary price
 // below it.
 static constexpr uint32_t STORE_COST_LEGENDARY = 350;
@@ -165,6 +166,13 @@ static constexpr uint16_t C_SYLVEON       = 0xFFBE;  // sylveon's body and face 
 static constexpr uint16_t C_SYLVEON_PINK  = 0xF517;  // sylveon's ears, head tuft, tail, feet, and bows (~#f0a0b8); fixed like eevee's colors, not accent-colored
 static constexpr uint16_t C_SYLVEON_BLUE  = 0x75DE;  // sylveon's inner ears, eyes, head-bow knot, and feeler-ribbon tips (~#70b8f0)
 static constexpr uint16_t C_SYLVEON_BLACK = 0x0000;  // sylveon's nose and mouth (her eyes have no pupil) — pure black like C_EEVEE_BLACK
+// Umbreon (COM-508), sampled from the Pokémon HOME render. The body is charcoal rather than
+// black for the same reason as the black cat's 0x1082: it has to stay visible on the black
+// Starry Night / 6-7 backdrops and the Hogwarts castle.
+static constexpr uint16_t C_UMBREON      = 0x3A29;  // umbreon's body, face, ears and tail (~#3c4448)
+static constexpr uint16_t C_UMBREON_DARK = 0x1082;  // umbreon's pupils and mouth — same near-black as the black cat
+static constexpr uint16_t C_UMBREON_RING = 0xFEC8;  // umbreon's glowing rings (~#f8d840); fixed like eevee's colors, not accent-colored
+static constexpr uint16_t C_UMBREON_EYE  = 0xF988;  // umbreon's red eyes (~#f83040)
 static constexpr uint16_t C_PARTY_HAT      = 0x939B;  // party hat cone — same purple as C_BOW_PURPLE
 static constexpr uint16_t C_PARTY_HAT_TRIM = 0xF6CB;  // party hat base band/pompom — same yellow as C_BOW_LEMON_YELLOW
 // Bold, saturated colors rather than pastels — the birthday theme's own room-theme backdrop
@@ -508,6 +516,8 @@ static void drawEeveePeeking(int cx, int cy, uint16_t accentColor);
 static void drawEeveeFull(int cx, int cy, uint16_t accentColor);
 static void drawSylveonPeeking(int cx, int cy, uint16_t accentColor);
 static void drawSylveonFull(int cx, int cy, uint16_t accentColor);
+static void drawUmbreonPeeking(int cx, int cy, uint16_t accentColor);
+static void drawUmbreonFull(int cx, int cy, uint16_t accentColor);
 static void drawTeddyHeld(int cx, int cy, uint16_t accentColor);
 static void drawBunnyHeld(int cx, int cy, uint16_t accentColor);
 static void drawSquirrelHeld(int cx, int cy, uint16_t accentColor);
@@ -517,6 +527,7 @@ static void drawSnowmanHeld(int cx, int cy, uint16_t accentColor);
 static void drawPikachuHeld(int cx, int cy, uint16_t accentColor);
 static void drawEeveeHeld(int cx, int cy, uint16_t accentColor);
 static void drawSylveonHeld(int cx, int cy, uint16_t accentColor);
+static void drawUmbreonHeld(int cx, int cy, uint16_t accentColor);
 static void drawTeddyHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawBunnyHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawSquirrelHeldPeeking(int cx, int cy, uint16_t accentColor);
@@ -526,6 +537,7 @@ static void drawSnowmanHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawPikachuHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawEeveeHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawSylveonHeldPeeking(int cx, int cy, uint16_t accentColor);
+static void drawUmbreonHeldPeeking(int cx, int cy, uint16_t accentColor);
 
 // Stuffy catalog — same purchase/equip model as blanket colors, so more stuffies can be
 // added later without changing the store/dressing-room plumbing. `id` is the stable
@@ -561,6 +573,7 @@ static constexpr Stuffy STUFFIES[] = {
     {"pikachu",  "Pikachu",      STORE_COST_PIKACHU,  drawPikachuPeeking,  drawPikachuFull,  drawPikachuHeld, drawPikachuHeldPeeking},
     {"eevee",    "Eevee",        STORE_COST_EEVEE,    drawEeveePeeking,    drawEeveeFull,    drawEeveeHeld,   drawEeveeHeldPeeking},
     {"sylveon",  "Sylveon",      STORE_COST_SYLVEON,  drawSylveonPeeking,  drawSylveonFull,  drawSylveonHeld, drawSylveonHeldPeeking},
+    {"umbreon",  "Umbreon",      STORE_COST_UMBREON,  drawUmbreonPeeking,  drawUmbreonFull,  drawUmbreonHeld, drawUmbreonHeldPeeking},
 };
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
 static_assert(STUFFY_COUNT <= 16, "ownedStuffies bitmask is uint16_t");
@@ -2122,6 +2135,110 @@ static void drawSylveonHeldPeeking(int cx, int cy, uint16_t accentColor) {
     tft.fillTriangle(bx - 13, by + 3, bx - 10, by + 1, bx - 18, by - 4, C_SYLVEON_PINK);  // bit of slim tail poking over the shoulder
     tft.fillTriangle(bx - 10, by + 1, bx - 18, by - 4, bx - 20, by - 9, C_SYLVEON_PINK);  // tapered tip
     drawSylveonHead(bx, by, -1);
+}
+
+// One of umbreon's yellow rings across a triangle (COM-508): a band from `t0` to `t1` tenths of
+// the way from the base edge (ax,ay)-(bx,by) toward the apex (tx,ty), filled as two triangles.
+// Cutting the band out of the triangle's own edges keeps it about as wide as the ear or tail at
+// that height. Integer rounding puts a few pixels just outside the outline (a 1 px strip on
+// each ear ring's outer edge, one pixel on the tail ring), as in the approved mockup.
+static void drawUmbreonRing(int ax, int ay, int bx, int by, int tx, int ty, int t0, int t1) {
+    int a0x = ax + (tx - ax) * t0 / 10, a0y = ay + (ty - ay) * t0 / 10;
+    int b0x = bx + (tx - bx) * t0 / 10, b0y = by + (ty - by) * t0 / 10;
+    int a1x = ax + (tx - ax) * t1 / 10, a1y = ay + (ty - ay) * t1 / 10;
+    int b1x = bx + (tx - bx) * t1 / 10, b1y = by + (ty - by) * t1 / 10;
+    tft.fillTriangle(a0x, a0y, b0x, b0y, b1x, b1y, C_UMBREON_RING);
+    tft.fillTriangle(a0x, a0y, b1x, b1y, a1x, a1y, C_UMBREON_RING);
+}
+
+// A small upright yellow oval ring with a dark centre slot, centred on (x,y): 5×7 px, the
+// forehead and leg rings from the official art. fillEllipse() draws nothing below a 2 px radius,
+// which is why this is the smallest oval that still reads as a ring.
+static void drawUmbreonOval(int x, int y) {
+    tft.fillEllipse(x, y, 2, 3, C_UMBREON_RING);
+    tft.fillRect(x, y - 1, 1, 3, C_UMBREON);
+}
+
+// Shared ear/head/face art reused by every umbreon pose (COM-508), at Eevee's proportions
+// (10px head, same ear triangles) since it's an Eevee evolution. Matched to the official art and
+// the Pokémon HOME render: solid charcoal ears with one yellow ring partway up, a yellow oval on
+// the forehead, and red eyes. No neck ruff, since umbreon's neck is smooth. The eyes copy
+// Sylveon's tall egg shape and white glint, plus a dark pupil as in the reference art. The
+// forehead oval sits at by-7, not by-6, so it clears the tops of those taller eyes. Fixed
+// colors, so no accent parameter, as with Eevee and Sylveon.
+static void drawUmbreonHead(int bx, int by) {
+    tft.fillTriangle(bx - 13, by - 6, bx - 3, by - 6, bx - 9, by - 28, C_UMBREON);       // left ear
+    drawUmbreonRing(bx - 13, by - 6, bx - 3, by - 6, bx - 9, by - 28, 5, 7);              // left ear ring
+    tft.fillTriangle(bx + 3, by - 6, bx + 13, by - 6, bx + 9, by - 28, C_UMBREON);       // right ear
+    drawUmbreonRing(bx + 3, by - 6, bx + 13, by - 6, bx + 9, by - 28, 5, 7);              // right ear ring
+    tft.fillCircle(bx, by, 10, C_UMBREON);                                                // head
+    drawUmbreonOval(bx, by - 7);                                                          // forehead ring
+    tft.fillEllipse(bx - 4, by - 1, 2, 3, C_UMBREON_EYE);  // left eye
+    tft.fillEllipse(bx + 4, by - 1, 2, 3, C_UMBREON_EYE);  // right eye
+    tft.fillRect(bx - 4, by - 1, 1, 2, C_UMBREON_DARK);    // left pupil
+    tft.fillRect(bx + 4, by - 1, 1, 2, C_UMBREON_DARK);    // right pupil
+    tft.fillRect(bx - 5, by - 2, 1, 2, TFT_WHITE);         // left eye highlight
+    tft.fillRect(bx + 3, by - 2, 1, 2, TFT_WHITE);         // right eye highlight
+    tft.drawLine(bx - 2, by + 5, bx,     by + 6, C_UMBREON_DARK);  // mouth, left half of smile
+    tft.drawLine(bx,     by + 6, bx + 2, by + 5, C_UMBREON_DARK);  // mouth, right half of smile
+}
+
+// Umbreon's tail: drawEeveeTail()'s 3-triangle strip, all charcoal, with one yellow ring across
+// the middle of the tapered part. `dir` is +1 for the left-slot poses, -1 for the right-arm slot.
+static void drawUmbreonTail(int bx, int by, int dir) {
+    tft.fillTriangle(bx + dir * 11, by + 20, bx + dir * 6,  by + 16, bx + dir * 20, by + 10, C_UMBREON);  // tail base, outer half
+    tft.fillTriangle(bx + dir * 6,  by + 16, bx + dir * 20, by + 10, bx + dir * 14, by + 7,  C_UMBREON);  // tail base, inner half
+    tft.fillTriangle(bx + dir * 20, by + 10, bx + dir * 14, by + 7,  bx + dir * 23, by - 6,  C_UMBREON);  // tapered tip
+    drawUmbreonRing(bx + dir * 20, by + 10, bx + dir * 14, by + 7, bx + dir * 23, by - 6, 3, 6);           // tail ring
+}
+
+// Body and feet shared by the full-body poses: Eevee's body, all charcoal, with a yellow oval
+// ring on each front leg just above the feet.
+static void drawUmbreonBody(int bx, int by) {
+    tft.fillRoundRect(bx - 10, by + 8, 20, 30, 10, C_UMBREON);  // body
+    tft.fillCircle(bx - 6, by + 39, 5, C_UMBREON);              // left foot
+    tft.fillCircle(bx + 6, by + 39, 5, C_UMBREON);              // right foot
+    drawUmbreonOval(bx - 5, by + 30);                           // left leg ring
+    drawUmbreonOval(bx + 5, by + 30);                           // right leg ring
+}
+
+// Umbreon peeking out beside the head, tucked into the blanket's top edge, with a bit of the
+// ringed tail over the shoulder, same as drawEeveePeeking().
+static void drawUmbreonPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 40, by = cy - 6;
+    tft.fillTriangle(bx + 13, by + 3, bx + 9,  by,     bx + 19, by - 5,  C_UMBREON);  // bit of tail poking over the shoulder
+    tft.fillTriangle(bx + 9,  by,     bx + 19, by - 5,  bx + 22, by - 10, C_UMBREON);  // tapered tip
+    drawUmbreonRing(bx + 9, by, bx + 19, by - 5, bx + 22, by - 10, 0, 4);              // tail ring
+    drawUmbreonHead(bx, by);
+}
+
+// Full-body umbreon sitting beside the cat, used when it's owned without the blanket.
+// accentColor goes unused, as with Eevee. Body before head, as in drawEeveeFull().
+static void drawUmbreonFull(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 38, by = cy - 8;
+    drawUmbreonTail(bx, by, 1);
+    drawUmbreonBody(bx, by);
+    drawUmbreonHead(bx, by);
+}
+
+// Right-arm slot pose (DIY-64): an exact mirror of drawUmbreonFull(), with the tail's `dir`
+// flipped so it still pokes toward the cat. Same footprint as drawEeveeHeld(), so unlike
+// drawSylveonHeld() it needs no extra backdrop strip cleared.
+static void drawUmbreonHeld(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 38, by = cy - 8;
+    drawUmbreonTail(bx, by, -1);
+    drawUmbreonBody(bx, by);
+    drawUmbreonHead(bx, by);
+}
+
+// Night-only right-arm variant (DIY-64), see drawTeddyHeldPeeking(). The tail bit is mirrored
+// to poke toward the body, as in drawEeveeHeldPeeking().
+static void drawUmbreonHeldPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 40, by = cy - 6;
+    tft.fillTriangle(bx - 13, by + 3, bx - 9,  by,     bx - 19, by - 5,  C_UMBREON);  // bit of tail poking over the shoulder
+    tft.fillTriangle(bx - 9,  by,     bx - 19, by - 5,  bx - 22, by - 10, C_UMBREON);  // tapered tip
+    drawUmbreonRing(bx - 9, by, bx - 19, by - 5, bx - 22, by - 10, 0, 4);              // tail ring
+    drawUmbreonHead(bx, by);
 }
 
 // Deeply-closed, sleepy eyes for the sleep-window peek — thinner and gently curled at

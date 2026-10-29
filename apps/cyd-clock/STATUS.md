@@ -1140,6 +1140,37 @@ device's points flash) for anything the user hasn't been shown yet, next to the 
 - **Size:** flash +488 B on `cyd` (1,207,713 → 1,208,201 B, 92.2%), +484 B on `freenove-s3`
   (1,161,149 → 1,161,633 B), on top of COM-516. No new globals or config fields.
 
+## Umbreon Stuffy (COM-508, 2026-10-29)
+
+A tenth stuffy, appended to `STUFFIES[]` after Sylveon as
+`{"umbreon", "Umbreon", STORE_COST_UMBREON, drawUmbreonPeeking, drawUmbreonFull, drawUmbreonHeld, drawUmbreonHeldPeeking}`.
+`STORE_COST_UMBREON` is 300, the licensed-character tier with Pikachu, Eevee and Sylveon, so no
+LEGENDARY tag. The art was tuned with the user through a pixel-accurate canvas mockup (a JS port
+of TFT_eSPI's fill routines and the draw calls) against the official artwork and the Pokémon HOME
+render; the first pass was drawn from memory and got the colours, leg rings and forehead ring wrong.
+
+- **Shape.** Another Eevee evolution, so it reuses Eevee's 10 px head, ear triangles, tail strip,
+  body and slot anchors, with no neck ruff. Footprint is identical to Eevee's, so
+  `drawUmbreonHeld()` needs no extra backdrop clear (unlike Sylveon's feelers).
+- **Colours**, sampled from the HOME render: charcoal body `C_UMBREON` (~#3c4448), yellow rings
+  `C_UMBREON_RING` (~#f8d840), red eyes `C_UMBREON_EYE` (~#f83040), near-black pupils and mouth
+  (`C_UMBREON_DARK`, the black cat's 0x1082). The body isn't pure black for the black cat's
+  reason: it has to show on Starry Night, 6-7 and the Hogwarts castle.
+- **Rings.** `drawUmbreonRing()` cuts a band out of a triangle between two fractions of the way to
+  its apex, so the ear and tail rings follow the outline (integer rounding puts a few pixels just
+  outside it, mostly a 1 px strip on each ear ring's outer edge; accepted in review): one partway up each ear, one
+  across the middle of the tail (and of the tail bit in the peeking poses). `drawUmbreonOval()`
+  draws the forehead and leg rings as 5×7 upright ovals with a dark centre slot, the smallest
+  `fillEllipse()` that reads as a ring (it draws nothing under a 2 px radius). The leg ovals sit on
+  the front legs just above the feet; a first try with horizontal bars read as a belt.
+- **Eyes** use Sylveon's tall egg shape and white glint, in red, with a 1×2 dark pupil as in the
+  reference art. The forehead oval sits at `by - 7` so it clears the taller eyes.
+- **No logic change.** Store, dressing room, combos and NEW badges all loop over `STUFFY_COUNT`;
+  ten stuffies stay inside the `uint16_t` `ownedStuffies` mask.
+- **Flash:** +1,440 B on `cyd` (1,208,153 → 1,209,593 B, 92.3%), +1,452 B on `freenove-s3`
+  (1,161,633 → 1,163,085 B, 34.8%), on top of COM-517. Baselines were re-measured on master,
+  which is why the `cyd` one is 48 B under the figure recorded in the section above.
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`
