@@ -1070,6 +1070,45 @@ several existing items in one purchase at about 20% off their combined price.
 - **Size:** flash +2,904 B on `cyd` (1,203,677 → 1,206,581 B, 91.8% → 92.1%), +2,936 B on
   `freenove-s3` (1,156,921 → 1,159,857 B), on top of COM-268; static RAM unchanged.
 
+## Store All Page (COM-516, 2026-10-29)
+
+An **All** button, first on the store menu (above Combos), opens `/config/store?s=all`: every `STORE_SECTIONS[]`
+entry except Combos, in menu order, each under an `<h3>` heading and its note, like the store
+before COM-506. Combos are left out because they only repackage items All already lists one by
+one.
+
+- **Same rows.** `appendStoreSectionRows()` (split out of `sendStoreSectionPage()`) builds a
+  section's rows for both its own page and All, so prices, flash-sale prices, ★ LEGENDARY / SALE
+  tags, owned states and the Cat - White row match. `storePurchaseMessage()` is the shared
+  purchase banner. The All button shows SALE whenever a section it lists does, so a sale on a combo marks only
+  the Combos button.
+- **Purchases return to All.** Buy forms on All carry a hidden `from=all` (`appendBuyFormOpen()`,
+  now shared by item and combo rows), and `redirectToStoreSection()` sends the result to
+  `?s=all` when it sees exactly that value, otherwise to the item's own section as before. Every
+  purchase path, combos and errors included, already goes through it. Section pages pass
+  `fromAll = false`, so their markup is unchanged.
+- **Streamed, not one String.** `sendStoreAllPage()` sends a chunked response
+  (`CONTENT_LENGTH_UNKNOWN`): the template head, then one `sendContent()` per section, built and
+  freed in turn, then the tail. Peak heap is one section's rows (Blankets, 3.3 KB, is the largest)
+  rather than the whole page, however big the store gets.
+- **Measured on a `cyd`** (with Combos still on the page; without them it's 16,930 B) with temporary `ESP.getFreeHeap()` / `getMaxAllocHeap()` logging (not
+  committed): the All page is 19,177 B and takes 0.28-0.59 s, against 4.4-4.9 KB and about
+  0.07 s for a section page. Free heap is about 225.5 KB before each All request, dips to
+  204-221 KB mid-response (mostly Wi-Fi/TCP buffers, the same range as a section page's
+  219 KB) and is back to about 225.4 KB on the next request, with no drift over repeated loads.
+  The largest free block stayed at 110,580 B throughout. One String would have fit today too,
+  but streaming keeps the cost flat as items are added.
+- **Redirects checked on device** with unaffordable or owned items, so no points were spent:
+  `from=all` returns `?s=all&err=funds` (Pikachu, Pretty in Pink combo) and `?s=all&err=owned`
+  (Right Arm Slot), without it the item's section (`stuffies`, `combos`), and a bogus
+  `from=//evil.com` falls back to the section. With the `from` fields stripped, every section
+  page's rows appear byte-for-byte in All, LEGENDARY tags included.
+- **Reserved key.** `all` isn't a `STORE_SECTIONS[]` entry, so the section count and unique-`cat`
+  asserts are unchanged; a new `static_assert` (`storeSectionKeysAvoidAll()`) stops a section
+  from ever using `all`.
+- **Size:** flash +1,132 B on `cyd` (1,206,581 → 1,207,713 B, 92.1%), +1,292 B on `freenove-s3`
+  (1,159,857 → 1,161,149 B), on top of COM-507. No new globals.
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`
