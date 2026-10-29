@@ -37,20 +37,26 @@ core_dir="$(readlink -f "$PLATFORMIO_CORE_DIR" 2>/dev/null)" || core_dir=""
 [ -n "$core_dir" ] || core_dir="$PLATFORMIO_CORE_DIR"
 [ -d "$core_dir" ] || mkdir -p "$core_dir"
 if [ -z "${PLATFORMIO_LIBDEPS_DIR:-}" ] && [ -n "${ESPHOME_LIBDEPS_ROOT:-}" ]; then
-    # The app is the apps/<app>/ dir holding the first .yaml argument.
+    # The app is the apps/<app>/ dir holding the first .yaml argument that is
+    # an existing file there (a -s value can end in .yaml too).
     repo_real="$(cd "$REPO_ROOT" && pwd -P)"
+    saw_yaml=""
     for arg in "$@"; do
-        case "$arg" in *.yaml | *.yml) ;; *) continue ;; esac
-        yaml_dir="$(cd "$(dirname "$arg")" 2>/dev/null && pwd -P)" || break
+        case "$arg" in *.yaml | *.yml) saw_yaml=1 ;; *) continue ;; esac
+        [ -f "$arg" ] || continue
+        yaml_dir="$(cd "$(dirname "$arg")" 2>/dev/null && pwd -P)" || continue
         case "$yaml_dir" in
             "$repo_real"/apps/*)
                 app="${yaml_dir#"$repo_real"/apps/}"
                 export PLATFORMIO_LIBDEPS_DIR="$ESPHOME_LIBDEPS_ROOT/${app%%/*}"
                 mkdir -p "$PLATFORMIO_LIBDEPS_DIR"
+                break
                 ;;
         esac
-        break
     done
+    if [ -n "$saw_yaml" ] && [ -z "${PLATFORMIO_LIBDEPS_DIR:-}" ]; then
+        echo "espframe-esphome.sh: no config under apps/<app>/ in the arguments; libraries stay in ESPHome's per-build .piolibdeps" >&2
+    fi
 fi
 
 # ESPHome equivalent of scripts/pio.sh's `-D NAME="${sysenv.NAME}"` build-flag

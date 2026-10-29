@@ -67,7 +67,10 @@ else
         # Keyed by the project's path inside the repo (apps/cyd-clock), which is
         # the same in every worktree. A project outside the repo keeps its own.
         repo_real="$(cd "$REPO_ROOT" && pwd -P)"
-        project_real="$(cd "$project_dir" 2>/dev/null && pwd -P)" || project_real=""
+        # PlatformIO resolves -d against the cwd; the repo-root form matches the
+        # .env lookup above, for a caller that isn't at the repo root.
+        project_real="$(cd "$project_dir" 2>/dev/null && pwd -P)" ||
+            project_real="$(cd "$REPO_ROOT/$project_dir" 2>/dev/null && pwd -P)" || project_real=""
         case "$project_real" in
             "$repo_real"/*)
                 export PLATFORMIO_LIBDEPS_DIR="$SHARED_CACHE_ROOT/platformio-libdeps/${project_real#"$repo_real"/}"
