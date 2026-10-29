@@ -18,11 +18,14 @@ easy to slot in, no other plumbing changes needed.
 - Hats/accessories worn directly on the cat (party hat, bow, tiny crown) rather than a stuffy beside it — a different equip slot, more visible since it's on the cat itself
 - Blanket patterns (polka dot, plaid) instead of just solid colors — reuses the existing blanket color-catalog mechanic with an extra draw variant
 
-Done: room/background themes (DIY-38) — `RoomTheme`/`ROOM_THEMES[]` in `apps/cyd-clock/src/main.cpp`, rendered behind the cat at all times (not just the sleep scene). Five flat-color themes pairing with the blanket palette, plus a "Starry Night" theme (moon + fixed star field) as the first real-art entry. Later real-art themes: "6-7" (DIY-87), "Clear Sky" (DIY-90) and the legendary "Hogwarts at Night" (COM-378, castle silhouette with flickering windows and a rare shooting star). More (fireplace, etc.) are still open — reuse `drawStarryNightBackground()`'s `tft.setViewport()` clipping pattern for any theme with per-pixel art rather than a flat fill.
+Done: room/background themes (DIY-38) — `RoomTheme`/`ROOM_THEMES[]` in `apps/cyd-clock/src/main.cpp`, rendered behind the cat at all times (not just the sleep scene). Five flat-color themes pairing with the blanket palette, plus a "Starry Night" theme (moon + fixed star field) as the first real-art entry. Later real-art themes: "6-7" (DIY-87), "Clear Sky" (DIY-90), the legendary "Hogwarts at Night" (COM-378, castle silhouette with flickering windows and a rare shooting star) and the legendary, October-only "Haunted Pumpkin Patch" (COM-503, haunted house, flickering jack-o'-lanterns and a bat across the moon). More (fireplace, etc.) are still open — reuse `drawStarryNightBackground()`'s `tft.setViewport()` clipping pattern for any theme with per-pixel art rather than a flat fill.
 
 ## Mechanics-flavored (ties into the points economy)
 
-- Limited-time/rotating item that changes weekly, using the RTC already available
+- Limited-time/rotating item that changes weekly, using the RTC already available. First step
+  done (COM-503): Haunted Pumpkin Patch is only sold in October (`isPumpkinPatchOnSale()`, checked
+  by `isStoreItem()`), and an owned copy stays equippable all year. A weekly rotation would reuse
+  the same `isStoreItem()` hook.
 - "Lucky" cheap item with a random color each purchase — surprise mechanic reusing the existing bitmask ownership
 - Cosmetic rank/badge shown next to the points balance once total lifetime points cross a threshold (bragging rights, no gameplay effect)
 
@@ -34,8 +37,8 @@ left on the table:
 
 - Pumpkin or ghost **stuffy** for Halloween. It was skipped because a stuffy needs four poses;
   revisit if flash on the `cyd` board is ever freed up.
-- Flickering jack-o'-lantern eyes on Oct 31. This needs a periodic partial redraw, unlike the
-  still ghost that shipped.
+- ~~Flickering jack-o'-lantern eyes on Oct 31.~~ Done in COM-503, as the legendary Haunted
+  Pumpkin Patch room theme (bought, not granted by the theme week).
 - A Christmas week (Dec 18–25?) on the same pattern: santa hat, snowflake glasses, a
   fireplace/snowfall room theme.
 
@@ -58,8 +61,11 @@ COM-382 introduced the legendary tier: `STORE_COST_LEGENDARY` (350 points, the t
 
 - **Hogwarts at Night** room theme (COM-378): a castle on the Black Lake under a starry sky,
   with windows that flicker and a rare shooting star. Its two animations are the first periodic
-  partial redraw of a room backdrop, so the flickering jack-o'-lantern eyes idea above could
-  reuse the same pattern (`updateHogwartsNightAnim()`).
+  partial redraw of a room backdrop (`updateHogwartsNightAnim()`).
+
+- **Haunted Pumpkin Patch** room theme (COM-503), the first item sold only for part of the year
+  (October): a crooked haunted house in front of a big orange moon, jack-o'-lanterns whose faces
+  flicker, and a bat flapping across the moon every 30–60 s (`updatePumpkinPatchAnim()`).
 
 Still planned on the same tier: COM-375 (Glory the RainWing), COM-376 (Golden Snitch) and COM-377
 (Shiny Mew).
