@@ -1133,6 +1133,10 @@ device's points flash) for anything the user hasn't been shown yet, next to the 
 - **SALE unchanged.** `storeSectionHasSale()` already covered catalog sections, Combos (the combo itself
   on sale) and the Right Arm Slot. A sale on one item inside a combo doesn't discount the combo, so it
   deliberately doesn't mark the Combos button. NEW and SALE can show on the same button (NEW first).
+- **Known edge (accepted).** Hidden seasonal entries still count toward a section's store count, as
+  they did in the old stamp. A clock that last opened the store before COM-503 and updates outside
+  October shows NEW on Room Themes with no NEW row (the unseen entry is the hidden Pumpkin Patch),
+  and opening it marks Pumpkin Patch seen, so it isn't NEW the next October.
 - **Size:** flash +488 B on `cyd` (1,207,713 → 1,208,201 B, 92.2%), +484 B on `freenove-s3`
   (1,161,149 → 1,161,633 B), on top of COM-516. No new globals or config fields.
 
