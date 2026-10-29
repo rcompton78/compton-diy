@@ -38,10 +38,16 @@ Flash it straight from your browser using the project's web flasher:
 You can revisit settings, the cosmetics store, backups, and firmware update options
 any time afterward at the same IP address.
 
-The store opens on a menu with your points balance and one button per section (Cat
-Colors, Stuffies, Blankets, Room Themes, Head, Glasses, Badges, Toys and the Right Arm
+The store opens on a menu with your points balance and one button per section (Combos,
+Cat Colors, Stuffies, Blankets, Room Themes, Head, Glasses, Badges, Toys and the Right Arm
 Slot). Each button opens that section's own page, and buying something keeps you on it.
 A section with an item on flash sale is marked **SALE** in the menu.
+
+Combos sell a few matching items together for about 20% off, e.g. Pretty in Pink (Pink
+cat, Hot Pink Bow, Pink-Rim Sunglasses, Hot Pink blanket and Flamingo Pink room) for 225
+instead of 280. Each combo lists its items with the ones you already own ticked, and you
+only pay the discounted price of the items you're missing. Once you own all of them it
+shows as Owned. A combo doesn't put anything on; pick its items in the Dressing Room.
 
 ## Staying up to date
 
