@@ -52,7 +52,8 @@ marked NEW has been opened.
 
 Combos sell a few matching items together for about 20% off, e.g. Pretty in Pink (Pink
 cat, Hot Pink Bow, Pink-Rim Sunglasses, Hot Pink blanket and Flamingo Pink room) for 225
-instead of 280. Each combo lists its items with the ones you already own ticked, and you
+instead of 280, or the Eeveelution Trio (Eevee, Sylveon and Umbreon) for 720 instead of
+900. Each combo lists its items with the ones you already own ticked, and you
 only pay the discounted price of the items you're missing. Once you own all of them it
 shows as Owned. A combo doesn't put anything on; pick its items in the Dressing Room.
 
