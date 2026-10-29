@@ -4124,6 +4124,7 @@ static constexpr const char* COMBO_COZY_STARTER[]   = {"teddy", "cream", "bow_cr
 static constexpr const char* COMBO_PRETTY_IN_PINK[] = {"pink", "bow_hot_pink", "sunglasses_pink", "hot_pink_blanket", "flamingo_pink_room"};
 static constexpr const char* COMBO_WINTER_DAY[]     = {"snowman", "baby_blue", "bow_baby_blue", "clear_sky"};
 static constexpr const char* COMBO_POKEMON_PALS[]   = {"pikachu", "eevee"};
+static constexpr const char* COMBO_EEVEELUTION_TRIO[] = {"eevee", "sylveon", "umbreon"};
 // Includes the Right Arm Slot because the wand can't be held without it.
 static constexpr const char* COMBO_WIZARDS_KIT[]    = {"sorting_hat", "hogwarts_crest", "magic_wand", "right_arm_slot", "hogwarts_night"};
 #define COMBO_ITEMS(a) a, (uint8_t)(sizeof(a) / sizeof(a[0]))
@@ -4132,6 +4133,7 @@ static constexpr StoreCombo STORE_COMBOS[] = {
     {"combo_pretty_in_pink", "Pretty in Pink",  225, COMBO_ITEMS(COMBO_PRETTY_IN_PINK)},  // full 280
     {"combo_winter_day",     "Winter Day",      350, COMBO_ITEMS(COMBO_WINTER_DAY)},      // full 440
     {"combo_pokemon_pals",   "Pok\xC3\xA9mon Pals", 480, COMBO_ITEMS(COMBO_POKEMON_PALS)},  // full 600
+    {"combo_eeveelution_trio", "Eeveelution Trio", 720, COMBO_ITEMS(COMBO_EEVEELUTION_TRIO)},  // full 900
     {"combo_wizards_kit",    "Wizard's Kit",   1080, COMBO_ITEMS(COMBO_WIZARDS_KIT)},     // full 1350
 };
 #undef COMBO_ITEMS

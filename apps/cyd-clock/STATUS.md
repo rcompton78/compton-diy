@@ -1042,6 +1042,7 @@ several existing items in one purchase at about 20% off their combined price.
 | Pretty in Pink | Pink cat, Hot Pink Bow, Pink-Rim Sunglasses, Hot Pink blanket, Flamingo Pink room | 280 | 225 |
 | Winter Day | Snowman, Baby Blue blanket, Baby Blue Bow, Clear Sky room | 440 | 350 |
 | Pokémon Pals | Pikachu, Eevee | 600 | 480 |
+| Eeveelution Trio | Eevee, Sylveon, Umbreon | 900 | 720 |
 | Wizard's Kit ★ | Sorting Hat, Hogwarts Crest, Magic Wand, Right Arm Slot, Hogwarts at Night room | 1350 | 1080 |
 
 - **No new save state.** `STORE_COMBOS[]` lists each combo's items by store id. Buying one sets
@@ -1056,8 +1057,9 @@ several existing items in one purchase at about 20% off their combined price.
   `collectStoreItemIds()`, so `assertStoreIdsUnique()` covers them and a flash sale can target a
   combo id (the menu's Combos button then shows SALE).
 - **★ LEGENDARY** goes on a combo that still has a legendary item to grant, not by price, since
-  Winter Day (350) and Pokémon Pals (480) would otherwise cross `STORE_COST_LEGENDARY`. Only the
-  Wizard's Kit is tagged, and it drops the tag once its three legendary items are all owned. The
+  Winter Day (350), Pokémon Pals (480) and the Eeveelution Trio (720) would otherwise cross
+  `STORE_COST_LEGENDARY`. Only the Wizard's Kit is tagged, and it drops the tag once its three
+  legendary items are all owned. The
   tag markup (`STORE_TAG_LEGENDARY`/`STORE_TAG_SALE`) is shared with catalog rows and the menu.
 - **Boot check.** `assertCombosValid()` (next to `assertStoreIdsUnique()` in `setup()`) halts if a
   combo item isn't a purchasable store item with cost > 0 (so never a theme-week exclusive), is
@@ -1065,6 +1067,8 @@ several existing items in one purchase at about 20% off their combined price.
   price.
 - **Refactor.** `handleConfigStorePost()`'s category loop moved into `findStoreItem()`, shared with
   the combo code; single-item purchases behave as before.
+- **Eeveelution Trio (COM-522)** came later, once Umbreon (COM-508) shipped. It overlaps Pokémon
+  Pals on Eevee on purpose: whichever is bought second charges only for the items still missing.
 - **Not done:** an "equip all" button in the Dressing Room, and counting new combos in the
   on-device "new store items!" flash (that would need a new seen-count field in the save file).
 - **Size:** flash +2,904 B on `cyd` (1,203,677 → 1,206,581 B, 91.8% → 92.1%), +2,936 B on
