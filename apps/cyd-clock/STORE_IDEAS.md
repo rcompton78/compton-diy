@@ -44,7 +44,7 @@ left on the table:
 
 ## Legendary tier
 
-COM-382 introduced the legendary tier: `STORE_COST_LEGENDARY` (350 points, the top tier above Pikachu/Eevee's 300) and a gold
+COM-382 introduced the legendary tier: `STORE_COST_LEGENDARY` (350 points, the top tier above Pikachu/Eevee/Sylveon's 300) and a gold
 "★ LEGENDARY" store tag for anything priced at or above it (`appendStoreItemTags()`). Shipped so far:
 
 - **Sorting Hat** (head accessory).
@@ -54,7 +54,7 @@ COM-382 introduced the legendary tier: `STORE_COST_LEGENDARY` (350 points, the t
   - more single-house crests (Slytherin serpent, Ravenclaw eagle, Hufflepuff badger), now that
     the Gryffindor one exists;
   - a gold star or sheriff badge;
-  - a Pokémon gym badge to go with the Pikachu/Eevee stuffies.
+  - a Pokémon gym badge to go with the Pikachu/Eevee/Sylveon stuffies.
 
 - **Gryffindor Badge** (COM-448), the second chest badge: a gold-rimmed scarlet shield with a
   gold lion rampant.

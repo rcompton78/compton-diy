@@ -992,6 +992,45 @@ phone. It's now a menu plus one page per section.
   unchanged. Each request now builds one section's rows instead of all nine, so the page String
   is much smaller.
 
+## Sylveon Stuffy (COM-268, 2026-10-28)
+
+A ninth stuffy, appended to `STUFFIES[]` after Eevee as
+`{"sylveon", "Sylveon", STORE_COST_SYLVEON, drawSylveonPeeking, drawSylveonFull, drawSylveonHeld, drawSylveonHeldPeeking}`.
+`STORE_COST_SYLVEON` is 300, the same licensed-character tier as Pikachu and Eevee, so it gets no
+LEGENDARY tag. The art was tuned with the user against the official artwork, the Pokémon HOME
+render and the game sprite, through a pixel-accurate canvas mockup (a JS port of the draw calls)
+and a device flash.
+
+- **Shape.** Sylveon is an Eevee evolution, so it reuses Eevee's 10 px head, ear triangles, slot
+  anchors and body, with all-fixed colours (no accent): white face and body (`C_SYLVEON`), pink
+  ears, widow's-peak tuft, slim tail and feet (`C_SYLVEON_PINK`), blue inner ears (`C_SYLVEON_BLUE`).
+- **Eyes** are tall egg-shaped blue ellipses with a 1×2 white glint and no pupil. The first pass
+  had black pupils, which the user found creepy.
+- **Feelers.** One per side of the face (`drawSylveonFeeler()`): a 2 px ribbon, white, then pink,
+  then blue out to a round blue tip. The outer one starts under a pink head bow with a blue knot on
+  the side away from the cat and trails outward; the inner one hangs almost straight down the
+  cheek, between the body and the tail, because angled outward its tip landed on the tail. Both
+  start at the face edge: rooted on the white face, the white stretch vanished and a feeler read
+  as a floating blue dot. The head bow sits on the face edge, not the ear base, because a pink bow
+  on the pink ear disappeared.
+- **Neck bow.** A pink bow under the chin (`drawSylveonBow()`) replaces Eevee's ruff.
+- **No logic change.** The store, dressing room and "new store items!" flash all loop over
+  `STUFFY_COUNT`; nine stuffies stay inside the `uint16_t` `ownedStuffies` mask.
+- **Right-arm ghosting.** In the day scene `drawAnimal()` clears only `CAT_CX ± 50` each frame,
+  and the right-arm pose's outer feeler and bow wing reach x 170..183, so the Celebrate bounce
+  (±3 px) left blue/pink ghost pixels beside the cat. `drawSylveonHeld()` now first repaints a
+  15×24 backdrop strip there (x 170..184), covering the previous frame's bounce. The strip stays
+  clear of the badge column's right-aligned text and the right-side "Zz" marks (x 188+).
+- **Night-pose leftovers.** The night poses reach past that clear too (left slot to x ~55, right
+  peeking to ~185), and leaving the peek scene only set `dirty.animal`, so outside Haunted Pumpkin
+  Patch (which already forced a full repaint there) those feeler/bow pixels stayed on the day
+  screen. Every `peekingAsleep` transition now sets `dirty.animalBg` too: one full backdrop
+  repaint per transition, which also cleans up any other stuffy art past `CAT_CX ± 50`.
+- **Known, accepted:** during Happy/Celebrate the right sparkle's clear box (x 171..179,
+  y 113..121) clips the middle of that same outer feeler, so only its blue tip shows for those few
+  seconds. Any outward feeler on that side crosses the box, and the next idle redraw restores it.
+- **Flash:** +1,560 B on `cyd` (1,202,117 → 1,203,677 B, 91.8%), +1,528 B on `freenove-s3` (1,155,393 → 1,156,921 B, 34.6%), on top of COM-506.
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`

@@ -82,6 +82,7 @@ static constexpr uint32_t STORE_COST_UNICORN  = 150;
 static constexpr uint32_t STORE_COST_SNOWMAN  = 150;
 static constexpr uint32_t STORE_COST_PIKACHU  = 300;  // top tier: licensed-character premium, priced above the squirrel/penguin/unicorn/snowman 150 tier
 static constexpr uint32_t STORE_COST_EEVEE    = 300;  // same top tier as Pikachu — also a licensed-character premium
+static constexpr uint32_t STORE_COST_SYLVEON  = 300;  // same top tier as Pikachu/Eevee — also a licensed-character premium
 static constexpr uint32_t STORE_COST_BLANKET  = 40;  // per blanket color
 static constexpr uint32_t STORE_COST_ROOM_THEME = 40;  // per flat-color room theme, matches blanket pricing
 static constexpr uint32_t STORE_COST_STARRY_NIGHT = 200;  // premium: has real art (moon + stars), not just a flat fill
@@ -95,7 +96,7 @@ static constexpr uint32_t STORE_COST_RIGHT_ARM_SLOT = 200;  // one-time unlock, 
 static constexpr uint32_t STORE_COST_HOCKEY_STICK = 100;
 static constexpr uint32_t STORE_COST_MAGIC_WAND = 100;
 // Legendary tier (COM-382): the top-of-store price shared by every legendary item (COM-375 to
-// COM-378 reuse it too), just above the Pikachu/Eevee 300 tier. Any item priced at or above it
+// COM-378 reuse it too), just above the Pikachu/Eevee/Sylveon 300 tier. Any item priced at or above it
 // gets the gold "LEGENDARY" store tag — see appendStoreItemTags() — so keep every non-legendary price
 // below it.
 static constexpr uint32_t STORE_COST_LEGENDARY = 350;
@@ -160,6 +161,10 @@ static constexpr uint16_t C_EEVEE       = 0xC4AC;  // eevee peeking out beside t
 static constexpr uint16_t C_EEVEE_DARK  = 0x8AE7;  // eevee's ear tips — a noticeably darker brown than the body fur (~#8c5d3c)
 static constexpr uint16_t C_EEVEE_LIGHT = 0xEED7;  // eevee's neck ruff, inner ears, and tail tip — light beige, brightened further (~#eeddc0) so it reads as clearly distinct from the C_EEVEE body brown on-device rather than blending in; fixed like pikachu's cheeks, not accent-colored
 static constexpr uint16_t C_EEVEE_BLACK = 0x0000;  // eevee's eyes, nose, and mouth (COM-266) — pure black like C_PIKACHU_MARK, distinct from the C_EEVEE_DARK ear-tip brown and from the shared charcoal C_DARK used for other stuffies' faces
+static constexpr uint16_t C_SYLVEON       = 0xFFBE;  // sylveon's body and face (~#f8f4f6) — white with a faint pink tint, carried by the pink/blue trim below so it doesn't read as the snowman/unicorn
+static constexpr uint16_t C_SYLVEON_PINK  = 0xF517;  // sylveon's ears, head tuft, tail, feet, and bows (~#f0a0b8); fixed like eevee's colors, not accent-colored
+static constexpr uint16_t C_SYLVEON_BLUE  = 0x75DE;  // sylveon's inner ears, eyes, head-bow knot, and feeler-ribbon tips (~#70b8f0)
+static constexpr uint16_t C_SYLVEON_BLACK = 0x0000;  // sylveon's nose and mouth (her eyes have no pupil) — pure black like C_EEVEE_BLACK
 static constexpr uint16_t C_PARTY_HAT      = 0x939B;  // party hat cone — same purple as C_BOW_PURPLE
 static constexpr uint16_t C_PARTY_HAT_TRIM = 0xF6CB;  // party hat base band/pompom — same yellow as C_BOW_LEMON_YELLOW
 // Bold, saturated colors rather than pastels — the birthday theme's own room-theme backdrop
@@ -501,6 +506,8 @@ static void drawPikachuPeeking(int cx, int cy, uint16_t accentColor);
 static void drawPikachuFull(int cx, int cy, uint16_t accentColor);
 static void drawEeveePeeking(int cx, int cy, uint16_t accentColor);
 static void drawEeveeFull(int cx, int cy, uint16_t accentColor);
+static void drawSylveonPeeking(int cx, int cy, uint16_t accentColor);
+static void drawSylveonFull(int cx, int cy, uint16_t accentColor);
 static void drawTeddyHeld(int cx, int cy, uint16_t accentColor);
 static void drawBunnyHeld(int cx, int cy, uint16_t accentColor);
 static void drawSquirrelHeld(int cx, int cy, uint16_t accentColor);
@@ -509,6 +516,7 @@ static void drawUnicornHeld(int cx, int cy, uint16_t accentColor);
 static void drawSnowmanHeld(int cx, int cy, uint16_t accentColor);
 static void drawPikachuHeld(int cx, int cy, uint16_t accentColor);
 static void drawEeveeHeld(int cx, int cy, uint16_t accentColor);
+static void drawSylveonHeld(int cx, int cy, uint16_t accentColor);
 static void drawTeddyHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawBunnyHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawSquirrelHeldPeeking(int cx, int cy, uint16_t accentColor);
@@ -517,6 +525,7 @@ static void drawUnicornHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawSnowmanHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawPikachuHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawEeveeHeldPeeking(int cx, int cy, uint16_t accentColor);
+static void drawSylveonHeldPeeking(int cx, int cy, uint16_t accentColor);
 
 // Stuffy catalog — same purchase/equip model as blanket colors, so more stuffies can be
 // added later without changing the store/dressing-room plumbing. `id` is the stable
@@ -551,6 +560,7 @@ static constexpr Stuffy STUFFIES[] = {
     {"snowman",  "Snowman",      STORE_COST_SNOWMAN,  drawSnowmanPeeking,  drawSnowmanFull,  drawSnowmanHeld, drawSnowmanHeldPeeking},
     {"pikachu",  "Pikachu",      STORE_COST_PIKACHU,  drawPikachuPeeking,  drawPikachuFull,  drawPikachuHeld, drawPikachuHeldPeeking},
     {"eevee",    "Eevee",        STORE_COST_EEVEE,    drawEeveePeeking,    drawEeveeFull,    drawEeveeHeld,   drawEeveeHeldPeeking},
+    {"sylveon",  "Sylveon",      STORE_COST_SYLVEON,  drawSylveonPeeking,  drawSylveonFull,  drawSylveonHeld, drawSylveonHeldPeeking},
 };
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
 static_assert(STUFFY_COUNT <= 16, "ownedStuffies bitmask is uint16_t");
@@ -2005,6 +2015,127 @@ static void drawEeveeHeldPeeking(int cx, int cy, uint16_t accentColor) {
     tft.fillTriangle(bx - 13, by + 3, bx - 9,  by,     bx - 19, by - 5,  C_EEVEE);       // bit of tail poking over the shoulder
     tft.fillTriangle(bx - 9,  by,     bx - 19, by - 5,  bx - 22, by - 10, C_EEVEE_LIGHT); // tapered light-beige tip, joined along the shared edge above
     drawEeveeHead(bx, by);
+}
+
+// One of sylveon's ribbon feelers (COM-268): a 2px-wide ribbon from (x0,y0) to (x1,y1), white
+// for its first half, then a pink band, then blue out to a round blue tip, matching the official
+// art's banding. Thickened by redrawing the line at a 1px offset in both axes, since TFT_eSPI
+// has no wide line. The white stretch has to land on the background, not the white face, or the
+// feeler shrinks to a floating blue dot, which is why drawSylveonHead() roots it at the face edge.
+static void drawSylveonFeeler(int x0, int y0, int x1, int y1) {
+    int bandX = x0 + (x1 - x0) * 5 / 10, bandY = y0 + (y1 - y0) * 5 / 10;  // white -> pink
+    int tipX  = x0 + (x1 - x0) * 7 / 10, tipY  = y0 + (y1 - y0) * 7 / 10;  // pink -> blue
+    for (int ox = 0; ox <= 1; ox++) {
+        for (int oy = 0; oy <= 1; oy++) {
+            tft.drawLine(x0 + ox, y0 + oy, bandX + ox, bandY + oy, C_SYLVEON);
+            tft.drawLine(bandX + ox, bandY + oy, tipX + ox, tipY + oy, C_SYLVEON_PINK);
+            tft.drawLine(tipX + ox, tipY + oy, x1 + ox, y1 + oy, C_SYLVEON_BLUE);
+        }
+    }
+    tft.fillCircle(x1, y1, 2, C_SYLVEON_BLUE);  // blue ribbon tip
+}
+
+// A small pink bow, two wing triangles meeting at a knot at (x,y). `knotColor` is blue for the
+// head bow, where it echoes the feelers' blue, and pink for the neck bow, which is all pink.
+static void drawSylveonBow(int x, int y, int halfW, uint16_t knotColor) {
+    tft.fillTriangle(x, y, x - halfW, y - 3, x - halfW, y + 3, C_SYLVEON_PINK);  // left wing
+    tft.fillTriangle(x, y, x + halfW, y - 3, x + halfW, y + 3, C_SYLVEON_PINK);  // right wing
+    tft.fillCircle(x, y, 1, knotColor);                                          // knot
+}
+
+// Shared ear/head/bow/feeler/face art reused by every sylveon pose (COM-268), at Eevee's
+// proportions (10px head, same ear triangles) since it's an Eevee evolution. Colors follow the
+// official art: pink ears with a blue inner sliver, a white face under a pink widow's-peak
+// tuft, big blue eyes, and a pink bow at the neck in place of Eevee's ruff. One ribbon feeler
+// hangs off each side of the face. The head bow sits on the outer side, away from the cat, with
+// its feeler trailing outward; the inner one drapes straight down the cheek so it stays clear of
+// the cat. `dir` is +1 for the left-slot poses (cat to the right, so the bow goes on the left)
+// and -1 for the right-arm slot. The bow sits on the face edge rather than the ear base, because
+// a pink bow on the pink ear disappeared. All colors are fixed, Eevee-style, so this helper
+// takes no accent color.
+static void drawSylveonHead(int bx, int by, int dir) {
+    tft.fillTriangle(bx - 13, by - 6, bx - 3, by - 6, bx - 9, by - 28, C_SYLVEON_PINK);  // left ear
+    tft.fillTriangle(bx - 9,  by - 8, bx - 5, by - 8, bx - 7, by - 17, C_SYLVEON_BLUE);  // left ear inner
+    tft.fillTriangle(bx + 3,  by - 6, bx + 13, by - 6, bx + 9, by - 28, C_SYLVEON_PINK); // right ear
+    tft.fillTriangle(bx + 5,  by - 8, bx + 9, by - 8, bx + 7, by - 17, C_SYLVEON_BLUE);  // right ear inner
+    tft.fillCircle(bx, by, 10, C_SYLVEON);                                               // head
+    tft.fillTriangle(bx - 6, by - 9, bx + 6, by - 9, bx, by - 4, C_SYLVEON_PINK);        // pink widow's-peak tuft
+    tft.fillRect(bx - 4, by - 10, 9, 2, C_SYLVEON_PINK);                                 // tuft top, filling the head circle's crown
+    // One feeler per side of the face, drawn before the head bow so the bow covers the outer root.
+    int ox = bx - dir * 11, oy = by - 4;               // outer side, under the head bow
+    int ix = bx + dir * 10, iy = by - 3;               // inner side, the cheek nearest the cat
+    drawSylveonFeeler(ox, oy, ox - dir * 12, oy + 6);  // outer feeler, trailing outward and down
+    drawSylveonFeeler(ix, iy, ix + dir * 1,  iy + 14); // inner feeler, hanging almost straight down the cheek, inside the tail
+    drawSylveonBow(ox, oy, 3, C_SYLVEON_BLUE);
+    drawSylveonBow(bx, by + 10, 4, C_SYLVEON_PINK);     // neck bow, under the chin
+    // Face — tall egg-shaped blue eyes with a white highlight in the upper corner, a nose, and a
+    // small smile. No black pupil: a black centre dot read as a creepy stare, where the official
+    // art's eyes are all blue with a white glint.
+    tft.fillEllipse(bx - 4, by - 1, 2, 3, C_SYLVEON_BLUE);  // left eye
+    tft.fillEllipse(bx + 4, by - 1, 2, 3, C_SYLVEON_BLUE);  // right eye
+    tft.fillRect(bx - 5, by - 2, 1, 2, TFT_WHITE);          // left eye highlight
+    tft.fillRect(bx + 3, by - 2, 1, 2, TFT_WHITE);          // right eye highlight
+    tft.drawPixel(bx,     by + 3, C_SYLVEON_BLACK);         // nose
+    tft.drawLine(bx - 2, by + 5, bx,     by + 6, C_SYLVEON_BLACK);  // mouth, left half of smile
+    tft.drawLine(bx,     by + 6, bx + 2, by + 5, C_SYLVEON_BLACK);  // mouth, right half of smile
+}
+
+// Sylveon's tail: the same shared-edge 3-triangle strip as drawEeveeTail(), but all pink (no
+// contrasting tip) and slimmer, since sylveon's tail is a narrow ribbon-like curl rather than
+// Eevee's bushy fox tail. `dir` is +1 for the left-slot poses, -1 for the right-arm slot.
+static void drawSylveonTail(int bx, int by, int dir) {
+    tft.fillTriangle(bx + dir * 10, by + 20, bx + dir * 7,  by + 17, bx + dir * 17, by + 9, C_SYLVEON_PINK);  // tail base, outer half
+    tft.fillTriangle(bx + dir * 7,  by + 17, bx + dir * 17, by + 9,  bx + dir * 14, by + 7, C_SYLVEON_PINK);  // tail base, inner half
+    tft.fillTriangle(bx + dir * 17, by + 9,  bx + dir * 14, by + 7,  bx + dir * 21, by - 4, C_SYLVEON_PINK);  // tapered tip
+}
+
+// Sylveon peeking out beside the head, tucked into the blanket's top edge, with a bit of the
+// pink tail over the shoulder, same as drawEeveePeeking().
+static void drawSylveonPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 40, by = cy - 6;
+    tft.fillTriangle(bx + 13, by + 3, bx + 10, by + 1, bx + 18, by - 4, C_SYLVEON_PINK);  // bit of slim tail poking over the shoulder
+    tft.fillTriangle(bx + 10, by + 1, bx + 18, by - 4, bx + 20, by - 9, C_SYLVEON_PINK);  // tapered tip
+    drawSylveonHead(bx, by, 1);
+}
+
+// Full-body sylveon sitting beside the cat, used when it's owned without the blanket. A plain
+// white body with pink feet (sylveon's lower legs are pink) and no belly patch, so accentColor
+// goes unused, as with Eevee. Body before head, so the neck bow isn't overpainted (see
+// drawEeveeFull()).
+static void drawSylveonFull(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 38, by = cy - 8;
+    drawSylveonTail(bx, by, 1);
+    tft.fillRoundRect(bx - 10, by + 8, 20, 30, 10, C_SYLVEON);  // body
+    tft.fillCircle(bx - 6, by + 39, 5, C_SYLVEON_PINK);         // left foot
+    tft.fillCircle(bx + 6, by + 39, 5, C_SYLVEON_PINK);         // right foot
+    drawSylveonHead(bx, by, 1);
+}
+
+// Right-arm slot pose (DIY-64): an exact mirror of drawSylveonFull(), with the tail and the
+// head bow flipped so the tail still pokes toward the cat and the feelers still trail away.
+static void drawSylveonHeld(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 38, by = cy - 8;
+    // The outer feeler and the head bow's outer wing reach x bx+12..bx+25, past the
+    // CAT_CX ± 50 rect drawAnimal() clears each frame (the rule drawPikachuTail() points its tail
+    // inward for). Erase that strip here first, tall enough to cover the previous frame's
+    // ±3 px Celebrate bounce, or the bounce smears blue/pink ghost pixels beside the cat until
+    // the next full backdrop repaint. The strip ends at x 184, clear of the badge column's
+    // right-aligned text and the right-side "Zz" marks (x 188+).
+    zoneFillRect(bx + 12, by - 13, 15, 24);
+    drawSylveonTail(bx, by, -1);
+    tft.fillRoundRect(bx - 10, by + 8, 20, 30, 10, C_SYLVEON);  // body
+    tft.fillCircle(bx - 6, by + 39, 5, C_SYLVEON_PINK);         // left foot
+    tft.fillCircle(bx + 6, by + 39, 5, C_SYLVEON_PINK);         // right foot
+    drawSylveonHead(bx, by, -1);
+}
+
+// Night-only right-arm variant (DIY-64), see drawTeddyHeldPeeking(). The tail bit is mirrored
+// to poke toward the body, as in drawEeveeHeldPeeking().
+static void drawSylveonHeldPeeking(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 40, by = cy - 6;
+    tft.fillTriangle(bx - 13, by + 3, bx - 10, by + 1, bx - 18, by - 4, C_SYLVEON_PINK);  // bit of slim tail poking over the shoulder
+    tft.fillTriangle(bx - 10, by + 1, bx - 18, by - 4, bx - 20, by - 9, C_SYLVEON_PINK);  // tapered tip
+    drawSylveonHead(bx, by, -1);
 }
 
 // Deeply-closed, sleepy eyes for the sleep-window peek — thinner and gently curled at
@@ -6801,8 +6932,12 @@ void loop() {
         peekingAsleep = inSleepWindow && peekUntilMs > 0;       // re-check post-touch, mirrors sleepingNow
         // Force a clean repaint on any peekingAsleep transition — covers the sleep
         // window itself ending mid-peek, which otherwise wouldn't force a redraw and
-        // could leave the blanket/bear scene stuck on screen after waking.
-        if (peekingAsleep != wasPeekingAsleep) dirty.animal = true;
+        // could leave the blanket/bear scene stuck on screen after waking. The backdrop is
+        // repainted too (COM-268): drawAnimal()'s per-frame clear only covers CAT_CX ± 50, and
+        // the night scene's stuffies can reach past it (Sylveon's outer feeler and head bow, out
+        // to x ~55 on the left slot and ~185 on the right), so without a full repaint those
+        // pixels stay on the day screen after the peek ends. Once per transition, not per frame.
+        if (peekingAsleep != wasPeekingAsleep) dirty.animal = dirty.animalBg = true;
         if (sleepingNow) {
             updateSleepScreen(now);
             delay(50);
