@@ -49,10 +49,12 @@ fi
 # go to a per-project dir there too, not one shared PLATFORMIO_LIBDEPS_DIR,
 # since env names (e.g. freenove-s3) repeat across apps with different
 # lib_deps. lib_extra_dirs (../../libs) still resolve per checkout, so a
-# worktree always builds its own libs/. PlatformIO locks each package dir
-# while installing, so concurrent builds from several worktrees are safe;
-# two branches with different lib_deps for one app just swap the changed
-# library back and forth. In CI (CI set) nothing changes: the repo-local
+# worktree always builds its own libs/ (never put a relative symlink:// or
+# file:// in lib_deps: the first worktree's copy would serve them all).
+# PlatformIO locks each install, so worktrees on the same lib_deps can build
+# at once. Branches whose lib_deps differ for one app can't: each build
+# uninstalls the libraries the other one needs (even mid-compile) and
+# re-downloads its own, so build those one at a time. In CI (CI set) nothing changes: the repo-local
 # defaults stay, which release.yml symlinks onto /hdd and pr-build.yml's
 # fresh VM never reuses anyway. Either var set explicitly always wins.
 is_ci() { [ -n "${CI:-}" ] && [ "${CI}" != "false" ] && [ "${CI}" != "0" ]; }

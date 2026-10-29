@@ -61,10 +61,13 @@ def find_esptool():
     # set, else the machine-wide shared cache locally or REPO_ROOT/.platformio-core
     # in CI) rather than PlatformIO's unisolated default of ~/.platformio -- this
     # repo deliberately redirects the core dir so toolchain caches can't clobber
-    # each other. Both defaults are tried, so a checkout still works whichever
-    # one its last build used.
+    # each other. Locally both defaults are tried, so a checkout still works
+    # whichever one its last build used; CI only ever uses the repo-local one.
+    ci = os.environ.get("CI", "") not in ("", "false", "0")
     if os.environ.get("PLATFORMIO_CORE_DIR"):
         core_dirs = [os.environ["PLATFORMIO_CORE_DIR"]]
+    elif ci:
+        core_dirs = [os.path.join(REPO_ROOT, ".platformio-core")]
     else:
         cache_root = os.environ.get("COMPTON_DIY_CACHE") or os.path.join(
             os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "compton-diy")
