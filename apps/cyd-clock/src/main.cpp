@@ -5485,6 +5485,10 @@ static const StoreSection STORE_SECTIONS[] = {
     {"right_arm",   "Right Arm Slot",     "Day &amp; night, holds either a Buddy or a Toy.",  ITEM_CATEGORY_COUNT},
 };
 static constexpr int STORE_SECTION_COUNT = sizeof(STORE_SECTIONS) / sizeof(STORE_SECTIONS[0]);
+// One section per catalog plus the Right Arm Slot, so a new ItemCategory can't ship without a
+// store page (storeSectionFor() would otherwise fall back to the first section). A section that
+// isn't a catalog, like the future Combos one, adds to the right-hand side.
+static_assert(STORE_SECTION_COUNT == ITEM_CATEGORY_COUNT + 1, "every ItemCategory needs a STORE_SECTIONS[] entry");
 
 // The section that sells `cat` (ITEM_CATEGORY_COUNT = the Right Arm Slot). Every category has one.
 static const StoreSection& storeSectionFor(ItemCategory cat) {
