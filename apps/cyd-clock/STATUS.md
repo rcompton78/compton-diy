@@ -900,6 +900,67 @@ Artifact.
   match the crest's gold label. At 350 it gets the ★ LEGENDARY tag automatically.
 - **Flash:** +472 B on `cyd` (1,198,865 → 1,199,337 B, 91.5%).
 
+## Legendary Room Theme — Haunted Pumpkin Patch (COM-503, 2026-10-28)
+
+The second legendary room theme and the first limited-time store item. The scene has a
+purple-black sky with faint stars and a big orange full moon top-left, a crooked haunted house
+(a leaning roof and chimney, a tower with a bent spire, three lit windows) silhouetted in front of
+the lower moon, black hills along the floor with low fog wisps, and a row of jack-o'-lanterns. It
+was the "flickering jack-o'-lantern eyes" idea in `STORE_IDEAS.md`.
+
+- **Catalog.** Appended to `ROOM_THEMES[]` as
+  `{"pumpkin_patch", "Haunted Pumpkin Patch", STORE_COST_LEGENDARY, C_PUMPKIN_PATCH_SKY, drawPumpkinPatchBackground, "#FF9A1F"}`.
+  It's index 12 (`ROOM_THEME_IDX_PUMPKIN_PATCH`), so the ★ LEGENDARY tag comes from the price, and
+  `ROOM_THEME_STORE_COUNT` becomes 11, which fires the "new store items!" flash once.
+- **Sold only in October.** `isPumpkinPatchOnSale()` is true from Oct 1 to Oct 31 local time, or
+  any time the Halloween theme week is in Preview mode (for on-device testing). It's false while
+  the clock hasn't synced. `isStoreItem()` checks it for this one theme, which covers both the
+  store listing and the purchase lookup (`findCatalogIndex(..., storeOnly=true)`), so a posted
+  `item=pumpkin_patch` outside October is rejected as "Unknown item". The dressing room, the
+  equip handler and backup/restore never call `isStoreItem()`, so a bought copy stays equippable
+  all year. The constexpr `isStoreRoomTheme()` and its count are unchanged. Outside October, the
+  "new store items!" flash on a fresh install still counts the theme, and the next store visit
+  clears it even though the theme isn't listed.
+- **Kept past a theme week.** It's on sale during the Halloween week (Oct 24–31), and buying it
+  then equips it over Haunted Night. `revertThemeWeekCosmetics()` used to put back the pre-week
+  snapshot no matter what, which would have switched it off on Nov 1. It now restores the snapshot
+  only while the theme-week backdrop is still equipped, so any theme the user picked during a week
+  stays.
+- **No out-of-season flash sale.** `isKnownStoreItemId()` treats `pumpkin_patch` as unknown while
+  `isPumpkinPatchOnSale()` is false, so a sale on it outside October is skipped, not announced
+  with a "SALE!" flash for an item the store doesn't list.
+- **Flat sky where text prints.** The cat's name strip (everything below `PUMPKIN_PATCH_MIST_Y`),
+  both "Zz" columns and the badge column stay plain `C_PUMPKIN_PATCH_SKY` (the bgColor), for the
+  same box-free text reason as Hogwarts' lake. Under the black ground the strip reads as purple
+  mist. The moon and house stay left of x=48, and every hill crest is below y=134.
+- **Lanterns.** `PUMPKIN_PATCH_LANTERNS[]` holds two small (15×13) lanterns in the only floor gaps
+  nothing is ever drawn over (x 55–69 and 170–184, which they fill, under the side sparkles, above the name strip),
+  and two big static ones in the bottom corners, where the Play/Treat (and Water) buttons go. The
+  corner ones are only drawn in the sleep-window peek scene, which hides the buttons: on-device,
+  the buttons left just a cut-off sliver of each showing during the day. `updatePumpkinPatchAnim()`
+  repaints the backdrop once whenever the peek scene starts or ends, to add or remove them.
+- **Animations** (`updatePumpkinPatchAnim()`, called every awake `loop()` tick right after
+  `updateHogwartsNightAnim()`):
+  - *Flicker:* each small lantern gutters on its own timer, dim (`C_PUMPKIN_FACE_DIM`) for
+    80–400 ms and then lit (`C_CANDLE_GLOW`) for 0.8–4 s. The dim and lit faces cover exactly the
+    same pixels, all on the pumpkin's body, so a switch just redraws the face
+    (`drawJackOLanternFace()`) without any erase, and there's nothing to tear.
+  - *Bat:* every 30–60 s (the first one 10–30 s after the theme is equipped or the peek scene
+    ends) a bat flaps up across the moon and out through the top of the zone. That takes 11
+    frames at 120 ms each (about 1.3 s), alternating `drawBat()` and `drawBatWingsDown()`.
+    Each frame repaints one rect covering the old and new bat through `zoneFillRect()`. The path
+    keeps the wingtips left of x=48 while level with the left "Zz" marks, and well clear of the
+    cat's clear rect.
+  - `drawPumpkinPatchBackground()` reads the state (`pumpkinDimMask`, `pumpkinBatFrame`), so other
+    partial erases agree with it. The state resets under any other theme, and the peek scene drops
+    a bat in flight and relights every face with one full backdrop repaint.
+- **Flash** (`pio run` size report):
+
+| Board | Before | After | Delta | % used |
+|---|---|---|---|---|
+| `cyd` | 1,199,321 B | 1,201,105 B | +1,784 B | 91.5% → **91.6%** |
+| `freenove-s3` | 1,152,557 B | 1,154,293 B | +1,736 B | 34.5% → 34.5% |
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`

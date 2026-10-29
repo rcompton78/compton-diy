@@ -112,9 +112,9 @@ struct AppConfig {
     // every loop() tick. Empty = no theme week's cosmetics are currently applied.
     String activeThemeWeekKey;
     // Snapshot of equippedRoomTheme taken the moment a theme week's cosmetics were applied,
-    // so revertThemeWeekCosmetics() can put back exactly what the user had equipped before,
-    // regardless of what they changed it to during the theme week — 0xFF (EQUIP_NONE in
-    // main.cpp) means "no theme was equipped before".
+    // so revertThemeWeekCosmetics() can put back what the user had equipped before, if the
+    // theme-week backdrop is still on when the week ends (a theme they switched to during the
+    // week is kept) — 0xFF (EQUIP_NONE in main.cpp) means "no theme was equipped before".
     uint8_t preThemeWeekRoomTheme = 0xFF;
     // Halloween theme week (COM-379) override, set on the same admin page: 0 = Auto (Oct 24–31
     // every year from the local clock), 1 = Preview (forced on, with the Oct 31 ghost),

@@ -191,6 +191,14 @@ static constexpr uint16_t C_HOGWARTS_CASTLE = 0x0000;  // black castle silhouett
 static constexpr uint16_t C_HOGWARTS_WINDOW = 0xFE68;  // warm lit window (~#ffcc44)
 static constexpr uint16_t C_HOGWARTS_GLINT  = 0xA3C5;  // dim gold window reflection on the lake (~#a07828)
 static constexpr uint16_t C_HOGWARTS_TAIL   = 0x8DDF;  // shooting-star tail (~#8fb8ff)
+
+// Haunted Pumpkin Patch colors (COM-503). The sky doubles as the theme's bgColor, so the strip
+// under the hill (behind the cat's name) stays this flat purple, like Hogwarts' lake. The moon,
+// pumpkins and candle glow reuse the Haunted Night colors above.
+static constexpr uint16_t C_PUMPKIN_PATCH_SKY  = 0x2087;  // purple-black sky (~#24103c)
+static constexpr uint16_t C_PUMPKIN_PATCH_LAND = 0x0000;  // black hill and haunted house
+static constexpr uint16_t C_PUMPKIN_PATCH_FOG  = 0x49CC;  // low fog wisps (~#4a3a66)
+static constexpr uint16_t C_PUMPKIN_FACE_DIM   = 0xA240;  // guttering jack-o'-lantern face (~#a04800)
 static constexpr uint16_t C_WITCH_HAT        = 0x0000;  // witch hat cone/brim (black)
 static constexpr uint16_t C_WITCH_HAT_RIM    = 0x9B5A;  // 1px lavender outline so the black hat reads on the sky and on a black cat (~#9b6bd6)
 static constexpr uint16_t C_WITCH_HAT_BAND   = 0xFC40;  // witch hat band, candy-corn temple arms (~#ff8a00)
@@ -614,6 +622,11 @@ static void drawHauntedNightBackground(int x, int y, int w, int h);
 // lit windows under a starry sky), defined further below alongside drawHauntedNightBackground().
 static void drawHogwartsNightBackground(int x, int y, int w, int h);
 
+// Forward declaration: legendary (COM-503) "Haunted Pumpkin Patch" backdrop (moon, haunted house,
+// flickering jack-o'-lanterns, a bat), defined further below alongside
+// drawHogwartsNightBackground().
+static void drawPumpkinPatchBackground(int x, int y, int w, int h);
+
 // Room theme catalog — same purchase/equip model as blanket colors and stuffies. `id` is
 // the stable identifier used in store/dressing-room form requests; ConfigManager persists
 // ownership as an `ownedRoomThemes` bitmask and the equipped selection as a numeric
@@ -652,6 +665,8 @@ static constexpr RoomTheme ROOM_THEMES[] = {
     // reason as the Sorting Hat in ACCESSORIES[]: ownership is an index-keyed bitmask, so store
     // code filters with isStoreRoomTheme() rather than assuming a contiguous prefix.
     {"hogwarts_night", "Hogwarts at Night", STORE_COST_LEGENDARY, C_HOGWARTS_SKY, drawHogwartsNightBackground, "#E8B030"},  // legendary: castle + lit windows + shooting star, gold label
+    // Legendary, sold only in October (COM-503, see isPumpkinPatchOnSale()); owners keep it all year.
+    {"pumpkin_patch", "Haunted Pumpkin Patch", STORE_COST_LEGENDARY, C_PUMPKIN_PATCH_SKY, drawPumpkinPatchBackground, "#FF9A1F"},  // moon + haunted house + flickering jack-o'-lanterns + bat, orange label
 };
 static constexpr int ROOM_THEME_COUNT = sizeof(ROOM_THEMES) / sizeof(ROOM_THEMES[0]);
 static_assert(ROOM_THEME_COUNT <= 16, "ownedRoomThemes bitmask is uint16_t");
@@ -660,7 +675,8 @@ static_assert(ROOM_THEME_COUNT <= 16, "ownedRoomThemes bitmask is uint16_t");
 static constexpr int ROOM_THEME_IDX_BIRTHDAY       = 9;
 static constexpr int ROOM_THEME_IDX_HAUNTED_NIGHT  = 10;
 static constexpr int ROOM_THEME_IDX_HOGWARTS_NIGHT = 11;
-static_assert(ROOM_THEME_COUNT > ROOM_THEME_IDX_HOGWARTS_NIGHT, "room theme indices out of range");
+static constexpr int ROOM_THEME_IDX_PUMPKIN_PATCH  = 12;
+static_assert(ROOM_THEME_COUNT > ROOM_THEME_IDX_PUMPKIN_PATCH, "room theme indices out of range");
 static_assert(ROOM_THEMES[ROOM_THEME_IDX_BIRTHDAY].cost == 0 && ROOM_THEMES[ROOM_THEME_IDX_HAUNTED_NIGHT].cost == 0,
               "theme-week exclusives must be cost 0, or isStoreRoomTheme() would put them in the store");
 
@@ -2473,6 +2489,226 @@ static void updateHogwartsNightAnim(unsigned long now) {
                  HOGWARTS_STAR_DX + HOGWARTS_STAR_TAIL_DX + 2, HOGWARTS_STAR_DY + HOGWARTS_STAR_TAIL_DY + 2);
 }
 
+// Haunted Pumpkin Patch (COM-503) layout. The ground (hills, house, lanterns) is black down to
+// PUMPKIN_PATCH_MIST_Y, and everything below it is flat C_PUMPKIN_PATCH_SKY, because the cat's
+// name label sits there and erases its glyph cells with bgColor. The same goes for the other
+// text overlays, so the badge column (x>=168, y<=110), both "Zz" columns (x 48–70, y 57–91 and
+// x 188–210, y 114–128) are left as plain sky: the moon and house stay left of x=48, and every
+// hill crest is below y=134.
+static constexpr int PUMPKIN_PATCH_GROUND_Y = ANIMAL_Y + 125;
+static constexpr int PUMPKIN_PATCH_MIST_Y   = ANIMAL_Y + ANIMAL_H - 27;  // = the name label strip
+static constexpr int PUMPKIN_PATCH_MOON_X = 22, PUMPKIN_PATCH_MOON_Y = ANIMAL_Y + 38, PUMPKIN_PATCH_MOON_R = 22;
+
+struct PumpkinPatchPoint { uint8_t x, y; };
+static constexpr PumpkinPatchPoint PUMPKIN_PATCH_STARS[] = {
+    {52, 46}, {64, 52}, {60, 104}, {44, 118}, {176, 128}, {226, 122}, {90, 48}, {150, 46},
+};
+static constexpr uint8_t PUMPKIN_PATCH_FOG_X[] = {14, 62, 104, 140, 177, 226};
+
+// Jack-o'-lanterns along the floor, as an ellipse centre and radii. The first
+// PUMPKIN_PATCH_FLICKERS are the small ones whose faces flicker: they sit in the only floor-level
+// gaps no overlay ever covers, between the side buttons and the cat's clear rect (x 55–69 and
+// 170–184, which they fill), below the side sparkles (y<=121) and above the name strip. The flicker redraws their
+// faces straight to the screen, which would draw over anything placed on top. The two big corner
+// ones are static and sit where the Play/Treat (and Water) buttons go, so they're only drawn in
+// the sleep-window peek scene, which hides the buttons. During the day the buttons would leave
+// just a cut-off sliver of each showing.
+struct PumpkinPatchLantern { uint8_t x, y, rx, ry; };
+static constexpr PumpkinPatchLantern PUMPKIN_PATCH_LANTERNS[] = {
+    {62, 180, 7, 6}, {177, 180, 7, 6},
+    {30, 176, 13, 10}, {210, 176, 13, 10},
+};
+static constexpr int PUMPKIN_PATCH_LANTERN_COUNT = sizeof(PUMPKIN_PATCH_LANTERNS) / sizeof(PUMPKIN_PATCH_LANTERNS[0]);
+static constexpr int PUMPKIN_PATCH_FLICKERS = 2;
+static_assert(PUMPKIN_PATCH_FLICKERS <= 8, "pumpkinDimMask is uint8_t");
+
+// Bat path: the body starts at (X0, Y0), just off the left edge, and moves DX right and DY up per
+// frame, across the moon and out through the top of the zone. While it's level with the left
+// "Zz" marks (y 57–91) its wingtips stay left of x=48, and it never comes near the cat's clear
+// rect (x>=70).
+static constexpr int PUMPKIN_BAT_X0 = -8, PUMPKIN_BAT_Y0 = ANIMAL_Y + 60;
+static constexpr int PUMPKIN_BAT_DX = 5, PUMPKIN_BAT_DY = 6;
+static constexpr int PUMPKIN_BAT_FRAMES = 11;
+static constexpr unsigned long PUMPKIN_BAT_FRAME_MS = 120;
+static constexpr int PUMPKIN_BAT_HALF_W = 11;  // drawBat()'s half-width; its height runs y-5..y+4
+
+// Animation state, read by drawPumpkinPatchBackground() so every partial redraw of the zone
+// agrees with what updatePumpkinPatchAnim() last put on screen.
+static uint8_t pumpkinDimMask  = 0;   // bit i set: flicker lantern i's face is guttering (dim)
+static int8_t  pumpkinBatFrame = -1;  // bat frame, -1 when none in flight
+
+/**
+ * The wings-down frame of drawBat()'s bat, for the Pumpkin Patch bat's flap: the same body and
+ * ears, with the wings swept down instead of up. Stays inside drawBat()'s box.
+ *
+ * @param x Body center x.
+ * @param y Body center y.
+ */
+static void drawBatWingsDown(int x, int y) {
+    tft.fillCircle(x, y, 2, TFT_BLACK);
+    tft.fillTriangle(x - 1, y - 1, x - 9, y + 4, x - 2, y + 3, TFT_BLACK);
+    tft.fillTriangle(x + 1, y - 1, x + 9, y + 4, x + 2, y + 3, TFT_BLACK);
+    tft.fillTriangle(x - 2, y - 2, x - 1, y - 5, x, y - 2, TFT_BLACK);
+    tft.fillTriangle(x + 2, y - 2, x + 1, y - 5, x, y - 2, TFT_BLACK);
+}
+
+/**
+ * A jack-o'-lantern's face (two triangle eyes and a toothy mouth) in the given color. Every face
+ * pixel lands on the pumpkin's own body, and the dim and bright faces cover the same pixels, so
+ * updatePumpkinPatchAnim() can switch one by redrawing just this, with no erase.
+ *
+ * @param l    The lantern.
+ * @param face Face color (C_CANDLE_GLOW lit, C_PUMPKIN_FACE_DIM guttering).
+ */
+static void drawJackOLanternFace(const PumpkinPatchLantern& l, uint16_t face) {
+    int rdx = l.rx / 2, e = l.rx >= 10 ? 3 : 2, ey = l.y - 1;
+    tft.fillTriangle(l.x - rdx - e, ey, l.x - rdx + e, ey, l.x - rdx, ey - 2 * e, face);
+    tft.fillTriangle(l.x + rdx - e, ey, l.x + rdx + e, ey, l.x + rdx, ey - 2 * e, face);
+    int my = l.y + (l.ry + 2) / 4, mh = l.ry >= 8 ? 3 : 2, t = mh - 1;
+    tft.fillRect(l.x - l.rx / 2, my, 2 * (l.rx / 2) + 1, mh, face);
+    tft.fillRect(l.x - l.rx / 3, my, t, t, C_PUMPKIN);
+    tft.fillRect(l.x + l.rx / 3 - t + 1, my, t, t, C_PUMPKIN);
+}
+
+/**
+ * "Haunted Pumpkin Patch" room theme (legendary, COM-503, sold only in October): a purple-black
+ * sky with faint stars and a big orange full moon, a crooked haunted house on the left hill in
+ * front of the moon, black hills along the floor with low fog, and a row of jack-o'-lanterns.
+ * Below the hills the floor is the same flat purple as the sky and bgColor, because the cat's
+ * name label sits there. Uses the same setViewport/resetViewport clipping as
+ * drawStarryNightBackground(), and draws the current animation state (the guttering faces, the
+ * bat in flight), so the frequent small erases elsewhere in the zone agree with it.
+ *
+ * @param x Left edge of the rect to repaint.
+ * @param y Top edge of the rect to repaint (already clamped to the animal zone).
+ * @param w Width of the rect.
+ * @param h Height of the rect.
+ */
+static void drawPumpkinPatchBackground(int x, int y, int w, int h) {
+    tft.setViewport(x, y, w, h, false);
+    tft.fillRect(x, y, w, h, C_PUMPKIN_PATCH_SKY);
+
+    for (const PumpkinPatchPoint& s : PUMPKIN_PATCH_STARS) tft.drawPixel(s.x, s.y, C_HAUNTED_STAR);
+
+    tft.fillCircle(PUMPKIN_PATCH_MOON_X, PUMPKIN_PATCH_MOON_Y, PUMPKIN_PATCH_MOON_R, C_HAUNTED_MOON);
+    tft.fillCircle(14, ANIMAL_Y + 30, 4, C_HAUNTED_CRATER);
+    tft.fillCircle(30, ANIMAL_Y + 26, 3, C_HAUNTED_CRATER);
+    tft.fillCircle(26, ANIMAL_Y + 44, 2, C_HAUNTED_CRATER);
+
+    // Crooked haunted house on the left hill, silhouetted against the lower half of the moon: a
+    // leaning roof and chimney, and a tower with a bent spire. The Meds button (shown while sick)
+    // covers its base.
+    tft.fillRect(6, ANIMAL_Y + 68, 24, 30, C_PUMPKIN_PATCH_LAND);
+    tft.fillTriangle(3, ANIMAL_Y + 69, 33, ANIMAL_Y + 67, 15, ANIMAL_Y + 46, C_PUMPKIN_PATCH_LAND);
+    tft.fillRect(9, ANIMAL_Y + 54, 3, 8, C_PUMPKIN_PATCH_LAND);
+    tft.fillRect(10, ANIMAL_Y + 51, 3, 4, C_PUMPKIN_PATCH_LAND);
+    tft.fillRect(28, ANIMAL_Y + 58, 9, 40, C_PUMPKIN_PATCH_LAND);
+    tft.fillTriangle(26, ANIMAL_Y + 59, 39, ANIMAL_Y + 58, 36, ANIMAL_Y + 42, C_PUMPKIN_PATCH_LAND);
+    tft.fillRect(10, ANIMAL_Y + 76, 4, 5, C_CANDLE_GLOW);
+    tft.fillRect(21, ANIMAL_Y + 77, 4, 5, C_CANDLE_GLOW);
+    tft.fillRect(31, ANIMAL_Y + 66, 3, 4, C_CANDLE_GLOW);
+
+    // Hills, then a solid ground band down to the mist strip. The center hill is behind the cat.
+    tft.fillEllipse(24, ANIMAL_Y + 110, 40, 16, C_PUMPKIN_PATCH_LAND);
+    tft.fillEllipse(120, ANIMAL_Y + 128, 80, 18, C_PUMPKIN_PATCH_LAND);
+    tft.fillEllipse(205, ANIMAL_Y + 118, 45, 12, C_PUMPKIN_PATCH_LAND);
+    tft.fillRect(0, PUMPKIN_PATCH_GROUND_Y, 240, PUMPKIN_PATCH_MIST_Y - PUMPKIN_PATCH_GROUND_Y, C_PUMPKIN_PATCH_LAND);
+
+    for (uint8_t fx : PUMPKIN_PATCH_FOG_X) tft.fillEllipse(fx, PUMPKIN_PATCH_MIST_Y - 3, 10, 2, C_PUMPKIN_PATCH_FOG);
+
+    for (int i = 0; i < PUMPKIN_PATCH_LANTERN_COUNT; i++) {
+        if (i >= PUMPKIN_PATCH_FLICKERS && !peekingAsleep) continue;  // corner lanterns: peek scene only
+        const PumpkinPatchLantern& l = PUMPKIN_PATCH_LANTERNS[i];
+        tft.fillRect(l.x - 1, l.y - l.ry - 3, 3, 4, C_PUMPKIN_STEM);
+        tft.fillEllipse(l.x, l.y, l.rx, l.ry, C_PUMPKIN);
+        tft.drawFastVLine(l.x - l.rx / 2, l.y - l.ry + 2, 2 * l.ry - 3, C_PUMPKIN_RIDGE);
+        tft.drawFastVLine(l.x + l.rx / 2, l.y - l.ry + 2, 2 * l.ry - 3, C_PUMPKIN_RIDGE);
+        drawJackOLanternFace(l, (pumpkinDimMask & (1 << i)) ? C_PUMPKIN_FACE_DIM : C_CANDLE_GLOW);
+    }
+
+    if (pumpkinBatFrame >= 0) {
+        int bx = PUMPKIN_BAT_X0 + pumpkinBatFrame * PUMPKIN_BAT_DX;
+        int by = PUMPKIN_BAT_Y0 - pumpkinBatFrame * PUMPKIN_BAT_DY;
+        if (pumpkinBatFrame & 1) drawBatWingsDown(bx, by);
+        else                     drawBat(bx, by);
+    }
+
+    tft.resetViewport();
+}
+
+/**
+ * Advances Haunted Pumpkin Patch's two animations, called every awake loop() tick. Each small
+ * flicker lantern gutters on its own timer, dim for 80–400 ms and then lit for 0.8–4 s, by
+ * redrawing just its face. Every 30–60 s a bat flaps up across the moon and out through the top
+ * of the zone, one frame per PUMPKIN_BAT_FRAME_MS (about 1.3 s in all); the first one comes
+ * 10–30 s after the theme is equipped or the peek scene ends. Both stay in spots
+ * nothing is drawn over, so nothing else needs a redraw. The state resets while another theme is
+ * equipped, and the sleep-window peek scene, which stays static, drops a bat in flight and
+ * relights every face (with one full backdrop repaint).
+ *
+ * @param now The loop's millis() reading.
+ */
+static void updatePumpkinPatchAnim(unsigned long now) {
+    static unsigned long nextFlickerMs[PUMPKIN_PATCH_FLICKERS] = {};
+    static unsigned long nextBatMs = 0, nextBatFrameMs = 0;
+    static bool started = false, wasPeeking = false;
+    if (equippedRoomThemeIndex() != ROOM_THEME_IDX_PUMPKIN_PATCH) {
+        pumpkinDimMask = 0;
+        pumpkinBatFrame = -1;
+        started = false;
+        wasPeeking = peekingAsleep;
+        return;
+    }
+    // The corner lanterns are only drawn in the peek scene, so entering or leaving it repaints
+    // the whole backdrop once to add or remove them.
+    if (peekingAsleep != wasPeeking) {
+        wasPeeking = peekingAsleep;
+        dirty.animal = dirty.animalBg = true;
+    }
+    if (peekingAsleep) {
+        if (pumpkinBatFrame >= 0 || pumpkinDimMask != 0) {
+            pumpkinBatFrame = -1;
+            pumpkinDimMask = 0;
+            dirty.animalBg = true;
+        }
+        started = false;
+        return;
+    }
+    if (!started) {
+        started = true;
+        for (unsigned long& t : nextFlickerMs) t = now + random(800, 4001);
+        nextBatMs = now + random(10000, 30001);  // first bat soon after equipping or waking
+    }
+
+    for (int i = 0; i < PUMPKIN_PATCH_FLICKERS; i++) {
+        if ((long)(now - nextFlickerMs[i]) < 0) continue;
+        pumpkinDimMask ^= (1 << i);
+        bool dim = pumpkinDimMask & (1 << i);
+        nextFlickerMs[i] = now + (dim ? random(80, 401) : random(800, 4001));
+        drawJackOLanternFace(PUMPKIN_PATCH_LANTERNS[i], dim ? C_PUMPKIN_FACE_DIM : C_CANDLE_GLOW);
+    }
+
+    if (pumpkinBatFrame < 0) {
+        if ((long)(now - nextBatMs) < 0) return;
+        pumpkinBatFrame = 0;
+    } else {
+        if ((long)(now - nextBatFrameMs) < 0) return;
+        if (++pumpkinBatFrame >= PUMPKIN_BAT_FRAMES) {
+            pumpkinBatFrame = -1;
+            nextBatMs = now + random(30000, 60001);
+        }
+    }
+    nextBatFrameMs = now + PUMPKIN_BAT_FRAME_MS;
+    // Repaint the previous frame's bat and the new one in one rect (one frame past the last when
+    // the bat just left, which only erases). The previous bat sat DX left and DY lower.
+    int f = pumpkinBatFrame >= 0 ? pumpkinBatFrame : PUMPKIN_BAT_FRAMES;
+    int bx = PUMPKIN_BAT_X0 + f * PUMPKIN_BAT_DX;
+    int by = PUMPKIN_BAT_Y0 - f * PUMPKIN_BAT_DY;
+    int x0 = bx - PUMPKIN_BAT_DX - PUMPKIN_BAT_HALF_W, x1 = bx + PUMPKIN_BAT_HALF_W;
+    if (x0 < 0) x0 = 0;
+    if (x1 >= x0) zoneFillRect(x0, by - 5, x1 - x0 + 1, PUMPKIN_BAT_DY + 10);
+}
+
 // Perceived luminance of an RGB565 color, used below to pick a contrasting tape color —
 // standard ITU-R BT.601 weights on the 5/6/5-bit channels scaled up to 8 bits each.
 // Threshold of 128 matches the usual "midpoint" cutoff for light-vs-dark text/UI contrast.
@@ -3669,8 +3905,11 @@ static int collectStoreItemIds(const char** ids, int cap) {
 // flash sale for an item id that doesn't exist (typo, removed item, catalog drift) rather than
 // letting the device show an active "SALE!" flash for an item that can never actually go on
 // sale (flashSalePrice() would never match it either, so the sale would silently do nothing
-// while still visually announcing itself).
+// while still visually announcing itself). Haunted Pumpkin Patch only counts while it's on sale
+// (COM-503), since outside October the store doesn't list it.
+static bool isPumpkinPatchOnSale();
 static bool isKnownStoreItemId(const char* id) {
+    if (strcmp(id, ROOM_THEMES[ROOM_THEME_IDX_PUMPKIN_PATCH].id) == 0) return isPumpkinPatchOnSale();
     const char* ids[STORE_ITEM_ID_COUNT];
     int n = collectStoreItemIds(ids, STORE_ITEM_ID_COUNT);
     for (int i = 0; i < n; i++) {
@@ -3949,6 +4188,20 @@ static bool isHalloweenGhostShown() {
 }
 
 /**
+ * Whether the store sells Haunted Pumpkin Patch right now (COM-503), the first limited-time store
+ * item: all of October local time, or at any time while the Halloween theme week is in Preview
+ * mode so it can be checked on-device. Only buying is limited; an owned copy stays equippable all
+ * year, since the dressing room and equip handler never consult this.
+ *
+ * @return true in October (or Preview), false otherwise or while the clock hasn't NTP-synced yet.
+ */
+static bool isPumpkinPatchOnSale() {
+    if (configMgr.config().themeWeekHalloweenMode == HALLOWEEN_MODE_PREVIEW) return true;
+    int mmdd = localTodayMmdd();
+    return mmdd >= 1001 && mmdd <= 1031;
+}
+
+/**
  * Picks which theme week should be applied right now. Birthday wins over Halloween when both
  * are active, so a birthday scheduled inside Oct 24–31 shows for its own days. Halloween then
  * takes over for whatever's left of the week.
@@ -3988,7 +4241,7 @@ static bool themeWeekItems(const String& key, ThemeWeekItems& out) {
  * `key` as activeThemeWeekKey. Called once per transition by checkThemeWeekTransition(), only
  * when nothing is applied: a switch between themes reverts the old one first. It snapshots the
  * room theme the user had equipped beforehand (preThemeWeekRoomTheme), so
- * revertThemeWeekCosmetics() can restore it exactly, whatever the user changes during the week.
+ * revertThemeWeekCosmetics() can restore it if the theme-week backdrop is still on at the end.
  *
  * @param key THEME_WEEK_BIRTHDAY or THEME_WEEK_HALLOWEEN.
  */
@@ -4018,18 +4271,25 @@ static void applyThemeWeekCosmetics(const char* key) {
  * since equippedAccessoryIndex()/equippedGlassesIndex() already fall back gracefully once the
  * owned bit clears (see their "owned bit not set" branch). The room theme is the one exception
  * that needs an explicit restore, since its fallback would pick "lowest owned theme" rather
- * than "what the user had before". An unknown key (from a newer firmware's backup) still
+ * than "what the user had before". It's only restored while the theme-week backdrop is still
+ * equipped: if the user switched to another theme they own during the week, that pick stays.
+ * An unknown key (from a newer firmware's backup) still
  * restores the room theme and clears the key, so the device can't get stuck in that state.
  */
 static void revertThemeWeekCosmetics() {
     ThemeWeekItems items;
-    if (themeWeekItems(configMgr.config().activeThemeWeekKey, items)) {
+    bool known = themeWeekItems(configMgr.config().activeThemeWeekKey, items);
+    if (known) {
         configMgr.config().ownedAccessories &= ~(1 << items.accessory);
         configMgr.config().ownedGlasses &= ~(1 << items.glasses);
         configMgr.config().ownedRoomThemes &= ~(1 << items.roomTheme);
     }
 
-    configMgr.config().equippedRoomTheme = configMgr.config().preThemeWeekRoomTheme;
+    // Restore the snapshot only while the theme-week backdrop is still on. A room theme the user
+    // picked during the week (e.g. Haunted Pumpkin Patch, bought in October, COM-503) stays.
+    if (!known || configMgr.config().equippedRoomTheme == items.roomTheme) {
+        configMgr.config().equippedRoomTheme = configMgr.config().preThemeWeekRoomTheme;
+    }
     configMgr.config().preThemeWeekRoomTheme = EQUIP_NONE;
     configMgr.config().activeThemeWeekKey = "";
     configMgr.save();
@@ -5073,9 +5333,10 @@ static CatalogEntry catalogEntry(ItemCategory cat, int i) {
 // Whether entry `i` is sold in the store. The theme-week exclusives (DIY-108) are skipped:
 // cost-0 entries in ACCESSORIES[]/ROOM_THEMES[], and the tail of GLASSES[] past
 // GLASSES_STORE_COUNT. They must never show up or be purchasable, whatever item id is posted.
+// Haunted Pumpkin Patch (COM-503) is also skipped outside October; see isPumpkinPatchOnSale().
 static bool isStoreItem(ItemCategory cat, int i) {
     switch (cat) {
-        case ITEM_ROOM_THEME: return isStoreRoomTheme(i);
+        case ITEM_ROOM_THEME: return isStoreRoomTheme(i) && (i != ROOM_THEME_IDX_PUMPKIN_PATCH || isPumpkinPatchOnSale());
         case ITEM_ACCESSORY:  return isStoreAccessory(i);
         case ITEM_GLASSES:    return i < GLASSES_STORE_COUNT;
         case ITEM_BADGE:      return i < BADGE_STORE_COUNT;
@@ -6564,8 +6825,10 @@ void loop() {
         wasSaleActive = saleActive;
     }
 
-    // Hogwarts at Night's window flicker and shooting star (COM-378); no-op under any other theme.
+    // Hogwarts at Night's window flicker and shooting star (COM-378), and Haunted Pumpkin Patch's
+    // lantern flicker and bat (COM-503); each is a no-op under any other theme.
     updateHogwartsNightAnim(now);
+    updatePumpkinPatchAnim(now);
 
     // Timer row refresh while running
     {
