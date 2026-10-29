@@ -4977,33 +4977,7 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 </form>
 %%MSG%%
 <div class="balance">Points: <strong>%%POINTS%%</strong></div>
-
-<h3>Cat Colors</h3>
-%%CAT_COLOR_ITEMS%%
-
-<h3>Stuffies</h3>
-%%STUFFY_ITEMS%%
-
-<h3>Blankets (night only)</h3>
-%%BLANKET_ITEMS%%
-
-<h3>Room Themes</h3>
-%%ROOM_THEME_ITEMS%%
-
-<h3>Accessories - Head</h3>
-%%ACCESSORY_ITEMS%%
-
-<h3>Glasses</h3>
-%%GLASSES_ITEMS%%
-
-<h3>Badges - Chest</h3>
-%%BADGE_ITEMS%%
-
-<h3>Toys (for the Right Arm slot)</h3>
-%%TOY_ITEMS%%
-
-<h3>Right Arm Slot (day &amp; night — holds either a Buddy or a Toy)</h3>
-%%RIGHT_ARM_SLOT_ITEM%%
+%%SECTIONS%%
 
 <script>
 // Easter egg: tap the "Store" heading 7 times in a row (no other tap in between)
@@ -5023,6 +4997,24 @@ static const char CONFIG_STORE_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 })();
 </script>
 
+</body></html>
+)html";
+
+// One store section's page (COM-506), shared by every entry in STORE_SECTIONS[] and served by
+// handleConfigStoreGet() for /config/store?s=<key>. The landing page above lists the sections.
+static const char CONFIG_STORE_SECTION_HTML[] PROGMEM = R"html(<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cat Control Panel · Store · %%TITLE%%</title>
+<style>%%STYLE%%</style>
+</head><body>
+<a class="back" href="/config/store">&larr; Store</a>
+<h2>%%TITLE%%</h2>
+%%NOTE%%
+%%MSG%%
+<div class="balance">Points: <strong>%%POINTS%%</strong></div>
+%%ITEMS%%
 </body></html>
 )html";
 
@@ -5294,8 +5286,8 @@ static void handleConfigCityGet() {
 // The eight item catalogs, as one switchable category (COM-387). Each catalog has its own
 // struct type, so the store and dressing-room handlers used to repeat the same row/radio/lookup
 // code once per catalog; they now loop over these categories and go through the accessors
-// below instead. Enum order is the store page's section order and the purchase lookup's
-// search order. Catalogs are still walked by index with the same owned-bitmask checks, so
+// below instead. Enum order is the purchase lookup's search order (the store's section order
+// is STORE_SECTIONS[]). Catalogs are still walked by index with the same owned-bitmask checks, so
 // the append-only catalog rule is untouched.
 enum ItemCategory : uint8_t {
     ITEM_STUFFY, ITEM_BLANKET, ITEM_ROOM_THEME, ITEM_CAT_COLOR,
@@ -5470,12 +5462,107 @@ static void appendStoreRow(String& html, ItemCategory cat, int i, uint32_t point
     appendStoreItemRow(html, e.id, e.webColor, LABEL_PREFIXES[cat], e.label, e.cost, ownedText, buyText, points);
 }
 
-// Each category's slot in CONFIG_STORE_HTML, in ItemCategory order.
-static const char* const STORE_ITEM_PLACEHOLDERS[ITEM_CATEGORY_COUNT] = {
-    "%%STUFFY_ITEMS%%", "%%BLANKET_ITEMS%%", "%%ROOM_THEME_ITEMS%%", "%%CAT_COLOR_ITEMS%%",
-    "%%ACCESSORY_ITEMS%%", "%%GLASSES_ITEMS%%", "%%BADGE_ITEMS%%", "%%TOY_ITEMS%%",
+// The store's sections (COM-506): the landing page lists one button per entry, in this order,
+// and /config/store?s=<key> shows that section's items alone. `cat` is the catalog the section
+// sells, or ITEM_CATEGORY_COUNT for the Right Arm Slot, which isn't a catalog item. `key` is
+// part of the section page's URL, so keep existing keys stable. A future Combos section goes
+// first.
+struct StoreSection {
+    const char* key;
+    const char* title;
+    const char* note;  // shown under the section page's heading, or nullptr
+    ItemCategory cat;
 };
+static const StoreSection STORE_SECTIONS[] = {
+    {"cat_colors",  "Cat Colors",         nullptr,                                            ITEM_CAT_COLOR},
+    {"stuffies",    "Stuffies",           nullptr,                                            ITEM_STUFFY},
+    {"blankets",    "Blankets",           "Night only.",                                      ITEM_BLANKET},
+    {"room_themes", "Room Themes",        nullptr,                                            ITEM_ROOM_THEME},
+    {"head",        "Accessories - Head", nullptr,                                            ITEM_ACCESSORY},
+    {"glasses",     "Glasses",            nullptr,                                            ITEM_GLASSES},
+    {"badges",      "Badges - Chest",     nullptr,                                            ITEM_BADGE},
+    {"toys",        "Toys",               "For the Right Arm slot.",                          ITEM_TOY},
+    {"right_arm",   "Right Arm Slot",     "Day &amp; night, holds either a Buddy or a Toy.",  ITEM_CATEGORY_COUNT},
+};
+static constexpr int STORE_SECTION_COUNT = sizeof(STORE_SECTIONS) / sizeof(STORE_SECTIONS[0]);
 
+// The section that sells `cat` (ITEM_CATEGORY_COUNT = the Right Arm Slot). Every category has one.
+static const StoreSection& storeSectionFor(ItemCategory cat) {
+    for (int i = 0; i < STORE_SECTION_COUNT; i++) {
+        if (STORE_SECTIONS[i].cat == cat) return STORE_SECTIONS[i];
+    }
+    return STORE_SECTIONS[0];
+}
+
+// Whether the item currently on flash sale is sold in `section`, so the landing page can mark
+// that section's button. Uses the same store-only lookup as purchases, so an item the store
+// isn't listing right now (e.g. Haunted Pumpkin Patch outside October) never marks a section.
+static bool storeSectionHasSale(const StoreSection& section) {
+    if (!isFlashSaleActive()) return false;
+    if (section.cat == ITEM_CATEGORY_COUNT) return strcmp(currentFlashSale.itemId, "right_arm_slot") == 0;
+    return findCatalogIndex(section.cat, currentFlashSale.itemId, true) >= 0;
+}
+
+// The landing page: the balance and one button per section (COM-506).
+static void sendStoreLandingPage(uint32_t points) {
+    String page = loadPage(CONFIG_STORE_HTML);
+    page.replace("%%POINTS%%", String(points));
+    String sections;
+    for (int i = 0; i < STORE_SECTION_COUNT; i++) {
+        const StoreSection& section = STORE_SECTIONS[i];
+        sections += "<a class='nav' href='/config/store?s=";
+        sections += section.key;
+        sections += "'>";
+        sections += section.title;
+        if (storeSectionHasSale(section)) sections += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        sections += "</a>\n";
+    }
+    page.replace("%%SECTIONS%%", sections);
+    String msg = "";
+    if (wm.server->hasArg("welcome")) {
+        msg = "<div class='banner ok'>Welcome! Here's 70 points to get started.</div>";
+    } else if (wm.server->hasArg("cheat")) {
+        msg = "<div class='banner ok'>Points added!</div>";
+    }
+    page.replace("%%MSG%%", msg);
+    sendHtmlPage(page);
+}
+
+// One section's page: its items, the balance and any purchase result (COM-506).
+static void sendStoreSectionPage(const StoreSection& section, uint32_t points) {
+    String page = loadPage(CONFIG_STORE_SECTION_HTML);
+    page.replace("%%TITLE%%", section.title);
+    page.replace("%%NOTE%%", section.note ? String("<p style='color:#888'>") + section.note + "</p>" : String(""));
+    page.replace("%%POINTS%%", String(points));
+    String rows;
+    if (section.cat == ITEM_CATEGORY_COUNT) {
+        appendStoreItemRow(rows, "right_arm_slot", nullptr, "", "Right Arm Slot", STORE_COST_RIGHT_ARM_SLOT,
+                           configMgr.config().rightArmSlotUnlocked ? "Owned" : nullptr, "Buy for ", points);
+    } else {
+        // White isn't a CAT_COLORS[] entry (it's the always-available default, equipped via
+        // EQUIP_NONE — see the comment above that catalog) but the wizard and Dress page both
+        // list it as an explicit choice, so show it here too rather than have it look missing.
+        if (section.cat == ITEM_CAT_COLOR) rows = "<div class='item'><span>Cat - White</span><span class='owned'>Owned</span></div>\n";
+        for (int i = 0; i < ITEM_CATALOG_COUNTS[section.cat]; i++) {
+            if (isStoreItem(section.cat, i)) appendStoreRow(rows, section.cat, i, points);
+        }
+    }
+    page.replace("%%ITEMS%%", rows);
+    String msg = "";
+    if (wm.server->hasArg("saved")) {
+        msg = "<div class='banner ok'>Purchase complete.</div>";
+    } else if (wm.server->hasArg("err")) {
+        String err = wm.server->arg("err");
+        if (err == "funds") msg = "<div class='banner err'>Not enough points.</div>";
+        else if (err == "owned") msg = "<div class='banner err'>You already own that item.</div>";
+        else if (err == "save") msg = "<div class='banner err'>Purchase failed to save — please try again.</div>";
+    }
+    page.replace("%%MSG%%", msg);
+    sendHtmlPage(page);
+}
+
+// /config/store shows the section menu; /config/store?s=<key> shows that section. An unknown
+// key falls back to the menu.
 static void handleConfigStoreGet() {
     // Clear the on-device points flash by stamping the current catalog sizes as "seen" —
     // any store visit acknowledges every item added up to this point.
@@ -5491,40 +5578,15 @@ static void handleConfigStoreGet() {
         configMgr.config().seenRightArmSlot      = true;
         configMgr.save();
     }
-    String page = loadPage(CONFIG_STORE_HTML);
     uint32_t points = configMgr.config().points;
-    page.replace("%%POINTS%%", String(points));
-    for (int c = 0; c < ITEM_CATEGORY_COUNT; c++) {
-        ItemCategory cat = (ItemCategory)c;
-        // White isn't a CAT_COLORS[] entry (it's the always-available default, equipped via
-        // EQUIP_NONE — see the comment above that catalog) but the wizard and Dress page both
-        // list it as an explicit choice, so show it here too rather than have it look missing.
-        String rows = cat == ITEM_CAT_COLOR
-            ? "<div class='item'><span>Cat - White</span><span class='owned'>Owned</span></div>\n" : "";
-        for (int i = 0; i < ITEM_CATALOG_COUNTS[cat]; i++) {
-            if (isStoreItem(cat, i)) appendStoreRow(rows, cat, i, points);
+    String key = wm.server->arg("s");
+    for (int i = 0; i < STORE_SECTION_COUNT; i++) {
+        if (key == STORE_SECTIONS[i].key) {
+            sendStoreSectionPage(STORE_SECTIONS[i], points);
+            return;
         }
-        page.replace(STORE_ITEM_PLACEHOLDERS[cat], rows);
     }
-    String rightArmSlotItem;
-    appendStoreItemRow(rightArmSlotItem, "right_arm_slot", nullptr, "", "Right Arm Slot", STORE_COST_RIGHT_ARM_SLOT,
-                       configMgr.config().rightArmSlotUnlocked ? "Owned" : nullptr, "Buy for ", points);
-    page.replace("%%RIGHT_ARM_SLOT_ITEM%%", rightArmSlotItem);
-    String msg = "";
-    if (wm.server->hasArg("welcome")) {
-        msg = "<div class='banner ok'>Welcome! Here's 70 points to get started.</div>";
-    } else if (wm.server->hasArg("cheat")) {
-        msg = "<div class='banner ok'>Points added!</div>";
-    } else if (wm.server->hasArg("saved")) {
-        msg = "<div class='banner ok'>Purchase complete.</div>";
-    } else if (wm.server->hasArg("err")) {
-        String err = wm.server->arg("err");
-        if (err == "funds") msg = "<div class='banner err'>Not enough points.</div>";
-        else if (err == "owned") msg = "<div class='banner err'>You already own that item.</div>";
-        else if (err == "save") msg = "<div class='banner err'>Purchase failed to save — please try again.</div>";
-    }
-    page.replace("%%MSG%%", msg);
-    sendHtmlPage(page);
+    sendStoreLandingPage(points);
 }
 
 static void handleConfigBadgesGet() {
@@ -5980,6 +6042,17 @@ static void handleConfigCityPost() {
     wm.server->send(302, "text/plain", "");
 }
 
+// Sends the purchase result back to the section the item is sold in (COM-506), so buying keeps
+// the user on that section's page. `cat` is ITEM_CATEGORY_COUNT for the Right Arm Slot.
+static void redirectToStoreSection(ItemCategory cat, const char* query) {
+    String location = "/config/store?s=";
+    location += storeSectionFor(cat).key;
+    location += "&";
+    location += query;
+    wm.server->sendHeader("Location", location);
+    wm.server->send(302, "text/plain", "");
+}
+
 static void handleConfigStorePost() {
     String item = wm.server->arg("item");
     uint32_t cost;
@@ -6009,13 +6082,11 @@ static void handleConfigStorePost() {
     }
 
     if (alreadyOwned) {
-        wm.server->sendHeader("Location", "/config/store?err=owned");
-        wm.server->send(302, "text/plain", "");
+        redirectToStoreSection(cat, "err=owned");
         return;
     }
     if (configMgr.config().points < cost) {
-        wm.server->sendHeader("Location", "/config/store?err=funds");
-        wm.server->send(302, "text/plain", "");
+        redirectToStoreSection(cat, "err=funds");
         return;
     }
 
@@ -6047,14 +6118,12 @@ static void handleConfigStorePost() {
         else if (secondStuffy) configMgr.config().ownedStuffiesSecond &= ~(1u << idx);
         else setItemOwned(cat, idx, false);
         if (equipped) *equipped = prevEquipped;
-        wm.server->sendHeader("Location", "/config/store?err=save");
-        wm.server->send(302, "text/plain", "");
+        redirectToStoreSection(cat, "err=save");
         return;
     }
     dirty.animal = true;
     dirty.animalBg = true;  // a newly bought room theme auto-equips, changing the backdrop
-    wm.server->sendHeader("Location", "/config/store?saved=1");
-    wm.server->send(302, "text/plain", "");
+    redirectToStoreSection(cat, "saved=1");
 }
 
 /**

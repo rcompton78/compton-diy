@@ -961,6 +961,35 @@ was the "flickering jack-o'-lantern eyes" idea in `STORE_IDEAS.md`.
 | `cyd` | 1,199,321 B | 1,201,105 B | +1,784 B | 91.5% → **91.6%** |
 | `freenove-s3` | 1,152,557 B | 1,154,293 B | +1,736 B | 34.5% → 34.5% |
 
+## Store Section Menu (COM-506, 2026-10-28)
+
+The store was one long page with all nine sections stacked, which took a lot of scrolling on a
+phone. It's now a menu plus one page per section.
+
+- **One route.** `/config/store` is the menu: the balance, the cheat easter egg (7 taps on the
+  "Store" heading, unchanged) and one `.nav` button per `STORE_SECTIONS[]` entry.
+  `/config/store?s=<key>` serves that section through a single `CONFIG_STORE_SECTION_HTML`
+  template, with a back link to the menu. An unknown key falls back to the menu. Keys:
+  `cat_colors`, `stuffies`, `blankets`, `room_themes`, `head`, `glasses`, `badges`, `toys`,
+  `right_arm`.
+- **`STORE_SECTIONS[]`** replaces `STORE_ITEM_PLACEHOLDERS` and the nine `<h3>` blocks. Each entry
+  is a key, title, optional note ("Night only." for blankets) and its `ItemCategory`, with
+  `ITEM_CATEGORY_COUNT` standing for the Right Arm Slot. Its order is the menu's order, so the
+  combos card's section goes in first. Rows still come from `isStoreItem()` + `appendStoreRow()`,
+  so the theme-week filters, October-only Haunted Pumpkin Patch, flash-sale price and
+  ★ LEGENDARY / SALE tags are unchanged.
+- **Purchases stay on their section.** The purchase form is unchanged: `handleConfigStorePost()`
+  already resolves the item's category, and `redirectToStoreSection()` sends every result
+  (`saved`, `err=owned|funds|save`) to that section's page. The welcome and cheat redirects still
+  land on the menu.
+- **SALE on the menu.** `storeSectionHasSale()` marks the section whose store items include the
+  active flash sale's item, using the same store-only `findCatalogIndex()` lookup as purchases.
+- **Any store page** (menu or section) still stamps the "seen" counts that clear the on-device
+  "new store items!" flash.
+- **Size:** flash +1,012 B on `cyd` (91.6% → 91.7%) and +1,100 B on `freenove-s3`; static RAM
+  unchanged. Each request now builds one section's rows instead of all nine, so the page String
+  is much smaller.
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`
