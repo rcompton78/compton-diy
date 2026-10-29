@@ -4001,15 +4001,55 @@ static int64_t parseIso8601ToLocalStamp(const char* iso) {
          + (int64_t)lt->tm_min;
 }
 
+// ── Store combos (COM-507) ────────────────────────────────────────────────────
+// A combo sells several existing store items in one purchase, at a discount on their combined
+// price. It's a buying shortcut, not an item: buying one just sets each item's existing owned
+// bit (or rightArmSlotUnlocked), so it adds no save-file state. Items are listed by store id and
+// resolved at runtime; assertCombosValid() checks at boot that each one is a purchasable,
+// non-seasonal, cost > 0 store item (so never a theme-week exclusive) and that `price` is below
+// the items' full price. A combo you partly own charges the same discount on just the missing
+// items (comboCharge()). Combo ids share the store id space, so a flash sale can target a combo,
+// but a sale on one of its items doesn't change the combo's price.
+struct StoreCombo {
+    const char* id;
+    const char* label;
+    uint32_t price;               // the combo price with none of its items owned
+    const char* const* items;     // store item ids
+    uint8_t itemCount;
+};
+static constexpr const char* COMBO_COZY_STARTER[]   = {"teddy", "cream", "bow_cream", "amber"};
+static constexpr const char* COMBO_PRETTY_IN_PINK[] = {"pink", "bow_hot_pink", "sunglasses_pink", "hot_pink_blanket", "flamingo_pink_room"};
+static constexpr const char* COMBO_WINTER_DAY[]     = {"snowman", "baby_blue", "bow_baby_blue", "clear_sky"};
+static constexpr const char* COMBO_POKEMON_PALS[]   = {"pikachu", "eevee"};
+// Includes the Right Arm Slot because the wand can't be held without it.
+static constexpr const char* COMBO_WIZARDS_KIT[]    = {"sorting_hat", "hogwarts_crest", "magic_wand", "right_arm_slot", "hogwarts_night"};
+#define COMBO_ITEMS(a) a, (uint8_t)(sizeof(a) / sizeof(a[0]))
+static constexpr StoreCombo STORE_COMBOS[] = {
+    {"combo_cozy_starter",   "Cozy Starter",    150, COMBO_ITEMS(COMBO_COZY_STARTER)},    // full 190
+    {"combo_pretty_in_pink", "Pretty in Pink",  225, COMBO_ITEMS(COMBO_PRETTY_IN_PINK)},  // full 280
+    {"combo_winter_day",     "Winter Day",      350, COMBO_ITEMS(COMBO_WINTER_DAY)},      // full 440
+    {"combo_pokemon_pals",   "Pok\xC3\xA9mon Pals", 480, COMBO_ITEMS(COMBO_POKEMON_PALS)},  // full 600
+    {"combo_wizards_kit",    "Wizard's Kit",   1080, COMBO_ITEMS(COMBO_WIZARDS_KIT)},     // full 1350
+};
+#undef COMBO_ITEMS
+static constexpr int STORE_COMBO_COUNT = sizeof(STORE_COMBOS) / sizeof(STORE_COMBOS[0]);
+// The largest combo's item count, which sizes purchaseCombo()'s rollback list. Recursive (like
+// countStoreAccessories()) so it stays a constant expression.
+static constexpr int maxComboItemsFrom(int i) {
+    return i >= STORE_COMBO_COUNT ? 0
+         : STORE_COMBOS[i].itemCount > maxComboItemsFrom(i + 1) ? STORE_COMBOS[i].itemCount : maxComboItemsFrom(i + 1);
+}
+static constexpr int STORE_COMBO_MAX_ITEMS = maxComboItemsFrom(0);
+
 // Shared with assertStoreIdsUnique() below and fetchFlashSale()'s unknown-item guard — collects
-// every purchasable store item's id (every catalog's id column, plus the one non-catalog item,
-// "right_arm_slot") into `ids`, which the caller must size to at least `cap` entries. Returns
+// every purchasable store item's id (every catalog's id column, the one non-catalog item,
+// "right_arm_slot", and every combo id) into `ids`, which the caller must size to at least `cap` entries. Returns
 // the count written. `cap` is checked on every write rather than trusted from the caller — every
 // call site below sizes its buffer via STORE_ITEM_ID_COUNT, which is kept in sync by
 // construction (it's the same catalog counts summed here), but if a future catalog is added or
 // grown without updating it, this halts immediately instead of silently overrunning the
 // caller's stack buffer.
-static constexpr int STORE_ITEM_ID_COUNT = CAT_COLOR_COUNT + ACCESSORY_COUNT + GLASSES_COUNT + BADGE_COUNT + STUFFY_COUNT + TOY_COUNT + BLANKET_COLOR_COUNT + ROOM_THEME_COUNT + 1;
+static constexpr int STORE_ITEM_ID_COUNT = CAT_COLOR_COUNT + ACCESSORY_COUNT + GLASSES_COUNT + BADGE_COUNT + STUFFY_COUNT + TOY_COUNT + BLANKET_COLOR_COUNT + ROOM_THEME_COUNT + 1 + STORE_COMBO_COUNT;
 static int collectStoreItemIds(const char** ids, int cap) {
     int n = 0;
     auto push = [&](const char* id) {
@@ -4029,6 +4069,7 @@ static int collectStoreItemIds(const char** ids, int cap) {
     for (int i = 0; i < BLANKET_COLOR_COUNT; i++) push(BLANKET_COLORS[i].id);
     for (int i = 0; i < ROOM_THEME_COUNT; i++) push(ROOM_THEMES[i].id);
     push("right_arm_slot");
+    for (int i = 0; i < STORE_COMBO_COUNT; i++) push(STORE_COMBOS[i].id);
     return n;
 }
 
@@ -5426,7 +5467,8 @@ enum ItemCategory : uint8_t {
     // Store sections that aren't catalogs (COM-506) each get their own value past the catalogs, so
     // STORE_SECTIONS[] and the purchase redirect can tell them apart. Never index catalog arrays
     // with these.
-    ITEM_RIGHT_ARM_SLOT = ITEM_CATEGORY_COUNT
+    ITEM_RIGHT_ARM_SLOT = ITEM_CATEGORY_COUNT,
+    ITEM_COMBO  // STORE_COMBOS[] (COM-507)
 };
 
 // One catalog entry's web-facing fields. `webColor` is nullptr for catalogs whose labels are
@@ -5530,6 +5572,109 @@ static int findCatalogIndex(ItemCategory cat, const String& id, bool storeOnly) 
     return -1;
 }
 
+// Resolves a purchasable store item id to its category and index: a catalog entry (store-only
+// lookup, in ItemCategory order), or ITEM_RIGHT_ARM_SLOT with index -1 for "right_arm_slot".
+// Returns false for anything else, including combo ids.
+static bool findStoreItem(const String& id, ItemCategory& cat, int& idx) {
+    for (int c = 0; c < ITEM_CATEGORY_COUNT; c++) {
+        idx = findCatalogIndex((ItemCategory)c, id, true);
+        if (idx >= 0) {
+            cat = (ItemCategory)c;
+            return true;
+        }
+    }
+    cat = ITEM_RIGHT_ARM_SLOT;
+    idx = -1;
+    return id == "right_arm_slot";
+}
+
+// A store item's catalog price (before any flash sale), its display label, and whether its
+// first copy is owned, for an item findStoreItem() resolved. Combos count a stuffy as owned
+// once its first copy is, and only ever grant the first copy.
+static uint32_t storeItemCost(ItemCategory cat, int idx) {
+    return cat == ITEM_RIGHT_ARM_SLOT ? STORE_COST_RIGHT_ARM_SLOT : catalogEntry(cat, idx).cost;
+}
+static const char* storeItemLabel(ItemCategory cat, int idx) {
+    return cat == ITEM_RIGHT_ARM_SLOT ? "Right Arm Slot" : catalogEntry(cat, idx).label;
+}
+static bool storeItemOwned(ItemCategory cat, int idx) {
+    return cat == ITEM_RIGHT_ARM_SLOT ? configMgr.config().rightArmSlotUnlocked : (ownedItems(cat) & (1u << idx)) != 0;
+}
+static void setStoreItemOwned(ItemCategory cat, int idx, bool owned) {
+    if (cat == ITEM_RIGHT_ARM_SLOT) configMgr.config().rightArmSlotUnlocked = owned;
+    else setItemOwned(cat, idx, owned);
+}
+
+// Index into STORE_COMBOS[] of the combo whose id is `id`, or -1.
+static int findCombo(const String& id) {
+    for (int i = 0; i < STORE_COMBO_COUNT; i++) {
+        if (id == STORE_COMBOS[i].id) return i;
+    }
+    return -1;
+}
+
+// A combo's prices against what's owned right now: `full` is the summed catalog price of the
+// items still missing, `charge` the combo price for them (the combo's own discount, pro-rated to
+// the missing items' share of the full price, rounded, never below 1, then any flash sale on the
+// combo's id), `missing` how many items it would grant, and `legendary` whether any item is
+// priced at the legendary tier. A fully-owned combo has missing == 0 and charge == 0.
+struct ComboPrice {
+    uint32_t full;
+    uint32_t charge;
+    int missing;
+    bool legendary;
+};
+static ComboPrice comboPrice(const StoreCombo& combo) {
+    ComboPrice p = {0, 0, 0, false};
+    uint32_t fullAll = 0;
+    for (int i = 0; i < combo.itemCount; i++) {
+        ItemCategory cat;
+        int idx;
+        if (!findStoreItem(combo.items[i], cat, idx)) continue;  // assertCombosValid() rules this out
+        uint32_t cost = storeItemCost(cat, idx);
+        fullAll += cost;
+        if (cost >= STORE_COST_LEGENDARY) p.legendary = true;
+        if (!storeItemOwned(cat, idx)) {
+            p.full += cost;
+            p.missing++;
+        }
+    }
+    if (p.missing == 0 || fullAll == 0) return p;
+    uint32_t charge = (uint32_t)(((uint64_t)combo.price * p.full + fullAll / 2) / fullAll);
+    p.charge = flashSalePrice(combo.id, charge > 0 ? charge : 1);
+    return p;
+}
+
+// Halts at boot if a combo is malformed: every item must resolve to a purchasable store item
+// that costs more than 0 (so never a theme-week exclusive), must not be a seasonal item (the
+// October-only Haunted Pumpkin Patch, which isStoreItem() hides the rest of the year), and must
+// appear only once in its combo; and the combo price must be below the items' full price.
+static void assertCombosValid() {
+    for (int c = 0; c < STORE_COMBO_COUNT; c++) {
+        const StoreCombo& combo = STORE_COMBOS[c];
+        uint32_t full = 0;
+        for (int i = 0; i < combo.itemCount; i++) {
+            const char* id = combo.items[i];
+            ItemCategory cat;
+            int idx;
+            bool ok = strcmp(id, ROOM_THEMES[ROOM_THEME_IDX_PUMPKIN_PATCH].id) != 0
+                   && findStoreItem(id, cat, idx) && storeItemCost(cat, idx) > 0;
+            for (int j = 0; ok && j < i; j++) ok = strcmp(combo.items[j], id) != 0;
+            if (!ok) {
+                Serial.printf("FATAL: combo \"%s\" item \"%s\" isn't a unique, purchasable, non-seasonal store item\n", combo.id, id);
+                Serial.flush();
+                abort();
+            }
+            full += storeItemCost(cat, idx);
+        }
+        if (combo.price == 0 || combo.price >= full) {
+            Serial.printf("FATAL: combo \"%s\" price %u isn't below its items' full price %u\n", combo.id, (unsigned)combo.price, (unsigned)full);
+            Serial.flush();
+            abort();
+        }
+    }
+}
+
 /**
  * The tags shown after a store item's label: a gold "LEGENDARY" marker for anything priced at
  * the legendary tier (COM-382), and the red "SALE" tag while a flash sale has cut its price.
@@ -5597,11 +5742,50 @@ static void appendStoreRow(String& html, ItemCategory cat, int i, uint32_t point
     appendStoreItemRow(html, e.id, e.webColor, LABEL_PREFIXES[cat], e.label, e.cost, ownedText, buyText, points);
 }
 
+// Store row for STORE_COMBOS[i] (COM-507): the label and tags, the item list (owned ones ticked),
+// then "Owned" once every item is, or a buy form posting the combo id. The price shows the
+// missing items' full price struck through, then the combo charge.
+static void appendComboRow(String& html, int i, uint32_t points) {
+    const StoreCombo& combo = STORE_COMBOS[i];
+    ComboPrice p = comboPrice(combo);
+    html += "<div class='item'><div><span>";
+    html += combo.label;
+    html += "</span>";
+    if (p.legendary) html += " <span style='color:#ffcc33;font-weight:bold'>\xE2\x98\x85 LEGENDARY</span>";
+    if (p.missing > 0 && isFlashSaleActive() && strcmp(currentFlashSale.itemId, combo.id) == 0) html += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+    html += "<div style='font-size:.8rem;color:#888;margin-top:4px'>";
+    for (int j = 0; j < combo.itemCount; j++) {
+        ItemCategory cat;
+        int idx;
+        if (!findStoreItem(combo.items[j], cat, idx)) continue;
+        if (j > 0) html += ", ";
+        html += storeItemLabel(cat, idx);
+        if (cat == ITEM_BLANKET) html += " blanket";
+        else if (cat == ITEM_ROOM_THEME) html += " room";
+        else if (cat == ITEM_CAT_COLOR) html += " cat";
+        if (storeItemOwned(cat, idx)) html += " <span class='owned'>\xE2\x9C\x93</span>";
+    }
+    html += "</div></div>";
+    if (p.missing == 0) {
+        html += "<span class='owned'>Owned</span>";
+    } else {
+        html += "<form method='POST' action='/save-config/store'><input type='hidden' name='item' value='";
+        html += combo.id;
+        html += "'><button type='submit'";
+        if (points < p.charge) html += " disabled";
+        html += ">Buy for <s>";
+        html += String(p.full);
+        html += "</s> ";
+        html += String(p.charge);
+        html += "</button></form>";
+    }
+    html += "</div>\n";
+}
+
 // The store's sections (COM-506): the landing page lists one button per entry, in this order,
 // and /config/store?s=<key> shows that section's items alone. `cat` is the catalog the section
-// sells, or a non-catalog value such as ITEM_RIGHT_ARM_SLOT. `key` is
-// part of the section page's URL, so keep existing keys stable. A future Combos section goes
-// first.
+// sells, or a non-catalog value such as ITEM_RIGHT_ARM_SLOT or ITEM_COMBO. `key` is
+// part of the section page's URL, so keep existing keys stable.
 struct StoreSection {
     const char* key;
     const char* title;
@@ -5609,6 +5793,7 @@ struct StoreSection {
     ItemCategory cat;
 };
 static constexpr StoreSection STORE_SECTIONS[] = {
+    {"combos",      "Combos",             "Several items together, about 20% off. Items you already own are left out of the price.", ITEM_COMBO},
     {"cat_colors",  "Cat Colors",         nullptr,                                            ITEM_CAT_COLOR},
     {"stuffies",    "Stuffies",           nullptr,                                            ITEM_STUFFY},
     {"blankets",    "Blankets",           "Night only.",                                      ITEM_BLANKET},
@@ -5620,11 +5805,10 @@ static constexpr StoreSection STORE_SECTIONS[] = {
     {"right_arm",   "Right Arm Slot",     "Day &amp; night, holds either a Buddy or a Toy.",  ITEM_RIGHT_ARM_SLOT},
 };
 static constexpr int STORE_SECTION_COUNT = sizeof(STORE_SECTIONS) / sizeof(STORE_SECTIONS[0]);
-// One section per catalog plus the Right Arm Slot, so a new ItemCategory can't ship without a
-// store page (storeSectionFor() would otherwise fall back to the first section). A section that
-// isn't a catalog, like the future Combos one, gets its own value after ITEM_RIGHT_ARM_SLOT and
-// adds to the right-hand side.
-static_assert(STORE_SECTION_COUNT == ITEM_CATEGORY_COUNT + 1, "every ItemCategory needs a STORE_SECTIONS[] entry");
+// One section per catalog plus the Right Arm Slot and Combos, so a new ItemCategory can't ship
+// without a store page (storeSectionFor() would otherwise fall back to the first section). A
+// section that isn't a catalog gets its own value after ITEM_COMBO and adds to the right-hand side.
+static_assert(STORE_SECTION_COUNT == ITEM_CATEGORY_COUNT + 2, "every ItemCategory needs a STORE_SECTIONS[] entry");
 // No two sections may share a `cat`: storeSectionFor() returns the first match, so a reused value
 // would send one section's purchases to the other's page. Recursive (like countStoreAccessories())
 // so it stays a constant expression.
@@ -5649,6 +5833,7 @@ static const StoreSection& storeSectionFor(ItemCategory cat) {
 static bool storeSectionHasSale(const StoreSection& section) {
     if (!isFlashSaleActive()) return false;
     if (section.cat == ITEM_RIGHT_ARM_SLOT) return strcmp(currentFlashSale.itemId, "right_arm_slot") == 0;
+    if (section.cat == ITEM_COMBO) return findCombo(currentFlashSale.itemId) >= 0;
     return findCatalogIndex(section.cat, currentFlashSale.itemId, true) >= 0;
 }
 
@@ -5687,6 +5872,8 @@ static void sendStoreSectionPage(const StoreSection& section, uint32_t points) {
     if (section.cat == ITEM_RIGHT_ARM_SLOT) {
         appendStoreItemRow(rows, "right_arm_slot", nullptr, "", "Right Arm Slot", STORE_COST_RIGHT_ARM_SLOT,
                            configMgr.config().rightArmSlotUnlocked ? "Owned" : nullptr, "Buy for ", points);
+    } else if (section.cat == ITEM_COMBO) {
+        for (int i = 0; i < STORE_COMBO_COUNT; i++) appendComboRow(rows, i, points);
     } else {
         // White isn't a CAT_COLORS[] entry (it's the always-available default, equipped via
         // EQUIP_NONE — see the comment above that catalog) but the wizard and Dress page both
@@ -6202,18 +6389,61 @@ static void redirectToStoreSection(ItemCategory cat, const char* query) {
     wm.server->send(302, "text/plain", "");
 }
 
+// Buys STORE_COMBOS[comboIdx] (COM-507): charges comboPrice()'s pro-rated price and grants every
+// item not owned yet (a stuffy's first copy only). Equips nothing, unlike a single purchase,
+// since a combo spans several slots. A failed save rolls back the points and every bit it set.
+static void purchaseCombo(int comboIdx) {
+    const StoreCombo& combo = STORE_COMBOS[comboIdx];
+    ComboPrice p = comboPrice(combo);
+    if (p.missing == 0) {
+        redirectToStoreSection(ITEM_COMBO, "err=owned");
+        return;
+    }
+    if (configMgr.config().points < p.charge) {
+        redirectToStoreSection(ITEM_COMBO, "err=funds");
+        return;
+    }
+    // Remember which items this purchase granted, so a failed save clears only those.
+    bool granted[STORE_COMBO_MAX_ITEMS] = {};
+    configMgr.config().points -= p.charge;
+    for (int i = 0; i < combo.itemCount; i++) {
+        ItemCategory cat;
+        int idx;
+        if (!findStoreItem(combo.items[i], cat, idx) || storeItemOwned(cat, idx)) continue;
+        setStoreItemOwned(cat, idx, true);
+        granted[i] = true;
+    }
+    if (!configMgr.save()) {
+        configMgr.config().points += p.charge;
+        for (int i = 0; i < combo.itemCount; i++) {
+            ItemCategory cat;
+            int idx;
+            if (granted[i] && findStoreItem(combo.items[i], cat, idx)) setStoreItemOwned(cat, idx, false);
+        }
+        redirectToStoreSection(ITEM_COMBO, "err=save");
+        return;
+    }
+    dirty.animal = true;
+    redirectToStoreSection(ITEM_COMBO, "saved=1");
+}
+
 static void handleConfigStorePost() {
     String item = wm.server->arg("item");
+    int comboIdx = findCombo(item);
+    if (comboIdx >= 0) {
+        purchaseCombo(comboIdx);
+        return;
+    }
     uint32_t cost;
     bool alreadyOwned;
-    ItemCategory cat = ITEM_RIGHT_ARM_SLOT;  // unless the lookup below finds a catalog item
-    int idx = -1;
+    ItemCategory cat;
+    int idx;
     // Store-only lookup (isStoreItem()): the theme-week-exclusive entries (DIY-108, in
     // ROOM_THEMES[]/ACCESSORIES[]/GLASSES[]) must never be purchasable here, no matter what
     // item id is posted.
-    for (int c = 0; c < ITEM_CATEGORY_COUNT && idx < 0; c++) {
-        idx = findCatalogIndex((ItemCategory)c, item, true);
-        if (idx >= 0) cat = (ItemCategory)c;
+    if (!findStoreItem(item, cat, idx)) {
+        wm.server->send(400, "text/plain", "Unknown item");
+        return;
     }
     if (idx >= 0) {
         CatalogEntry e = catalogEntry(cat, idx);
@@ -6222,12 +6452,9 @@ static void handleConfigStorePost() {
         // "already owned" here; owning just the 1st copy still allows this same item id
         // to be bought again for the 2nd, handled in the purchase branch below.
         alreadyOwned = (cat == ITEM_STUFFY ? configMgr.config().ownedStuffiesSecond : ownedItems(cat)) & (1u << idx);
-    } else if (item == "right_arm_slot") {
+    } else {
         cost = flashSalePrice("right_arm_slot", STORE_COST_RIGHT_ARM_SLOT);
         alreadyOwned = configMgr.config().rightArmSlotUnlocked;
-    } else {
-        wm.server->send(400, "text/plain", "Unknown item");
-        return;
     }
 
     if (alreadyOwned) {
@@ -6796,6 +7023,7 @@ void setup() {
     Serial.begin(115200);
 
     assertStoreIdsUnique();
+    assertCombosValid();
 
     pinMode(TFT_BACKLIGHT_PIN, OUTPUT);
     digitalWrite(TFT_BACKLIGHT_PIN, HIGH);

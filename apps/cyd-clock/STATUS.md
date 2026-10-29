@@ -975,9 +975,9 @@ phone. It's now a menu plus one page per section.
 - **`STORE_SECTIONS[]`** replaces `STORE_ITEM_PLACEHOLDERS` and the nine `<h3>` blocks. Each entry
   is a key, title, optional note ("Night only." for blankets) and its `ItemCategory`, with
   `ITEM_RIGHT_ARM_SLOT` (a non-catalog value past `ITEM_CATEGORY_COUNT`) for the Right Arm Slot. A
-  `static_assert` requires one section per catalog, and a future non-catalog section such as
-  Combos gets its own value too. Its order is the menu's order, so the
-  combos card's section goes in first. Rows still come from `isStoreItem()` + `appendStoreRow()`,
+  `static_assert` requires one section per catalog, and a non-catalog section such as
+  Combos (COM-507, `ITEM_COMBO`) gets its own value too. Its order is the menu's order, so
+  Combos comes first. Rows still come from `isStoreItem()` + `appendStoreRow()`,
   so the theme-week filters, October-only Haunted Pumpkin Patch, flash-sale price and
   ★ LEGENDARY / SALE tags are unchanged.
 - **Purchases stay on their section.** The purchase form is unchanged: `handleConfigStorePost()`
@@ -1030,6 +1030,43 @@ and a device flash.
   y 113..121) clips the middle of that same outer feeler, so only its blue tip shows for those few
   seconds. Any outward feeler on that side crosses the box, and the next idle redraw restores it.
 - **Flash:** +1,560 B on `cyd` (1,202,117 → 1,203,677 B, 91.8%), +1,528 B on `freenove-s3` (1,155,393 → 1,156,921 B, 34.6%), on top of COM-506.
+
+## Store Combos (COM-507, 2026-10-28)
+
+A Combos section is the first button on the store menu (`/config/store?s=combos`). A combo sells
+several existing items in one purchase at about 20% off their combined price.
+
+| Combo | Items | Full | Combo |
+|---|---|---|---|
+| Cozy Starter | Teddy Bear, Cream blanket, Cream Bow, Amber room | 190 | 150 |
+| Pretty in Pink | Pink cat, Hot Pink Bow, Pink-Rim Sunglasses, Hot Pink blanket, Flamingo Pink room | 280 | 225 |
+| Winter Day | Snowman, Baby Blue blanket, Baby Blue Bow, Clear Sky room | 440 | 350 |
+| Pokémon Pals | Pikachu, Eevee | 600 | 480 |
+| Wizard's Kit ★ | Sorting Hat, Hogwarts Crest, Magic Wand, Right Arm Slot, Hogwarts at Night room | 1350 | 1080 |
+
+- **No new save state.** `STORE_COMBOS[]` lists each combo's items by store id. Buying one sets
+  each missing item's existing owned bit (`rightArmSlotUnlocked` for the slot, a stuffy's first
+  copy only), so there's no migration. It equips nothing; the items are picked in the Dressing
+  Room as usual. A failed `save()` rolls back the points and every bit it set.
+- **Partly owned combos** charge the same discount on just the missing items:
+  `round(price × missingFull / fullPrice)`, minimum 1 (`comboPrice()`). The button shows the
+  missing items' full price struck through, then that charge. Owned items are ticked in the
+  combo's item list, and a fully owned combo shows "Owned" (a forced POST gets `err=owned`).
+- **Flash sales.** A sale on one item doesn't change any combo price. Combo ids are in
+  `collectStoreItemIds()`, so `assertStoreIdsUnique()` covers them and a flash sale can target a
+  combo id (the menu's Combos button then shows SALE).
+- **★ LEGENDARY** goes on a combo that *contains* a legendary item, not by price, since Winter
+  Day (350) and Pokémon Pals (480) would otherwise cross `STORE_COST_LEGENDARY`. Only the Wizard's
+  Kit is tagged.
+- **Boot check.** `assertCombosValid()` (next to `assertStoreIdsUnique()` in `setup()`) halts if a
+  combo item isn't a purchasable store item with cost > 0 (so never a theme-week exclusive), is
+  the October-only Haunted Pumpkin Patch, or repeats, or if a combo's price isn't below its full
+  price.
+- **Refactor.** `handleConfigStorePost()`'s category loop moved into `findStoreItem()`, shared with
+  the combo code; single-item purchases behave as before.
+- **Not done:** an "equip all" button in the Dressing Room, and counting new combos in the
+  on-device "new store items!" flash (that would need a new seen-count field in the save file).
+- **Size:** flash ~+3 KB on `cyd` (91.7% → 91.9%, 1,205,089 B); static RAM unchanged.
 
 ## Branch & Files
 
