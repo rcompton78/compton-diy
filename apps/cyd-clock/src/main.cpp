@@ -5477,7 +5477,7 @@ struct StoreSection {
     const char* note;  // shown under the section page's heading, or nullptr
     ItemCategory cat;
 };
-static const StoreSection STORE_SECTIONS[] = {
+static constexpr StoreSection STORE_SECTIONS[] = {
     {"cat_colors",  "Cat Colors",         nullptr,                                            ITEM_CAT_COLOR},
     {"stuffies",    "Stuffies",           nullptr,                                            ITEM_STUFFY},
     {"blankets",    "Blankets",           "Night only.",                                      ITEM_BLANKET},
@@ -5494,6 +5494,15 @@ static constexpr int STORE_SECTION_COUNT = sizeof(STORE_SECTIONS) / sizeof(STORE
 // isn't a catalog, like the future Combos one, gets its own value after ITEM_RIGHT_ARM_SLOT and
 // adds to the right-hand side.
 static_assert(STORE_SECTION_COUNT == ITEM_CATEGORY_COUNT + 1, "every ItemCategory needs a STORE_SECTIONS[] entry");
+// No two sections may share a `cat`: storeSectionFor() returns the first match, so a reused value
+// would send one section's purchases to the other's page. Recursive (like countStoreAccessories())
+// so it stays a constant expression.
+static constexpr bool storeSectionCatUniqueFrom(int i, int j) {
+    return i >= STORE_SECTION_COUNT ? true
+         : j >= STORE_SECTION_COUNT ? storeSectionCatUniqueFrom(i + 1, i + 2)
+         : STORE_SECTIONS[i].cat != STORE_SECTIONS[j].cat && storeSectionCatUniqueFrom(i, j + 1);
+}
+static_assert(storeSectionCatUniqueFrom(0, 1), "two STORE_SECTIONS[] entries share an ItemCategory value");
 
 // The section that sells `cat` (or a non-catalog value like ITEM_RIGHT_ARM_SLOT). Every category has one.
 static const StoreSection& storeSectionFor(ItemCategory cat) {
