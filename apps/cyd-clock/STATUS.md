@@ -1157,8 +1157,8 @@ render; the first pass was drawn from memory and got the colours, leg rings and 
   (`C_UMBREON_DARK`, the black cat's 0x1082). The body isn't pure black for the black cat's
   reason: it has to show on Starry Night, 6-7 and the Hogwarts castle.
 - **Rings.** `drawUmbreonRing()` cuts a band out of a triangle between two fractions of the way to
-  its apex, so the ear and tail rings follow the outline (integer rounding leaves a 1 px nub past
-  each ear's outer edge, accepted in review): one partway up each ear, one
+  its apex, so the ear and tail rings follow the outline (integer rounding puts a few pixels just
+  outside it, mostly a 1 px strip on each ear ring's outer edge; accepted in review): one partway up each ear, one
   across the middle of the tail (and of the tail bit in the peeking poses). `drawUmbreonOval()`
   draws the forehead and leg rings as 5×7 upright ovals with a dark centre slot, the smallest
   `fillEllipse()` that reads as a ring (it draws nothing under a 2 px radius). The leg ovals sit on
