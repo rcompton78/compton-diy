@@ -45,6 +45,11 @@ A section with an item on flash sale is marked **SALE** in the menu. The first b
 lists every section except Combos on one page, like the store before it had a menu, and buying
 from it keeps you on All.
 
+After a firmware update adds store items, their section's button and the items themselves are
+marked **NEW**. Opening that section clears its NEW (opening All clears every section), and the
+other sections keep theirs. The points balance on the clock flashes cyan until every section
+marked NEW has been opened.
+
 Combos sell a few matching items together for about 20% off, e.g. Pretty in Pink (Pink
 cat, Hot Pink Bow, Pink-Rim Sunglasses, Hot Pink blanket and Flamingo Pink room) for 225
 instead of 280. Each combo lists its items with the ones you already own ticked, and you

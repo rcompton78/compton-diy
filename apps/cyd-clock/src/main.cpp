@@ -1498,23 +1498,9 @@ static void zoneFillRect(int x, int y, int w, int h) {
     else tft.fillRect(x, y, w, h, TFT_BLACK);
 }
 
-// True whenever the store catalog has grown (a new stuffy, blanket color, room theme, or
-// cat color shipped in a firmware update) since the last time the user opened the store
-// page — cleared by handleConfigStoreGet(), which stamps the current catalog sizes as "seen".
-static bool hasNewStoreItems() {
-    // *_STORE_COUNT, not the full *_COUNT — the theme-week-exclusive entries appended to
-    // those catalogs (DIY-108) are never store-purchasable, so they must never trip this
-    // badge either.
-    return STUFFY_COUNT > configMgr.config().seenStuffyCount ||
-           BLANKET_COLOR_COUNT > configMgr.config().seenBlanketColorCount ||
-           ROOM_THEME_STORE_COUNT > configMgr.config().seenRoomThemeCount ||
-           CAT_COLOR_COUNT > configMgr.config().seenCatColorCount ||
-           ACCESSORY_STORE_COUNT > configMgr.config().seenAccessoryCount ||
-           GLASSES_STORE_COUNT > configMgr.config().seenGlassesCount ||
-           BADGE_STORE_COUNT > configMgr.config().seenBadgeCount ||
-           TOY_COUNT > configMgr.config().seenToyCount ||
-           !configMgr.config().seenRightArmSlot;
-}
+// True while any store section has an item the user hasn't seen yet; drives the points flash.
+// Defined next to STORE_SECTIONS[], since it's just storeSectionHasNew() over every section.
+static bool hasNewStoreItems();
 
 // Shared ear/head/snout/eyes/nose art reused by both teddy variants below.
 static void drawTeddyHead(int bx, int by, uint16_t snoutColor) {
@@ -5328,6 +5314,8 @@ static void handleSetupGet() {
     sendHtmlPage(page);
 }
 
+static bool markAllStoreSectionsSeen();  // with STORE_SECTIONS[] below
+
 static void handleSetupPost() {
     String color = wm.server->arg("catColor");
     String name = wm.server->arg("name");
@@ -5374,6 +5362,9 @@ static void handleSetupPost() {
     configMgr.config().longitude        = lon;
     configMgr.config().utcOffsetSeconds = utc;
     configMgr.config().setupComplete = true;
+    // The wizard ends on the store menu, which no longer marks anything seen (COM-517). A new
+    // user has nothing to catch up on, so start with no NEW badges and no points flash.
+    markAllStoreSectionsSeen();
     configMgr.save();
 
     // Same side effects handleConfigCityPost() applies when latitude/longitude/utc change.
@@ -5499,17 +5490,55 @@ static CatalogEntry catalogEntry(ItemCategory cat, int i) {
     }
 }
 
-// Whether entry `i` is sold in the store. The theme-week exclusives (DIY-108) are skipped:
-// cost-0 entries in ACCESSORIES[]/ROOM_THEMES[], and the tail of GLASSES[] past
-// GLASSES_STORE_COUNT. They must never show up or be purchasable, whatever item id is posted.
-// Haunted Pumpkin Patch (COM-503) is also skipped outside October; see isPumpkinPatchOnSale().
-static bool isStoreItem(ItemCategory cat, int i) {
+// Whether entry `i` is one of the catalog's store entries at all, i.e. counted by its
+// *_STORE_COUNT. The theme-week exclusives (DIY-108) aren't: cost-0 entries in
+// ACCESSORIES[]/ROOM_THEMES[], and the tail of GLASSES[] past GLASSES_STORE_COUNT.
+static bool isStoreCatalogEntry(ItemCategory cat, int i) {
     switch (cat) {
-        case ITEM_ROOM_THEME: return isStoreRoomTheme(i) && (i != ROOM_THEME_IDX_PUMPKIN_PATCH || isPumpkinPatchOnSale());
+        case ITEM_ROOM_THEME: return isStoreRoomTheme(i);
         case ITEM_ACCESSORY:  return isStoreAccessory(i);
         case ITEM_GLASSES:    return i < GLASSES_STORE_COUNT;
         case ITEM_BADGE:      return i < BADGE_STORE_COUNT;
         default:              return true;
+    }
+}
+
+// Whether entry `i` is sold in the store right now. Theme-week exclusives (see
+// isStoreCatalogEntry()) must never show up or be purchasable, whatever item id is posted.
+// Haunted Pumpkin Patch (COM-503) is also skipped outside October; see isPumpkinPatchOnSale().
+static bool isStoreItem(ItemCategory cat, int i) {
+    if (cat == ITEM_ROOM_THEME && i == ROOM_THEME_IDX_PUMPKIN_PATCH && !isPumpkinPatchOnSale()) return false;
+    return isStoreCatalogEntry(cat, i);
+}
+
+// How many store entries the catalog has: the count its seen*Count is compared against
+// (COM-517). *_STORE_COUNT, not the full *_COUNT, so theme-week exclusives never count as new.
+static int storeCatalogStoreCount(ItemCategory cat) {
+    switch (cat) {
+        case ITEM_STUFFY:     return STUFFY_COUNT;
+        case ITEM_BLANKET:    return BLANKET_COLOR_COUNT;
+        case ITEM_ROOM_THEME: return ROOM_THEME_STORE_COUNT;
+        case ITEM_CAT_COLOR:  return CAT_COLOR_COUNT;
+        case ITEM_ACCESSORY:  return ACCESSORY_STORE_COUNT;
+        case ITEM_GLASSES:    return GLASSES_STORE_COUNT;
+        case ITEM_BADGE:      return BADGE_STORE_COUNT;
+        default:              return TOY_COUNT;
+    }
+}
+
+// The category's seen*Count field: how many of its store entries the user has been shown,
+// stamped when its store section is opened (COM-517).
+static uint8_t& storeSeenCount(ItemCategory cat) {
+    AppConfig& c = configMgr.config();
+    switch (cat) {
+        case ITEM_STUFFY:     return c.seenStuffyCount;
+        case ITEM_BLANKET:    return c.seenBlanketColorCount;
+        case ITEM_ROOM_THEME: return c.seenRoomThemeCount;
+        case ITEM_CAT_COLOR:  return c.seenCatColorCount;
+        case ITEM_ACCESSORY:  return c.seenAccessoryCount;
+        case ITEM_GLASSES:    return c.seenGlassesCount;
+        case ITEM_BADGE:      return c.seenBadgeCount;
+        default:              return c.seenToyCount;
     }
 }
 
@@ -5675,21 +5704,26 @@ static void assertCombosValid() {
     }
 }
 
-// The ★ LEGENDARY and 🔥 SALE tag markup, shared by catalog rows (appendStoreItemTags()), combo
-// rows and the store menu's section buttons so the tags look the same everywhere.
+// The ★ LEGENDARY, ✨ NEW and 🔥 SALE tag markup, shared by catalog rows (appendStoreItemTags()),
+// combo rows and the store menu's section buttons so the tags look the same everywhere. NEW is
+// cyan like the device's points flash (C_NEW_ITEM), which means the same thing (COM-517).
 static const char STORE_TAG_LEGENDARY[] = " <span style='color:#ffcc33;font-weight:bold'>\xE2\x98\x85 LEGENDARY</span>";
+static const char STORE_TAG_NEW[]       = " <span style='color:#00ffff;font-weight:bold'>\xE2\x9C\xA8 NEW</span>";
 static const char STORE_TAG_SALE[]      = " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
 
 /**
  * The tags shown after a store item's label: a gold "LEGENDARY" marker for anything priced at
- * the legendary tier (COM-382), and the red "SALE" tag while a flash sale has cut its price.
- * Shared by every store section so the two tags always look the same everywhere.
+ * the legendary tier (COM-382), the cyan "NEW" tag until the user has opened its section once
+ * since it shipped (COM-517), and the red "SALE" tag while a flash sale has cut its price.
+ * Shared by every store section so the tags always look the same everywhere.
  *
  * @param baseCost The item's catalog price, before any flash sale.
  * @param cost The price actually charged, from flashSalePrice().
+ * @param isNew Whether the item is still unseen.
  */
-static void appendStoreItemTags(String& html, uint32_t baseCost, uint32_t cost) {
+static void appendStoreItemTags(String& html, uint32_t baseCost, uint32_t cost, bool isNew) {
     if (baseCost >= STORE_COST_LEGENDARY) html += STORE_TAG_LEGENDARY;
+    if (isNew) html += STORE_TAG_NEW;
     if (cost != baseCost) html += STORE_TAG_SALE;
 }
 
@@ -5719,11 +5753,12 @@ static void appendBuyFormOpen(String& html, const char* item, bool fromAll) {
  * @param ownedText The owned marker's text, or nullptr when the item can still be bought.
  * @param buyText The buy button's text before the price ("Buy for " / "Buy 2nd for ").
  * @param fromAll Whether the row is on the All page (see appendBuyFormOpen()).
+ * @param isNew Whether to tag the row NEW (see appendStoreItemTags()).
  */
 static void appendStoreItemRow(String& html, const char* item, const char* webColor,
                                const char* labelPrefix, const char* label, uint32_t baseCost,
                                const char* ownedText, const char* buyText, uint32_t points,
-                               bool fromAll) {
+                               bool fromAll, bool isNew) {
     uint32_t cost = flashSalePrice(item, baseCost);
     html += "<div class='item'><span";
     if (webColor) { html += " style='color:"; html += webColor; html += "'"; }
@@ -5731,7 +5766,7 @@ static void appendStoreItemRow(String& html, const char* item, const char* webCo
     html += labelPrefix;
     html += label;
     html += "</span>";
-    appendStoreItemTags(html, baseCost, cost);
+    appendStoreItemTags(html, baseCost, cost, isNew);
     if (ownedText) {
         html += "<span class='owned'>";
         html += ownedText;
@@ -5751,7 +5786,7 @@ static void appendStoreItemRow(String& html, const char* item, const char* webCo
 // Store row for catalog entry `i` of `cat`. Stuffies can be bought twice (DIY-106), so the
 // same item id posts a second purchase once the first copy is owned, labeled "Buy 2nd for N"
 // so it's clear the button re-buys the same item; only owning both copies shows as owned.
-static void appendStoreRow(String& html, ItemCategory cat, int i, uint32_t points, bool fromAll) {
+static void appendStoreRow(String& html, ItemCategory cat, int i, uint32_t points, bool fromAll, bool isNew) {
     static const char* const LABEL_PREFIXES[ITEM_CATEGORY_COUNT] = {"", "Blanket - ", "", "Cat - ", "", "", "", ""};
     CatalogEntry e = catalogEntry(cat, i);
     bool owned = ownedItems(cat) & (1u << i);
@@ -5762,7 +5797,7 @@ static void appendStoreRow(String& html, ItemCategory cat, int i, uint32_t point
         ownedText = ownedSecond ? "Owned (x2)" : nullptr;
         if (owned) buyText = "Buy 2nd for ";
     }
-    appendStoreItemRow(html, e.id, e.webColor, LABEL_PREFIXES[cat], e.label, e.cost, ownedText, buyText, points, fromAll);
+    appendStoreItemRow(html, e.id, e.webColor, LABEL_PREFIXES[cat], e.label, e.cost, ownedText, buyText, points, fromAll, isNew);
 }
 
 // Store row for STORE_COMBOS[i] (COM-507): the label and tags, the item list (owned ones ticked),
@@ -5871,12 +5906,49 @@ static bool storeSectionHasSale(const StoreSection& section) {
     return findCatalogIndex(section.cat, currentFlashSale.itemId, true) >= 0;
 }
 
-// The landing page: the balance, an All button (COM-516), which shows SALE whenever a section it
-// lists does, then one button per section (COM-506).
+// Whether `section` has an item the user hasn't been shown yet (COM-517): its catalog has grown
+// past its seen*Count (a firmware update appended an item), or the Right Arm Slot was never seen.
+// Combos have no seen tracking, so they're never NEW.
+static bool storeSectionHasNew(const StoreSection& section) {
+    if (section.cat == ITEM_RIGHT_ARM_SLOT) return !configMgr.config().seenRightArmSlot;
+    if (section.cat == ITEM_COMBO) return false;
+    return storeCatalogStoreCount(section.cat) > storeSeenCount(section.cat);
+}
+
+// True whenever any store section is NEW. Since opening a section is what marks it seen, the
+// device's points flash stays on until every section with something new has been opened (or All).
+static bool hasNewStoreItems() {
+    for (int i = 0; i < STORE_SECTION_COUNT; i++) {
+        if (storeSectionHasNew(STORE_SECTIONS[i])) return true;
+    }
+    return false;
+}
+
+// Marks everything in `section` as seen, clearing its NEW badge. Returns whether anything changed,
+// so the caller only saves when it has to. Combos have nothing to mark.
+static bool markStoreSectionSeen(const StoreSection& section) {
+    if (!storeSectionHasNew(section)) return false;
+    if (section.cat == ITEM_RIGHT_ARM_SLOT) configMgr.config().seenRightArmSlot = true;
+    else storeSeenCount(section.cat) = (uint8_t)storeCatalogStoreCount(section.cat);
+    return true;
+}
+
+// Marks every section seen: the All page, and the end of the first-run wizard, since nothing in
+// the store is "new" to someone who has never seen it.
+static bool markAllStoreSectionsSeen() {
+    bool changed = false;
+    for (int i = 0; i < STORE_SECTION_COUNT; i++) changed |= markStoreSectionSeen(STORE_SECTIONS[i]);
+    return changed;
+}
+
+// The landing page: the balance, an All button (COM-516), which shows NEW or SALE whenever a
+// section it lists does, then one button per section (COM-506), tagged NEW (COM-517) and SALE.
+// Opening the menu marks nothing seen; only opening a section does.
 static void sendStoreLandingPage(uint32_t points) {
     String page = loadPage(CONFIG_STORE_HTML);
     page.replace("%%POINTS%%", String(points));
     String sections;
+    bool anyNew = false;
     bool anySale = false;
     for (int i = 0; i < STORE_SECTION_COUNT; i++) {
         const StoreSection& section = STORE_SECTIONS[i];
@@ -5884,6 +5956,10 @@ static void sendStoreLandingPage(uint32_t points) {
         sections += section.key;
         sections += "'>";
         sections += section.title;
+        if (storeSectionHasNew(section)) {  // never Combos, so All can take it as is
+            sections += STORE_TAG_NEW;
+            anyNew = true;
+        }
         if (storeSectionHasSale(section)) {
             sections += STORE_TAG_SALE;
             if (section.cat != ITEM_COMBO) anySale = true;  // All leaves combos out
@@ -5893,6 +5969,7 @@ static void sendStoreLandingPage(uint32_t points) {
     String all = "<a class='nav' href='/config/store?s=";
     all += STORE_ALL_KEY;
     all += "'>All";
+    if (anyNew) all += STORE_TAG_NEW;
     if (anySale) all += STORE_TAG_SALE;
     all += "</a>\n";
     page.replace("%%SECTIONS%%", all + sections);
@@ -5906,11 +5983,13 @@ static void sendStoreLandingPage(uint32_t points) {
     sendHtmlPage(page);
 }
 
-// Appends `section`'s rows, as shown on its own page and on the All page (`fromAll`).
+// Appends `section`'s rows, as shown on its own page and on the All page (`fromAll`). Rows are
+// tagged NEW from the seen counts as they are before this visit marks the section seen.
 static void appendStoreSectionRows(String& rows, const StoreSection& section, uint32_t points, bool fromAll) {
     if (section.cat == ITEM_RIGHT_ARM_SLOT) {
         appendStoreItemRow(rows, "right_arm_slot", nullptr, "", "Right Arm Slot", STORE_COST_RIGHT_ARM_SLOT,
-                           configMgr.config().rightArmSlotUnlocked ? "Owned" : nullptr, "Buy for ", points, fromAll);
+                           configMgr.config().rightArmSlotUnlocked ? "Owned" : nullptr, "Buy for ", points, fromAll,
+                           !configMgr.config().seenRightArmSlot);
     } else if (section.cat == ITEM_COMBO) {
         for (int i = 0; i < STORE_COMBO_COUNT; i++) appendComboRow(rows, i, points, fromAll);
     } else {
@@ -5918,8 +5997,17 @@ static void appendStoreSectionRows(String& rows, const StoreSection& section, ui
         // EQUIP_NONE — see the comment above that catalog) but the wizard and Dress page both
         // list it as an explicit choice, so show it here too rather than have it look missing.
         if (section.cat == ITEM_CAT_COLOR) rows += "<div class='item'><span>Cat - White</span><span class='owned'>Owned</span></div>\n";
+        // A seen*Count counts store entries, not indexes: in ACCESSORIES[] and ROOM_THEMES[] the
+        // store entries aren't a contiguous prefix (theme-week exclusives sit between them), so
+        // a row is NEW when its rank among the catalog's store entries is past the seen count.
+        // The rank counts every store entry, even the October-only Pumpkin Patch when it's
+        // hidden, the same way *_STORE_COUNT does.
+        int seen = storeSeenCount(section.cat);
+        int rank = 0;
         for (int i = 0; i < ITEM_CATALOG_COUNTS[section.cat]; i++) {
-            if (isStoreItem(section.cat, i)) appendStoreRow(rows, section.cat, i, points, fromAll);
+            if (!isStoreCatalogEntry(section.cat, i)) continue;
+            bool isNew = rank++ >= seen;
+            if (isStoreItem(section.cat, i)) appendStoreRow(rows, section.cat, i, points, fromAll, isNew);
         }
     }
 }
@@ -5995,34 +6083,31 @@ static void sendStoreAllPage(uint32_t points) {
 
 // /config/store shows the section menu; /config/store?s=<key> shows that section, and
 // ?s=all every section (COM-516). An unknown key falls back to the menu.
+//
+// Seen tracking (COM-517): the menu marks nothing seen, a section page marks only its own section
+// and All marks every section, which is what clears their NEW badges and, once no section is NEW,
+// the device's points flash. Each page is sent before it's marked, so its rows still show NEW on
+// this visit. A failed save only leaves the badges up until the next visit, so there's no rollback.
 static void handleConfigStoreGet() {
-    // Clear the on-device points flash by stamping the current catalog sizes as "seen" —
-    // any store visit acknowledges every item added up to this point.
-    if (hasNewStoreItems()) {
-        configMgr.config().seenStuffyCount       = (uint8_t)STUFFY_COUNT;
-        configMgr.config().seenBlanketColorCount = (uint8_t)BLANKET_COLOR_COUNT;
-        configMgr.config().seenRoomThemeCount    = (uint8_t)ROOM_THEME_STORE_COUNT;
-        configMgr.config().seenCatColorCount     = (uint8_t)CAT_COLOR_COUNT;
-        configMgr.config().seenAccessoryCount    = (uint8_t)ACCESSORY_STORE_COUNT;
-        configMgr.config().seenGlassesCount      = (uint8_t)GLASSES_STORE_COUNT;
-        configMgr.config().seenBadgeCount        = (uint8_t)BADGE_STORE_COUNT;
-        configMgr.config().seenToyCount          = (uint8_t)TOY_COUNT;
-        configMgr.config().seenRightArmSlot      = true;
-        configMgr.save();
-    }
     uint32_t points = configMgr.config().points;
     String key = wm.server->arg("s");
+    bool seenChanged = false;
     if (key == STORE_ALL_KEY) {
         sendStoreAllPage(points);
-        return;
-    }
-    for (int i = 0; i < STORE_SECTION_COUNT; i++) {
-        if (key == STORE_SECTIONS[i].key) {
-            sendStoreSectionPage(STORE_SECTIONS[i], points);
-            return;
+        seenChanged = markAllStoreSectionsSeen();
+    } else {
+        const StoreSection* section = nullptr;
+        for (int i = 0; i < STORE_SECTION_COUNT; i++) {
+            if (key == STORE_SECTIONS[i].key) section = &STORE_SECTIONS[i];
+        }
+        if (section) {
+            sendStoreSectionPage(*section, points);
+            seenChanged = markStoreSectionSeen(*section);
+        } else {
+            sendStoreLandingPage(points);
         }
     }
-    sendStoreLandingPage(points);
+    if (seenChanged) configMgr.save();
 }
 
 static void handleConfigBadgesGet() {
@@ -7343,7 +7428,7 @@ void loop() {
 
     // Points flash — while the store has an unseen new item, toggle the points balance's
     // color every 500ms; repaint once more with the flash off the moment it's cleared
-    // (i.e. the user just opened the store) so it doesn't linger mid-flash.
+    // (i.e. the user just opened the last store section with something new) so it doesn't linger mid-flash.
     {
         static unsigned long lastFlash = 0;
         static bool wasNew = false;
