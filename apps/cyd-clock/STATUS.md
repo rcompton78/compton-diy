@@ -1024,7 +1024,7 @@ and a device flash.
 - **Known, accepted:** during Happy/Celebrate the right sparkle's clear box (x 171..179,
   y 113..121) clips the middle of that same outer feeler, so only its blue tip shows for those few
   seconds. Any outward feeler on that side crosses the box, and the next idle redraw restores it.
-- **Flash:** +1,440 B on `cyd` (1,201,105 → 1,202,545 B, 91.7%), +1,476 B on `freenove-s3` (1,154,293 → 1,155,769 B, 34.6%).
+- **Flash:** +1,560 B on `cyd` (1,202,117 → 1,203,677 B, 91.8%), +1,528 B on `freenove-s3` (1,155,393 → 1,156,921 B, 34.6%), on top of COM-506.
 
 ## Branch & Files
 
