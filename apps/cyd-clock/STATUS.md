@@ -1057,8 +1057,9 @@ several existing items in one purchase at about 20% off their combined price.
   `collectStoreItemIds()`, so `assertStoreIdsUnique()` covers them and a flash sale can target a
   combo id (the menu's Combos button then shows SALE).
 - **★ LEGENDARY** goes on a combo that still has a legendary item to grant, not by price, since
-  Winter Day (350) and Pokémon Pals (480) would otherwise cross `STORE_COST_LEGENDARY`. Only the
-  Wizard's Kit is tagged, and it drops the tag once its three legendary items are all owned. The
+  Winter Day (350), Pokémon Pals (480) and the Eeveelution Trio (720) would otherwise cross
+  `STORE_COST_LEGENDARY`. Only the Wizard's Kit is tagged, and it drops the tag once its three
+  legendary items are all owned. The
   tag markup (`STORE_TAG_LEGENDARY`/`STORE_TAG_SALE`) is shared with catalog rows and the menu.
 - **Boot check.** `assertCombosValid()` (next to `assertStoreIdsUnique()` in `setup()`) halts if a
   combo item isn't a purchasable store item with cost > 0 (so never a theme-week exclusive), is
