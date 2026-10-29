@@ -4008,7 +4008,7 @@ static int64_t parseIso8601ToLocalStamp(const char* iso) {
 // resolved at runtime; assertCombosValid() checks at boot that each one is a purchasable,
 // non-seasonal, cost > 0 store item (so never a theme-week exclusive) and that `price` is below
 // the items' full price. A combo you partly own charges the same discount on just the missing
-// items (comboCharge()). Combo ids share the store id space, so a flash sale can target a combo,
+// items (comboPrice()). Combo ids share the store id space, so a flash sale can target a combo,
 // but a sale on one of its items doesn't change the combo's price.
 struct StoreCombo {
     const char* id;

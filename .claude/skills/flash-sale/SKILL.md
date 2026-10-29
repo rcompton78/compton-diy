@@ -49,6 +49,14 @@ grep -A3 'CAT_COLORS\[\] = {\|STUFFIES\[\] = {\|BLANKET_COLORS\[\] = {\|ROOM_THE
 Plus the one special case not from a catalog array: `right_arm_slot` (the one-time
 right-arm buddy slot unlock).
 
+Store combos (COM-507) are valid sale targets too: their `combo_*` ids live in `STORE_COMBOS[]`.
+A sale on a combo id discounts that combo; a sale on one of its items doesn't change the combo's
+price.
+
+```bash
+grep -A8 'STORE_COMBOS\[\] = {' apps/cyd-clock/src/main.cpp
+```
+
 ## Steps
 
 1. **List current sales** (always do this first, for context — a stale/forgotten sale
