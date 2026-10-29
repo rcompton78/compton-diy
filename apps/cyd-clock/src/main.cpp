@@ -3905,8 +3905,11 @@ static int collectStoreItemIds(const char** ids, int cap) {
 // flash sale for an item id that doesn't exist (typo, removed item, catalog drift) rather than
 // letting the device show an active "SALE!" flash for an item that can never actually go on
 // sale (flashSalePrice() would never match it either, so the sale would silently do nothing
-// while still visually announcing itself).
+// while still visually announcing itself). Haunted Pumpkin Patch only counts while it's on sale
+// (COM-503), since outside October the store doesn't list it.
+static bool isPumpkinPatchOnSale();
 static bool isKnownStoreItemId(const char* id) {
+    if (strcmp(id, ROOM_THEMES[ROOM_THEME_IDX_PUMPKIN_PATCH].id) == 0) return isPumpkinPatchOnSale();
     const char* ids[STORE_ITEM_ID_COUNT];
     int n = collectStoreItemIds(ids, STORE_ITEM_ID_COUNT);
     for (int i = 0; i < n; i++) {
@@ -4238,7 +4241,7 @@ static bool themeWeekItems(const String& key, ThemeWeekItems& out) {
  * `key` as activeThemeWeekKey. Called once per transition by checkThemeWeekTransition(), only
  * when nothing is applied: a switch between themes reverts the old one first. It snapshots the
  * room theme the user had equipped beforehand (preThemeWeekRoomTheme), so
- * revertThemeWeekCosmetics() can restore it exactly, whatever the user changes during the week.
+ * revertThemeWeekCosmetics() can restore it if the theme-week backdrop is still on at the end.
  *
  * @param key THEME_WEEK_BIRTHDAY or THEME_WEEK_HALLOWEEN.
  */
@@ -4268,18 +4271,25 @@ static void applyThemeWeekCosmetics(const char* key) {
  * since equippedAccessoryIndex()/equippedGlassesIndex() already fall back gracefully once the
  * owned bit clears (see their "owned bit not set" branch). The room theme is the one exception
  * that needs an explicit restore, since its fallback would pick "lowest owned theme" rather
- * than "what the user had before". An unknown key (from a newer firmware's backup) still
+ * than "what the user had before". It's only restored while the theme-week backdrop is still
+ * equipped: if the user switched to another theme they own during the week, that pick stays.
+ * An unknown key (from a newer firmware's backup) still
  * restores the room theme and clears the key, so the device can't get stuck in that state.
  */
 static void revertThemeWeekCosmetics() {
     ThemeWeekItems items;
-    if (themeWeekItems(configMgr.config().activeThemeWeekKey, items)) {
+    bool known = themeWeekItems(configMgr.config().activeThemeWeekKey, items);
+    if (known) {
         configMgr.config().ownedAccessories &= ~(1 << items.accessory);
         configMgr.config().ownedGlasses &= ~(1 << items.glasses);
         configMgr.config().ownedRoomThemes &= ~(1 << items.roomTheme);
     }
 
-    configMgr.config().equippedRoomTheme = configMgr.config().preThemeWeekRoomTheme;
+    // Restore the snapshot only while the theme-week backdrop is still on. A room theme the user
+    // picked during the week (e.g. Haunted Pumpkin Patch, bought in October, COM-503) stays.
+    if (!known || configMgr.config().equippedRoomTheme == items.roomTheme) {
+        configMgr.config().equippedRoomTheme = configMgr.config().preThemeWeekRoomTheme;
+    }
     configMgr.config().preThemeWeekRoomTheme = EQUIP_NONE;
     configMgr.config().activeThemeWeekKey = "";
     configMgr.save();

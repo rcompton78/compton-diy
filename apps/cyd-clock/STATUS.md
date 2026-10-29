@@ -921,6 +921,14 @@ was the "flickering jack-o'-lantern eyes" idea in `STORE_IDEAS.md`.
   all year. The constexpr `isStoreRoomTheme()` and its count are unchanged. Outside October, the
   "new store items!" flash on a fresh install still counts the theme, and the next store visit
   clears it even though the theme isn't listed.
+- **Kept past a theme week.** It's on sale during the Halloween week (Oct 24–31), and buying it
+  then equips it over Haunted Night. `revertThemeWeekCosmetics()` used to put back the pre-week
+  snapshot no matter what, which would have switched it off on Nov 1. It now restores the snapshot
+  only while the theme-week backdrop is still equipped, so any theme the user picked during a week
+  stays.
+- **No out-of-season flash sale.** `isKnownStoreItemId()` treats `pumpkin_patch` as unknown while
+  `isPumpkinPatchOnSale()` is false, so a sale on it outside October is skipped, not announced
+  with a "SALE!" flash for an item the store doesn't list.
 - **Flat sky where text prints.** The cat's name strip (everything below `PUMPKIN_PATCH_MIST_Y`),
   both "Zz" columns and the badge column stay plain `C_PUMPKIN_PATCH_SKY` (the bgColor), for the
   same box-free text reason as Hogwarts' lake. Under the black ground the strip reads as purple
@@ -950,8 +958,8 @@ was the "flickering jack-o'-lantern eyes" idea in `STORE_IDEAS.md`.
 
 | Board | Before | After | Delta | % used |
 |---|---|---|---|---|
-| `cyd` | 1,199,321 B | 1,201,041 B | +1,720 B | 91.5% → **91.6%** |
-| `freenove-s3` | 1,152,557 B | 1,154,233 B | +1,676 B | 34.5% → 34.5% |
+| `cyd` | 1,199,321 B | 1,201,105 B | +1,784 B | 91.5% → **91.6%** |
+| `freenove-s3` | 1,152,557 B | 1,154,293 B | +1,736 B | 34.5% → 34.5% |
 
 ## Branch & Files
 
