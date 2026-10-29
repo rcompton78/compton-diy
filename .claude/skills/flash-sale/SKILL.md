@@ -1,6 +1,6 @@
 ---
 name: flash-sale
-description: Add, list, or remove a cyd-clock store flash-sale item by writing directly to cat-buddy-api's flash_sales database (prod on cat-buddy.richcompton.com, or the local dev instance). Use when the user asks to "put X on sale", "add a flash sale", "start a sale on <item>", "remove the flash sale", "clear the sale", "what's currently on sale", or similar (DIY-59/DIY-79).
+description: Add, list, or remove a cyd-clock store flash-sale item by writing directly to cat-buddy-api's flash_sales database (prod on the homelab host via `ssh home`, or the local dev instance). Use when the user asks to "put X on sale", "add a flash sale", "start a sale on <item>", "remove the flash sale", "clear the sale", "what's currently on sale", or similar (DIY-59/DIY-79).
 allowed-tools: [Bash]
 ---
 
@@ -28,7 +28,11 @@ Default to **prod** unless the user says "dev"/"local"/"test":
   Don't SSH to the public name from the LAN: `cat-buddy.richcompton.com` resolves to the
   router's public IP, which refuses :22 from inside (hairpin NAT, same as COM-233; 443 works),
   so `ssh compton@cat-buddy.richcompton.com` fails with "Connection refused". That public name
-  is only the fallback for when you're off the LAN and `home` (192.168.1.218) is unreachable.
+  is only the fallback for when you're off the LAN and `home` (192.168.1.218) is unreachable:
+  `ssh -o HostKeyAlias=home.richcompton.com compton@cat-buddy.richcompton.com "docker exec -i cat-buddy-db psql -U postgres -d cat_buddy"`.
+  The `HostKeyAlias` reuses `home`'s known host key; without it a non-interactive run stops
+  at "Host key verification failed". The off-LAN path is untested (it needs :22 forwarded
+  publicly), so if it fails, tell the user rather than retrying variations.
 - **Dev**: `docker exec -i cat-buddy-db psql -U postgres -d cat_buddy` run locally — only works if the dev container is up (`docker ps --format '{{.Names}}' | grep cat-buddy-db`; if not, tell the user to start it, e.g. via `nx start-infra cat-buddy` in the `compton-apps` repo — don't start it yourself unless asked)
 
 ## Valid item ids
