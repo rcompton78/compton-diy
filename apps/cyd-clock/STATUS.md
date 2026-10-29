@@ -1016,7 +1016,15 @@ and a device flash.
 - **Neck bow.** A pink bow under the chin (`drawSylveonBow()`) replaces Eevee's ruff.
 - **No logic change.** The store, dressing room and "new store items!" flash all loop over
   `STUFFY_COUNT`; nine stuffies stay inside the `uint16_t` `ownedStuffies` mask.
-- **Flash:** +1,424 B on `cyd` (1,201,105 → 1,202,529 B, 91.7%), +1,460 B on `freenove-s3` (1,154,293 → 1,155,753 B, 34.6%).
+- **Right-arm ghosting.** In the day scene `drawAnimal()` clears only `CAT_CX ± 50` each frame,
+  and the right-arm pose's outer feeler and bow wing reach x 170..183, so the Celebrate bounce
+  (±3 px) left blue/pink ghost pixels beside the cat. `drawSylveonHeld()` now first repaints a
+  15×24 backdrop strip there (x 170..184), covering the previous frame's bounce. The strip stays
+  clear of the badge column's right-aligned text and the right-side "Zz" marks (x 188+).
+- **Known, accepted:** during Happy/Celebrate the right sparkle's clear box (x 171..179,
+  y 113..121) clips the middle of that same outer feeler, so only its blue tip shows for those few
+  seconds. Any outward feeler on that side crosses the box, and the next idle redraw restores it.
+- **Flash:** +1,440 B on `cyd` (1,201,105 → 1,202,545 B, 91.7%), +1,476 B on `freenove-s3` (1,154,293 → 1,155,769 B, 34.6%).
 
 ## Branch & Files
 

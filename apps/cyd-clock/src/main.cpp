@@ -2115,6 +2115,13 @@ static void drawSylveonFull(int cx, int cy, uint16_t accentColor) {
 // head bow flipped so the tail still pokes toward the cat and the feelers still trail away.
 static void drawSylveonHeld(int cx, int cy, uint16_t accentColor) {
     int bx = cx + 38, by = cy - 8;
+    // The outer feeler and the head bow's outer wing reach x bx+12..bx+25, past the
+    // CAT_CX ± 50 rect drawAnimal() clears each frame (the rule drawPikachuTail() points its tail
+    // inward for). Erase that strip here first, tall enough to cover the previous frame's
+    // ±3 px Celebrate bounce, or the bounce smears blue/pink ghost pixels beside the cat until
+    // the next full backdrop repaint. The strip ends at x 184, clear of the badge column's
+    // right-aligned text and the right-side "Zz" marks (x 188+).
+    zoneFillRect(bx + 12, by - 13, 15, 24);
     drawSylveonTail(bx, by, -1);
     tft.fillRoundRect(bx - 10, by + 8, 20, 30, 10, C_SYLVEON);  // body
     tft.fillCircle(bx - 6, by + 39, 5, C_SYLVEON_PINK);         // left foot
