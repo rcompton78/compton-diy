@@ -9,7 +9,9 @@ list when planning the next store card.
 Same catalog pattern as the existing stuffies (`STUFFIES[]` in `apps/cyd-clock/src/main.cpp`) —
 easy to slot in, no other plumbing changes needed.
 
-- Black cat — high-contrast silhouette, would read well against the existing bear/bunny/squirrel/penguin style
+- Black cat — high-contrast silhouette, would read well against the existing bear/bunny/squirrel/penguin style.
+  Umbreon (COM-508) shipped as a dark stuffy first; its charcoal body (not pure black) is the colour
+  to reuse, so the cat stays visible on the black room themes
 - Dinosaur (little T-rex with tiny arms) — fun shape for the vector-primitive drawing technique
 - Dragon as a next premium tier above the current 150pt stuffies, with wings and a longer tail for a "reach goal" feel
 
@@ -47,7 +49,7 @@ left on the table:
 
 ## Legendary tier
 
-COM-382 introduced the legendary tier: `STORE_COST_LEGENDARY` (350 points, the top tier above Pikachu/Eevee/Sylveon's 300) and a gold
+COM-382 introduced the legendary tier: `STORE_COST_LEGENDARY` (350 points, the top tier above Pikachu/Eevee/Sylveon/Umbreon's 300) and a gold
 "★ LEGENDARY" store tag for anything priced at or above it (`appendStoreItemTags()`). Shipped so far:
 
 - **Sorting Hat** (head accessory).
@@ -57,7 +59,7 @@ COM-382 introduced the legendary tier: `STORE_COST_LEGENDARY` (350 points, the t
   - more single-house crests (Slytherin serpent, Ravenclaw eagle, Hufflepuff badger), now that
     the Gryffindor one exists;
   - a gold star or sheriff badge;
-  - a Pokémon gym badge to go with the Pikachu/Eevee/Sylveon stuffies.
+  - a Pokémon gym badge to go with the Pikachu/Eevee/Sylveon/Umbreon stuffies.
 
 - **Gryffindor Badge** (COM-448), the second chest badge: a gold-rimmed scarlet shield with a
   gold lion rampant.
