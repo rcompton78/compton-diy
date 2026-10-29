@@ -6932,8 +6932,12 @@ void loop() {
         peekingAsleep = inSleepWindow && peekUntilMs > 0;       // re-check post-touch, mirrors sleepingNow
         // Force a clean repaint on any peekingAsleep transition — covers the sleep
         // window itself ending mid-peek, which otherwise wouldn't force a redraw and
-        // could leave the blanket/bear scene stuck on screen after waking.
-        if (peekingAsleep != wasPeekingAsleep) dirty.animal = true;
+        // could leave the blanket/bear scene stuck on screen after waking. The backdrop is
+        // repainted too (COM-268): drawAnimal()'s per-frame clear only covers CAT_CX ± 50, and
+        // the night scene's stuffies can reach past it (Sylveon's outer feeler and head bow, out
+        // to x ~55 on the left slot and ~185 on the right), so without a full repaint those
+        // pixels stay on the day screen after the peek ends. Once per transition, not per frame.
+        if (peekingAsleep != wasPeekingAsleep) dirty.animal = dirty.animalBg = true;
         if (sleepingNow) {
             updateSleepScreen(now);
             delay(50);

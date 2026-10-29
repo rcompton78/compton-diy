@@ -1021,6 +1021,11 @@ and a device flash.
   (±3 px) left blue/pink ghost pixels beside the cat. `drawSylveonHeld()` now first repaints a
   15×24 backdrop strip there (x 170..184), covering the previous frame's bounce. The strip stays
   clear of the badge column's right-aligned text and the right-side "Zz" marks (x 188+).
+- **Night-pose leftovers.** The night poses reach past that clear too (left slot to x ~55, right
+  peeking to ~185), and leaving the peek scene only set `dirty.animal`, so outside Haunted Pumpkin
+  Patch (which already forced a full repaint there) those feeler/bow pixels stayed on the day
+  screen. Every `peekingAsleep` transition now sets `dirty.animalBg` too: one full backdrop
+  repaint per transition, which also cleans up any other stuffy art past `CAT_CX ± 50`.
 - **Known, accepted:** during Happy/Celebrate the right sparkle's clear box (x 171..179,
   y 113..121) clips the middle of that same outer feeler, so only its blue tip shows for those few
   seconds. Any outward feeler on that side crosses the box, and the next idle redraw restores it.
