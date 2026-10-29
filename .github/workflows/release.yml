@@ -56,6 +56,7 @@ jobs:
           # registry's per-IP download limit. Targets are pre-created because PlatformIO
           # can't create a dir through a dangling symlink, and kept per app because env
           # names (e.g. freenove-s3) repeat across apps with different lib_deps.
+          shopt -s nullglob
           for ini in apps/*/platformio.ini; do
             app="$(basename "$(dirname "$ini")")"
             mkdir -p "apps/$app/.pio" "/hdd/compton-diy/libdeps-$app"
