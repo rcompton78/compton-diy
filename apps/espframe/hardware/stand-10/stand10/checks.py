@@ -80,12 +80,18 @@ def run(parts: dict) -> list:
         f"fit test: {p.FIT_FACE_GAP_MEASURED:g} mm from the frame face's rear to the glass with nominal risers; the "
         f"printed riser is {printed_add:.2f} mm longer, leaving {fit_gap:.2f} mm of air, no face felt (need 0.1–0.5)")
 
-    head_gap = p.SCREW_HEAD_CB[1] - p.WASHER_T - p.BUTTON_HEAD_K - p.PLUG_BODY
-    add("Hole plugs clear the screw heads",
-        head_gap >= p.MIN_PLUG_HEAD_GAP and max(p.PLUG_TRIAL_D + [p.PLUG_D]) < p.SCREW_HEAD_CB[0],
-        f"{p.PLUG_BODY:g} mm plug body in the {p.SCREW_HEAD_CB[1]:g} mm counterbore stops {head_gap:.1f} mm above a "
-        f"{p.BUTTON_HEAD_K:g} mm button head (need ≥ {p.MIN_PLUG_HEAD_GAP:g}); plugs Ø{min(p.PLUG_TRIAL_D):g}–"
-        f"{max(p.PLUG_TRIAL_D):g} (six at Ø{p.PLUG_D:g}) in a Ø{p.SCREW_HEAD_CB[0]:g} bore")
+    bore = p.SCREW_HEAD_CB[0]
+    ribs = p.PLUG_TRIAL_RIB_D + [p.PLUG_RIB_D]
+    head_depth = min(p.SCREW_HEAD_CB[1] - p.WASHER_T - p.BUTTON_HEAD_K, p.PLUG_HEAD_DEPTH)   # model or as printed
+    head_gap = head_depth - max(p.PLUG_TRIAL_BODY + [p.PLUG_BODY])
+    add("Hole plugs clear the screw heads and grip on their ribs",
+        head_gap >= p.MIN_PLUG_HEAD_GAP and p.PLUG_CORE_D < bore < min(ribs) and max(ribs) < p.PLUG_FLANGE[0],
+        f"the deepest {max(p.PLUG_TRIAL_BODY + [p.PLUG_BODY]):g} mm plug body stops {head_gap:.2f} mm above the screw head, "
+        f"{head_depth:g} mm under the back face as measured (model {p.SCREW_HEAD_CB[1] - p.WASHER_T - p.BUTTON_HEAD_K:g}; "
+        f"need ≥ {p.MIN_PLUG_HEAD_GAP:g}); Ø{p.PLUG_CORE_D:g} "
+        f"core clear of the Ø{bore:g} bore, {p.PLUG_RIB_N} crush ribs Ø{min(ribs):g}–{max(ribs):g} "
+        f"({(min(ribs) - bore) / 2:.3f}–{(max(ribs) - bore) / 2:.3f} mm/side into it; six at Ø{p.PLUG_RIB_D:g} × "
+        f"{p.PLUG_BODY:g}), inside the Ø{p.PLUG_FLANGE[0]:g} lip")
 
     # 3. Antenna keep-out: no metal (plate screws other than the nylon one, frame inserts and screws, foot lock) near it.
     metal = {f"M2.5 at ({x:g}, {y:g})": (x, y) for x, y in p.HOLES if (x, y) != p.NYLON_HOLE}
