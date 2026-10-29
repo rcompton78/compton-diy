@@ -82,12 +82,14 @@ def run(parts: dict) -> list:
 
     bore = p.SCREW_HEAD_CB[0]
     ribs = p.PLUG_TRIAL_RIB_D + [p.PLUG_RIB_D]
-    head_depth = min(p.SCREW_HEAD_CB[1] - p.WASHER_T - p.BUTTON_HEAD_K, p.PLUG_HEAD_DEPTH)   # model or as printed
+    model_depth = p.SCREW_HEAD_CB[1] - p.WASHER_T - p.BUTTON_HEAD_K
+    head_depth = min(model_depth, p.PLUG_HEAD_DEPTH)   # model or as printed, whichever is tighter
+    depth_src = "as measured" if p.PLUG_HEAD_DEPTH <= model_depth else "in the model"
     head_gap = head_depth - max(p.PLUG_TRIAL_BODY + [p.PLUG_BODY])
     add("Hole plugs clear the screw heads and grip on their ribs",
         head_gap >= p.MIN_PLUG_HEAD_GAP and p.PLUG_CORE_D < bore < min(ribs) and max(ribs) < p.PLUG_FLANGE[0],
         f"the deepest {max(p.PLUG_TRIAL_BODY + [p.PLUG_BODY]):g} mm plug body stops {head_gap:.2f} mm above the screw head, "
-        f"{head_depth:g} mm under the back face as measured (model {p.SCREW_HEAD_CB[1] - p.WASHER_T - p.BUTTON_HEAD_K:g}; "
+        f"{head_depth:g} mm under the back face {depth_src} (model {model_depth:g}, measured {p.PLUG_HEAD_DEPTH:g}; "
         f"need ≥ {p.MIN_PLUG_HEAD_GAP:g}); Ø{p.PLUG_CORE_D:g} "
         f"core clear of the Ø{bore:g} bore, {p.PLUG_RIB_N} crush ribs Ø{min(ribs):g}–{max(ribs):g} "
         f"({(min(ribs) - bore) / 2:.3f}–{(max(ribs) - bore) / 2:.3f} mm/side into it; six at Ø{p.PLUG_RIB_D:g} × "

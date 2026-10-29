@@ -127,7 +127,8 @@ PLUG_CORE_D = 5.3                 # DESIGN: plain core, 0.15 mm/side clear of th
 PLUG_RIB_N = 4                    # DESIGN: crush ribs round the core
 PLUG_RIB_W = 0.8                  # DESIGN: rib width, two extrusion widths so it prints as a solid fin
 PLUG_RIB_CHAMFER = 0.5            # DESIGN: lead-in on each rib's top so it starts into the bore
-PLUG_RIB_D = 5.75                 # MEASURED (COM-496 trial): rib tips across, 0.075 mm/side into the counterbore
+PLUG_RIB_D = 5.75                 # MEASURED (COM-496 trial): across the rib faces, 0.075 mm/side into the counterbore
+                                  #   (the flat faces' corners reach ~0.05 mm further). The figure is the trial's label
 PLUG_HEAD_DEPTH = 2.5             # MEASURED (COM-496, calipers on the printed plate): back face to the screw head top. The
                                   #   model says SCREW_HEAD_CB depth − BUTTON_HEAD_K = 4.25; the plugs size to the measured value
 PLUG_BODY = 2.0                   # MEASURED (COM-496 trial): plug depth into the counterbore, flush over the screw head
