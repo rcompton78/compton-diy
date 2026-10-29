@@ -1066,7 +1066,8 @@ several existing items in one purchase at about 20% off their combined price.
   the combo code; single-item purchases behave as before.
 - **Not done:** an "equip all" button in the Dressing Room, and counting new combos in the
   on-device "new store items!" flash (that would need a new seen-count field in the save file).
-- **Size:** flash ~+3 KB on `cyd` (91.7% → 91.9%, 1,205,089 B); static RAM unchanged.
+- **Size:** flash +2,904 B on `cyd` (1,203,677 → 1,206,581 B, 91.8% → 92.1%), +2,936 B on
+  `freenove-s3` (1,156,921 → 1,159,857 B), on top of COM-268; static RAM unchanged.
 
 ## Branch & Files
 
