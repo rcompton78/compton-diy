@@ -11,7 +11,47 @@ VENV_ESPHOME="$REPO_ROOT/apps/espframe/.venv/bin/esphome"
 # upgraded shared framework/tool packages out from under the other one. A
 # dedicated core dir means the two can never clobber each other's package
 # versions again.
-export PLATFORMIO_CORE_DIR="${PLATFORMIO_CORE_DIR:-$REPO_ROOT/apps/espframe/.platformio-core}"
+#
+# Outside CI that dir, and each app's PlatformIO libraries, live in a cache
+# shared by every clone and worktree on the machine (COM-524), the same way as
+# scripts/pio.sh's: a fresh worktree used to re-download the whole ESP-IDF
+# toolchain, and every download counts against PlatformIO's per-IP registry
+# limit. ESPHome only defaults PLATFORMIO_LIBDEPS_DIR (to the device build
+# dir's .piolibdeps, which checkout's clean deletes on the release runner), so
+# setting it here wins. It's keyed per app, since the libdeps dir holds one
+# subdir per device name. In CI the core stays apps/espframe/.platformio-core
+# (release.yml symlinks it onto /hdd), and libdeps move only when
+# ESPHOME_LIBDEPS_ROOT is set, as release.yml does; pr-build.yml's fresh VM
+# keeps ESPHome's default. Either PLATFORMIO_* var set explicitly always wins.
+is_ci() { [ -n "${CI:-}" ] && [ "${CI}" != "false" ] && [ "${CI}" != "0" ]; }
+SHARED_CACHE_ROOT="${COMPTON_DIY_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/compton-diy}"
+if is_ci; then
+    export PLATFORMIO_CORE_DIR="${PLATFORMIO_CORE_DIR:-$REPO_ROOT/apps/espframe/.platformio-core}"
+else
+    export PLATFORMIO_CORE_DIR="${PLATFORMIO_CORE_DIR:-$SHARED_CACHE_ROOT/esphome-platformio-core}"
+    ESPHOME_LIBDEPS_ROOT="${ESPHOME_LIBDEPS_ROOT:-$SHARED_CACHE_ROOT/esphome-libdeps}"
+fi
+# Pre-created like pio.sh's (PlatformIO's first-run init races on a cold dir),
+# through readlink -f so the runner's dangling /hdd symlink gets its target made.
+core_dir="$(readlink -f "$PLATFORMIO_CORE_DIR" 2>/dev/null)" || core_dir=""
+[ -n "$core_dir" ] || core_dir="$PLATFORMIO_CORE_DIR"
+[ -d "$core_dir" ] || mkdir -p "$core_dir"
+if [ -z "${PLATFORMIO_LIBDEPS_DIR:-}" ] && [ -n "${ESPHOME_LIBDEPS_ROOT:-}" ]; then
+    # The app is the apps/<app>/ dir holding the first .yaml argument.
+    repo_real="$(cd "$REPO_ROOT" && pwd -P)"
+    for arg in "$@"; do
+        case "$arg" in *.yaml | *.yml) ;; *) continue ;; esac
+        yaml_dir="$(cd "$(dirname "$arg")" 2>/dev/null && pwd -P)" || break
+        case "$yaml_dir" in
+            "$repo_real"/apps/*)
+                app="${yaml_dir#"$repo_real"/apps/}"
+                export PLATFORMIO_LIBDEPS_DIR="$ESPHOME_LIBDEPS_ROOT/${app%%/*}"
+                mkdir -p "$PLATFORMIO_LIBDEPS_DIR"
+                ;;
+        esac
+        break
+    done
+fi
 
 # ESPHome equivalent of scripts/pio.sh's `-D NAME="${sysenv.NAME}"` build-flag
 # pattern: threads RELEASE_VERSION into the compiled firmware's own
@@ -50,7 +90,7 @@ SUBSTITUTION_ARGS=(-s firmware_version "${RELEASE_VERSION:-dev}")
 # ESPHOME_SKIP_VERSION_CHECK=1 to run an unpinned ESPHome (e.g. to try a new
 # release before bumping the pin).
 CONTRACT_JSON="$REPO_ROOT/apps/espframe/product/contract/project.json"
-SHARED_VENV_ROOT="${ESPHOME_VENV_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/compton-diy}"
+SHARED_VENV_ROOT="${ESPHOME_VENV_CACHE:-$SHARED_CACHE_ROOT}"
 
 die() {
     echo "espframe-esphome.sh: $*" >&2
@@ -113,7 +153,7 @@ fi
 mismatch_msg="ESPHome $ESPHOME_PIN required (apps/espframe/product/contract/project.json), $found_msg."
 
 # GitHub Actions sets CI=true; CI=false/0 (a common local opt-out) isn't CI.
-if [ -n "${CI:-}" ] && [ "${CI}" != "false" ] && [ "${CI}" != "0" ]; then
+if is_ci; then
     die "$mismatch_msg Install the pinned version before building."
 fi
 

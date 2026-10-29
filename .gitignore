@@ -27,8 +27,8 @@ dist/
 .env
 .env.*
 !.env.example
-.venv/
-.platformio-core/
+.venv
+.platformio-core
 
 # Python
 __pycache__/
