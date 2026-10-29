@@ -5291,7 +5291,11 @@ static void handleConfigCityGet() {
 // the append-only catalog rule is untouched.
 enum ItemCategory : uint8_t {
     ITEM_STUFFY, ITEM_BLANKET, ITEM_ROOM_THEME, ITEM_CAT_COLOR,
-    ITEM_ACCESSORY, ITEM_GLASSES, ITEM_BADGE, ITEM_TOY, ITEM_CATEGORY_COUNT
+    ITEM_ACCESSORY, ITEM_GLASSES, ITEM_BADGE, ITEM_TOY, ITEM_CATEGORY_COUNT,
+    // Store sections that aren't catalogs (COM-506) each get their own value past the catalogs, so
+    // STORE_SECTIONS[] and the purchase redirect can tell them apart. Never index catalog arrays
+    // with these.
+    ITEM_RIGHT_ARM_SLOT = ITEM_CATEGORY_COUNT
 };
 
 // One catalog entry's web-facing fields. `webColor` is nullptr for catalogs whose labels are
@@ -5464,7 +5468,7 @@ static void appendStoreRow(String& html, ItemCategory cat, int i, uint32_t point
 
 // The store's sections (COM-506): the landing page lists one button per entry, in this order,
 // and /config/store?s=<key> shows that section's items alone. `cat` is the catalog the section
-// sells, or ITEM_CATEGORY_COUNT for the Right Arm Slot, which isn't a catalog item. `key` is
+// sells, or a non-catalog value such as ITEM_RIGHT_ARM_SLOT. `key` is
 // part of the section page's URL, so keep existing keys stable. A future Combos section goes
 // first.
 struct StoreSection {
@@ -5482,15 +5486,16 @@ static const StoreSection STORE_SECTIONS[] = {
     {"glasses",     "Glasses",            nullptr,                                            ITEM_GLASSES},
     {"badges",      "Badges - Chest",     nullptr,                                            ITEM_BADGE},
     {"toys",        "Toys",               "For the Right Arm slot.",                          ITEM_TOY},
-    {"right_arm",   "Right Arm Slot",     "Day &amp; night, holds either a Buddy or a Toy.",  ITEM_CATEGORY_COUNT},
+    {"right_arm",   "Right Arm Slot",     "Day &amp; night, holds either a Buddy or a Toy.",  ITEM_RIGHT_ARM_SLOT},
 };
 static constexpr int STORE_SECTION_COUNT = sizeof(STORE_SECTIONS) / sizeof(STORE_SECTIONS[0]);
 // One section per catalog plus the Right Arm Slot, so a new ItemCategory can't ship without a
 // store page (storeSectionFor() would otherwise fall back to the first section). A section that
-// isn't a catalog, like the future Combos one, adds to the right-hand side.
+// isn't a catalog, like the future Combos one, gets its own value after ITEM_RIGHT_ARM_SLOT and
+// adds to the right-hand side.
 static_assert(STORE_SECTION_COUNT == ITEM_CATEGORY_COUNT + 1, "every ItemCategory needs a STORE_SECTIONS[] entry");
 
-// The section that sells `cat` (ITEM_CATEGORY_COUNT = the Right Arm Slot). Every category has one.
+// The section that sells `cat` (or a non-catalog value like ITEM_RIGHT_ARM_SLOT). Every category has one.
 static const StoreSection& storeSectionFor(ItemCategory cat) {
     for (int i = 0; i < STORE_SECTION_COUNT; i++) {
         if (STORE_SECTIONS[i].cat == cat) return STORE_SECTIONS[i];
@@ -5503,7 +5508,7 @@ static const StoreSection& storeSectionFor(ItemCategory cat) {
 // isn't listing right now (e.g. Haunted Pumpkin Patch outside October) never marks a section.
 static bool storeSectionHasSale(const StoreSection& section) {
     if (!isFlashSaleActive()) return false;
-    if (section.cat == ITEM_CATEGORY_COUNT) return strcmp(currentFlashSale.itemId, "right_arm_slot") == 0;
+    if (section.cat == ITEM_RIGHT_ARM_SLOT) return strcmp(currentFlashSale.itemId, "right_arm_slot") == 0;
     return findCatalogIndex(section.cat, currentFlashSale.itemId, true) >= 0;
 }
 
@@ -5539,7 +5544,7 @@ static void sendStoreSectionPage(const StoreSection& section, uint32_t points) {
     page.replace("%%NOTE%%", section.note ? String("<p style='color:#888'>") + section.note + "</p>" : String(""));
     page.replace("%%POINTS%%", String(points));
     String rows;
-    if (section.cat == ITEM_CATEGORY_COUNT) {
+    if (section.cat == ITEM_RIGHT_ARM_SLOT) {
         appendStoreItemRow(rows, "right_arm_slot", nullptr, "", "Right Arm Slot", STORE_COST_RIGHT_ARM_SLOT,
                            configMgr.config().rightArmSlotUnlocked ? "Owned" : nullptr, "Buy for ", points);
     } else {
@@ -6047,7 +6052,7 @@ static void handleConfigCityPost() {
 }
 
 // Sends the purchase result back to the section the item is sold in (COM-506), so buying keeps
-// the user on that section's page. `cat` is ITEM_CATEGORY_COUNT for the Right Arm Slot.
+// the user on that section's page. `cat` is ITEM_RIGHT_ARM_SLOT for the Right Arm Slot.
 static void redirectToStoreSection(ItemCategory cat, const char* query) {
     String location = "/config/store?s=";
     location += storeSectionFor(cat).key;
@@ -6061,7 +6066,7 @@ static void handleConfigStorePost() {
     String item = wm.server->arg("item");
     uint32_t cost;
     bool alreadyOwned;
-    ItemCategory cat = ITEM_CATEGORY_COUNT;  // ITEM_CATEGORY_COUNT = the right arm slot, not a catalog item
+    ItemCategory cat = ITEM_RIGHT_ARM_SLOT;  // unless the lookup below finds a catalog item
     int idx = -1;
     // Store-only lookup (isStoreItem()): the theme-week-exclusive entries (DIY-108, in
     // ROOM_THEMES[]/ACCESSORIES[]/GLASSES[]) must never be purchasable here, no matter what

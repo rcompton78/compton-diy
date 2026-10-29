@@ -974,7 +974,9 @@ phone. It's now a menu plus one page per section.
   `right_arm`.
 - **`STORE_SECTIONS[]`** replaces `STORE_ITEM_PLACEHOLDERS` and the nine `<h3>` blocks. Each entry
   is a key, title, optional note ("Night only." for blankets) and its `ItemCategory`, with
-  `ITEM_CATEGORY_COUNT` standing for the Right Arm Slot. Its order is the menu's order, so the
+  `ITEM_RIGHT_ARM_SLOT` (a non-catalog value past `ITEM_CATEGORY_COUNT`) for the Right Arm Slot. A
+  `static_assert` requires one section per catalog, and a future non-catalog section such as
+  Combos gets its own value too. Its order is the menu's order, so the
   combos card's section goes in first. Rows still come from `isStoreItem()` + `appendStoreRow()`,
   so the theme-week filters, October-only Haunted Pumpkin Patch, flash-sale price and
   ★ LEGENDARY / SALE tags are unchanged.
