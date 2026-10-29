@@ -120,9 +120,20 @@ SCREW_HEAD_CB = (5.6, 3.5 + RISER_FIT_ADD)  # DESIGN: head counterbore (dia, dep
                                   #   gives 3.8 mm into the 4.4 mm insert. No washer: one would lift the head
                                   #   0.5 mm, into the cover plug
 BUTTON_HEAD_K = 1.5               # EST: tallest M2.5 button head expected (commercial 1.3–1.5)
-PLUG_D = 5.45                     # DESIGN: removable cover plug, a friction fit in the Ø5.6 counterbore (PETG)
-PLUG_TRIAL_D = [5.35, 5.45, 5.55] # DESIGN: plug test set, 1–3 notches in the pull tab
-PLUG_BODY = 1.6 + RISER_FIT_ADD   # DESIGN: plug depth into the counterbore, short of the screw head
+# Cover plugs (COM-496): the first plain Ø5.35–5.55 plugs were loose in the printed Ø5.6 counterbore and too long to sit
+# flush. Now a shorter undersize core with PLUG_RIB_N crush ribs that squash as it goes in, so the grip doesn't hang
+# on holding a 0.1 mm slip fit. The trial grid brackets the rib diameter (interference) and body depth.
+PLUG_CORE_D = 5.3                 # DESIGN: plain core, 0.15 mm/side clear of the Ø5.6 counterbore
+PLUG_RIB_N = 4                    # DESIGN: crush ribs round the core
+PLUG_RIB_W = 0.8                  # DESIGN: rib width, two extrusion widths so it prints as a solid fin
+PLUG_RIB_CHAMFER = 0.5            # DESIGN: lead-in on each rib's top so it starts into the bore
+PLUG_RIB_D = 5.75                 # MEASURED (COM-496 trial): across the rib faces, 0.075 mm/side into the counterbore
+                                  #   (the flat faces' corners reach ~0.05 mm further). The figure is the trial's label
+PLUG_HEAD_DEPTH = 2.5             # MEASURED (COM-496, calipers on the printed plate): back face to the screw head top. The
+                                  #   model says SCREW_HEAD_CB depth − BUTTON_HEAD_K = 4.25; the plugs size to the measured value
+PLUG_BODY = 2.0                   # MEASURED (COM-496 trial): plug depth into the counterbore, flush over the screw head
+PLUG_TRIAL_RIB_D = [5.75, 5.9, 6.05]  # DESIGN: trial rib diameters, 1–3 notches in the pull tab
+PLUG_TRIAL_BODY = [1.0, 1.5, 2.0]     # DESIGN: trial body depths, one row each (they show by length)
 PLUG_FLANGE = (SCREW_HEAD_CB[0] + 0.8, 0.6)  # DESIGN: lip (dia, thickness) proud of the back face
 PLUG_TAB = (2.5, 1.2)             # DESIGN: pull tab on one side of the lip (width, reach past the lip) for a fingernail
 MIN_PLUG_HEAD_GAP = 0.3           # DESIGN: check limit, plug end above the tallest button head

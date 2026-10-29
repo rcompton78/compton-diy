@@ -4,7 +4,7 @@ Print the template and the riser first: they check the board's measured hole pat
 outline, UART port position and screw length against the real board before the big parts.
 """
 
-from build123d import Align, Cylinder, Part, Pos, Rot
+from build123d import Align, Cylinder, Part, Plane, Polygon, Pos, Rot, extrude
 
 from . import params as p
 from .foot import build_rail
@@ -66,14 +66,20 @@ def riser_coupon() -> Part:
     return part
 
 
-def hole_plug(d: float, notches: int = 0) -> Part:
-    """One cover plug for a counterbored riser hole, flange down on the bed: a PLUG_BODY friction-fit body of
-    diameter d on a thin lip, with a pull tab on one side for a fingernail. Notches in the tab end count a trial size."""
+def hole_plug(rib_d: float = p.PLUG_RIB_D, body: float = p.PLUG_BODY, notches: int = 0) -> Part:
+    """One cover plug for a counterbored riser hole, flange down on the bed: a PLUG_CORE_D core, body deep, with
+    PLUG_RIB_N crush ribs reaching rib_d that squash into the Ø5.6 counterbore, on a thin lip with a pull tab on one
+    side for a fingernail. Each rib's top is chamfered as a lead-in. Notches in the tab end count a trial rib size."""
     fd, ft = p.PLUG_FLANGE
     tw, tr = p.PLUG_TAB
     plug = Cylinder(fd / 2, ft, align=(Align.CENTER, Align.CENTER, Align.MIN))
     plug += box(0, fd / 2 + tr, -tw / 2, tw / 2, 0, ft)
-    plug += Pos(0, 0, ft) * Cylinder(d / 2, p.PLUG_BODY, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    plug += Pos(0, 0, ft) * Cylinder(p.PLUG_CORE_D / 2, body, align=(Align.CENTER, Align.CENTER, Align.MIN))
+    r, ch = rib_d / 2, min(p.PLUG_RIB_CHAMFER, body)
+    rib = extrude(Plane.XZ * Polygon((0, ft), (r, ft), (r, ft + body - ch), (r - ch, ft + body), (0, ft + body),
+                                     align=None), p.PLUG_RIB_W / 2, both=True)
+    for k in range(p.PLUG_RIB_N):
+        plug += Rot(Z=45 + k * 360 / p.PLUG_RIB_N) * rib
     for k in range(notches):
         y = -tw / 2 + (k + 1) * tw / (notches + 1)
         plug -= box(fd / 2 + tr - 0.5, fd / 2 + tr + 1, y - 0.2, y + 0.2, -1, ft + 1)
@@ -81,14 +87,16 @@ def hole_plug(d: float, notches: int = 0) -> Part:
 
 
 def plugs_coupon() -> Part:
-    """Six cover plugs at PLUG_D in a row, and below them the PLUG_TRIAL_D test set (1–3 notches, smallest first)."""
+    """Six cover plugs at PLUG_RIB_D × PLUG_BODY in a row, and below them the trial grid: a row per PLUG_TRIAL_BODY
+    (shallowest first), PLUG_TRIAL_RIB_D across it (1–3 notches, smallest first)."""
     pitch = p.PLUG_FLANGE[0] + p.PLUG_TAB[1] + 3
     out = None
     for i in range(len(p.HOLES)):
-        plug = Pos(i * pitch, 0, 0) * hole_plug(p.PLUG_D)
+        plug = Pos(i * pitch, 0, 0) * hole_plug()
         out = plug if out is None else out + plug
-    for i, d in enumerate(p.PLUG_TRIAL_D):
-        out += Pos(i * pitch, -pitch, 0) * hole_plug(d, i + 1)
+    for j, body in enumerate(p.PLUG_TRIAL_BODY):
+        for i, d in enumerate(p.PLUG_TRIAL_RIB_D):
+            out += Pos(i * pitch, -(j + 1) * pitch, 0) * hole_plug(d, body, i + 1)
     return out
 
 
