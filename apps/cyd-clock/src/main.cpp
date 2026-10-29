@@ -5616,8 +5616,8 @@ static int findCombo(const String& id) {
 // A combo's prices against what's owned right now: `full` is the summed catalog price of the
 // items still missing, `charge` the combo price for them (the combo's own discount, pro-rated to
 // the missing items' share of the full price, rounded, never below 1, then any flash sale on the
-// combo's id), `missing` how many items it would grant, and `legendary` whether any item is
-// priced at the legendary tier. A fully-owned combo has missing == 0 and charge == 0.
+// combo's id), `missing` how many items it would grant, and `legendary` whether any still-missing
+// item is priced at the legendary tier. A fully-owned combo has missing == 0 and charge == 0.
 struct ComboPrice {
     uint32_t full;
     uint32_t charge;
@@ -5633,7 +5633,7 @@ static ComboPrice comboPrice(const StoreCombo& combo) {
         if (!findStoreItem(combo.items[i], cat, idx)) continue;  // assertCombosValid() rules this out
         uint32_t cost = storeItemCost(cat, idx);
         fullAll += cost;
-        if (cost >= STORE_COST_LEGENDARY) p.legendary = true;
+        if (cost >= STORE_COST_LEGENDARY && !storeItemOwned(cat, idx)) p.legendary = true;
         if (!storeItemOwned(cat, idx)) {
             p.full += cost;
             p.missing++;
@@ -5675,6 +5675,11 @@ static void assertCombosValid() {
     }
 }
 
+// The ★ LEGENDARY and 🔥 SALE tag markup, shared by catalog rows (appendStoreItemTags()), combo
+// rows and the store menu's section buttons so the tags look the same everywhere.
+static const char STORE_TAG_LEGENDARY[] = " <span style='color:#ffcc33;font-weight:bold'>\xE2\x98\x85 LEGENDARY</span>";
+static const char STORE_TAG_SALE[]      = " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+
 /**
  * The tags shown after a store item's label: a gold "LEGENDARY" marker for anything priced at
  * the legendary tier (COM-382), and the red "SALE" tag while a flash sale has cut its price.
@@ -5684,8 +5689,8 @@ static void assertCombosValid() {
  * @param cost The price actually charged, from flashSalePrice().
  */
 static void appendStoreItemTags(String& html, uint32_t baseCost, uint32_t cost) {
-    if (baseCost >= STORE_COST_LEGENDARY) html += " <span style='color:#ffcc33;font-weight:bold'>\xE2\x98\x85 LEGENDARY</span>";
-    if (cost != baseCost) html += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+    if (baseCost >= STORE_COST_LEGENDARY) html += STORE_TAG_LEGENDARY;
+    if (cost != baseCost) html += STORE_TAG_SALE;
 }
 
 /**
@@ -5751,8 +5756,8 @@ static void appendComboRow(String& html, int i, uint32_t points) {
     html += "<div class='item'><div><span>";
     html += combo.label;
     html += "</span>";
-    if (p.legendary) html += " <span style='color:#ffcc33;font-weight:bold'>\xE2\x98\x85 LEGENDARY</span>";
-    if (p.missing > 0 && isFlashSaleActive() && strcmp(currentFlashSale.itemId, combo.id) == 0) html += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+    if (p.legendary) html += STORE_TAG_LEGENDARY;
+    if (p.missing > 0 && isFlashSaleActive() && strcmp(currentFlashSale.itemId, combo.id) == 0) html += STORE_TAG_SALE;
     html += "<div style='font-size:.8rem;color:#888;margin-top:4px'>";
     bool first = true;
     for (int j = 0; j < combo.itemCount; j++) {
@@ -5850,7 +5855,7 @@ static void sendStoreLandingPage(uint32_t points) {
         sections += section.key;
         sections += "'>";
         sections += section.title;
-        if (storeSectionHasSale(section)) sections += " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+        if (storeSectionHasSale(section)) sections += STORE_TAG_SALE;
         sections += "</a>\n";
     }
     page.replace("%%SECTIONS%%", sections);
