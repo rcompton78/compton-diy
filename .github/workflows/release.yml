@@ -52,6 +52,17 @@ jobs:
           ln -sfn /hdd/compton-diy/venv-espframe-stand apps/espframe/hardware/stand/.venv
           ln -sfn /hdd/compton-diy/venv-espframe-stand-10 apps/espframe/hardware/stand-10/.venv
           ln -sfn /hdd/compton-diy/venv-media-room-remote-enclosure apps/media-room-dashboard/hardware/enclosure/.venv
+          # Per-app PlatformIO lib_deps (COM-524): re-installing them on every run hit the
+          # registry's per-IP download limit. Targets are pre-created because PlatformIO
+          # can't create a dir through a dangling symlink, and kept per app because env
+          # names (e.g. freenove-s3) repeat across apps with different lib_deps.
+          shopt -s nullglob
+          for ini in apps/*/platformio.ini; do
+            app="$(basename "$(dirname "$ini")")"
+            mkdir -p "apps/$app/.pio" "/hdd/compton-diy/libdeps-$app"
+            rm -rf "apps/$app/.pio/libdeps"
+            ln -sfn "/hdd/compton-diy/libdeps-$app" "apps/$app/.pio/libdeps"
+          done
 
       - name: Compute version
         id: version
