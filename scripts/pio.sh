@@ -40,7 +40,45 @@ fi
 # resolving differently between the two build systems silently upgraded
 # shared framework/tool packages out from under this one. A dedicated core
 # dir means the two can never clobber each other's package versions again.
-export PLATFORMIO_CORE_DIR="${PLATFORMIO_CORE_DIR:-$REPO_ROOT/.platformio-core}"
+#
+# Shared by every clone and worktree on the machine (COM-524), not kept per
+# checkout: a fresh worktree used to re-download the espressif32 platform, its
+# toolchain and every lib_deps library, and PlatformIO's registry limits
+# downloads per IP (429 "Download limit exceeded", a bare `HTTPClientError:`
+# locally), which the release runner shares with every dev machine. Libraries
+# go to a per-project dir there too, not one shared PLATFORMIO_LIBDEPS_DIR,
+# since env names (e.g. freenove-s3) repeat across apps with different
+# lib_deps. lib_extra_dirs (../../libs) still resolve per checkout, so a
+# worktree always builds its own libs/ (never put a relative symlink:// or
+# file:// in lib_deps: the first worktree's copy would serve them all).
+# PlatformIO locks each install, so worktrees on the same lib_deps can build
+# at once. Branches whose lib_deps differ for one app can't: each build
+# uninstalls the libraries the other one needs (even mid-compile) and
+# re-downloads its own, so build those one at a time. In CI (CI set) nothing changes: the repo-local
+# defaults stay, which release.yml symlinks onto /hdd and pr-build.yml's
+# fresh VM never reuses anyway. Either var set explicitly always wins.
+is_ci() { [ -n "${CI:-}" ] && [ "${CI}" != "false" ] && [ "${CI}" != "0" ]; }
+SHARED_CACHE_ROOT="${COMPTON_DIY_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/compton-diy}"
+if is_ci; then
+    export PLATFORMIO_CORE_DIR="${PLATFORMIO_CORE_DIR:-$REPO_ROOT/.platformio-core}"
+else
+    export PLATFORMIO_CORE_DIR="${PLATFORMIO_CORE_DIR:-$SHARED_CACHE_ROOT/platformio-core}"
+    if [ -z "${PLATFORMIO_LIBDEPS_DIR:-}" ] && [ -n "$project_dir" ]; then
+        # Keyed by the project's path inside the repo (apps/cyd-clock), which is
+        # the same in every worktree. A project outside the repo keeps its own.
+        repo_real="$(cd "$REPO_ROOT" && pwd -P)"
+        # PlatformIO resolves -d against the cwd; the repo-root form matches the
+        # .env lookup above, for a caller that isn't at the repo root.
+        project_real="$(cd "$project_dir" 2>/dev/null && pwd -P)" ||
+            project_real="$(cd "$REPO_ROOT/$project_dir" 2>/dev/null && pwd -P)" || project_real=""
+        case "$project_real" in
+            "$repo_real"/*)
+                export PLATFORMIO_LIBDEPS_DIR="$SHARED_CACHE_ROOT/platformio-libdeps/${project_real#"$repo_real"/}"
+                mkdir -p "$PLATFORMIO_LIBDEPS_DIR"
+                ;;
+        esac
+    fi
+fi
 # Pre-create it: PlatformIO's own first-run init uses os.makedirs without exist_ok, so two
 # builds started in parallel on a cold core dir (nx running several PlatformIO projects at
 # once, e.g. in pr-build.yml) race to create it and one crashes with FileExistsError.

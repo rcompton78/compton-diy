@@ -24,6 +24,11 @@ jobs:
     env:
       NX_CACHE_DIRECTORY: /hdd/compton-diy/nx-cache
       NX_WORKSPACE_DATA_DIRECTORY: /hdd/compton-diy/nx-workspace-data
+      # ESPHome apps' PlatformIO libraries (COM-524), one dir per app, read by
+      # scripts/espframe-esphome.sh. ESPHome's default (builds/.esphome/build/
+      # <device>/.piolibdeps) is wiped by checkout's clean, so every rebuild
+      # re-downloaded esphome/noise-c and esphome/libsodium from the registry.
+      ESPHOME_LIBDEPS_ROOT: /hdd/compton-diy/esphome-libdeps
     steps:
       # A manual run from any other ref would publish its builds to Pages and
       # cut a release from it. Fail loudly rather than skip, so it's obvious.
@@ -44,7 +49,7 @@ jobs:
 
       - name: Prepare persistent cache directories
         run: |
-          mkdir -p /hdd/compton-diy "$NX_CACHE_DIRECTORY" "$NX_WORKSPACE_DATA_DIRECTORY"
+          mkdir -p /hdd/compton-diy "$NX_CACHE_DIRECTORY" "$NX_WORKSPACE_DATA_DIRECTORY" "$ESPHOME_LIBDEPS_ROOT"
           ln -sfn /hdd/compton-diy/venv-root .venv
           ln -sfn /hdd/compton-diy/venv-espframe apps/espframe/.venv
           ln -sfn /hdd/compton-diy/platformio-core-root .platformio-core
