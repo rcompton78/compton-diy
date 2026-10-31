@@ -102,8 +102,12 @@ esphome:
         - lambda: |-
             for (lv_obj_t *tile : {id(btn_window_lamp), id(btn_window_lights), id(btn_standing_lamp)})
               lv_obj_add_flag(tile, LV_OBJ_FLAG_STATE_TRICKLE);
-            for (lv_obj_t *half : {id(btn_roku_play_game), id(btn_roku_watch_tv)})
+            // Start dimmed: main_page shows on wifi connect, before HA has
+            // sent tv_power, and an unknown TV state is dimmed.
+            for (lv_obj_t *half : {id(btn_roku_play_game), id(btn_roku_watch_tv)}) {
               lv_obj_set_style_text_color(half, lv_color_hex(${ui_faint}), LV_PART_MAIN | LV_STATE_USER_1);
+              lv_obj_add_state(half, LV_STATE_USER_1);
+            }
 
 # No compile-time ssid/password: this device relies entirely on the
 # captive-portal flow below to get station wifi credentials at runtime
@@ -999,9 +1003,12 @@ lvgl:
             text: ""
             text_font: ui_font_12
             text_color: ${ui_quiet}
-        # Input switcher: a dark well with two halves. The active input's half
-        # is checked (blue); the user_1 state dims both while the TV isn't on
-        # (its colour is set in esphome: on_boot).
+        # Input switcher: a dark well with two halves. The active input's
+        # half is checked (blue); the user_1 state dims both while the TV
+        # isn't on (its colour and initial state are set in esphome:
+        # on_boot). The halves touch, so their pressed outline is drawn
+        # inside (outline_pad -2): outside, the Watch TV half would paint
+        # over the Game half's right edge.
         - obj:
             x: 18
             y: 114
@@ -1026,6 +1033,8 @@ lvgl:
             checked:
               bg_color: ${ui_blue}
               text_color: 0xFFFFFF
+            pressed:
+              outline_pad: -2
             layout:
               type: flex
               pad_column: 6
@@ -1059,6 +1068,8 @@ lvgl:
             checked:
               bg_color: ${ui_blue}
               text_color: 0xFFFFFF
+            pressed:
+              outline_pad: -2
             layout:
               type: flex
               pad_column: 6
