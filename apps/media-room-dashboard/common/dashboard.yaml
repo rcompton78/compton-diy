@@ -3,7 +3,7 @@
 # =============================================================================
 # WiFi/API/logger, OTA + auto-update checking (same http_request-manifest
 # mechanism as espframe, see apps/espframe/common/addon/firmware_update.yaml),
-# and the 6-button LVGL touch UI calling Home Assistant services directly
+# and the LVGL touch UI (six buttons) calling Home Assistant services directly
 # over the native API (`homeassistant.service`). Button state (TV power,
 # active HDMI input, light on/off) comes back down the same connection via
 # `homeassistant` text sensors subscribed to exactly the entities the buttons
@@ -61,6 +61,25 @@ substitutions:
   # battery_critical_pct.
   battery_low_pct: "20"
   battery_critical_pct: "10"
+  # main_page palette (COM-531 design B). Flat fills only: the panel is
+  # RGB565, so gradients band.
+  ui_bg: 0x0B0E13
+  ui_card: 0x1A1F27
+  ui_card_edge: 0x262C36
+  ui_press: 0x2C3440
+  ui_ink: 0xF2F4F7
+  ui_quiet: 0x8A93A3
+  ui_faint: 0x5B6474
+  ui_amber: 0xF5A623
+  ui_on_amber: 0x1A1205
+  ui_blue: 0x3D7BFF
+  # Material Design Icons codepoints, see icon_font_* below.
+  icon_power: "\U000F0425"
+  icon_gamepad: "\U000F0297"
+  icon_television: "\U000F0502"
+  icon_lamp: "\U000F06B5"
+  icon_string_lights: "\U000F12BA"
+  icon_floor_lamp: "\U000F08DD"
 
 esphome:
   project:
@@ -74,6 +93,21 @@ esphome:
     - priority: -200
       then:
         - script.execute: restart_sleep_timer
+        # Two main_page styles ESPHome's YAML can't express (on a widget,
+        # `user_1:` is the flag, not a state style):
+        #  - each light tile passes its pressed/checked state on to its icon
+        #    and name labels, which colour themselves per state.
+        #  - the input switcher's halves dim in the user_1 state, which
+        #    refresh_tv_card sets while the TV isn't on.
+        - lambda: |-
+            for (lv_obj_t *tile : {id(btn_window_lamp), id(btn_window_lights), id(btn_standing_lamp)})
+              lv_obj_add_flag(tile, LV_OBJ_FLAG_STATE_TRICKLE);
+            // Start dimmed: main_page shows on wifi connect, before HA has
+            // sent tv_power, and an unknown TV state is dimmed.
+            for (lv_obj_t *half : {id(btn_roku_play_game), id(btn_roku_watch_tv)}) {
+              lv_obj_set_style_text_color(half, lv_color_hex(${ui_faint}), LV_PART_MAIN | LV_STATE_USER_1);
+              lv_obj_add_state(half, LV_STATE_USER_1);
+            }
 
 # No compile-time ssid/password: this device relies entirely on the
 # captive-portal flow below to get station wifi credentials at runtime
@@ -326,17 +360,7 @@ text_sensor:
     entity_id: ${tv_remote}
     internal: true
     on_value:
-      # Label names the action a tap performs; the checked (lit) style shows
-      # the current state. Anything other than on/off (unavailable, unknown)
-      # falls back to the neutral pre-feedback label.
-      - lvgl.label.update:
-          id: lbl_roku_power
-          text: !lambda 'return std::string(x == "on" ? "Power\nOff" : (x == "off" ? "Power\nOn" : "Roku\nPower"));'
-      - lvgl.widget.update:
-          id: btn_roku_power
-          state:
-            checked: !lambda 'return x == "on";'
-      - script.execute: refresh_input_buttons
+      - script.execute: refresh_tv_card
 
   - platform: homeassistant
     id: tv_app_id
@@ -344,7 +368,7 @@ text_sensor:
     attribute: app_id
     internal: true
     on_value:
-      - script.execute: refresh_input_buttons
+      - script.execute: refresh_tv_card
 
   - platform: homeassistant
     id: window_lamp_state
@@ -376,7 +400,7 @@ text_sensor:
           state:
             checked: !lambda 'return x == "on";'
 
-# Battery % in the main_page footer (COM-446). Driven only by the board's
+# Battery % in the main_page status bar (COM-446). Driven only by the board's
 # existing battery_level reading, so no extra ADC reads or wakeups.
 sensor:
   - id: !extend battery_level
@@ -389,7 +413,7 @@ binary_sensor:
   - id: !extend usb_host_connected
     on_state:
       - script.execute: update_dev_mode
-      # The footer shows a USB glyph instead of the battery one while a PC
+      # The status bar shows a USB glyph instead of the battery one while a PC
       # is attached.
       - script.execute: refresh_battery_label
 
@@ -413,29 +437,59 @@ switch:
       - script.execute: update_dev_mode
 
 script:
-  # The Roku can keep reporting its last input's app_id while in standby, so
-  # the input buttons are gated on power as well -- re-run whenever either
-  # changes.
-  - id: refresh_input_buttons
+  # Repaints the TV card from tv_power and tv_app_id: the power button, the
+  # state line beside it and the input switcher. The Roku can keep reporting
+  # its last input's app_id while in standby, so the inputs are gated on
+  # power as well -- re-run whenever either changes. Anything other than
+  # on/off (unavailable, unknown) shows the neutral "TV" with no sub-line.
+  - id: refresh_tv_card
     then:
+      - lvgl.widget.update:
+          id: btn_roku_power
+          state:
+            checked: !lambda 'return id(tv_power).state == "on";'
+      - lvgl.label.update:
+          id: lbl_tv_state
+          text: !lambda |-
+            const std::string &power = id(tv_power).state;
+            return std::string(power == "on" ? "TV is on" : (power == "off" ? "TV is off" : "TV"));
+      - lvgl.label.update:
+          id: lbl_tv_detail
+          text: !lambda |-
+            const std::string &power = id(tv_power).state;
+            const std::string &app = id(tv_app_id).state;
+            if (power == "off") return std::string("Tap to turn on");
+            if (power != "on") return std::string("");
+            if (app == "${tv_game_app_id}") return std::string("Showing: Game");
+            if (app == "${tv_watch_app_id}") return std::string("Showing: TV");
+            return std::string("");
       - lvgl.widget.update:
           id: btn_roku_play_game
           state:
             checked: !lambda 'return id(tv_power).state == "on" && id(tv_app_id).state == "${tv_game_app_id}";'
+            user_1: !lambda 'return id(tv_power).state != "on";'
       - lvgl.widget.update:
           id: btn_roku_watch_tv
           state:
             checked: !lambda 'return id(tv_power).state == "on" && id(tv_app_id).state == "${tv_watch_app_id}";'
+            user_1: !lambda 'return id(tv_power).state != "on";'
 
   - id: reset_button_states
     then:
       - lvgl.label.update:
-          id: lbl_roku_power
-          text: "Roku\nPower"
+          id: lbl_tv_state
+          text: "TV"
+      - lvgl.label.update:
+          id: lbl_tv_detail
+          text: ""
       - lvgl.widget.update:
           id: [btn_roku_power, btn_roku_play_game, btn_roku_watch_tv, btn_window_lamp, btn_window_lights, btn_standing_lamp]
           state:
             checked: false
+      - lvgl.widget.update:
+          id: [btn_roku_play_game, btn_roku_watch_tv]
+          state:
+            user_1: true
 
   # COM-214 tier 2: blank the screen. Pausing LVGL (with resume_on_input
   # off, see lvgl: below) stops it reading touch at all, so the touch that
@@ -491,7 +545,7 @@ script:
   # While on, the screen never blanks (on_idle skips it), neither deep-sleep
   # countdown runs (restart_sleep_timer stops them, and both re-check before
   # sleeping), and automatic light sleep is blocked, so serial logs, USB
-  # flashing and OTA keep working. The footer shows a DEV badge. Turning off
+  # flashing and OTA keep working. The status bar shows a DEV badge. Turning off
   # restarts the blank and deep-sleep clocks from that moment, as if the
   # screen had just been touched. Re-run on every change to either trigger;
   # it only acts when the combined state flips.
@@ -540,7 +594,7 @@ script:
           level: INFO
       - switch.turn_off: dev_mode_switch
 
-  # Footer battery readout: a battery glyph stepped by charge plus the %, in
+  # Status bar battery readout: a battery glyph stepped by charge plus the %, in
   # amber below battery_low_pct and red below battery_critical_pct. While a PC
   # is attached the glyph is a USB plug and the colour stays grey: the battery
   # is charging then and reads near its 4.2V charge voltage, so the % isn't a
@@ -558,7 +612,7 @@ script:
           else if (rounded >= 60) glyph = LV_SYMBOL_BATTERY_3;
           else if (rounded >= 35) glyph = LV_SYMBOL_BATTERY_2;
           else if (rounded >= ${battery_critical_pct}) glyph = LV_SYMBOL_BATTERY_1;
-          uint32_t color = 0x909090;
+          uint32_t color = ${ui_quiet};
           if (!usb && rounded >= 0) {
             if (rounded < ${battery_critical_pct}) color = 0xE5484D;
             else if (rounded < ${battery_low_pct}) color = 0xF5A623;
@@ -650,18 +704,63 @@ touchscreen:
       - script.execute: restart_sleep_timer
 
 # -----------------------------------------------------------------------------
+# main_page fonts (COM-531). Montserrat semibold at the mock-up's sizes, next
+# to LVGL's built-in (regular) montserrat_14/28 the status pages use. ASCII
+# only: the IP, the labels and HA state text never need more. Icons are
+# Material Design Icons with only the glyphs main_page draws; each size is
+# its own font, so every glyph is rasterised once at the size it's used.
+# -----------------------------------------------------------------------------
+font:
+  - file: "gfonts://Montserrat@600"
+    id: ui_font_10
+    size: 10
+    bpp: 4
+    glyphs: &ascii_glyphs ' !"#$%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^_`abcdefghijklmnopqrstuvwxyz{|}~'
+  - file: "gfonts://Montserrat@600"
+    id: ui_font_12
+    size: 12
+    bpp: 4
+    glyphs: *ascii_glyphs
+  - file: "gfonts://Montserrat@600"
+    id: ui_font_14
+    size: 14
+    bpp: 4
+    glyphs: *ascii_glyphs
+  - file: "gfonts://Montserrat@600"
+    id: ui_font_16
+    size: 16
+    bpp: 4
+    glyphs: *ascii_glyphs
+  - file: &mdi_font 'https://github.com/Templarian/MaterialDesign-Webfont/raw/v7.4.47/fonts/materialdesignicons-webfont.ttf'
+    id: icon_font_18
+    size: 18
+    bpp: 4
+    glyphs: ["${icon_gamepad}", "${icon_television}"]
+  - file: *mdi_font
+    id: icon_font_24
+    size: 24
+    bpp: 4
+    glyphs: ["${icon_power}"]
+  - file: *mdi_font
+    id: icon_font_30
+    size: 30
+    bpp: 4
+    glyphs: ["${icon_lamp}", "${icon_string_lights}", "${icon_floor_lamp}"]
+
+# -----------------------------------------------------------------------------
 # Three LVGL pages. `connecting_page` (the default, i.e. at boot, and again
 # whenever wifi drops) says the device is retrying its saved network;
 # `setup_page` replaces it once that fails and the fallback AP comes up (see
-# the interval above), naming the AP to join; `main_page` -- the 6-button
-# dashboard, hidden until the device is actually reachable from HA -- is a 2
-# column x 3 row grid over the 240x320 portrait panel (the board file sets
-# the panel and touch orientation; freenove-s3 turns both 180° for the
-# handheld enclosure, COM-445), with a
-# one-line footer under it showing the web portal's http://<ip> address.
-# Button -> HA service mapping is the finalized list from Jira DIY-102. Every
-# button shares one theme: dim grey by default, lit amber when `checked` --
-# which only the imported HA state above ever sets.
+# the interval above), naming the AP to join; `main_page` -- the dashboard,
+# hidden until the device is actually reachable from HA -- is COM-531's design
+# B over the 240x320 portrait panel (the board file sets the panel and touch
+# orientation; freenove-s3 turns both 180° for the handheld enclosure,
+# COM-445): a status bar (title, DEV badge, battery), a TV card (power button,
+# a state line, and a Game | Watch TV switcher), three light tiles, and a
+# footer with the web portal's http://<ip> address.
+# Button -> HA service mapping is the finalized list from Jira DIY-102. A
+# button's lit style (blue for the TV, amber for lights) is its `checked`
+# state, which only the imported HA state above ever sets.
 # -----------------------------------------------------------------------------
 # byte_order: big_endian avoids a known LVGL+ili9xxx grey-screen bug hit on
 # this same panel in apps/espframe (see project memory project_diy44_espframe
@@ -671,13 +770,28 @@ lvgl:
   displays: [tft_display]
   touchscreens: [tft_touch]
   byte_order: big_endian
+  # Shared button look; each main_page button adds its own fills and
+  # checked colours on top. Pressed (COM-531): the press fill plus a 2px
+  # outline, which sits outside the button so its contents don't shift.
+  # recolor_opa cancels LVGL's default-theme pressed style, which darkens a
+  # pressed button by 35%. Local styles beat these only in the same or a
+  # higher state, so pressed wins over a button's own default and checked
+  # fills.
   theme:
     button:
-      bg_color: 0x303030
-      text_color: 0xFFFFFF
-      checked:
-        bg_color: 0xF5A623
-        text_color: 0x000000
+      bg_color: ${ui_card}
+      bg_opa: COVER
+      text_color: ${ui_ink}
+      radius: 14
+      pad_all: 0
+      border_width: 0
+      shadow_opa: TRANSP
+      pressed:
+        bg_color: ${ui_press}
+        recolor_opa: TRANSP
+        outline_width: 2
+        outline_pad: 0
+        outline_color: ${ui_ink}
   # The wake touch is handled by wake_screen, not LVGL (see blank_screen).
   resume_on_input: false
   # Tier 2: blank only on main_page. The connecting and setup pages stay lit
@@ -692,7 +806,7 @@ lvgl:
               - script.execute: blank_screen
   pages:
     - id: connecting_page
-      bg_color: 0x000000
+      bg_color: ${ui_bg}
       bg_opa: COVER
       widgets:
         - label:
@@ -726,7 +840,7 @@ lvgl:
             align: TOP_MID
             text_align: CENTER
     - id: setup_page
-      bg_color: 0x000000
+      bg_color: ${ui_bg}
       bg_opa: COVER
       widgets:
         - label:
@@ -767,36 +881,174 @@ lvgl:
             text_color: 0x909090
             align: TOP_MID
             text_align: CENTER
+    # COM-531 design B (mock-up and its generator: docs/com-530-mockups/,
+    # generate.py's design_b has every coordinate). Widgets sit at absolute
+    # page coordinates rather than inside tv_card, which is only a backdrop:
+    # LVGL 9 offsets a parent's children by its border width too.
     - id: main_page
-      bg_color: 0x000000
+      bg_color: ${ui_bg}
       bg_opa: COVER
       widgets:
-        - button:
-            id: btn_roku_power
-            x: 8
-            y: 8
-            width: 108
-            height: 88
+        # Status bar: title on the left, DEV badge + battery on the right.
+        - label:
+            x: 10
+            y: 6
+            text: "Media Room"
+            text_font: ui_font_12
+            text_color: ${ui_quiet}
+        # A right-aligned flex row, so the DEV badge (hidden, and so left out
+        # of the layout, outside dev mode) pushes nothing but itself.
+        - obj:
+            id: status_row
+            align: TOP_RIGHT
+            x: -6
+            y: 3
+            width: 150
+            height: 18
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            clickable: false
+            layout:
+              type: flex
+              pad_column: 6
+              flex_flow: ROW
+              flex_align_main: END
+              flex_align_cross: CENTER
+              flex_align_track: CENTER
             widgets:
               - label:
-                  id: lbl_roku_power
-                  text: "Roku\nPower"
+                  id: lbl_dev_badge
+                  hidden: true
+                  text: "DEV"
+                  text_font: ui_font_10
+                  text_color: ${ui_on_amber}
+                  bg_color: ${ui_amber}
+                  bg_opa: COVER
+                  radius: 3
+                  pad_left: 4
+                  pad_right: 4
+              # Built-in montserrat_12: the LV_SYMBOL_BATTERY_*/USB glyphs
+              # refresh_battery_label uses only exist in LVGL's own fonts.
+              - label:
+                  id: lbl_battery
+                  text: " --%"
+                  text_font: montserrat_12
+                  text_color: ${ui_quiet}
+
+        # --- TV card ---------------------------------------------------------
+        - label:
+            x: 12
+            y: 29
+            text: "TV"
+            text_font: ui_font_10
+            text_color: ${ui_faint}
+            text_letter_space: 1
+        - obj:
+            id: tv_card
+            x: 8
+            y: 44
+            width: 224
+            height: 124
+            radius: 14
+            bg_color: ${ui_card}
+            bg_opa: COVER
+            border_width: 1
+            border_color: ${ui_card_edge}
+            pad_all: 0
+            scrollable: false
+            clickable: false
+        # Round power button: blue when on, grey when off (checked follows
+        # tv_power, see refresh_tv_card).
+        - button:
+            id: btn_roku_power
+            x: 18
+            y: 58
+            width: 44
+            height: 44
+            radius: 22
+            bg_color: ${ui_press}
+            border_width: 1
+            border_color: ${ui_card_edge}
+            text_color: ${ui_quiet}
+            checked:
+              bg_color: ${ui_blue}
+              border_color: ${ui_blue}
+              text_color: 0xFFFFFF
+            pressed:
+              text_color: ${ui_ink}
+            widgets:
+              - label:
+                  text: "${icon_power}"
+                  text_font: icon_font_24
                   align: CENTER
             on_click:
               - homeassistant.service:
                   service: remote.toggle
                   data:
                     entity_id: ${tv_remote}
+        # State line next to it, written by refresh_tv_card.
+        - label:
+            id: lbl_tv_state
+            x: 72
+            y: 61
+            text: "TV"
+            text_font: ui_font_16
+            text_color: ${ui_ink}
+        - label:
+            id: lbl_tv_detail
+            x: 72
+            y: 83
+            text: ""
+            text_font: ui_font_12
+            text_color: ${ui_quiet}
+        # Input switcher: a dark well with two halves. The active input's
+        # half is checked (blue); the user_1 state dims both while the TV
+        # isn't on (its colour and initial state are set in esphome:
+        # on_boot). The halves touch, so their pressed outline is drawn
+        # inside (outline_pad -2): outside, the Watch TV half would paint
+        # over the Game half's right edge.
+        - obj:
+            x: 18
+            y: 114
+            width: 204
+            height: 44
+            radius: 11
+            bg_color: ${ui_bg}
+            bg_opa: COVER
+            border_width: 0
+            pad_all: 0
+            scrollable: false
+            clickable: false
         - button:
             id: btn_roku_play_game
-            x: 124
-            y: 8
-            width: 108
-            height: 88
+            x: 20
+            y: 116
+            width: 100
+            height: 40
+            radius: 9
+            bg_color: ${ui_bg}
+            text_color: ${ui_quiet}
+            checked:
+              bg_color: ${ui_blue}
+              text_color: 0xFFFFFF
+            pressed:
+              outline_pad: -2
+            layout:
+              type: flex
+              pad_column: 6
+              flex_flow: ROW
+              flex_align_main: CENTER
+              flex_align_cross: CENTER
+              flex_align_track: CENTER
             widgets:
               - label:
-                  text: "Play\nGame"
-                  align: CENTER
+                  text: "${icon_gamepad}"
+                  text_font: icon_font_18
+              - label:
+                  text: "Game"
+                  text_font: ui_font_14
             on_click:
               - homeassistant.service:
                   service: remote.send_command
@@ -806,14 +1058,32 @@ lvgl:
                     command: input_hdmi1
         - button:
             id: btn_roku_watch_tv
-            x: 8
-            y: 104
-            width: 108
-            height: 88
+            x: 120
+            y: 116
+            width: 100
+            height: 40
+            radius: 9
+            bg_color: ${ui_bg}
+            text_color: ${ui_quiet}
+            checked:
+              bg_color: ${ui_blue}
+              text_color: 0xFFFFFF
+            pressed:
+              outline_pad: -2
+            layout:
+              type: flex
+              pad_column: 6
+              flex_flow: ROW
+              flex_align_main: CENTER
+              flex_align_cross: CENTER
+              flex_align_track: CENTER
             widgets:
               - label:
-                  text: "Watch\nTV"
-                  align: CENTER
+                  text: "${icon_television}"
+                  text_font: icon_font_18
+              - label:
+                  text: "Watch TV"
+                  text_font: ui_font_14
             on_click:
               - homeassistant.service:
                   service: remote.send_command
@@ -821,16 +1091,55 @@ lvgl:
                     entity_id: ${tv_remote}
                     device: cc6a35ae75dc995d71981ff3e2a4a3ae
                     command: input_hdmi3
+
+        # --- Light tiles -----------------------------------------------------
+        # Amber when on. The icon and name colours differ by state (grey icon
+        # and white name when off, both white while pressed, both dark when
+        # on), which inheritance from the button can't express, so each tile
+        # gets LV_OBJ_FLAG_STATE_TRICKLE at boot (see esphome: on_boot) and
+        # its labels style their own checked/pressed states.
+        - label:
+            x: 12
+            y: 179
+            text: "LIGHTS"
+            text_font: ui_font_10
+            text_color: ${ui_faint}
+            text_letter_space: 1
         - button:
             id: btn_window_lamp
-            x: 124
-            y: 104
-            width: 108
-            height: 88
+            x: 8
+            y: 196
+            width: 70
+            height: 98
+            <<: &light_tile
+              bg_color: ${ui_card}
+              border_width: 1
+              border_color: ${ui_card_edge}
+              checked:
+                bg_color: ${ui_amber}
+                border_color: ${ui_amber}
             widgets:
-              - label:
+              - label: &tile_icon
+                  text: "${icon_lamp}"
+                  text_font: icon_font_30
+                  align: TOP_MID
+                  y: 13
+                  text_color: ${ui_quiet}
+                  checked:
+                    text_color: ${ui_on_amber}
+                  pressed:
+                    text_color: ${ui_ink}
+              - label: &tile_name
                   text: "Window\nLamp"
-                  align: CENTER
+                  text_font: ui_font_12
+                  text_align: CENTER
+                  align: TOP_MID
+                  y: 54
+                  text_color: ${ui_ink}
+                  checked:
+                    text_color: ${ui_on_amber}
+                  pressed:
+                    text_color: ${ui_ink}
             on_click:
               - homeassistant.service:
                   service: light.toggle
@@ -838,14 +1147,18 @@ lvgl:
                     entity_id: light.media_room_window_lamp_2
         - button:
             id: btn_window_lights
-            x: 8
-            y: 200
-            width: 108
-            height: 88
+            x: 85
+            y: 196
+            width: 70
+            height: 98
+            <<: *light_tile
             widgets:
               - label:
+                  <<: *tile_icon
+                  text: "${icon_string_lights}"
+              - label:
+                  <<: *tile_name
                   text: "Window\nLights"
-                  align: CENTER
             on_click:
               - homeassistant.service:
                   service: light.toggle
@@ -853,64 +1166,33 @@ lvgl:
                     entity_id: light.window_lights
         - button:
             id: btn_standing_lamp
-            x: 124
-            y: 200
-            width: 108
-            height: 88
+            x: 162
+            y: 196
+            width: 70
+            height: 98
+            <<: *light_tile
             widgets:
               - label:
+                  <<: *tile_icon
+                  text: "${icon_floor_lamp}"
+              - label:
+                  <<: *tile_name
                   text: "Standing\nLamp"
-                  align: CENTER
             on_click:
               - homeassistant.service:
                   service: switch.toggle
                   data:
                     entity_id: switch.media_room_plug
-        # Footer under the 3 button rows, laid out as a flex row so the
-        # pieces share the 232px however long the address is: the web portal
-        # address on the left (filled in by the ip_address sensor, cleared by
-        # wifi on_disconnect; truncated with "..." only if it would overlap),
-        # the DEV badge while dev mode is on, and the battery readout on the
-        # right (refresh_battery_label). The DEV badge is hidden, and so
-        # left out of the layout, the rest of the time.
-        - obj:
-            id: footer_row
-            x: 4
-            y: 294
-            width: 232
-            height: 22
-            bg_opa: TRANSP
-            border_width: 0
-            pad_all: 0
-            scrollable: false
-            layout:
-              type: flex
-              pad_column: 6
-              flex_flow: ROW
-              flex_align_main: START
-              flex_align_cross: CENTER
-              flex_align_track: CENTER
-            widgets:
-              - label:
-                  id: lbl_ip_footer
-                  flex_grow: 1
-                  long_mode: DOT
-                  text: ""
-                  text_font: montserrat_14
-                  text_color: 0x909090
-              - label:
-                  id: lbl_dev_badge
-                  hidden: true
-                  text: "DEV"
-                  text_font: montserrat_14
-                  text_color: 0x000000
-                  bg_color: 0xF5A623
-                  bg_opa: COVER
-                  radius: 3
-                  pad_left: 4
-                  pad_right: 4
-              - label:
-                  id: lbl_battery
-                  text: "\uF244 --%"
-                  text_font: montserrat_14
-                  text_color: 0x909090
+
+        # Web portal address, filled in by the ip_address sensor and cleared
+        # by wifi on_disconnect.
+        - label:
+            id: lbl_ip_footer
+            x: 0
+            y: 303
+            width: 240
+            long_mode: DOT
+            text: ""
+            text_font: ui_font_10
+            text_color: ${ui_faint}
+            text_align: CENTER

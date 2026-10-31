@@ -1,6 +1,6 @@
 # media-room-dashboard
 
-ESPHome-based 6-button touchscreen remote for the media room. Each button
+ESPHome-based touchscreen remote for the media room. Each button
 calls a Home Assistant service directly over the native API, and lights up
 to reflect the real state of what it controls (TV power, active HDMI input,
 light on/off). Apart from a few diagnostics (IP address, firmware version,
@@ -12,6 +12,34 @@ and it serves an admin portal with a firmware upload page at that address
 (see "IP address and admin portal").
 
 Tracks Jira DIY-102 (buttons) and DIY-104 / COM-196 (state feedback).
+
+## Screen layout (COM-531)
+
+`main_page` is design B from COM-530's mock-ups
+(`docs/com-530-mockups/`: `index.html` shows every design, `png/b-1.png` and
+`png/b-2.png` are the one built). From the top: a status bar ("Media Room",
+the DEV badge and the battery readout), a **TV card** (a round power button,
+a state line such as "TV is on / Showing: Game", and a Game | Watch TV
+switcher), a row of three **light tiles**, and the `http://<ip>` footer.
+The TV is blue when on, the lights amber; a pressed button turns dark grey
+with a white outline.
+
+The mock-ups are generated, not drawn: `python3 generate.py` rewrites
+`index.html` and `svg/` (and the gitignored `widgets/`), and
+`render.sh <font dir>` renders `svg/` to `png/` with the Montserrat TTFs from
+https://github.com/JulietaUla/Montserrat/tree/master/fonts/ttf.
+`generate.py`'s `design_b` holds every coordinate and colour `main_page`
+uses. The fonts are Montserrat semibold (`gfonts://Montserrat@600`) and
+Material Design Icons, both downloaded at build time with only the glyphs
+used; the battery readout stays on LVGL's built-in `montserrat_12`, the only
+fonts with the `LV_SYMBOL_BATTERY_*`/`LV_SYMBOL_USB` glyphs.
+
+Two styles ESPHome's YAML can't set are applied in `on_boot`'s lambda: the
+light tiles carry `LV_OBJ_FLAG_STATE_TRICKLE`, so their icon and name labels
+see the tile's pressed/checked state and colour themselves (the icon is grey
+and the name white when off, both dark on amber when on), and the switcher
+halves get their dimmed text colour for the `user_1` state, which marks the
+TV as not on.
 
 ## Board
 
@@ -47,7 +75,7 @@ UI or HA wiring:
   else in the app depends on board-specific detail beyond those ids. Battery
   sensing, light sleep and the sleep diagnostics are board-specific too, so
   they live there.
-- `common/dashboard.yaml` — everything else: wifi/api/ota, the 6-button LVGL
+- `common/dashboard.yaml` — everything else: wifi/api/ota, the six-button LVGL
   UI, and the HA service calls. Board-agnostic.
 - `builds/<name>.yaml` — thin entrypoint combining the two as ESPHome
   packages. This is the file you point `esphome`/nx targets at.
@@ -160,7 +188,7 @@ voltage; a MAX17048 fuel gauge would be more accurate.
 
 ### Battery on screen (COM-446)
 
-The right end of `main_page`'s footer shows a battery glyph (full, 3/4, 1/2,
+The right end of `main_page`'s status bar shows a battery glyph (full, 3/4, 1/2,
 1/4, empty) and the %, e.g. `87%`. It turns amber below `battery_low_pct`
 (20%) and red below `battery_critical_pct` (10%), and shows `--%` until the
 first reading. It's driven by the existing `Battery Level` sensor, so it
@@ -195,7 +223,7 @@ While it's on, the screen never blanks, neither deep-sleep countdown runs
 (so the idle-time firmware auto-install doesn't either), and automatic light
 sleep is blocked (an `ESP_PM_NO_LIGHT_SLEEP` lock in the light_sleep
 component; a PC on USB already blocks it). An amber `DEV` badge shows in the
-footer. When it turns off, the 30s blank and 30min deep sleep count from that
+status bar. When it turns off, the 30s blank and 30min deep sleep count from that
 moment, as if the screen had just been touched.
 
 A remote already in deep sleep doesn't notice being plugged in until it's
@@ -310,9 +338,8 @@ this app's initial bring-up) since nothing in the logs points to it.
 The device's current IP is always on its own screen, so you never need the
 router or HA to find it:
 
-- **Main page:** a grey footer under the buttons shows `http://<ip>` on the
-  left (next to the battery readout and, in dev mode, the DEV badge), which
-  is also the admin portal's address. It's blanked the moment wifi drops, so
+- **Main page:** a grey footer under the light tiles shows `http://<ip>`,
+  which is also the admin portal's address. It's blanked the moment wifi drops, so
   it never shows a stale address.
 - **Connecting page:** "Not connected", plus "Last IP: <ip>" once the device
   has had one this boot.
@@ -382,14 +409,14 @@ needed.
 
 ## Button mapping
 
-| Button | Action | Lit (amber) when |
+| Button | Action | Lit when |
 |---|---|---|
-| Power On / Power Off | `remote.toggle` on `remote.living_room_tv` | TV is on (label names the action a tap performs) |
-| Play Game | `remote.send_command` (HDMI1) on `remote.living_room_tv` | TV on and `media_player.living_room_tv`'s `app_id` is `tvinput.hdmi1` |
-| Watch TV | `remote.send_command` (HDMI3) on `remote.living_room_tv` | TV on and `app_id` is `tvinput.hdmi3` |
-| Window Lamp | `light.toggle` on `light.media_room_window_lamp_2` | light is on |
-| Window Lights | `light.toggle` on `light.window_lights` | light is on |
-| Standing Lamp | `switch.toggle` on `switch.media_room_plug` | switch is on |
+| TV power (round button) | `remote.toggle` on `remote.living_room_tv` | TV is on (blue; the state line beside it says "TV is on"/"TV is off") |
+| Game | `remote.send_command` (HDMI1) on `remote.living_room_tv` | TV on and `media_player.living_room_tv`'s `app_id` is `tvinput.hdmi1` (blue) |
+| Watch TV | `remote.send_command` (HDMI3) on `remote.living_room_tv` | TV on and `app_id` is `tvinput.hdmi3` (blue) |
+| Window Lamp | `light.toggle` on `light.media_room_window_lamp_2` | light is on (amber) |
+| Window Lights | `light.toggle` on `light.window_lights` | light is on (amber) |
+| Standing Lamp | `switch.toggle` on `switch.media_room_plug` | switch is on (amber) |
 
 ## State feedback
 
@@ -407,12 +434,14 @@ device.
   never changes the highlight by itself. It only changes once HA reports the
   new state, usually well under a second later.
 - **Input buttons are gated on power.** The Roku can keep reporting its
-  last input's `app_id` while in standby, so Play Game / Watch TV only
-  light up while the TV is on.
+  last input's `app_id` while in standby, so Game / Watch TV only light up
+  while the TV is on, and both are dimmed while it isn't. The state line's
+  "Showing: Game"/"Showing: TV" follows the same rule, and stays blank for
+  any other app.
 - **`app_id`, not `source`.** `source` is the input's user-editable name on
   the TV, while `app_id` stays `tvinput.hdmiN`. The entity id and the two
   app ids are substitutions at the top of `common/dashboard.yaml`, in case
   they ever change.
 - **Stale state is cleared.** When the last state-subscribed API client (i.e.
-  HA) disconnects, every button drops back to neutral and the power button
-  shows "Roku Power" again. HA re-sends all subscribed states on reconnect.
+  HA) disconnects, every button drops back to neutral and the state line
+  shows just "TV" again. HA re-sends all subscribed states on reconnect.
