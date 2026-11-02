@@ -59,11 +59,12 @@ output:
     frequency: 1220Hz
 
 light:
+  # Internal: common/dashboard.yaml's screen on/off logic owns it. Switched
+  # from HA or the portal, it would go dark while LVGL kept taking taps (or
+  # light up a paused, frozen frame).
   - platform: monochromatic
     id: backlight
-    name: "Backlight"
-    icon: "mdi:brightness-6"
-    entity_category: config
+    internal: true
     output: backlight_pwm
     restore_mode: ALWAYS_ON
     default_transition_length: 0s

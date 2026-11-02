@@ -12,8 +12,8 @@
 # never needs a reflash when a group's members change: that's an edit in HA.
 #
 # The only entities it exposes are diagnostics (firmware version, IP
-# address), firmware update controls and the backlight, also shown in the
-# unprotected web portal at http://<device-ip>/ (see web_server below).
+# address) and firmware update controls, also shown in the unprotected web
+# portal at http://<device-ip>/ (see web_server below).
 #
 # Requires a board package to have already defined `tft_display` (an 800x480
 # display, turned to portrait by LVGL's rotation below), `tft_touch`
@@ -245,8 +245,10 @@ time:
         then:
           - script.execute: refresh_clock
 
-# Basement motion from HA. Every report of motion turns the screen on and
-# restarts the off timer, whether the screen was on or off.
+# Basement motion from HA. Motion turns the screen on and restarts the off
+# timer, whether the screen was on or off; the timer restarts again when the
+# sensor clears, so screen_on_time counts from the last movement, and
+# screen_off never fires while the sensor still reads motion.
 binary_sensor:
   - platform: homeassistant
     id: basement_motion
@@ -254,6 +256,8 @@ binary_sensor:
     internal: true
     on_press:
       - script.execute: wake_screen
+      - script.execute: screen_off_countdown
+    on_release:
       - script.execute: screen_off_countdown
 
 text_sensor:
@@ -376,8 +380,9 @@ script:
           int dy = (id(pixel_shift_step) / 3 - 1) * ${pixel_shift_px};
           lv_obj_set_pos(id(main_content), dx, dy);
 
-  # Restarted by every motion report, every touch release and HA connecting;
-  # turns the screen off once it runs out. Never while HA is away (nothing
+  # Restarted by motion starting and clearing, every touch release and HA
+  # connecting; turns the screen off once it runs out (unless the motion
+  # sensor still reads motion, see screen_off). Never while HA is away (nothing
   # could wake the screen but a touch), see api on_client_disconnected.
   - id: screen_off_countdown
     mode: restart
@@ -397,7 +402,7 @@ script:
     then:
       - if:
           condition:
-            lambda: 'return !id(screen_dark) && id(main_page)->is_showing();'
+            lambda: 'return !id(screen_dark) && !id(basement_motion).state && id(main_page)->is_showing();'
           then:
             - globals.set:
                 id: screen_dark

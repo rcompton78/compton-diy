@@ -25,6 +25,7 @@
         "cwd": "."
       },
       "dependsOn": ["write-secrets"],
+      "parallelism": false,
       "cache": true,
       "inputs": ["default", "{projectRoot}/builds/secrets.yaml", "{workspaceRoot}/scripts/espframe-esphome.sh", "{workspaceRoot}/apps/espframe/product/contract/project.json", "{workspaceRoot}/scripts/write-secrets.sh", { "env": "RELEASE_VERSION" }, { "env": "BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY" }],
       "outputs": ["{projectRoot}/builds/.esphome/build/basement-lights-crowpanel-5"]

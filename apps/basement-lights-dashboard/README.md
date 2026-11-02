@@ -53,7 +53,9 @@ The backlight is either full on or off, never dimmed:
   `binary_sensor.0xa4c138abf0cc23b5_occupancy` (`motion_sensor`), over the
   same HA connection. Every motion report turns the screen on and restarts
   the off timer.
-- **Off after an hour** (`screen_on_time`) with no motion and no touch.
+- **Off an hour after the last motion** (`screen_on_time`) with no touch,
+  counted from when the sensor clears, and never while it still reads
+  motion.
   The PIR reports "on" for only ~35-70 s per movement and can't see someone
   sitting still, hence the long hold.
 - **Touch wakes it without pressing anything.** While the screen is off LVGL
@@ -71,8 +73,8 @@ The backlight is either full on or off, never dimmed:
 A published firmware update installs on its own while the screen is off
 (checked every 15 minutes), so it never interrupts someone using the panel.
 Local `dev` builds never auto-install; see [Admin portal](#admin-portal).
-The backlight is also exposed to HA as a `Backlight` light (config
-category).
+The backlight isn't exposed to HA: switched from outside, it would fall out
+of step with the screen logic (dark while taps still toggle lights).
 
 ## Board
 
@@ -178,7 +180,7 @@ switch anything.
 
 ESPHome's stock web UI at the footer's `http://<ip>` (v3, embedded, so it
 works from a phone on the setup AP too). It shows the firmware version, IP
-address, backlight and the **Firmware Update** entity with **Check for
+address and the **Firmware Update** entity with **Check for
 Firmware Update** / **Install Firmware Update** buttons, plus an upload form
 for flashing a local build without USB. It's deliberately unprotected, like
 the other ESPHome apps here: anyone on the LAN can reflash it.
@@ -193,8 +195,14 @@ Update** replaces it with the latest release.
 ```bash
 pnpm nx run basement-lights-dashboard:build-crowpanel-5
 pnpm nx run basement-lights-dashboard:flash-crowpanel-5     # --device /dev/ttyUSB0
-pnpm nx run basement-lights-dashboard:monitor-crowpanel-5
+pnpm nx run basement-lights-dashboard:monitor-crowpanel-5  # see below
 ```
+
+`monitor-crowpanel-5` runs `esphome logs` over USB, which holds the board in
+reset through the USB-UART bridge's RTS line, so it shows nothing. Read boot
+logs with a plain serial terminal at 115200 instead (DTR/RTS low), or once
+the panel is on wifi, `scripts/espframe-esphome.sh logs
+apps/basement-lights-dashboard/builds/crowpanel-5.yaml --device <ip>`.
 
 Uses `scripts/espframe-esphome.sh`, which runs the ESPHome version pinned in
 `apps/espframe/product/contract/project.json` (installing it into a shared
