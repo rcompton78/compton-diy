@@ -245,21 +245,6 @@ time:
         then:
           - script.execute: refresh_clock
 
-# Basement motion from HA. Motion turns the screen on and restarts the off
-# timer, whether the screen was on or off; the timer restarts again when the
-# sensor clears, so screen_on_time counts from the last movement, and
-# screen_off never fires while the sensor still reads motion.
-binary_sensor:
-  - platform: homeassistant
-    id: basement_motion
-    entity_id: ${motion_sensor}
-    internal: true
-    on_press:
-      - script.execute: wake_screen
-      - script.execute: screen_off_countdown
-    on_release:
-      - script.execute: screen_off_countdown
-
 text_sensor:
   - platform: template
     name: "Firmware Version"
@@ -293,6 +278,25 @@ text_sensor:
   # toggle needed for these. The toggles aren't `checkable`, so a tap never
   # flips the highlight by itself: it changes once HA confirms the new state.
   # ---------------------------------------------------------------------------
+  # Basement motion from HA, as text like the group states, so
+  # "unavailable"/"unknown" read as not-motion (a homeassistant binary sensor
+  # keeps its last state on those, which would hold the screen on forever if
+  # the PIR dropped off while reading "on"). "on" turns the screen on and
+  # restarts the off timer, whether the screen was on or off; any other value
+  # restarts the timer too, so screen_on_time counts from the last movement,
+  # and screen_off never fires while the sensor still reads "on".
+  - platform: homeassistant
+    id: basement_motion
+    entity_id: ${motion_sensor}
+    internal: true
+    on_value:
+      - if:
+          condition:
+            lambda: 'return x == "on";'
+          then:
+            - script.execute: wake_screen
+      - script.execute: screen_off_countdown
+
   - platform: homeassistant
     id: office_state
     entity_id: ${office_group}
@@ -402,7 +406,7 @@ script:
     then:
       - if:
           condition:
-            lambda: 'return !id(screen_dark) && !id(basement_motion).state && id(main_page)->is_showing();'
+            lambda: 'return !id(screen_dark) && id(basement_motion).state != "on" && id(main_page)->is_showing();'
           then:
             - globals.set:
                 id: screen_dark
