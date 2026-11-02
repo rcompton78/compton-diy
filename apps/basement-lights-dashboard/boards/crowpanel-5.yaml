@@ -1,0 +1,113 @@
+# =============================================================================
+# BOARD HAL: Elecrow CrowPanel 5.0" HMI, Basic (ESP32-S3, 800x480 RGB, GT911)
+# =============================================================================
+# Hardware-only ESPHome package: chip, PSRAM, backlight, RGB parallel display,
+# I2C touch, and which UART the logger uses. No app logic (no wifi/api/ota/UI)
+# lives here on purpose.
+#
+# To run the app on another board, add boards/<name>.yaml providing the same
+# ids this file does (`tft_display`, `tft_touch`, `backlight`, a light) and
+# point a new builds/<name>.yaml at it. common/dashboard.yaml draws for an
+# 800x480 panel turned to portrait, so a different size needs a new layout.
+#
+# The board is the ESP32-S3-WROOM-1-N4R8 version (4MB quad flash, 8MB octal
+# PSRAM). Some Amazon listings call it an "LX6" (original ESP32) part; it
+# isn't, and an RGB panel this size needs the S3's LCD peripheral anyway.
+#
+# Pins and timings are the community config from esphome-devices
+# ("CrowPanel 5.0" HMI ESP32 display (by Elecrow)"), which drives the same
+# panel through the now-deprecated rpi_dpi_rgb component with its default
+# porches/pulse widths. mipi_rgb's "RPI" model is that component's
+# replacement (a plain RGB panel with no init sequence), so those defaults are
+# spelled out below. The data pins match Sunton's ESP32-8048S050 (same
+# reference design); only the pclk pin and timings differ.
+#
+# GPIO19/20 are the S3's native USB D-/D+ pins, and this board uses them for
+# the touch I2C bus, so the native USB port isn't available: programming and
+# logs go through the on-board USB-UART bridge on UART0 (hence `logger:
+# hardware_uart: UART0` below, since ESPHome defaults the S3 to USB-JTAG).
+# =============================================================================
+
+esp32:
+  variant: ESP32S3
+  flash_size: 4MB
+  cpu_frequency: 240MHZ
+  framework:
+    type: esp-idf
+    # From the community config. A bigger data cache and running code and
+    # read-only data from PSRAM keep the RGB panel fed while flash is busy
+    # (an OTA write, NVS); without them the panel can drift or flicker.
+    sdkconfig_options:
+      CONFIG_ESP32S3_DATA_CACHE_64KB: "y"
+      CONFIG_SPIRAM_FETCH_INSTRUCTIONS: "y"
+      CONFIG_SPIRAM_RODATA: "y"
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+logger:
+  hardware_uart: UART0
+
+# Backlight on GPIO2 through the panel's LED driver, dimmable with PWM (no
+# controller in between on the Basic version, unlike the CrowPanel Advance).
+# common/dashboard.yaml switches it on and off with motion and touch.
+output:
+  - platform: ledc
+    id: backlight_pwm
+    pin: GPIO2
+    frequency: 1220Hz
+
+light:
+  - platform: monochromatic
+    id: backlight
+    name: "Backlight"
+    icon: "mdi:brightness-6"
+    entity_category: config
+    output: backlight_pwm
+    restore_mode: ALWAYS_ON
+    default_transition_length: 0s
+
+i2c:
+  - id: i2c_bus_touch
+    sda: GPIO19
+    scl: GPIO20
+    frequency: 400kHz
+
+display:
+  - platform: mipi_rgb
+    model: RPI
+    id: tft_display
+    dimensions:
+      width: 800
+      height: 480
+    color_order: RGB
+    pclk_frequency: 12MHz
+    pclk_inverted: true
+    de_pin: GPIO40
+    hsync_pin: GPIO39
+    vsync_pin: GPIO41
+    # GPIO0 is a strapping pin (boot mode); the board wires pclk to it anyway.
+    pclk_pin:
+      number: GPIO0
+      ignore_strapping_warning: true
+    hsync_pulse_width: 10
+    hsync_back_porch: 10
+    hsync_front_porch: 20
+    vsync_pulse_width: 10
+    vsync_back_porch: 10
+    vsync_front_porch: 10
+    data_pins:
+      red: [45, 48, 47, 21, 14]
+      green: [5, 6, 7, 15, 16, 4]
+      blue: [8, 3, 46, 9, 1]
+    auto_clear_enabled: false
+    update_interval: never
+
+# No reset or interrupt pin is wired to the GT911 on this board, so it's
+# polled.
+touchscreen:
+  - platform: gt911
+    id: tft_touch
+    display: tft_display
+    i2c_id: i2c_bus_touch

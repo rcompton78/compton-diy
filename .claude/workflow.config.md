@@ -20,6 +20,7 @@
 - **Area mappings:**
   - cyd-clock: COM / Cyd Clock
   - tamagotchi-plus: COM / Tamagotchi+
+  - basement-lights-dashboard: COM / Basement Lights
 
 ## Commands
 

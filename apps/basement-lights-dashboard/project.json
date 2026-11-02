@@ -1,0 +1,56 @@
+{
+  "name": "basement-lights-dashboard",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "targets": {
+    "write-secrets": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/write-secrets.sh apps/basement-lights-dashboard",
+        "cwd": "."
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "echo done",
+        "cwd": "."
+      },
+      "dependsOn": ["build-crowpanel-5"]
+    },
+    "build-crowpanel-5": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/espframe-esphome.sh compile apps/basement-lights-dashboard/builds/crowpanel-5.yaml",
+        "cwd": "."
+      },
+      "dependsOn": ["write-secrets"],
+      "cache": true,
+      "inputs": ["default", "{projectRoot}/builds/secrets.yaml", "{workspaceRoot}/scripts/espframe-esphome.sh", "{workspaceRoot}/apps/espframe/product/contract/project.json", "{workspaceRoot}/scripts/write-secrets.sh", { "env": "RELEASE_VERSION" }, { "env": "BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY" }],
+      "outputs": ["{projectRoot}/builds/.esphome/build/basement-lights-crowpanel-5"]
+    },
+    "flash-crowpanel-5": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/espframe-esphome.sh upload apps/basement-lights-dashboard/builds/crowpanel-5.yaml --device /dev/ttyUSB0",
+        "cwd": "."
+      },
+      "dependsOn": ["build-crowpanel-5"]
+    },
+    "monitor-crowpanel-5": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/espframe-esphome.sh logs apps/basement-lights-dashboard/builds/crowpanel-5.yaml --device /dev/ttyUSB0",
+        "cwd": "."
+      }
+    },
+    "release": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "python3 tools/esp-flasher/generate_release.py --project-dir apps/basement-lights-dashboard --name \"Basement Lights Dashboard\" --esphome crowpanel-5:ESP32-S3:basement-lights-crowpanel-5 --version ${RELEASE_VERSION:-dev}",
+        "cwd": "."
+      },
+      "dependsOn": ["build-crowpanel-5"]
+    }
+  }
+}
