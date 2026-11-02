@@ -156,6 +156,7 @@ jobs:
           # Per-app secrets for scripts/write-secrets.sh (COM-463); strict, so a missing one fails the run.
           REQUIRE_APP_SECRETS: "1"
           MEDIA_ROOM_DASHBOARD_API_ENCRYPTION_KEY: ${{ secrets.MEDIA_ROOM_DASHBOARD_API_ENCRYPTION_KEY }}
+          BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY: ${{ secrets.BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY }}
         run: |
           scripts/release-run.sh "$RUNNER_TEMP/release-versions.json" build
           scripts/release-run.sh "$RUNNER_TEMP/release-versions.json" build-fs
@@ -176,6 +177,7 @@ jobs:
           # Per-app secrets for scripts/write-secrets.sh (COM-463); strict, so a missing one fails the run.
           REQUIRE_APP_SECRETS: "1"
           MEDIA_ROOM_DASHBOARD_API_ENCRYPTION_KEY: ${{ secrets.MEDIA_ROOM_DASHBOARD_API_ENCRYPTION_KEY }}
+          BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY: ${{ secrets.BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY }}
         run: scripts/release-run.sh "$RUNNER_TEMP/release-versions.json" release
 
       - name: Generate flasher index
