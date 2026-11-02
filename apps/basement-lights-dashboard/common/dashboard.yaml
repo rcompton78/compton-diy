@@ -384,8 +384,8 @@ script:
           int dy = (id(pixel_shift_step) / 3 - 1) * ${pixel_shift_px};
           lv_obj_set_pos(id(main_content), dx, dy);
 
-  # Restarted by motion starting and clearing, every touch release and HA
-  # connecting; turns the screen off once it runs out (unless the motion
+  # Restarted by every motion sensor state from HA (motion, clear, or
+  # unavailable), every touch release and HA connecting; turns the screen off once it runs out (unless the motion
   # sensor still reads motion, see screen_off). Never while HA is away (nothing
   # could wake the screen but a touch), see api on_client_disconnected.
   - id: screen_off_countdown
