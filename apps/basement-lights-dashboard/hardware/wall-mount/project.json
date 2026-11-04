@@ -1,0 +1,47 @@
+{
+  "name": "basement-lights-wall-mount",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "tags": ["hardware"],
+  "targets": {
+    "cad-setup": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "apps/basement-lights-dashboard/hardware/wall-mount/setup.sh",
+        "cwd": "."
+      }
+    },
+    "cad": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["cad-setup"],
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/mount/**/*.py",
+        "{projectRoot}/requirements.txt"
+      ],
+      "outputs": ["{projectRoot}/out", "{projectRoot}/docs"],
+      "options": {
+        "command": ".venv/bin/python -m mount.build",
+        "cwd": "apps/basement-lights-dashboard/hardware/wall-mount"
+      }
+    },
+    "release": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["cad"],
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/mount/**/*.py",
+        "{projectRoot}/requirements.txt",
+        "{projectRoot}/README.md",
+        "{projectRoot}/docs/*.png",
+        "{workspaceRoot}/scripts/pack-hardware-release.sh",
+        { "env": "RELEASE_VERSION" }
+      ],
+      "outputs": ["{workspaceRoot}/dist/basement-lights-wall-mount"],
+      "options": {
+        "command": "scripts/pack-hardware-release.sh apps/basement-lights-dashboard/hardware/wall-mount basement-lights-wall-mount ${RELEASE_VERSION:-dev}",
+        "cwd": "."
+      }
+    }
+  }
+}

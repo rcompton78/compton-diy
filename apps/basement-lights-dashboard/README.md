@@ -82,7 +82,10 @@ of step with the screen logic (dark while taps still toggle lights).
 flash, 8 MB octal PSRAM), 800×480 RGB parallel panel, GT911 capacitive
 touch, in the stock acrylic case. Some listings call it a "32-bit LX6"
 (original ESP32) board; it's an S3 (an RGB panel this size needs the S3's LCD
-peripheral). A printed wall mount is COM-534.
+peripheral). It hangs on the wall in that case: a printed cradle on a
+dovetail wall plate, [`hardware/wall-mount/`](hardware/wall-mount/README.md)
+(COM-534), portrait with the USB-C at the bottom, which is what the default
+`screen_rotation: "90"` draws upright.
 
 | Function | Pins |
 |---|---|
