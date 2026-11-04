@@ -4,8 +4,8 @@ SOURCED  from Elecrow's STEP of the CrowPanel 5.0" HMI (Basic, board V3.0) in it
          3D_File_CrowPanel_5.0-ESP32_HMI-3.0.zip on elecrow.com (measured in OCP), or its outline
          drawing 5.0inch_HMI_Outline_Dimensions.pdf. The STEP isn't committed (unclear licence).
 DESIGN   a choice made here.
-MEASURED checked on the real parts in this project (none yet: the fit-test coupons settle the DESIGN
-         clearances and retag them).
+MEASURED checked on the real parts in this project, on the fit-test coupons (coupon 1: 2026-11); the
+         coupons settle the remaining DESIGN clearances and retag them.
 
 World frame (mm): X to the right as seen from the front, Z up, Y into the wall. The wall face is
 Y = 0, so a part at `d` mm off the wall sits at Y = -d; helpers take d and do the sign.
@@ -62,11 +62,13 @@ PLUG_BEND_CLEAR = 50.0               # DESIGN: kept clear below the case's botto
 PLUG_BEND_MARGIN = 2.0               # DESIGN: extra width each side of that clear zone
 
 # --- Cradle (DESIGN, black PLA) ------------------------------------------------------------------
-CLEAR_SIDE = 0.4                     # DESIGN: case to side walls, per side (fit-test coupon 1)
+CLEAR_SIDE = 0.4                     # MEASURED: case to side walls, per side; coupon 1 in black PLA fit well
 CLEAR_BACK = 0.3                     # DESIGN: case back to the cradle back
-LIP_GAP = 0.15                       # DESIGN: lip's back face to the case face
-LIP_T = 1.5                          # DESIGN: lip thickness
-LIP_WINDOW_MARGIN = 0.5              # DESIGN: lips stop this far outside the case window
+LIP_GAP = 0.15                       # DESIGN: lip's back face to the case face (needs the full depth: coupon 2)
+LIP_T = 1.5                          # MEASURED: lip thickness; coupon 1's lips (bottom span included) printed
+                                     #   clean with no supports
+LIP_WINDOW_MARGIN = 0.5              # MEASURED: lips stop this far outside the case window; on coupon 1 they sit
+                                     #   on the border, clear of the window
 WALL = 2.4                           # DESIGN: side wall thickness
 FLOOR_T = 4.0                        # DESIGN: floor under the case (carries it in compression)
 BACK_T = 7.0                         # DESIGN: flat back, wall side down on the bed; holds the dovetail groove
