@@ -4,7 +4,8 @@ SOURCED  from Elecrow's STEP of the CrowPanel 5.0" HMI (Basic, board V3.0) in it
          3D_File_CrowPanel_5.0-ESP32_HMI-3.0.zip on elecrow.com (measured in OCP), or its outline
          drawing 5.0inch_HMI_Outline_Dimensions.pdf. The STEP isn't committed (unclear licence).
 DESIGN   a choice made here.
-MEASURED checked on the real parts (none yet: the fit-test coupons settle the DESIGN clearances).
+MEASURED checked on the real parts in this project (none yet: the fit-test coupons settle the DESIGN
+         clearances and retag them).
 
 World frame (mm): X to the right as seen from the front, Z up, Y into the wall. The wall face is
 Y = 0, so a part at `d` mm off the wall sits at Y = -d; helpers take d and do the sign.
@@ -75,8 +76,10 @@ HEAD_POCKET_EXTRA = 0.3              # DESIGN: pocket floor past the head
 FLEX_RELIEF_DEPTH = 0.6              # DESIGN: relief in the left wall for the 0.35 mm flex tab
 FLEX_RELIEF_MARGIN = 1.0             # DESIGN: round the tab, in Z and depth
 TF_MARGIN_Z, TF_MARGIN_D = 2.0, 1.0  # DESIGN: TF window past the case's slot, along and across
-VENT_W, VENT_H, VENT_PITCH = 18.0, 2.5, 8.0   # DESIGN: vent slots each side of the spine
-VENT_Z = (55.0, 110.0)               # DESIGN: their span (bottom of the lowest, top of the highest)
+VENT_W, VENT_H, VENT_PITCH = 18.0, 2.5, 8.0   # DESIGN: vent slots, two columns either side of the centre line
+VENT_X0 = 5.0                        # DESIGN: inner end of each column (outer end at VENT_X0 + VENT_W)
+VENT_Z = (96.0, 126.0)               # DESIGN: their span, above PLATE_TOP so they open onto the gap behind the
+                                     #   cradle rather than onto the plate, and below the antenna end
 EDGE_CHAMFER = 0.8                   # DESIGN: front edge chamfer round the lips
 
 # --- Dovetail (DESIGN; the espframe stand's groove/rail approach, sized for PLA) ------------------
@@ -88,13 +91,17 @@ DOVE_TRIAL_CLEARS = (0.10, 0.15, 0.20)
 DOVE_TIP_CLEAR = 0.4                 # DESIGN: rail tip to groove floor (the groove floor is an 18 mm bridge)
 BACK_GAP = SLIDE_CLEAR               # DESIGN: cradle back face to plate face, the same as the flanks
 MIN_ENGAGE = 80.0                    # DESIGN: check limit (the PETG stand needed 30; PLA creeps)
+MAX_HEADROOM = 90.0                  # DESIGN: check limit on the lift needed to take the cradle off
 
 # --- Wall plate (DESIGN) --------------------------------------------------------------------------
-PLATE_T = 4.0
-PLATE_W = 52.0
-PLATE_TOP = 128.0                    # DESIGN: Z of the plate's (and rail's) top end; the groove's top end sits on it
-RAIL_BOTTOM = 24.0                   # DESIGN: Z where the rail starts (engagement = PLATE_TOP - RAIL_BOTTOM)
-WOOD_SCREW_Z = (50.0, 110.0)         # DESIGN: two #6 countersunk, 60 mm apart, through the rail
+PLATE_T = 4.0                        # DESIGN
+PLATE_W = 52.0                       # DESIGN
+# The groove is open at the cradle's underside (Z 0), so lifting the cradle off takes PLATE_TOP of
+# headroom above it, whatever the engagement. Running the rail from Z 0 makes engagement = headroom,
+# and PLATE_TOP is the smallest that keeps MIN_ENGAGE with a margin.
+PLATE_TOP = 88.0                     # DESIGN: Z of the plate's (and rail's) top end; the groove's top end sits on it
+RAIL_BOTTOM = 0.0                    # DESIGN: Z where the rail starts, level with the cradle's underside
+WOOD_SCREW_Z = (20.0, 80.0)          # DESIGN: two #6 countersunk, 60 mm apart, through the rail
 WOOD_CLEAR_D = 3.8                   # DESIGN: #6 (3.5 mm) shank clearance
 WOOD_HEAD_D = 7.4                    # SOURCED: #6 flat head is 0.262" (6.65 mm) max; + 0.75
 WOOD_CSK_ANGLE = 82.0                # SOURCED: imperial flat-head angle
@@ -108,11 +115,12 @@ EAR_X = (13.0, 23.0)                 # DESIGN: right of the plug, clear of the b
 EAR_T = 4.0                          # DESIGN: thickness (Z); the screw passes through it
 EAR_D = 12.0                         # DESIGN: reaches this far off the wall
 DETENT_GAP = 0.3                     # DESIGN: ear top to the cradle's underside
-DETENT_SCREW_L = 8.0                 # M3 x 8
-M3_CLEAR_D = 3.4
-INSERT_HOLE_D = 4.0                  # MEASURED in PETG on the espframe stand's coupons; check in PLA
-INSERT_L = 4.0
-INSERT_HOLE_DEPTH = 5.5
+DETENT_SCREW_L = 8.0                 # SOURCED: M3 x 8 socket head cap screw
+M3_CLEAR_D = 3.4                     # DESIGN
+INSERT_OD = 4.2                      # SOURCED: LUKAISEN M3 x 4 x 4.2 kit (the espframe stand's)
+INSERT_HOLE_D = INSERT_OD - 0.2      # DESIGN: confirmed snug in PETG on the espframe stand; coupon 2 checks PLA
+INSERT_L = 4.0                       # SOURCED: kit
+INSERT_HOLE_DEPTH = 5.5              # DESIGN: insert plus 1.5 for the screw tip
 DETENT_D = 7.65                      # DESIGN: screw axis off the wall, centred in the 7 mm back (4.15..11.15)
 MIN_INSERT_WALL = 1.2                # DESIGN: check limit round an insert hole
 

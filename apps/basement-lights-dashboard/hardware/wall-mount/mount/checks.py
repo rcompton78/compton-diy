@@ -1,12 +1,12 @@
 """Fit checks. Each returns (name, ok, detail); build.py exits non-zero, and the release refuses to
 pack, if any fails."""
 
-import math
+from build123d import Pos
 
 from . import params as p
 from . import reference as ref
 from .cradle import detent_x, head_channel_x, lip_edges, window_x
-from .geom import FLANK, box, groove_half, rail_half, step_d, step_x, step_z
+from .geom import box, groove_half, rail_half, step_d, step_x, step_z
 from .plate import csk_depth, ear_z
 
 EPS = 1e-3
@@ -28,16 +28,12 @@ def run(cradle, plate, printed: dict) -> list:
         f"case + screw heads + flex tab + TF card: overlap {over:.4f} mm³, nearest {gap:.2f} mm "
         f"(sides {p.CLEAR_SIDE}, back {p.CLEAR_BACK}, lip {p.LIP_GAP}); stands on the {p.FLOOR_T:.0f} mm floor")
 
-    # 2. The case slides in from the top: sweep it up out of the cradle and check nothing is hit.
-    from build123d import Pos
-    sweep = None
-    for dz in (5, 15, 40, 80, 150):
-        s = Pos(0, 0, dz) * case
-        sweep = s if sweep is None else sweep + s
-    s_over = (cradle & sweep).volume
+    # 2. The case slides in from the top: the volume it sweeps from well above the cradle down into its
+    #    seat (every feature extruded straight up) never meets the cradle.
+    s_over = (cradle & ref.case_swept(p.Z_TOP + 50)).volume
     add("Case slides in from the open top", s_over < EPS,
-        f"the case lifted 5–150 mm never touches the cradle (overlap {s_over:.4f} mm³): heads ride in "
-        f"{len(head_channel_x())} channels, the flex tab in a {p.FLEX_RELIEF_DEPTH} mm relief")
+        f"the case's swept path from above the cradle to its seat never touches it (overlap {s_over:.4f} mm³): "
+        f"heads ride in {len(head_channel_x())} channels, the flex tab in a {p.FLEX_RELIEF_DEPTH} mm relief")
 
     # 3. Lips stay outside the window; the active area is fully clear.
     w_over = (cradle & ref.window_column()).volume
@@ -79,37 +75,51 @@ def run(cradle, plate, printed: dict) -> list:
         f"nearest screw or insert {near:.1f} mm below the antenna (need ≥ {p.ANTENNA_METAL_KEEPOUT:.0f}); "
         f"the cradle stops at the case's top edge: nothing over it, only the PLA back and walls beside it")
 
-    # 8. Dovetail clearance, square to the flank.
-    rail_only = box(-50, 50, p.D_PLATE_FACE + 0.01, p.D_RAIL_TIP, p.RAIL_BOTTOM, p.PLATE_TOP)
+    # 8. Dovetail clearance, measured on the solids: the groove's walls against the rail alone.
+    rail = plate & box(-50, 50, p.D_PLATE_FACE + 0.01, p.D_RAIL_TIP + 1, 10, p.PLATE_TOP - 10)
+    groove_walls = cradle & box(-15, 15, p.D_BACK0 - 1, p.D_GROOVE_FLOOR + 1, 10, p.PLATE_TOP - 10)
+    flank_gap = groove_walls.distance_to(rail)
     d_over = (cradle & plate).volume
-    flank_gap = (groove_half(6.0) - rail_half(6.0)) * math.cos(FLANK)
     tip_gap = p.D_GROOVE_FLOOR - p.D_RAIL_TIP
     back_gap = p.D_BACK0 - p.D_PLATE_FACE
-    add("Dovetail clearance", d_over < EPS and abs(flank_gap - p.SLIDE_CLEAR) < 1e-6,
-        f"{flank_gap:.2f} mm per flank (square to it), {tip_gap:.2f} mm at the tip, {back_gap:.2f} mm "
-        f"back to plate; cradle and plate never overlap ({d_over:.4f} mm³)")
-    del rail_only
+    add("Dovetail clearance", d_over < EPS and abs(flank_gap - p.SLIDE_CLEAR) < 0.01,
+        f"measured {flank_gap:.3f} mm from the groove to the rail (square to the flank; design {p.SLIDE_CLEAR}), "
+        f"{tip_gap:.2f} mm at the tip, {back_gap:.2f} mm back to plate; cradle and plate never overlap "
+        f"({d_over:.4f} mm³)")
 
-    # 9. Engagement and the weight path.
+    # 9. Engagement, the weight path, and the lift needed to take the cradle off: lift it L, pull it
+    #    1 mm off the wall, and see whether it still meets the plate.
     engage = p.PLATE_TOP - max(p.RAIL_BOTTOM, 0.0)
     seat = (cradle & box(-50, 50, p.D_PLATE_FACE, p.D_RAIL_TIP, p.PLATE_TOP, p.PLATE_TOP + 0.01)).volume
-    add("Dovetail engagement", engage >= p.MIN_ENGAGE and seat > 0,
-        f"{engage:.0f} mm of rail inside the groove (need ≥ {p.MIN_ENGAGE:.0f}); the groove's closed top sits "
-        f"on the rail's top end, so the weight goes down the rail, not through a cantilever; "
-        f"lifting off takes {engage:.0f} mm of headroom above the cradle")
+
+    def captive(lift):
+        return (Pos(0, -1.0, lift) * cradle & plate).volume > EPS
+
+    lo, hi = 0.0, p.PLATE_TOP + 20
+    ok_bounds = captive(lo) and not captive(hi)
+    for _ in range(12):
+        mid = (lo + hi) / 2
+        lo, hi = (mid, hi) if captive(mid) else (lo, mid)
+    headroom = hi
+    add("Dovetail engagement and lift-off", engage >= p.MIN_ENGAGE and seat > 0 and ok_bounds
+        and headroom <= p.MAX_HEADROOM,
+        f"{engage:.0f} mm of rail in the groove (need ≥ {p.MIN_ENGAGE:.0f}); the groove's closed top sits on the "
+        f"rail's top end, so the weight goes down the rail, not through a cantilever; measured lift to free it "
+        f"{headroom:.1f} mm (limit {p.MAX_HEADROOM:.0f}), so leave {headroom + 5:.0f} mm free above the cradle")
 
     # 10. Detent: the ear clears the cradle, and the screw reaches the insert.
     ez0, ez1 = ear_z()
     ear_gap = 0.0 - ez1
     reach = p.DETENT_SCREW_L - p.EAR_T - p.DETENT_GAP
-    walls = min(p.DETENT_D - p.INSERT_HOLE_D / 2 - p.D_BACK0, p.D_BACK1 - (p.DETENT_D + p.INSERT_HOLE_D / 2))
-    groove_web = detent_x() - p.INSERT_HOLE_D / 2 - groove_half(p.D_GROOVE_FLOOR)
+    # Wall left round the insert itself (Ø INSERT_OD), not just its hole.
+    walls = min(p.DETENT_D - p.INSERT_OD / 2 - p.D_BACK0, p.D_BACK1 - (p.DETENT_D + p.INSERT_OD / 2))
+    groove_web = detent_x() - p.INSERT_OD / 2 - groove_half(p.D_GROOVE_FLOOR)
     plug_web = p.EAR_X[0] - (ux + p.PLUG_W / 2 + p.PLUG_CLEAR + p.PLUG_BEND_MARGIN)
     add("Detent screw", ear_gap > 0 and p.INSERT_L - 1.0 <= reach <= p.INSERT_HOLE_DEPTH - 0.3
         and walls >= p.MIN_INSERT_WALL and groove_web >= p.MIN_INSERT_WALL and plug_web > 0,
         f"M3 × {p.DETENT_SCREW_L:.0f} up through the {p.EAR_T:.0f} mm ear: {reach:.1f} mm into an M3 × "
         f"{p.INSERT_L:.0f} insert ({p.INSERT_HOLE_DEPTH} mm hole); ear {ear_gap:.1f} mm under the cradle "
-        f"(never carries it); insert walls {walls:.2f} mm, {groove_web:.1f} mm to the groove; ear "
+        f"(never carries it); {walls:.2f} mm of wall round the Ø{p.INSERT_OD} insert, {groove_web:.1f} mm to the groove; ear "
         f"{plug_web:.1f} mm clear of the plug zone")
 
     # 11. Wall screws.

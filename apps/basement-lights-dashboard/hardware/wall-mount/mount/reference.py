@@ -37,6 +37,22 @@ def case():
     return case_outline() + heads() + flex_tab() + tf_card()
 
 
+def case_swept(top):
+    """The volume the case passes through sliding down from Z = top into its seat: every feature of
+    case() extruded straight up from where it sits to `top`."""
+    body = box(-p.CASE_W / 2, p.CASE_W / 2, p.D_CASE_BACK, p.D_CASE_FRONT, p.Z_CASE0, top)
+    out = fillet(body.edges().filter_by(Axis.Y), p.CASE_R)
+    r = p.HEAD_D / 2
+    for xs, ys in p.STEP_HEADS:
+        x, z = step_x(ys), step_z(xs)
+        out += dcyl(x, z, p.D_CASE_BACK - p.HEAD_H, p.D_CASE_BACK, p.HEAD_D)
+        out += box(x - r, x + r, p.D_CASE_BACK - p.HEAD_H, p.D_CASE_BACK, z, top)
+    for b in (flex_tab(), tf_card()):
+        bb = b.bounding_box()
+        out += box(bb.min.X, bb.max.X, -bb.max.Y, -bb.min.Y, bb.min.Z, top)
+    return out
+
+
 def glass():
     """The glass, 1.93 mm behind the case face, filling the window (for renders)."""
     return step_box(p.STEP_WINDOW_X, p.STEP_WINDOW_Y, (p.STEP_GLASS_FRONT_Z - 0.3, p.STEP_GLASS_FRONT_Z))

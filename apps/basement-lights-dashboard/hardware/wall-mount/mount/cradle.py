@@ -67,10 +67,9 @@ def build_cradle():
     # Dovetail groove: open at the bottom, closed at PLATE_TOP where it sits on the rail's top end.
     c -= trapezoid_z(groove_half, p.D_BACK0 - 0.5, p.D_GROOVE_FLOOR, -1, p.PLATE_TOP)
 
-    # Vents through the back, each side of the groove.
-    gx = groove_half(p.D_GROOVE_FLOOR) + 3.5
+    # Vents through the back, above the plate (the groove ends at PLATE_TOP, below them).
     for side in (-1, 1):
-        x0, x1 = side * gx, side * (gx + p.VENT_W)
+        x0, x1 = side * p.VENT_X0, side * (p.VENT_X0 + p.VENT_W)
         z = p.VENT_Z[0]
         while z + p.VENT_H <= p.VENT_Z[1] + 1e-6:
             c -= box(x0, x1, p.D_BACK0 - 1, p.D_BACK1 + 1, z, z + p.VENT_H)
