@@ -166,16 +166,21 @@ def main() -> int:
     # A POSIX string can't express a one-time transition, so the firmware's
     # rule has to match the zone's current rules: sample years after the 2026
     # one-time changes, so a newer tzdata announcing a future change fails too.
-    posix_instants = [
-        instant.replace(year=year) for year in rule_sample_years(args.rolling_years) for instant in label_instants
-    ]
+    def sample_instants(rolling: bool) -> list[dt.datetime]:
+        return [instant.replace(year=year) for year in rule_sample_years(rolling) for instant in label_instants]
+
+    posix_instants = sample_instants(args.rolling_years)
+    # Whether an exception still covers a sample is judged against the drift
+    # job's samples (fixed + rolling years) in either mode, so an entry only a
+    # rolling year needs doesn't fail the PR check.
+    coverage_instants = sample_instants(rolling=True)
 
     zones = {tz for tz, *_ in rows}
     for exception in POSIX_EXCEPTIONS:
         if exception.zone not in zones:
             raise AssertionError(f"POSIX exception for {exception.zone}, which isn't in the timezone table")
         if exception.end <= exception.start:
-            raise AssertionError(f"POSIX exception for {exception.zone} ends before it starts")
+            raise AssertionError(f"POSIX exception for {exception.zone} doesn't end after it starts")
     skipped = {exception: 0 for exception in POSIX_EXCEPTIONS}
 
     for tz, gmt, _lat, _lon, posix in rows:
@@ -224,9 +229,14 @@ def main() -> int:
     for exception, count in skipped.items():
         window = f"{exception.zone} POSIX samples {exception.start}..{exception.end} (local)"
         if today >= exception.end:
-            print(f"EXPIRED, remove this entry: {window}: {exception.reason}")
+            # Fixed sample years inside the window are skipped forever, so removing
+            # the entry alone would make them fail against the zone's history.
+            print(
+                f"EXPIRED: remove this entry and, in the same change, move rule_sample_years' "
+                f"fixed years past {exception.end}: {window}: {exception.reason}"
+            )
             continue
-        if count == 0:
+        if not any(exception.covers(exception.zone, instant) for instant in coverage_instants):
             raise AssertionError(f"POSIX exception for {window} covers no sample; remove or fix it")
         print(f"exception: {window}, {count} skipped: {exception.reason}")
 

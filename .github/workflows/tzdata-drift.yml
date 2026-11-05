@@ -11,6 +11,8 @@ name: tzdata drift
 # A one-time transition a POSIX rule can't express (e.g. Cuba's 2026f DST
 # extension) goes in check_timezones.py's dated POSIX_EXCEPTIONS list instead;
 # the run prints each one, and flags it EXPIRED once its window has passed.
+# Then remove the entry and, in the same change, move rule_sample_years'
+# fixed years past its end, or the PR check fails on the zone's history.
 
 on:
   schedule:
