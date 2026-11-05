@@ -56,38 +56,40 @@ This creates (or refreshes) a local Python venv (`setup.sh`, Python 3.10–3.13,
 Every dimension is a named constant in [`mount/params.py`](mount/params.py), tagged `SOURCED`, `DESIGN` or `MEASURED`. Change a value and re-run the target.
 
 - **Source.** The case and board come from Elecrow's own STEP of the board in its acrylic case. That's `3D_File_CrowPanel_5.0-ESP32_HMI-3.0.zip` (board V3.0) on elecrow.com, measured in OpenCascade, cross-checked against the outline drawing `5.0inch_HMI_Outline_Dimensions.pdf`.
-  - The STEP isn't committed (its licence is unclear). The model rebuilds the case as a reference body from the numbers in `params.py`: 140.2 × 83.9 × 12.55 mm with R4.5 corners, the M2.5 heads, the flex tab, the TF card, the USB-C receptacle, the window and the antenna.
+  - The STEP isn't committed (its licence is unclear). The model rebuilds the case as a reference body from the numbers in `params.py`: 140.2 × 83.9 mm with R4.5 corners, 13.0 mm thick (`CASE_T`, measured on the real case; the STEP says 12.55), the M2.5 heads, the flex tab, the TF card, the USB-C receptacle, the window and the antenna.
 - **USB-C cable.** The overmold is reserved at 12.5 × 7 × 35 mm. Richard's cable passed coupon 2's 13.5 × 8 floor opening and seated in the port.
 - **To measure.** Every clearance is a `DESIGN` value until the coupons below confirm or change it. When they do, retag it `MEASURED`.
 
 ## Checks
 
-`out/checks.txt` has the full detail.
+`pnpm nx run basement-lights-wall-mount:cad` writes this table from `mount/checks.py` on every build (and the same lines to `out/checks.txt`), so its numbers always match the model.
 
+<!-- checks:start (written by mount.build; edit checks.py, not this table) -->
 | Check | Result |
 |---|---|
-| Case fits the cradle | no overlap with the case, its screw heads, the flex tab or the TF card; nearest 0.15 mm (sides 0.4, back 0.3, lips 0.15); stands on the 4 mm floor |
-| Case slides in from the open top | the case's swept path from above the cradle down to its seat never touches it: heads ride in 2 channels, the flex tab in a 0.6 mm relief |
-| Lips clear the case window | nearest lip 0.50 mm outside the window; nothing over the 108 × 64.8 active area |
-| Lips retain the case | each lip overlaps the case face by ≥ 2.68 mm, even with the case pushed to one side |
-| USB-C plug and cable clear | 12.5 × 7 × 35 overmold through a 13.5 × 8 floor opening; 50 mm below the case clear for the plug and its bend |
-| TF slot open through the right wall | nothing in front of the case's 16.5 mm TF slot; 2 mm spare along it, 1 mm across |
-| Antenna end kept clear | nearest screw or insert 55.6 mm below the antenna (need ≥ 15); nothing over the case's top edge |
-| Dovetail clearance | measured 0.100 mm per flank on the solids, 0.40 at the tip, 0.15 back to the plate; no overlap |
-| Dovetail engagement and lift-off | 88 mm (need ≥ 80); the groove's top end sits on the rail's top end; a lift-then-pull sweep frees the cradle at 88 mm (limit 90) |
-| Detent screw | M3 × 8 reaches 3.7 mm into an M3 × 4 insert; ear 0.3 mm under the cradle; 1.4 mm of wall round the Ø4.2 insert |
-| Wall screws | #6 heads 0.5 mm below the rail face; Ø7.4 countersink in the 17.5 mm rail |
-| Wall thickness | walls 2.4, floor 4, back 2.75 in front of the groove, plate 4, ear 4, lips 1.5; 1.8 at the flex relief |
-| Every part fits the P1S bed, flat | cradle 90 × 144 × 21.5, plate 52 × 92 × 12 |
-| Depth off the wall | 26.5 mm (limit 27) |
+| Case fits the cradle | case + screw heads + flex tab + TF card: overlap 0.0000 mm³, nearest 0.30 mm (sides 0.6, back 0.3, lip 0.55); stands on the 4 mm floor |
+| Case slides in from the open top | the case's swept path from above the cradle to its seat never touches it (overlap 0.0000 mm³): heads ride in 2 channels, the flex tab in a 0.6 mm relief |
+| Lips clear the case window | nearest lip 0.50 mm outside the window (need ≥ 0.5); nothing over the 108 × 64.8 active area; lips cover 3.1 mm of each 3.6 mm side border and 9.05 of the 9.55 bottom border |
+| Lips retain the case | each lip overlaps the case face by ≥ 2.48 mm even pushed to one side (need ≥ 2); printed unsupported: side lips overhang 3.7 mm, the bottom lip spans 85 × 9 mm over the pocket |
+| USB-C plug and cable clear | reserved 12.5 × 7.0 × 35.0 mm overmold through a 13.5 × 8.0 floor opening; 50 mm below the case clear for the plug and its bend (overlap 0.0000 mm³); axis 15.9 mm off the wall |
+| TF slot open through the right wall | nothing of the cradle in front of the case's 16.5 mm TF slot (overlap 0.0000 mm³), 2.0 mm spare along and 1.0 mm across |
+| Antenna end kept clear | nearest screw or insert 55.6 mm below the antenna (need ≥ 15); the cradle stops at the case's top edge: nothing over it, only the PLA back and walls beside it |
+| Dovetail clearance | measured 0.100 mm from the groove to the rail (square to the flank; design 0.1), 0.40 mm at the tip, 0.15 mm back to plate; cradle and plate never overlap (0.0000 mm³) |
+| Dovetail engagement and lift-off | 88 mm of rail in the groove (need ≥ 80); the groove's closed top sits on the rail's top end, so the weight goes down the rail, not through a cantilever; measured lift to free it 88.0 mm (limit 90), so leave 93 mm free above the cradle |
+| Detent screw | M3 × 8 up through the 4 mm ear: 3.7 mm into an M3 × 4 insert (5.5 mm hole); ear 0.3 mm under the cradle (never carries it); 1.40 mm of wall round the Ø4.2 insert, 6.6 mm to the groove; ear 3.9 mm clear of the plug zone |
+| Wall screws | 2 × #6 countersunk, 60 mm apart on the centre line: heads 0.5 mm below the rail face (the groove slides over them), Ø7.4 countersink in the 17.5 mm rail, 5.4 mm under the cone |
+| Wall thickness | walls 2.4, floor 4.0, back 2.75 in front of the groove, 5.86 behind the head channels, plate 4.0, ear 4.0, lips 1.5 (need ≥ 2.4, lips 1.5); 1.8 at the flex relief (need ≥ 1.5) |
+| Every part fits the P1S bed, flat | cradle 90 × 144 × 22.4; plate 52 × 92 × 12.0; coupon-1-fit-frame 90 × 144 × 4.0; coupon-2-bottom-slice 90 × 25 × 22.4; coupon-3-dovetail 154 × 30 × 8.0 |
+| Depth off the wall | 26.50 mm to the lip face (limit 27); cradle 89.9 × 144.2 mm |
+<!-- checks:end -->
 
 ## Print the test coupons first
 
-The clearances are first guesses. Print these three before the full parts (black PLA, the stock Bambu P1S profile, 0.4 mm nozzle, 0.2 mm layers, no supports). The times are rough estimates from each part's volume; Bambu Studio gives the real ones.
+The coupons settled the clearances; their results are below. To rebuild for another filament or printer, print these three before the full parts (black PLA, the stock Bambu P1S profile, 0.4 mm nozzle, 0.2 mm layers, no supports). The times are rough estimates from each part's volume; Bambu Studio gives the real ones.
 
 | Coupon | What it tests | Approx. time | What to report |
 |---|---|---|---|
-| `coupon-1-fit-frame` ![](docs/coupon-1.png) | The cradle's front 4 mm, in the cradle's own print pose, so the lips print as 3.5 mm overhangs exactly as on the cradle. Turn it over onto the case. | 20 min, 8 g | Side-to-side play (`CLEAR_SIDE`, 0.4 per side when printed); whether the lips sit on the border and clear the window; how the lips printed: the side lips are 3.5 mm overhangs, and the bottom lip is an 85 × 9 mm span over the open pocket (anchored on the floor's edge and both walls), so it's the likelier one to sag. **Result (black PLA): good.** The side play is right, the lips sit on the border clear of the window, and every lip printed clean with no supports, the bottom span included. `LIP_WINDOW_MARGIN` and `LIP_T` are now `MEASURED`. (`CLEAR_SIDE` was too, until coupon 2's deeper walls proved 0.4 too tight to slide the case in: see below.) |
+| `coupon-1-fit-frame` ![](docs/coupon-1.png) | The cradle's front 4 mm, in the cradle's own print pose, so the lips print exactly as on the cradle. Turn it over onto the case. | 20 min, 8 g | Side-to-side play (`CLEAR_SIDE`, 0.4 per side when printed); whether the lips sit on the border and clear the window; how the lips printed: the side lips are 3.5 mm overhangs (3.7 since `CLEAR_SIDE` went to 0.6), and the bottom lip is an 85 × 9 mm span over the open pocket (anchored on the floor's edge and both walls), so it's the likelier one to sag. **Result (black PLA): good.** The side play is right, the lips sit on the border clear of the window, and every lip printed clean with no supports, the bottom span included. `LIP_WINDOW_MARGIN` and `LIP_T` are now `MEASURED`. (`CLEAR_SIDE` was too, until coupon 2's deeper walls proved 0.4 too tight to slide the case in: see below.) |
 | `coupon-2-bottom-slice` ![](docs/coupon-2.png) | The cradle's bottom 25 mm (`COUPON2_TOP`; the first two prints were 40 mm): floor, plug opening, back with the lower head channels, bottom lip, the lower part of the TF window, detent insert hole. Push an M3 insert into the hole. Stand the case in it and plug in the real USB-C cable. | About 40 min, 20 g | Whether the case seats on the floor (the heads in their channels); whether the cable's overmold passes the 13.5 × 8 opening and seats in the port; whether the TF card can be pushed and pulled through the window; how the insert went in. **First print (black PLA, `LIP_GAP` 0.15): the screw-head channels and the USB-C opening are good, but the case was slightly too tight front to back to slide in.** The pocket had 0.45 mm front to back (0.3 behind the case, 0.15 under the lips). The lips' undersides print as down-facing overhangs and sag into the pocket, so `LIP_GAP` is now 0.5 (0.8 mm in all). Only the lips move, 0.35 mm further out, so the heads, the USB-C opening and the TF window stay where coupon 2 checked them. **Second print (`LIP_GAP` 0.5): still too tight front to back, and side to side as well.** Calipers showed why: the case is 13.0 mm from screen to back plate, not the STEP's 12.55 (`CASE_T` is now 13.0, `MEASURED`), and the coupon measured 14.5 mm from the back's inner face to the lip face against 14.85 modelled, so the pocket printed 0.35 short. That left no play at all. `LIP_GAP` is now 0.55 on the 13.0 case, which should print about 0.5 mm of real play (0.3 + 0.55 − 0.35). The case measured about 83.5 wide, under the STEP's 83.9, so the side tightness was most likely the case binding front to back; `CLEAR_SIDE` is 0.6 per side on the STEP width anyway (about 0.8 on the real case). The case's back doesn't move, so the head channels and the USB-C opening are where coupon 2 confirmed them. **Third print (25 mm tall, `CASE_T` 13.0, `LIP_GAP` 0.55, `CLEAR_SIDE` 0.6): perfect.** The case slides in and seats, so `CASE_T`, `LIP_GAP`, `CLEAR_SIDE`, `CLEAR_BACK`, the head channels and the plug opening are all `MEASURED`. |
 | `coupon-3-dovetail` ![](docs/coupon-3.png) | One groove block, printed like the cradle, and three rail blocks, printed like the plate. The rails are narrowed by 0.10 / 0.15 / 0.20 mm per flank, marked with 1 / 2 / 3 notches. | 45 min, about 20 g | Which rail slides in freely without rocking. That value becomes `SLIDE_CLEAR`. **Result (black PLA): all three slide; the tightest, 0.10 (1 notch), slides easily with very little side play and no tilt or rocking.** `SLIDE_CLEAR` is now 0.10, `MEASURED`. |
 
@@ -97,7 +99,7 @@ Black PLA on the stock Bambu P1S profile, 0.4 mm nozzle, 0.2 mm layers.
 
 | File | Orientation | Settings |
 |---|---|---|
-| `basement-lights-wall-mount-cradle` | As exported: wall side down, so the groove opens onto the bed and its floor bridges 18 mm. The lips are the top layers: a 3.5 mm overhang along each side, and across the bottom an 85 × 9 mm span over the open pocket, held only by the floor's edge and the two walls. | 4 walls, 25% infill, no supports: coupon 1 printed every lip, the bottom span included, clean without them. (If a different filament or profile sags, tree supports grown from the back's inner face inside the pocket stay hidden behind the case.) About 3.5 h. |
+| `basement-lights-wall-mount-cradle` | As exported: wall side down, so the groove opens onto the bed and its floor bridges 18 mm. The lips are the top layers: a 3.7 mm overhang along each side, and across the bottom an 85 × 9 mm span over the open pocket, held only by the floor's edge and the two walls. | 4 walls, 25% infill, no supports: coupon 1 printed every lip, the bottom span included, clean without them. (If a different filament or profile sags, tree supports grown from the back's inner face inside the pocket stay hidden behind the case.) About 3.5 h. |
 | `basement-lights-wall-mount-plate` | As exported: wall side down, rail and ear up. | 4 walls, 25% infill, no supports. About 1 h. |
 
 The M3 heat-set insert goes into the cradle's underside at 200–220 °C for PLA, pressed square and flush. The hole is Ø4.0 (`INSERT_HOLE_D`), which was confirmed in PETG on the espframe stand's coupons; coupon 2 checks it in PLA.

@@ -49,7 +49,9 @@ def run(cradle, plate, printed: dict) -> list:
     # 4. Lips actually hold the case: they overlap its face.
     lip_hold = min(lx0 + p.CASE_W / 2, p.CASE_W / 2 - lx1, lz - p.Z_CASE0) - p.CLEAR_SIDE
     add("Lips retain the case", lip_hold >= 2.0,
-        f"each lip overlaps the case face by ≥ {lip_hold:.2f} mm even pushed to one side (need ≥ 2)")
+        f"each lip overlaps the case face by ≥ {lip_hold:.2f} mm even pushed to one side (need ≥ 2); printed "
+        f"unsupported: side lips overhang {max(lx0 + p.X_IN, p.X_IN - lx1):.1f} mm, the bottom lip spans "
+        f"{2 * p.X_IN:.0f} × {lz - p.FLOOR_T:.0f} mm over the pocket")
 
     # 5. Plug and cable.
     k_over = (cradle & ref.plug_keepout()).volume + (plate & ref.plug_keepout()).volume

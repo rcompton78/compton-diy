@@ -78,6 +78,8 @@ def main(argv=None) -> int:
         print("  " + line)
         report.append(line)
     (out / "checks.txt").write_text("\n".join(report) + "\n", encoding="utf-8")
+    if not args.no_render:
+        _update_readme_checks(results)
 
     if not args.no_render:
         print("rendering previews…", flush=True)
@@ -89,6 +91,21 @@ def main(argv=None) -> int:
         return 1
     print("all checks passed")
     return 0
+
+
+README_CHECKS = ("<!-- checks:start (written by mount.build; edit checks.py, not this table) -->",
+                 "<!-- checks:end -->")
+
+
+def _update_readme_checks(results):
+    """Rewrite the README's Checks table from this run's results, so its numbers can't go stale."""
+    readme = HERE / "README.md"
+    text = readme.read_text(encoding="utf-8")
+    start, end = README_CHECKS
+    i, j = text.index(start) + len(start), text.index(end)
+    rows = ["| Check | Result |", "|---|---|"]
+    rows += [f"| {name} | {'' if ok else '**FAIL** '}{detail} |" for name, ok, detail in results]
+    readme.write_text(text[:i] + "\n" + "\n".join(rows) + "\n" + text[j:], encoding="utf-8")
 
 
 def _cable():

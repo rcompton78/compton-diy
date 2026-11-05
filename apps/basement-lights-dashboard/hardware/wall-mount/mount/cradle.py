@@ -91,7 +91,7 @@ def cradle_print_pose(cradle):
 
 def fit_frame(cradle, depth=4.0):
     """Coupon 1: the cradle's front `depth` mm (lips, side walls, bottom lip), in the cradle's own pose
-    (wall side down, lips on top), so it also shows how the lips' 3.5 mm overhang prints. Turn it over
+    (wall side down, lips on top), so it also shows how the lips' overhangs print. Turn it over
     onto the case to check the side play and that the lips sit on the border, clear of the window."""
     return wall_side_down(cradle & box(-100, 100, p.D_FRONT - depth, p.D_FRONT + 1, -10, 300), p.D_FRONT - depth)
 
