@@ -57,23 +57,24 @@ CASE_T = 13.0                                  # MEASURED: screen face to the ba
                                                #   STEP_CASE_BACK_Z), so the real case is 0.45 thicker
 STEP_YC = (STEP_CASE_Y[0] + STEP_CASE_Y[1]) / 2   # -2.19
 
-# --- USB-C plug (DESIGN: reserved until fit-test coupon 2 tries Richard's cable) ----------------
-PLUG_W, PLUG_T = 12.5, 7.0           # DESIGN: overmold envelope, across × front-to-back
+# --- USB-C plug (the opening is MEASURED: Richard's cable passed coupon 2's floor) -------------
+PLUG_W, PLUG_T = 12.5, 7.0           # MEASURED: overmold envelope, across × front-to-back; the real cable
+                                     #   passed coupon 2's opening and seated in the port
 PLUG_L = 35.0                        # DESIGN: overmold plus strain relief below the case
-PLUG_CLEAR = 0.5                     # DESIGN: floor opening per side round the overmold
+PLUG_CLEAR = 0.5                     # MEASURED: floor opening per side round the overmold (coupon 2)
 PLUG_BEND_CLEAR = 50.0               # DESIGN: kept clear below the case's bottom edge (plug + bend)
 PLUG_BEND_MARGIN = 2.0               # DESIGN: extra width each side of that clear zone
 
 # --- Cradle (DESIGN, black PLA) ------------------------------------------------------------------
-CLEAR_SIDE = 0.6                     # DESIGN: case to side walls, per side, on the STEP's 83.9 width. 0.4 fit coupon
-                                     #   1's 4 mm frame; coupon 2 felt tight side to side too (likely the case binding
-                                     #   front to back), so it's 0.6. The real case is about 83.5, so about 0.8 a side
-CLEAR_BACK = 0.3                     # DESIGN: case back to the cradle back
-LIP_GAP = 0.55                       # DESIGN: lip's back face to the case face. Coupon 2 (LIP_GAP 0.5 on the STEP's
-                                     #   12.55 case) measured 14.5 from the back's inner face to the lip face, 0.35
-                                     #   short of the 14.85 modelled (the lips' down-facing overhangs sag), against a
-                                     #   13.0 case: no play, so it wouldn't slide. 0.55 on the measured 13.0 case
-                                     #   prints about 0.5 of real play (0.3 + 0.55 - 0.35); reprint coupon 2 to confirm
+CLEAR_SIDE = 0.6                     # MEASURED: case to side walls, per side, on the STEP's 83.9 width (about 0.8 on
+                                     #   the real 83.5 case). 0.4 fit coupon 1's 4 mm frame but bound on coupon 2's
+                                     #   deeper walls; 0.6 slid in on coupon 2's third print, a good fit
+CLEAR_BACK = 0.3                     # MEASURED: case back to the cradle back (coupon 2, third print)
+LIP_GAP = 0.55                       # MEASURED: lip's back face to the case face. Coupon 2's second print (LIP_GAP 0.5
+                                     #   on the STEP's 12.55 case) measured 14.5 from the back's inner face to the lip
+                                     #   face, 0.35 short of the 14.85 modelled (the lips' down-facing overhangs sag),
+                                     #   against a 13.0 case: no play. 0.55 on the measured 13.0 case prints about 0.5
+                                     #   of real play (0.3 + 0.55 - 0.35); the third print slid in, a good fit
 LIP_T = 1.5                          # MEASURED: lip thickness; coupon 1's lips (bottom span included) printed
                                      #   clean with no supports
 LIP_WINDOW_MARGIN = 0.5              # MEASURED: lips stop this far outside the case window; on coupon 1 they sit
@@ -82,8 +83,8 @@ WALL = 2.4                           # DESIGN: side wall thickness
 FLOOR_T = 4.0                        # DESIGN: floor under the case (carries it in compression)
 BACK_T = 7.0                         # DESIGN: flat back, wall side down on the bed; holds the dovetail groove
 BACK_SKIN_MIN = 2.4                  # DESIGN: check limit for the back left in front of the groove
-HEAD_POCKET_D = 6.2                  # DESIGN: Ø4.74 heads + 0.73 per side
-HEAD_POCKET_EXTRA = 0.3              # DESIGN: pocket floor past the head
+HEAD_POCKET_D = 6.2                  # MEASURED: Ø4.74 heads + 0.73 per side; the heads ride their channels on coupon 2
+HEAD_POCKET_EXTRA = 0.3              # MEASURED: pocket floor past the head (coupon 2)
 FLEX_RELIEF_DEPTH = 0.6              # DESIGN: relief in the left wall for the 0.35 mm flex tab
 FLEX_RELIEF_MARGIN = 1.0             # DESIGN: round the tab, in Z and depth
 TF_MARGIN_Z, TF_MARGIN_D = 2.0, 1.0  # DESIGN: TF window past the case's slot, along and across
@@ -156,7 +157,7 @@ D_FRONT = D_LIP0 + LIP_T                       # 26.5: depth off the wall
 D_GROOVE_FLOOR = D_RAIL_TIP + DOVE_TIP_CLEAR   # 8.4
 
 # --- Test coupons ---------------------------------------------------------------------------------
-COUPON2_TOP = 25.0                   # DESIGN: coupon 2's height: floor, plug opening, lower head channels, insert,
+COUPON2_TOP = 25.0                   # DESIGN: coupon 2's height (the third print, which confirmed the fit): floor, plug opening, lower head channels, insert,
                                      #   the bottom lip and the lower TF window, tall enough to test the slide
 
 # --- Derived plan ---------------------------------------------------------------------------------
