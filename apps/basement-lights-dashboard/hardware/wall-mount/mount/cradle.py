@@ -96,7 +96,8 @@ def fit_frame(cradle, depth=4.0):
     return wall_side_down(cradle & box(-100, 100, p.D_FRONT - depth, p.D_FRONT + 1, -10, 300), p.D_FRONT - depth)
 
 
-def bottom_slice(cradle, top=40.0):
-    """Coupon 2: the cradle's bottom `top` mm (floor, plug opening, TF window, detent insert), as printed."""
+def bottom_slice(cradle, top=p.COUPON2_TOP):
+    """Coupon 2: the cradle's bottom `top` mm (floor, plug opening, lower head channels, lower TF window,
+    detent insert), as printed."""
     return cradle_print_pose(cradle & box(-100, 100, -1, 60, -10, top))
 

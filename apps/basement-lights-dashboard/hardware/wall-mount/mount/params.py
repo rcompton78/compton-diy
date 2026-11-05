@@ -62,11 +62,14 @@ PLUG_BEND_CLEAR = 50.0               # DESIGN: kept clear below the case's botto
 PLUG_BEND_MARGIN = 2.0               # DESIGN: extra width each side of that clear zone
 
 # --- Cradle (DESIGN, black PLA) ------------------------------------------------------------------
-CLEAR_SIDE = 0.4                     # MEASURED: case to side walls, per side; coupon 1 in black PLA fit well
+CLEAR_SIDE = 0.6                     # DESIGN: case to side walls, per side. 0.4 fit coupon 1's 4 mm frame, but on
+                                     #   coupon 2's deeper walls it was too tight to slide; reprint coupon 2 to confirm
 CLEAR_BACK = 0.3                     # DESIGN: case back to the cradle back
-LIP_GAP = 0.5                        # MEASURED: lip's back face to the case face. Coupon 2 at 0.15 (0.45 front to
-                                     #   back with CLEAR_BACK) was too tight to slide the case in: the lips' down-
-                                     #   facing overhang sags into the pocket. Widened here so nothing else moves
+LIP_GAP = 1.0                        # DESIGN: lip's back face to the case face. Coupon 2 at 0.15 and again at 0.5
+                                     #   (0.45, then 0.8 front to back with CLEAR_BACK) was too tight to slide the
+                                     #   case in: the lips' down-facing overhangs sag into the pocket. Only the
+                                     #   lips move, so the heads, plug opening and TF window stay where coupon 2
+                                     #   checked them; reprint coupon 2 to confirm
 LIP_T = 1.5                          # MEASURED: lip thickness; coupon 1's lips (bottom span included) printed
                                      #   clean with no supports
 LIP_WINDOW_MARGIN = 0.5              # MEASURED: lips stop this far outside the case window; on coupon 1 they sit
@@ -144,9 +147,13 @@ D_BACK0 = PLATE_T + BACK_GAP                   # 4.15: cradle back face (wall si
 D_BACK1 = D_BACK0 + BACK_T                     # 11.15: cradle back's inner face
 D_CASE_BACK = D_BACK1 + CLEAR_BACK             # 11.45
 D_CASE_FRONT = D_CASE_BACK + CASE_T            # 24.0
-D_LIP0 = D_CASE_FRONT + LIP_GAP                # 24.5
-D_FRONT = D_LIP0 + LIP_T                       # 26.0: depth off the wall
+D_LIP0 = D_CASE_FRONT + LIP_GAP                # 25.0
+D_FRONT = D_LIP0 + LIP_T                       # 26.5: depth off the wall
 D_GROOVE_FLOOR = D_RAIL_TIP + DOVE_TIP_CLEAR   # 8.4
+
+# --- Test coupons ---------------------------------------------------------------------------------
+COUPON2_TOP = 25.0                   # DESIGN: coupon 2's height: floor, plug opening, lower head channels, insert,
+                                     #   the bottom lip and the lower TF window, tall enough to test the slide
 
 # --- Derived plan ---------------------------------------------------------------------------------
 Z_CASE0 = FLOOR_T                              # the case stands on the floor
