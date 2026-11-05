@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from dataclasses import dataclass
 import datetime as dt
 import importlib.util
 import os
@@ -21,6 +22,38 @@ INSTALL_HINT = (
     f"run scripts/setup.sh (installs it into apps/espframe/.venv, which "
     f"npm run test:timezones uses), or pip install -r {REQUIREMENTS_PATH} in a venv"
 )
+
+
+@dataclass(frozen=True)
+class PosixException:
+    """A one-time transition a POSIX rule can't express, accepted until it ends.
+
+    POSIX samples for `zone` whose local date falls in [start, end) are skipped;
+    every other sample, and every other zone, is still checked. Once `end` has
+    passed the zone's normal rule applies again, and the run prints the entry as
+    EXPIRED so it gets removed.
+    """
+
+    zone: str
+    start: dt.date  # local date, inclusive
+    end: dt.date  # local date, exclusive
+    reason: str
+
+    def covers(self, tz: str, instant: dt.datetime) -> bool:
+        return tz == self.zone and self.start <= instant.astimezone(ZoneInfo(tz)).date() < self.end
+
+
+POSIX_EXCEPTIONS = [
+    PosixException(
+        zone="America/Havana",
+        start=dt.date(2026, 11, 1),
+        end=dt.date(2027, 11, 7),
+        reason=(
+            "tzdata 2026f: Cuba skips the Nov 2026 fall-back and stays on UTC-4 until "
+            "2027-11-07, so frames run an hour behind until then (COM-590)"
+        ),
+    ),
+]
 
 
 def load_timezones():
@@ -133,9 +166,22 @@ def main() -> int:
     # A POSIX string can't express a one-time transition, so the firmware's
     # rule has to match the zone's current rules: sample years after the 2026
     # one-time changes, so a newer tzdata announcing a future change fails too.
-    posix_instants = [
-        instant.replace(year=year) for year in rule_sample_years(args.rolling_years) for instant in label_instants
-    ]
+    def sample_instants(rolling: bool) -> list[dt.datetime]:
+        return [instant.replace(year=year) for year in rule_sample_years(rolling) for instant in label_instants]
+
+    posix_instants = sample_instants(args.rolling_years)
+    # Whether an exception still covers a sample is judged against the drift
+    # job's samples (fixed + rolling years) in either mode, so an entry only a
+    # rolling year needs doesn't fail the PR check.
+    coverage_instants = sample_instants(rolling=True)
+
+    zones = {tz for tz, *_ in rows}
+    for exception in POSIX_EXCEPTIONS:
+        if exception.zone not in zones:
+            raise AssertionError(f"POSIX exception for {exception.zone}, which isn't in the timezone table")
+        if exception.end <= exception.start:
+            raise AssertionError(f"POSIX exception for {exception.zone} doesn't end after it starts")
+    skipped = {exception: 0 for exception in POSIX_EXCEPTIONS}
 
     for tz, gmt, _lat, _lon, posix in rows:
         label_offset = module.parse_gmt_label(gmt)
@@ -144,6 +190,10 @@ def main() -> int:
             raise AssertionError(f"{tz} label {gmt} is not one of the sampled IANA offsets {sorted(iana_offsets)}")
 
         for instant in posix_instants:
+            exception = next((e for e in POSIX_EXCEPTIONS if e.covers(tz, instant)), None)
+            if exception is not None:
+                skipped[exception] += 1
+                continue
             assert_close(
                 posix_offset_hours(posix, instant),
                 iana_offset_hours(tz, instant),
@@ -174,6 +224,22 @@ def main() -> int:
     assert "daylight GMT+1" in labels["Europe/London (GMT+0)"]
     assert "daylight GMT-4" in labels["America/New_York (GMT-5)"]
     assert labels["Asia/Almaty (GMT+5)"] == "Asia/Almaty (GMT+5)"
+
+    for exception, count in skipped.items():
+        window = f"{exception.zone} POSIX samples {exception.start}..{exception.end} (local)"
+        # The window is in the zone's local dates, so judge expiry by its local
+        # date too, not the host's (CI runs in UTC, a dev machine may not).
+        if dt.datetime.now(ZoneInfo(exception.zone)).date() >= exception.end:
+            # Fixed sample years inside the window are skipped forever, so removing
+            # the entry alone would make them fail against the zone's history.
+            print(
+                f"EXPIRED: remove this entry and, in the same change, move rule_sample_years' "
+                f"fixed years past {exception.end}: {window}: {exception.reason}"
+            )
+            continue
+        if not any(exception.covers(exception.zone, instant) for instant in coverage_instants):
+            raise AssertionError(f"POSIX exception for {window} covers no sample; remove or fix it")
+        print(f"exception: {window}, {count} skipped: {exception.reason}")
 
     print(f"timezone validation passed (tzdata {iana_version})")
     return 0
