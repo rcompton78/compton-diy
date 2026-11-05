@@ -11,7 +11,7 @@
 # the link would only remove the link.
 set -euo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd -P)"   # physical path, to compare with the resolved VENV
+HERE="$(cd "$(dirname "$0")" && pwd)"
 # BSD readlink may have no -f, so fall back to Python's realpath.
 VENV="$(readlink -f "$HERE/.venv" 2>/dev/null)" \
   || VENV="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$HERE/.venv" 2>/dev/null)" \
@@ -49,16 +49,10 @@ if [ -z "$PY" ]; then
 fi
 
 echo "Creating CAD venv with $PY at $VENV"
-# A mis-pointed symlink must not take anything else with it: never delete the
-# filesystem root, the home dir, or a dir that contains this project.
-case "$HERE/" in
-  "$VENV"/*) unsafe=1 ;;
-  *) unsafe=0 ;;
-esac
-HOME_DIR=~   # with HOME unset, bash takes this from the passwd entry
-REAL_HOME="$(cd "$HOME_DIR" 2>/dev/null && pwd -P)" || REAL_HOME="$HOME_DIR"
-if [ "$unsafe" = 1 ] || [ "$VENV" = "/" ] || [ "$VENV" = "$REAL_HOME" ]; then
-  echo "ERROR: refusing to rm -rf '$VENV'; check the .venv symlink." >&2
+# A mis-pointed symlink must not take anything else with it: only ever delete a
+# venv (it has a pyvenv.cfg), or a target that's missing or empty.
+if [ -e "$VENV" ] && [ ! -f "$VENV/pyvenv.cfg" ] && [ -n "$(ls -A "$VENV" 2>&1)" ]; then
+  echo "ERROR: refusing to rm -rf '$VENV': it isn't a venv. Check the .venv symlink." >&2
   exit 1
 fi
 rm -rf "$VENV"
