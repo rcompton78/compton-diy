@@ -11,7 +11,7 @@
 # the link would only remove the link.
 set -euo pipefail
 
-HERE="$(cd "$(dirname "$0")" && pwd)"
+HERE="$(cd "$(dirname "$0")" && pwd -P)"   # physical path, to compare with the resolved VENV
 # BSD readlink may have no -f, so fall back to Python's realpath.
 VENV="$(readlink -f "$HERE/.venv" 2>/dev/null)" \
   || VENV="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$HERE/.venv" 2>/dev/null)" \
@@ -55,7 +55,8 @@ case "$HERE/" in
   "$VENV"/*) unsafe=1 ;;
   *) unsafe=0 ;;
 esac
-if [ "$unsafe" = 1 ] || [ "$VENV" = "/" ] || [ "$VENV" = "$HOME" ]; then
+REAL_HOME="$(cd "${HOME:-/nonexistent}" 2>/dev/null && pwd -P)" || REAL_HOME=""
+if [ "$unsafe" = 1 ] || [ "$VENV" = "/" ] || [ "$VENV" = "$REAL_HOME" ]; then
   echo "ERROR: refusing to rm -rf '$VENV'; check the .venv symlink." >&2
   exit 1
 fi
