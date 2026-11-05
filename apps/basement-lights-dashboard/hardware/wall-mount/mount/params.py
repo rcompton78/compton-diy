@@ -49,9 +49,12 @@ STEP_BUTTONS = [((-64.74, -61.54), (7.55, 12.75)), ((-64.74, -61.54), (16.17, 21
 STEP_MODULE = ((42.72, 68.52), (-11.68, 6.32), (-8.27, -5.05))
 ANTENNA_L = 7.0                      # SOURCED (WROOM-1 datasheet): antenna end of the 25.5 mm module
 
-CASE_W = STEP_CASE_Y[1] - STEP_CASE_Y[0]      # 83.9 (portrait width)
+CASE_W = STEP_CASE_Y[1] - STEP_CASE_Y[0]      # 83.9 (portrait width); Richard's unit measures about 83.5,
+                                               #   so the STEP's 83.9 is kept as the safe envelope
 CASE_H = STEP_CASE_X[1] - STEP_CASE_X[0]      # 140.2 (portrait height)
-CASE_T = STEP_CASE_FRONT_Z - STEP_CASE_BACK_Z  # 12.55
+CASE_T = 13.0                                  # MEASURED: screen face to the back plate, by calipers on
+                                               #   Richard's unit; the STEP says 12.55 (STEP_CASE_FRONT_Z -
+                                               #   STEP_CASE_BACK_Z), so the real case is 0.45 thicker
 STEP_YC = (STEP_CASE_Y[0] + STEP_CASE_Y[1]) / 2   # -2.19
 
 # --- USB-C plug (DESIGN: reserved until fit-test coupon 2 tries Richard's cable) ----------------
@@ -62,14 +65,15 @@ PLUG_BEND_CLEAR = 50.0               # DESIGN: kept clear below the case's botto
 PLUG_BEND_MARGIN = 2.0               # DESIGN: extra width each side of that clear zone
 
 # --- Cradle (DESIGN, black PLA) ------------------------------------------------------------------
-CLEAR_SIDE = 0.6                     # DESIGN: case to side walls, per side. 0.4 fit coupon 1's 4 mm frame, but on
-                                     #   coupon 2's deeper walls it was too tight to slide; reprint coupon 2 to confirm
+CLEAR_SIDE = 0.6                     # DESIGN: case to side walls, per side, on the STEP's 83.9 width. 0.4 fit coupon
+                                     #   1's 4 mm frame; coupon 2 felt tight side to side too (likely the case binding
+                                     #   front to back), so it's 0.6. The real case is about 83.5, so about 0.8 a side
 CLEAR_BACK = 0.3                     # DESIGN: case back to the cradle back
-LIP_GAP = 1.0                        # DESIGN: lip's back face to the case face. Coupon 2 at 0.15 and again at 0.5
-                                     #   (0.45, then 0.8 front to back with CLEAR_BACK) was too tight to slide the
-                                     #   case in: the lips' down-facing overhangs sag into the pocket. Only the
-                                     #   lips move, so the heads, plug opening and TF window stay where coupon 2
-                                     #   checked them; reprint coupon 2 to confirm
+LIP_GAP = 0.55                       # DESIGN: lip's back face to the case face. Coupon 2 (LIP_GAP 0.5 on the STEP's
+                                     #   12.55 case) measured 14.5 from the back's inner face to the lip face, 0.35
+                                     #   short of the 14.85 modelled (the lips' down-facing overhangs sag), against a
+                                     #   13.0 case: no play, so it wouldn't slide. 0.55 on the measured 13.0 case
+                                     #   prints about 0.5 of real play (0.3 + 0.55 - 0.35); reprint coupon 2 to confirm
 LIP_T = 1.5                          # MEASURED: lip thickness; coupon 1's lips (bottom span included) printed
                                      #   clean with no supports
 LIP_WINDOW_MARGIN = 0.5              # MEASURED: lips stop this far outside the case window; on coupon 1 they sit
@@ -146,7 +150,7 @@ D_RAIL_TIP = PLATE_T + RAIL_D                  # 8.0
 D_BACK0 = PLATE_T + BACK_GAP                   # 4.15: cradle back face (wall side)
 D_BACK1 = D_BACK0 + BACK_T                     # 11.15: cradle back's inner face
 D_CASE_BACK = D_BACK1 + CLEAR_BACK             # 11.45
-D_CASE_FRONT = D_CASE_BACK + CASE_T            # 24.0
+D_CASE_FRONT = D_CASE_BACK + CASE_T            # 24.45
 D_LIP0 = D_CASE_FRONT + LIP_GAP                # 25.0
 D_FRONT = D_LIP0 + LIP_T                       # 26.5: depth off the wall
 D_GROOVE_FLOOR = D_RAIL_TIP + DOVE_TIP_CLEAR   # 8.4
