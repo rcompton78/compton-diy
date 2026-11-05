@@ -88,10 +88,13 @@ EDGE_CHAMFER = 0.8                   # DESIGN: front edge chamfer round the lips
 RAIL_ROOT_W = 14.0                   # DESIGN: rail width at the plate face
 RAIL_TIP_W = 18.0                    # DESIGN: rail width at its tip (undercut)
 RAIL_D = 4.0                         # DESIGN: rail height off the plate
-SLIDE_CLEAR = 0.15                   # DESIGN: flank clearance per side (fit-test coupon 3: 0.10/0.15/0.20)
+SLIDE_CLEAR = 0.10                   # MEASURED: flank clearance per side, square to the flank. Coupon 3 in black
+                                     #   PLA: all three trials (0.10/0.15/0.20) slid; 0.10 slid easily with very
+                                     #   little side play and no tilt or rocking
 DOVE_TRIAL_CLEARS = (0.10, 0.15, 0.20)
 DOVE_TIP_CLEAR = 0.4                 # DESIGN: rail tip to groove floor (the groove floor is an 18 mm bridge)
-BACK_GAP = SLIDE_CLEAR               # DESIGN: cradle back face to plate face, the same as the flanks
+BACK_GAP = 0.15                      # DESIGN: cradle back face to plate face (the flanks locate the cradle; this
+                                     #   only keeps the faces from rubbing, and keeps every other depth unchanged)
 MIN_ENGAGE = 80.0                    # DESIGN: check limit (the PETG stand needed 30; PLA creeps)
 MAX_HEADROOM = 90.0                  # DESIGN: check limit on the lift needed to take the cradle off
 

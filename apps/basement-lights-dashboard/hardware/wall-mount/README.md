@@ -21,7 +21,7 @@ Left and right are as seen from the front. The panel hangs portrait with its USB
   - **Antenna.** The ESP32-S3 module's antenna is at the top end. The cradle stops level with the case's top edge, and no screw or insert is within 55 mm of the antenna.
 - **Wall plate (black PLA).** A 4 mm plate with a dovetail rail (14 mm at the root, 18 mm at the tip, 4 mm high) running its full 88 mm, from level with the cradle's underside to the plate's top end.
   - **Wall screws.** Two #6 countersunk wood screws, 60 mm apart on the centre line, go through the rail. Their heads sit 0.5 mm below the rail face, so the groove slides over them. The plate is its own drilling template: hold it level against the wall (its top edge is square) and mark through both holes.
-  - **Dovetail.** The cradle's groove is open at the bottom and closed at the top. That closed top end sits on the rail's top end, so the weight goes straight down the rail and no cantilever carries it, which matters for PLA creep. The flanks have 0.15 mm clearance each, measured square to the flank.
+  - **Dovetail.** The cradle's groove is open at the bottom and closed at the top. That closed top end sits on the rail's top end, so the weight goes straight down the rail and no cantilever carries it, which matters for PLA creep. The flanks have 0.10 mm clearance each, measured square to the flank, picked on coupon 3.
   - **Detent.** An ear at the plate's bottom reaches under the cradle, 0.3 mm below it, so it never carries the weight. An M3 × 8 screw goes up through it into an M3 insert in the cradle's underside, so the cradle can't be knocked off the rail. The screw is reached from below, right of the plug.
 - **BOOT and RESET aren't reachable.** The stock case's back plate has no holes over them; its only holes are the four screws and four Ø4 holes at the corners. Flashing over USB doesn't need them: the board's CH340 USB-UART bridge drives the ESP32-S3's auto-reset, the same as with the case on the desk.
 
@@ -73,7 +73,7 @@ Every dimension is a named constant in [`mount/params.py`](mount/params.py), tag
 | USB-C plug and cable clear | 12.5 × 7 × 35 overmold through a 13.5 × 8 floor opening; 50 mm below the case clear for the plug and its bend |
 | TF slot open through the right wall | nothing in front of the case's 16.5 mm TF slot; 2 mm spare along it, 1 mm across |
 | Antenna end kept clear | nearest screw or insert 55.6 mm below the antenna (need ≥ 15); nothing over the case's top edge |
-| Dovetail clearance | measured 0.150 mm per flank on the solids, 0.40 at the tip, 0.15 back to the plate; no overlap |
+| Dovetail clearance | measured 0.100 mm per flank on the solids, 0.40 at the tip, 0.15 back to the plate; no overlap |
 | Dovetail engagement and lift-off | 88 mm (need ≥ 80); the groove's top end sits on the rail's top end; a lift-then-pull sweep frees the cradle at 88 mm (limit 90) |
 | Detent screw | M3 × 8 reaches 3.7 mm into an M3 × 4 insert; ear 0.3 mm under the cradle; 1.4 mm of wall round the Ø4.2 insert |
 | Wall screws | #6 heads 0.5 mm below the rail face; Ø7.4 countersink in the 17.5 mm rail |
@@ -89,7 +89,7 @@ The clearances are first guesses. Print these three before the full parts (black
 |---|---|---|---|
 | `coupon-1-fit-frame` ![](docs/coupon-1.png) | The cradle's front 4 mm, in the cradle's own print pose, so the lips print as 3.5 mm overhangs exactly as on the cradle. Turn it over onto the case. | 20 min, 8 g | Side-to-side play (`CLEAR_SIDE`, now 0.4 per side); whether the lips sit on the border and clear the window; how the lips printed: the side lips are 3.5 mm overhangs, and the bottom lip is an 85 × 9 mm span over the open pocket (anchored on the floor's edge and both walls), so it's the likelier one to sag. **Result (black PLA): good.** The side play is right, the lips sit on the border clear of the window, and every lip printed clean with no supports, the bottom span included. `CLEAR_SIDE`, `LIP_WINDOW_MARGIN` and `LIP_T` are now `MEASURED`. |
 | `coupon-2-bottom-slice` ![](docs/coupon-2.png) | The cradle's bottom 40 mm: floor, plug opening, back with its head channels, TF window, detent insert hole. Push an M3 insert into the hole. Stand the case in it and plug in the real USB-C cable. | 1 h, about 30 g | Whether the case seats on the floor (the heads in their channels); whether the cable's overmold passes the 13.5 × 8 opening and seats in the port; whether the TF card can be pushed and pulled through the window; how the insert went in. |
-| `coupon-3-dovetail` ![](docs/coupon-3.png) | One groove block, printed like the cradle, and three rail blocks, printed like the plate. The rails are narrowed by 0.10 / 0.15 / 0.20 mm per flank, marked with 1 / 2 / 3 notches. | 45 min, about 20 g | Which rail slides in freely without rocking. That value becomes `SLIDE_CLEAR`. |
+| `coupon-3-dovetail` ![](docs/coupon-3.png) | One groove block, printed like the cradle, and three rail blocks, printed like the plate. The rails are narrowed by 0.10 / 0.15 / 0.20 mm per flank, marked with 1 / 2 / 3 notches. | 45 min, about 20 g | Which rail slides in freely without rocking. That value becomes `SLIDE_CLEAR`. **Result (black PLA): all three slide; the tightest, 0.10 (1 notch), slides easily with very little side play and no tilt or rocking.** `SLIDE_CLEAR` is now 0.10, `MEASURED`. |
 
 ## Parts to print
 
