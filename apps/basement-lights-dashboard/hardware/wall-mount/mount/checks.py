@@ -24,7 +24,7 @@ def run(cradle, plate, printed: dict) -> list:
     over = (cradle & case).volume
     # The case stands on the floor (contact by design), so measure the gaps above the floor.
     gap = (cradle & box(-100, 100, -10, 60, p.Z_CASE0 + 0.01, 400)).distance_to(case)
-    add("Case fits the cradle", over < EPS and gap >= p.LIP_GAP - EPS,
+    add("Case fits the cradle", over < EPS and gap >= min(p.CLEAR_SIDE, p.CLEAR_BACK, p.LIP_GAP) - EPS,
         f"case + screw heads + flex tab + TF card: overlap {over:.4f} mm³, nearest {gap:.2f} mm "
         f"(sides {p.CLEAR_SIDE}, back {p.CLEAR_BACK}, lip {p.LIP_GAP}); stands on the {p.FLOOR_T:.0f} mm floor")
 

@@ -64,7 +64,9 @@ PLUG_BEND_MARGIN = 2.0               # DESIGN: extra width each side of that cle
 # --- Cradle (DESIGN, black PLA) ------------------------------------------------------------------
 CLEAR_SIDE = 0.4                     # MEASURED: case to side walls, per side; coupon 1 in black PLA fit well
 CLEAR_BACK = 0.3                     # DESIGN: case back to the cradle back
-LIP_GAP = 0.15                       # DESIGN: lip's back face to the case face (needs the full depth: coupon 2)
+LIP_GAP = 0.5                        # MEASURED: lip's back face to the case face. Coupon 2 at 0.15 (0.45 front to
+                                     #   back with CLEAR_BACK) was too tight to slide the case in: the lips' down-
+                                     #   facing overhang sags into the pocket. Widened here so nothing else moves
 LIP_T = 1.5                          # MEASURED: lip thickness; coupon 1's lips (bottom span included) printed
                                      #   clean with no supports
 LIP_WINDOW_MARGIN = 0.5              # MEASURED: lips stop this far outside the case window; on coupon 1 they sit
@@ -142,8 +144,8 @@ D_BACK0 = PLATE_T + BACK_GAP                   # 4.15: cradle back face (wall si
 D_BACK1 = D_BACK0 + BACK_T                     # 11.15: cradle back's inner face
 D_CASE_BACK = D_BACK1 + CLEAR_BACK             # 11.45
 D_CASE_FRONT = D_CASE_BACK + CASE_T            # 24.0
-D_LIP0 = D_CASE_FRONT + LIP_GAP                # 24.15
-D_FRONT = D_LIP0 + LIP_T                       # 25.65: depth off the wall
+D_LIP0 = D_CASE_FRONT + LIP_GAP                # 24.5
+D_FRONT = D_LIP0 + LIP_T                       # 26.0: depth off the wall
 D_GROOVE_FLOOR = D_RAIL_TIP + DOVE_TIP_CLEAR   # 8.4
 
 # --- Derived plan ---------------------------------------------------------------------------------
