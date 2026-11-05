@@ -225,10 +225,11 @@ def main() -> int:
     assert "daylight GMT-4" in labels["America/New_York (GMT-5)"]
     assert labels["Asia/Almaty (GMT+5)"] == "Asia/Almaty (GMT+5)"
 
-    today = dt.date.today()
     for exception, count in skipped.items():
         window = f"{exception.zone} POSIX samples {exception.start}..{exception.end} (local)"
-        if today >= exception.end:
+        # The window is in the zone's local dates, so judge expiry by its local
+        # date too, not the host's (CI runs in UTC, a dev machine may not).
+        if dt.datetime.now(ZoneInfo(exception.zone)).date() >= exception.end:
             # Fixed sample years inside the window are skipped forever, so removing
             # the entry alone would make them fail against the zone's history.
             print(
