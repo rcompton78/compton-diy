@@ -55,7 +55,7 @@ case "$HERE/" in
   "$VENV"/*) unsafe=1 ;;
   *) unsafe=0 ;;
 esac
-REAL_HOME="$(cd "${HOME:-/nonexistent}" 2>/dev/null && pwd -P)" || REAL_HOME=""
+REAL_HOME="$(cd "${HOME:-/nonexistent}" 2>/dev/null && pwd -P)" || REAL_HOME="${HOME:-}"
 if [ "$unsafe" = 1 ] || [ "$VENV" = "/" ] || [ "$VENV" = "$REAL_HOME" ]; then
   echo "ERROR: refusing to rm -rf '$VENV'; check the .venv symlink." >&2
   exit 1
