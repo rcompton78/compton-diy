@@ -2,7 +2,8 @@
 
     python -m mount.build [--out OUT] [--docs DOCS] [--no-render]
 
-Exits non-zero if any check fails.
+Also rewrites the Checks table in the README next to these sources, whatever --out, --docs or
+--no-render say. Exits non-zero if any check fails.
 """
 
 import argparse
@@ -78,8 +79,7 @@ def main(argv=None) -> int:
         print("  " + line)
         report.append(line)
     (out / "checks.txt").write_text("\n".join(report) + "\n", encoding="utf-8")
-    if not args.no_render:
-        _update_readme_checks(results)
+    _update_readme_checks(results)
 
     if not args.no_render:
         print("rendering previews…", flush=True)

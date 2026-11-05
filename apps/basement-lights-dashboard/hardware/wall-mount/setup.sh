@@ -12,8 +12,17 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-VENV="$(readlink -f "$HERE/.venv" 2>/dev/null)" || VENV=""
-[ -n "$VENV" ] || VENV="$HERE/.venv"
+# BSD readlink may have no -f, so fall back to Python's realpath.
+VENV="$(readlink -f "$HERE/.venv" 2>/dev/null)" \
+  || VENV="$(python3 -c 'import os, sys; print(os.path.realpath(sys.argv[1]))' "$HERE/.venv" 2>/dev/null)" \
+  || VENV=""
+if [ -z "$VENV" ]; then
+  if [ -L "$HERE/.venv" ]; then
+    echo "ERROR: can't resolve the .venv symlink at $HERE/.venv" >&2
+    exit 1
+  fi
+  VENV="$HERE/.venv"
+fi
 REQ="$HERE/requirements.txt"
 STAMP="$VENV/.requirements.sha256"
 if command -v sha256sum >/dev/null 2>&1; then
@@ -40,6 +49,16 @@ if [ -z "$PY" ]; then
 fi
 
 echo "Creating CAD venv with $PY at $VENV"
+# A mis-pointed symlink must not take anything else with it: never delete the
+# filesystem root, the home dir, or a dir that contains this project.
+case "$HERE/" in
+  "$VENV"/*) unsafe=1 ;;
+  *) unsafe=0 ;;
+esac
+if [ "$unsafe" = 1 ] || [ "$VENV" = "/" ] || [ "$VENV" = "$HOME" ]; then
+  echo "ERROR: refusing to rm -rf '$VENV'; check the .venv symlink." >&2
+  exit 1
+fi
 rm -rf "$VENV"
 "$PY" -m venv "$VENV"
 "$VENV/bin/pip" install --quiet --upgrade pip

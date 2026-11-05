@@ -24,8 +24,8 @@ def rail_block(clear, notches):
     blk = box(-BLOCK_W / 2, BLOCK_W / 2, 0.0, p.D_PLATE_FACE, 0, LENGTH)
     blk += trapezoid_z(lambda d: rail_half(d, clear), p.D_PLATE_FACE - 0.01, p.D_RAIL_TIP, 0, LENGTH)
     for k in range(notches):
-        x = BLOCK_W / 2 - 3 - 3 * k
-        blk -= box(x - 1.2, x, -1, p.D_PLATE_FACE + 1, LENGTH - 2, LENGTH + 1)
+        x = BLOCK_W / 2 - 1 - 3 * k    # outboard of the rail, and cut no higher than the plate, so the flanks stay whole
+        blk -= box(x - 1.2, x, -1, p.D_PLATE_FACE + 0.01, LENGTH - 2, LENGTH + 1)
     return wall_side_down(blk, 0.0)
 
 

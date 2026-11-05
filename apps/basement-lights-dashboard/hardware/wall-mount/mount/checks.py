@@ -40,7 +40,7 @@ def run(cradle, plate, printed: dict) -> list:
     w_gap = cradle.distance_to(ref.window_column())
     a_over = (cradle & ref.active_column()).volume
     lx0, lx1, lz = lip_edges()
-    wx0, wx1 = window_x()
+    wx0, _ = window_x()
     add("Lips clear the case window", w_over < EPS and w_gap >= p.LIP_WINDOW_MARGIN - EPS and a_over < EPS,
         f"nearest lip {w_gap:.2f} mm outside the window (need ≥ {p.LIP_WINDOW_MARGIN}); nothing over the "
         f"{p.ACTIVE_W:.0f} × {p.ACTIVE_H:.1f} active area; lips cover {wx0 - (-p.CASE_W / 2) - p.LIP_WINDOW_MARGIN:.1f} mm "
@@ -110,7 +110,7 @@ def run(cradle, plate, printed: dict) -> list:
         f"{headroom:.1f} mm (limit {p.MAX_HEADROOM:.0f}), so leave {headroom + 5:.0f} mm free above the cradle")
 
     # 10. Detent: the ear clears the cradle, and the screw reaches the insert.
-    ez0, ez1 = ear_z()
+    _, ez1 = ear_z()
     ear_gap = 0.0 - ez1
     reach = p.DETENT_SCREW_L - p.EAR_T - p.DETENT_GAP
     # Wall left round the insert itself (Ø INSERT_OD), not just its hole.

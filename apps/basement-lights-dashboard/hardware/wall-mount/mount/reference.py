@@ -111,5 +111,5 @@ def tf_slot_column():
 
 def antenna_zone():
     """The module's antenna end (its outer ANTENNA_L mm), through the case's full depth."""
-    (x0, x1), (y0, y1), _ = p.STEP_MODULE
+    (_, x1), (y0, y1), _ = p.STEP_MODULE
     return box(step_x(y1), step_x(y0), p.D_CASE_BACK, p.D_CASE_FRONT, step_z(x1 - p.ANTENNA_L), step_z(x1))
