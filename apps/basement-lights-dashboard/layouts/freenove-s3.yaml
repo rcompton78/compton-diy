@@ -17,8 +17,9 @@
 # seconds with no touch, saver_page replaces main_page: just the time, on
 # black, with the backlight dimmed to saver_brightness. The time jumps to a
 # random spot every minute, which also guards against image retention (the
-# toggles are only up for saver_after after a touch, so they need no pixel
-# shift). The screen never goes fully dark. A touch brings main_page back on
+# toggles are only up for saver_after_s after a touch, so they need no pixel
+# shift; the exception is before HA has ever sent the time, when the saver
+# can't start and main_page stays up). The screen never goes fully dark. A touch brings main_page back on
 # release; the whole waking tap lands on saver_page, which has nothing to
 # press, so it never toggles a light. Unlike the CrowPanel, HA going away
 # changes nothing here: the toggles show "--" and the saver still runs.
@@ -42,14 +43,17 @@ globals:
 interval:
   # Starts the screen saver once nobody has touched the screen for
   # saver_after_s. Only from main_page (never over the connecting or setup
-  # pages) and only once HA has sent the time, so the saver never shows a
-  # blank screen; until then it just keeps checking.
+  # pages), only once HA has sent the time, so the saver never shows a blank
+  # screen, and never while a finger is down: the countdown runs from the
+  # last release, so a press held across it would otherwise have the saver
+  # replace the tiles under the finger. Until then it just keeps checking.
   - interval: 1s
     then:
       - if:
           condition:
             lambda: |-
               return !id(screen_idle) && id(main_page)->is_showing() && id(ha_time).now().is_valid() &&
+                     id(tft_touch).get_touches().empty() &&
                      millis() - id(last_touch_ms) >= ${saver_after_s} * 1000UL;
           then:
             - globals.set:
@@ -420,7 +424,8 @@ lvgl:
                   text: ""
                   text_font: ui_font_saver
                   text_color: ${ui_ink}
-              # Nudged up off the digits' baseline gap below the numerals.
+              # pad_bottom lifts AM/PM to sit on the digits' baseline (the
+              # big font's line box has more room below its numerals).
               - label:
                   id: lbl_saver_ampm
                   text: ""

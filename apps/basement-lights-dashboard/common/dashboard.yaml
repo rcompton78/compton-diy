@@ -34,7 +34,9 @@
 
 substitutions:
   firmware_version: "dev"
-  firmware_manifest_url: "https://rcompton78.github.io/compton-diy/basement-lights-dashboard/manifest.json"
+  # No firmware_manifest_url default on purpose: both boards are ESP32-S3s, so
+  # a build that forgot to set its own would poll another board's firmware
+  # (COM-427). Each builds/<board>.yaml sets it.
   # The three HA light groups (COM-533). Membership lives in HA.
   office_group: "light.dad_s_office_lights"
   games_group: "light.basement_board_games"
@@ -119,9 +121,10 @@ interval:
                 value: "true"
             - script.execute: wake_screen
             - lvgl.page.show: setup_page
-  # Install a published update while nobody is using the panel (an idle
-  # screen means nobody has touched it, or on the CrowPanel moved past it, for
-  # the layout's timeout). The flash and reboot take about a minute.
+  # Install a published update while nobody is using the panel: while the
+  # layout's idle state is on (the Freenove's screen saver after 2 min with no
+  # touch; the CrowPanel's backlight off after 1 h with no motion or touch).
+  # The flash and reboot take about a minute.
   # Unversioned "dev" builds never auto-install: they always mismatch the
   # manifest, so they'd replace a build someone is testing. Install Firmware
   # Update does it on demand.
@@ -178,8 +181,10 @@ api:
 
 # -----------------------------------------------------------------------------
 # OTA + update check against the GitHub Pages manifest (see CLAUDE.md's
-# "Release workflow"). Each build points firmware_manifest_url at its own
-# manifest-<env>.json.
+# "Release workflow"). firmware_manifest_url comes from the build file: the
+# CrowPanel polls the shared manifest.json (kept for it by project.json's
+# `--shared-manifest crowpanel-5`), the Freenove its own
+# manifest-freenove-s3.json.
 # -----------------------------------------------------------------------------
 http_request:
 

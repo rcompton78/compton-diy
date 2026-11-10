@@ -10,7 +10,7 @@ substitutions:
   name: "basement-lights-freenove-s3"
   friendly_name: "Basement Lights"
   # Its own manifest: the CrowPanel is an ESP32-S3 too, and keeps the shared
-  # manifest.json it was deployed with (see project.json's release target).
+  # manifest.json it was deployed with (see builds/crowpanel-5.yaml).
   firmware_manifest_url: "https://rcompton78.github.io/compton-diy/basement-lights-dashboard/manifest-freenove-s3.json"
 
 esphome:

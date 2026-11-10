@@ -2,9 +2,9 @@
 
 ESPHome touchscreen for the basement lights, on two boards: an Elecrow
 CrowPanel 5.0" HMI on the wall, in portrait (COM-533), and a Freenove
-ESP32-S3 2.8" CYD on a desk stand, in landscape (COM-629). Three toggles, **Office**, **Board Games** and **All**,
-each call Home Assistant directly over the native API and light up amber to
-show the real state. Like `media-room-dashboard`, it's a remote with
+ESP32-S3 2.8" CYD in a desk stand, in landscape (COM-629). Three toggles,
+**Office**, **Board Games** and **All**, each call Home Assistant directly
+over the native API and light up amber to show the real state. Like `media-room-dashboard`, it's a remote with
 feedback, not a general HA dashboard.
 
 Each toggle is bound to an HA light group, not to individual lights, so
@@ -44,8 +44,10 @@ a second). A pressed toggle shows a grey fill with a white outline. While HA
 isn't connected, every toggle drops to neutral with a `--` pill.
 
 A published firmware update installs on its own while the screen is idle
-(off on the CrowPanel, the screen saver on the Freenove; checked every 15
-minutes), so it never interrupts someone using it. Local `dev` builds never
+(off on the CrowPanel, the screen saver on the Freenove), so it never
+interrupts someone using it. The manifest is checked every 6 hours and the
+idle state every 15 minutes, so a release can take up to about 6¼ hours to
+install. Local `dev` builds never
 auto-install; see [Admin portal](#admin-portal). The backlight isn't exposed
 to HA: switched from outside, it would fall out of step with the screen
 logic.
@@ -203,8 +205,8 @@ Config notes:
 ## Setup
 
 ```bash
-# the panel's own key (bws basement-lights-dashboard/BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY,
-# or a fresh `openssl rand -base64 32` for a new device)
+# the app's key, shared by both boards (bws
+# basement-lights-dashboard/BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY)
 echo "BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY=<key>" > apps/basement-lights-dashboard/.env
 ```
 
@@ -219,11 +221,12 @@ details; they're kept in NVS and survive firmware updates.
 
 ### Secrets
 
-The panel has its own API encryption key, used by nothing else (COM-463):
+Both boards share one API encryption key, used by nothing else (COM-463):
 `BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY`, kept in bws as
 `basement-lights-dashboard/BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY` and
 as the same-named GitHub Actions repo secret. Both must hold the key HA was
-given when the panel was paired.
+given when the devices were paired; each device's HA entry keeps its own
+copy.
 
 `scripts/write-secrets.sh apps/basement-lights-dashboard` (the
 `write-secrets` nx target, a dependency of each `build-<board>`) generates
@@ -237,14 +240,15 @@ can't pair with HA, so every toggle silently does nothing.
 `REQUIRE_APP_SECRETS=1`, so **the repo secret must exist before this app is
 merged**, or the release run fails. To rotate the key, update the GitHub
 secret and bws, run the CI workflow manually with `force_bump` set to
-`basement-lights-dashboard`, press **Install Firmware Update** on the portal,
-then re-enter the new key in HA (the device's ESPHome entry, ⋮ >
-Reconfigure).
+`basement-lights-dashboard`, then for **each** device press **Install
+Firmware Update** on its portal and re-enter the new key in HA (that device's
+ESPHome entry, ⋮ > Reconfigure). A device left on the old key in HA stops
+toggling anything.
 
 ## Adding to Home Assistant
 
-After flashing, HA's ESPHome integration discovers the panel under Settings >
-Devices & Services > Discovered. Click Configure and enter the API key from
+After flashing, HA's ESPHome integration discovers each device under
+Settings > Devices & Services > Discovered. Click Configure and enter the API key from
 [Secrets](#secrets).
 
 **Also required:** on the device's ESPHome entry, ⋮ > Reconfigure, check
@@ -256,8 +260,8 @@ switch anything.
 ## Admin portal
 
 ESPHome's stock web UI at `http://<ip>` (the CrowPanel's footer, or either
-board's connecting page; v3, embedded, so it
-works from a phone on the setup AP too). It shows the firmware version, IP
+board's connecting page; v3, embedded, so it works from a phone on the setup
+AP too). It shows the firmware version, IP
 address and the **Firmware Update** entity with **Check for
 Firmware Update** / **Install Firmware Update** buttons, plus an upload form
 for flashing a local build without USB. It's deliberately unprotected, like
@@ -268,8 +272,10 @@ CrowPanel `basement-lights-dashboard/manifest.json`, the Freenove
 `manifest-freenove-s3.json`. Both boards are ESP32-S3s, so the shared
 manifest can only hold one of them; the release keeps the CrowPanel in it
 (`--shared-manifest crowpanel-5`) because the one on the wall was deployed
-polling that URL, and would otherwise never see another update. A local build reports version `dev`, always shows
-"update available", and never auto-installs; pressing **Install Firmware
+polling that URL, and would otherwise never see another update.
+
+A local build reports version `dev`, always shows "update available", and
+never auto-installs; pressing **Install Firmware
 Update** replaces it with the latest release.
 
 ## Build / flash / monitor

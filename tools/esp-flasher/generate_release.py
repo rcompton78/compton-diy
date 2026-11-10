@@ -366,7 +366,7 @@ def main():
         if not os.path.exists(factory_src):
             raise RuntimeError(
                 f"ESPHome factory binary not found: {factory_src} "
-                f"(run the espframe build-{v['env']} target first)"
+                f"(run the {app_slug}:build-{v['env']} target first)"
             )
         print(f"==> Copying ESPHome build for {v['env']} ({v['chip']})")
         shutil.copy(factory_src, os.path.join(dist_dir, bin_name))

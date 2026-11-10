@@ -9,7 +9,7 @@
 # Trimmed from apps/media-room-dashboard/boards/freenove-s3.yaml (same board),
 # which has the full story behind each choice below. Left out: its battery
 # sleep tiers (light sleep, deep sleep, the wake guard), the battery sensors
-# and dev mode. This one sits on mains power in a stand. Also unlike it:
+# and dev mode: this one runs on USB power, in a stand. Also unlike it:
 #   - the panel is the board's own upright orientation (`mirror_x: true`, as
 #     in espframe's freenove-s3 device and media-room before COM-445's 180°
 #     flip), with no touch transform; LVGL's software `rotation:` (in the
