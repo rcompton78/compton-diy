@@ -70,6 +70,26 @@ class ManifestTests(unittest.TestCase):
         self.assertEqual([b["chipFamily"] for b in self.read("manifest.json")["builds"]],
                          ["ESP32", "ESP32-S3"])
 
+    def test_shared_env_keeps_a_deployed_variant_in_the_shared_manifest(self):
+        # COM-629: the CrowPanel was deployed polling manifest.json before the
+        # Freenove (also ESP32-S3) joined the app.
+        builds = [build("crowpanel-5", "ESP32-S3"), build("freenove-s3", "ESP32-S3")]
+        per_device = gr.write_manifests("Basement", "1", builds, self.dir, shared_envs=["crowpanel-5"])
+        self.assertTrue(per_device)
+        shared = self.read("manifest.json")["builds"]
+        self.assertEqual([b["ota"]["path"] for b in shared], ["app-crowpanel-5-ota.bin"])
+        self.assertEqual(self.read("manifest-freenove-s3.json")["builds"][0]["ota"]["path"],
+                         "app-freenove-s3-ota.bin")
+
+    def test_shared_envs_still_reject_two_builds_on_one_chip(self):
+        with self.assertRaisesRegex(ValueError, "ESP32-S3"):
+            gr.write_manifests("espframe", "1", ESPFRAME, self.dir,
+                               shared_envs=["freenove-s3", "waveshare-esp32-s3-touch-lcd-7"])
+
+    def test_shared_env_must_name_a_variant(self):
+        with self.assertRaisesRegex(ValueError, "nope"):
+            gr.write_manifests("CYD Clock", "1", CYD_CLOCK, self.dir, shared_envs=["nope"])
+
     def test_single_variant_writes_no_per_variant_manifest(self):
         gr.write_manifests("Tamagotchi+", "1", [build("waveshare-s3-169", "ESP32-S3")], self.dir)
         self.assertEqual(os.listdir(self.dir), ["manifest.json"])

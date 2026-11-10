@@ -2,14 +2,18 @@
 # BUILD: Basement Lights Dashboard - Elecrow CrowPanel 5.0" HMI (Basic)
 # =============================================================================
 # Entrypoint passed to `esphome`/scripts/espframe-esphome.sh. Combines the
-# crowpanel-5 board HAL with the board-agnostic dashboard app logic. To add
-# another board, copy this file to builds/<name>.yaml and point `board:` at
-# boards/<name>.yaml instead.
+# crowpanel-5 board HAL, the shared dashboard app logic and the 480x800
+# portrait layout. Another board gets its own builds/<name>.yaml with its own
+# board and layout (see builds/freenove-s3.yaml).
 # =============================================================================
 
 substitutions:
   name: "basement-lights-crowpanel-5"
   friendly_name: "Basement Lights"
+  # The shared manifest.json: the CrowPanel was deployed polling it, and the
+  # release keeps its build there with --shared-manifest crowpanel-5 (the
+  # Freenove, also an ESP32-S3, has its own manifest-freenove-s3.json).
+  firmware_manifest_url: "https://rcompton78.github.io/compton-diy/basement-lights-dashboard/manifest.json"
 
 esphome:
   name: ${name}
@@ -18,3 +22,4 @@ esphome:
 packages:
   board: !include ../boards/crowpanel-5.yaml
   dashboard: !include ../common/dashboard.yaml
+  layout: !include ../layouts/crowpanel-5.yaml

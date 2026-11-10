@@ -6,9 +6,10 @@
 # lives here on purpose.
 #
 # To run the app on another board, add boards/<name>.yaml providing the same
-# ids this file does (`tft_display`, `tft_touch`, `backlight`, a light) and
-# point a new builds/<name>.yaml at it. common/dashboard.yaml draws for an
-# 800x480 panel turned to portrait, so a different size needs a new layout.
+# ids this file does (`tft_display`, `tft_touch`, `backlight`, a light), a
+# layouts/<name>.yaml for its screen (common/dashboard.yaml lists what a
+# layout provides), and a builds/<name>.yaml combining them. This board's
+# screen is layouts/crowpanel-5.yaml (800x480 turned to portrait).
 #
 # The board is the ESP32-S3-WROOM-1-N4R8 version (4MB quad flash, 8MB octal
 # PSRAM). Some Amazon listings call it an "LX6" (original ESP32) part; it
@@ -51,7 +52,7 @@ logger:
 
 # Backlight on GPIO2 through the panel's LED driver, dimmable with PWM (no
 # controller in between on the Basic version, unlike the CrowPanel Advance).
-# common/dashboard.yaml switches it on and off with motion and touch.
+# layouts/crowpanel-5.yaml switches it on and off with motion and touch.
 output:
   - platform: ledc
     id: backlight_pwm
@@ -59,7 +60,7 @@ output:
     frequency: 1220Hz
 
 light:
-  # Internal: common/dashboard.yaml's screen on/off logic owns it. Switched
+  # Internal: layouts/crowpanel-5.yaml's screen on/off logic owns it. Switched
   # from HA or the portal, it would go dark while LVGL kept taking taps (or
   # light up a paused, frozen frame).
   - platform: monochromatic

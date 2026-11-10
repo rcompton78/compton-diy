@@ -1,10 +1,11 @@
 # basement-lights-dashboard
 
-ESPHome touchscreen for the basement lights (COM-533), on an Elecrow
-CrowPanel 5.0" HMI. Three toggles, **Office**, **Board Games** and **All**,
-each call Home Assistant directly over the native API and light up amber to
-show the real state. Like `media-room-dashboard`, it's a remote with
-feedback, not a general HA dashboard.
+ESPHome touchscreen for the basement lights, on two boards: an Elecrow
+CrowPanel 5.0" HMI on the wall, in portrait (COM-533), and a Freenove ESP32-S3
+2.8" CYD in a desk stand, in landscape (COM-629). Three toggles, **Office**,
+**Board Games** and **All**, each call Home Assistant directly over the native
+API and light up amber to show the real state. Like `media-room-dashboard`,
+it's a remote with feedback, not a general HA dashboard.
 
 Each toggle is bound to an HA light group, not to individual lights, so
 adding or removing a light is a group edit in HA and never needs a reflash.
@@ -16,10 +17,41 @@ A group reads "on" while any of its lights is on.
 | Board Games | `light.basement_board_games` | Boardgame Lightbar, Board game socket, Server room socket |
 | All | `light.basement_lights` | the two groups above |
 
-The member lines on the rows are static text in `common/dashboard.yaml`, so
-update them there if a group's members change.
+The member lines on the CrowPanel's rows are static text in
+`layouts/crowpanel-5.yaml`, so update them there if a group's members change.
+The Freenove's tiles have no member lines.
 
-## Screen layout
+## Files
+
+Each build (`builds/<board>.yaml`) combines three packages:
+
+| Package | What's in it |
+|---|---|
+| `boards/<board>.yaml` | Hardware only: chip, PSRAM, `tft_display`, `tft_touch`, `backlight` (a light). |
+| `common/dashboard.yaml` | Everything shared: wifi, API, OTA and update checks, the portal, the HA group sensors and the scripts that repaint the toggles. |
+| `layouts/<board>.yaml` | The screen: fonts, the LVGL pages, and when the screen goes idle. |
+
+`common/dashboard.yaml`'s header lists what a layout must provide (page and
+widget ids, a `wake_screen` script). A layout adds to the shared scripts with
+`!extend` (the CrowPanel's All-row summary and IP footer) and to shared
+triggers by repeating the key, since ESPHome appends lists from packages.
+
+## Behaviour on both boards
+
+A tap never flips a toggle by itself: the toggles aren't LVGL-`checkable`,
+and the amber only changes once HA reports the new state (usually well under
+a second). A pressed toggle shows a grey fill with a white outline. While HA
+isn't connected, every toggle drops to neutral with a `--` pill.
+
+A published firmware update installs on its own while the screen is idle (off
+on the CrowPanel, the screen saver on the Freenove), so it never interrupts
+someone using it. The manifest is checked every 6 hours and the idle state
+every 15 minutes, so a release can take up to about 6¼ hours to install. Local
+`dev` builds never auto-install; see [Admin portal](#admin-portal). The
+backlight isn't exposed to HA: switched from outside, it would fall out of
+step with the screen logic.
+
+## CrowPanel 5": screen layout
 
 COM-533 design P2, a "switch plate", picked from the mock-ups in
 [`docs/com-533-mockups/`](docs/com-533-mockups/) (`python3 generate.py`
@@ -40,12 +72,7 @@ The panel is 800×480 natively; LVGL's `rotation:` (`screen_rotation`, 90 by
 default) turns it and the touch together, in software. If the picture is
 upside down for how it's mounted, set `screen_rotation` to 270.
 
-A tap never flips a toggle by itself: the toggles aren't LVGL-`checkable`,
-and the amber only changes once HA reports the new state (usually well under
-a second). A pressed toggle shows a grey fill with a white outline. While HA
-isn't connected, every toggle drops to neutral with a `--` pill.
-
-## Screen on/off and burn-in
+## CrowPanel 5": screen on/off and burn-in
 
 The backlight is either full on or off, never dimmed:
 
@@ -70,13 +97,39 @@ The backlight is either full on or off, never dimmed:
   leave faint image retention, and the backlight off for most of the day is
   what saves its LEDs.
 
-A published firmware update installs on its own while the screen is off
-(checked every 15 minutes), so it never interrupts someone using the panel.
-Local `dev` builds never auto-install; see [Admin portal](#admin-portal).
-The backlight isn't exposed to HA: switched from outside, it would fall out
-of step with the screen logic (dark while taps still toggle lights).
+## Freenove 2.8": screen layout and screen saver
 
-## Board
+COM-629's mock-ups L1 and S1, picked from
+[`docs/com-629-mockups/`](docs/com-629-mockups/) (same tooling as COM-533's).
+The page is 320×240, landscape:
+
+- **Header:** "Basement" on the left, the time (from HA) on the right. The
+  portal address isn't on the main page; it's on the connecting page and in
+  HA.
+- **Three side-by-side tiles**, Office, Board Games and All lights, 100×200
+  each: an icon, the name and an ON/OFF pill, amber while on. All toggles
+  `light.basement_lights`, as on the CrowPanel.
+
+There's no motion sensor, so a **screen saver** stands in for the CrowPanel's
+backlight-off:
+
+- **After 2 minutes with no touch** (`saver_after_s`, in seconds) the tiles
+  give way to just the time, on black, with the backlight dimmed to 30%
+  (`saver_brightness`, the PWM duty). The screen never goes fully dark.
+- **The time jumps to a random spot every minute.** That's also the burn-in
+  guard; the tiles are only up for a couple of minutes after a touch, so
+  they need no pixel shift.
+- **Touch wakes it without pressing anything.** The screen comes back when
+  the finger lifts; the waking tap lands on the saver, which has nothing to
+  press, so it never toggles a light. Every touch restarts the countdown.
+- It only starts from the main page, once HA has sent the time (so it never
+  shows a blank screen). HA going away doesn't stop it.
+
+The panel is 240×320 natively; LVGL's `rotation:` (`screen_rotation`, 90 by
+default) turns it and the touch to landscape. If the picture is upside down
+in the stand, set `screen_rotation` to 270.
+
+## Board: Elecrow CrowPanel 5"
 
 **Elecrow CrowPanel 5.0" HMI, Basic edition**: ESP32-S3-WROOM-1-N4R8 (4 MB
 flash, 8 MB octal PSRAM), 800×480 RGB parallel panel, GT911 capacitive
@@ -119,18 +172,40 @@ Config notes (`boards/crowpanel-5.yaml`):
   boot logs with a plain serial terminal at 115200 (or over wifi once it's
   on the network).
 
-### Board HAL
+## Board: Freenove ESP32-S3 CYD 2.8"
 
-`boards/crowpanel-5.yaml` is hardware only. It provides `tft_display`,
-`tft_touch` and `backlight` (a light), and `common/dashboard.yaml` uses only
-those. Another 800×480 board needs only a new `boards/<name>.yaml` and
-`builds/<name>.yaml`; a different panel size needs a new layout.
+**Freenove ESP32-S3 2.8" (FNK0104)**: ESP32-S3 with 16 MB flash and 8 MB
+octal PSRAM, a 240×320 ILI9341 SPI panel and FT6336U capacitive touch. The
+same board as `media-room-dashboard` and espframe's `freenove-s3`;
+`boards/freenove-s3.yaml` is media-room's board file without its battery
+sleep tiers (this one runs on USB power in a stand).
+
+| Function | Pins |
+|---|---|
+| Display SPI CLK / MOSI / MISO | 12 / 11 / 13 |
+| Display CS / DC | 10 / 46 |
+| Backlight (PWM) | 45 |
+| Touch I2C (FT6336U) SDA / SCL | 16 / 15 (reset and interrupt not used) |
+
+Config notes:
+
+- **Display:** ili9xxx `CUSTOM` with the alternate init sequence from
+  espframe (the stock ILI9341 model leaves this panel white), ending in the
+  required `[0x00]` terminator (see CLAUDE.md). `mirror_x: true` is the
+  board's upright orientation; landscape is LVGL's job.
+- **Touch:** no `reset_pin`: ESPHome's reset is too quick for the FT6336U, so
+  its own power-on reset is used instead (the full story is in
+  media-room-dashboard's board file).
+- **Backlight:** LEDC PWM with `gamma_correct: 1.0`, so the screen saver's
+  brightness is the duty cycle. (media-room uses a plain GPIO only because
+  its light sleep stops LEDC.)
+- **USB:** native USB-Serial/JTAG (`/dev/ttyACM0`) for flashing and logs.
 
 ## Setup
 
 ```bash
-# the panel's own key (bws basement-lights-dashboard/BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY,
-# or a fresh `openssl rand -base64 32` for a new device)
+# the app's key, shared by both boards (bws
+# basement-lights-dashboard/BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY)
 echo "BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY=<key>" > apps/basement-lights-dashboard/.env
 ```
 
@@ -145,14 +220,15 @@ details; they're kept in NVS and survive firmware updates.
 
 ### Secrets
 
-The panel has its own API encryption key, used by nothing else (COM-463):
+Both boards share one API encryption key, used by nothing else (COM-463):
 `BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY`, kept in bws as
 `basement-lights-dashboard/BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY` and
 as the same-named GitHub Actions repo secret. Both must hold the key HA was
-given when the panel was paired.
+given when the devices were paired; each device's HA entry keeps its own
+copy.
 
 `scripts/write-secrets.sh apps/basement-lights-dashboard` (the
-`write-secrets` nx target, a dependency of `build-crowpanel-5`) generates
+`write-secrets` nx target, a dependency of each `build-<board>`) generates
 `builds/secrets.yaml` from `secrets.yaml.example`, reading
 `BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY` from the shell or the
 gitignored `apps/basement-lights-dashboard/.env` (`.env` wins). Without it,
@@ -163,15 +239,16 @@ can't pair with HA, so every toggle silently does nothing.
 `REQUIRE_APP_SECRETS=1`, so **the repo secret must exist before this app is
 merged**, or the release run fails. To rotate the key, update the GitHub
 secret and bws, run the CI workflow manually with `force_bump` set to
-`basement-lights-dashboard`, press **Install Firmware Update** on the portal,
-then re-enter the new key in HA (the device's ESPHome entry, ⋮ >
-Reconfigure).
+`basement-lights-dashboard`, then for **each** device press **Install
+Firmware Update** on its portal and re-enter the new key in HA (that device's
+ESPHome entry, ⋮ > Reconfigure). A device left on the old key in HA stops
+toggling anything.
 
 ## Adding to Home Assistant
 
-After flashing, HA's ESPHome integration discovers the panel under Settings >
-Devices & Services > Discovered. Click Configure and enter the API key from
-[Secrets](#secrets).
+After flashing, HA's ESPHome integration discovers each device under
+Settings > Devices & Services > Discovered. Click Configure and enter the
+API key from [Secrets](#secrets).
 
 **Also required:** on the device's ESPHome entry, ⋮ > Reconfigure, check
 "Allow the device to perform Home Assistant actions". It defaults to off,
@@ -181,17 +258,24 @@ switch anything.
 
 ## Admin portal
 
-ESPHome's stock web UI at the footer's `http://<ip>` (v3, embedded, so it
-works from a phone on the setup AP too). It shows the firmware version, IP
+ESPHome's stock web UI at `http://<ip>` (the CrowPanel's footer, or either
+board's connecting page; v3, embedded, so it works from a phone on the setup
+AP too). It shows the firmware version, IP
 address and the **Firmware Update** entity with **Check for
 Firmware Update** / **Install Firmware Update** buttons, plus an upload form
 for flashing a local build without USB. It's deliberately unprotected, like
 the other ESPHome apps here: anyone on the LAN can reflash it.
 
-Release builds check `basement-lights-dashboard/manifest.json` on GitHub
-Pages every 6 hours. A local build reports version `dev`, always shows
-"update available", and never auto-installs; pressing **Install Firmware
-Update** replaces it with the latest release.
+Release builds check their manifest on GitHub Pages every 6 hours: the
+CrowPanel `basement-lights-dashboard/manifest.json`, the Freenove
+`manifest-freenove-s3.json`. Both boards are ESP32-S3s, so the shared
+manifest can only hold one of them; the release keeps the CrowPanel in it
+(`--shared-manifest crowpanel-5`) because the one on the wall was deployed
+polling that URL, and would otherwise never see another update.
+
+A local build reports version `dev`, always shows "update available", and
+never auto-installs; pressing **Install Firmware Update** replaces it with the
+latest release.
 
 ## Build / flash / monitor
 
@@ -199,7 +283,13 @@ Update** replaces it with the latest release.
 pnpm nx run basement-lights-dashboard:build-crowpanel-5
 pnpm nx run basement-lights-dashboard:flash-crowpanel-5     # --device /dev/ttyUSB0
 pnpm nx run basement-lights-dashboard:monitor-crowpanel-5  # see below
+
+pnpm nx run basement-lights-dashboard:build-freenove-s3
+pnpm nx run basement-lights-dashboard:flash-freenove-s3     # --device /dev/ttyACM0
+pnpm nx run basement-lights-dashboard:monitor-freenove-s3
 ```
+
+`build` builds both boards.
 
 `monitor-crowpanel-5` runs `esphome logs` over USB, which holds the board in
 reset through the USB-UART bridge's RTS line, so it shows nothing. Read boot

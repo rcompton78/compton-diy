@@ -1,0 +1,435 @@
+# =============================================================================
+# LAYOUT: 320x240 landscape, floating-clock screen saver (Freenove 2.8", COM-629)
+# =============================================================================
+# The screen half of the Freenove build: fonts, LVGL pages and the screen
+# saver. common/dashboard.yaml has the HA side and documents what a layout
+# has to provide.
+#
+# Requires a board package to have already defined `tft_display` (a 240x320
+# panel, turned to landscape by LVGL's rotation below), `tft_touch` and
+# `backlight` (a dimmable light), see boards/freenove-s3.yaml.
+#
+# main_page is COM-629's mock-up L1 (docs/com-629-mockups/generate.py's
+# design_l1, which has every coordinate): a slim header with the title and
+# the time, and three side-by-side tiles, Office, Board Games and All.
+#
+# Screen saver (mock-up S1): no motion sensor here, so after saver_after_s
+# seconds with no touch, saver_page replaces main_page: just the time, on
+# black, with the backlight dimmed to saver_brightness. The time jumps to a
+# random spot every minute, which also guards against image retention (the
+# toggles are only up for saver_after_s after a touch, so they need no pixel
+# shift; the exception is before HA has ever sent the time, when the saver
+# can't start and main_page stays up). The screen never goes fully dark. A
+# touch brings main_page back on release; the whole waking tap lands on
+# saver_page, which has nothing to press, so it never toggles a light. Unlike
+# the CrowPanel, HA going away changes nothing here: the toggles show "--" and
+# the saver still runs.
+# =============================================================================
+
+substitutions:
+  # Seconds with no touch before the screen saver starts.
+  saver_after_s: "120"
+  # Backlight under the screen saver (PWM duty, see the board's backlight).
+  saver_brightness: "30%"
+  # Panel orientation. 90 or 270 is landscape; use the other one if the
+  # picture comes out upside down for the way the board sits in its stand.
+  screen_rotation: "90"
+
+globals:
+  # millis() of the last touch release (or boot), see the saver check below.
+  - id: last_touch_ms
+    type: uint32_t
+    initial_value: "0"
+
+interval:
+  # Starts the screen saver once nobody has touched the screen for
+  # saver_after_s. Only from main_page (never over the connecting or setup
+  # pages), only once HA has sent the time, so the saver never shows a blank
+  # screen, and never while a finger is down: the countdown runs from the
+  # last release, so a press held across it would otherwise have the saver
+  # replace the tiles under the finger. Until then it just keeps checking.
+  - interval: 1s
+    then:
+      - if:
+          condition:
+            lambda: |-
+              return !id(screen_idle) && id(main_page)->is_showing() && id(ha_time).now().is_valid() &&
+                     id(tft_touch).get_touches().empty() &&
+                     millis() - id(last_touch_ms) >= ${saver_after_s} * 1000UL;
+          then:
+            - globals.set:
+                id: screen_idle
+                value: "true"
+            - logger.log:
+                format: "No touch for ${saver_after_s} s: screen saver"
+                level: INFO
+            - script.execute: refresh_clock
+            - lvgl.page.show: saver_page
+            - light.turn_on:
+                id: backlight
+                brightness: ${saver_brightness}
+
+script:
+  # Every minute (and when the saver starts) the saver's time is redrawn and
+  # moved to a random spot that keeps all of it on the screen.
+  - id: !extend refresh_clock
+    then:
+      - lambda: |-
+          auto now = id(ha_time).now();
+          if (!now.is_valid())
+            return;
+          int hour = now.hour % 12;
+          char buf[8];
+          snprintf(buf, sizeof(buf), "%d:%02d", hour == 0 ? 12 : hour, now.minute);
+          lv_label_set_text(id(lbl_saver_time), buf);
+          lv_label_set_text(id(lbl_saver_ampm), now.hour < 12 ? "AM" : "PM");
+          lv_obj_t *clock = id(saver_clock);
+          lv_obj_update_layout(clock);
+          int room_x = lv_obj_get_width(lv_obj_get_parent(clock)) - lv_obj_get_width(clock);
+          int room_y = lv_obj_get_height(lv_obj_get_parent(clock)) - lv_obj_get_height(clock);
+          lv_obj_set_pos(clock, room_x > 0 ? random_uint32() % (room_x + 1) : 0,
+                         room_y > 0 ? random_uint32() % (room_y + 1) : 0);
+
+  - id: wake_screen
+    then:
+      - if:
+          condition:
+            lambda: 'return id(screen_idle);'
+          then:
+            - globals.set:
+                id: screen_idle
+                value: "false"
+            - lvgl.page.show: main_page
+            - light.turn_on:
+                id: backlight
+                brightness: 100%
+
+# Wake on release, not touch, so the finger that woke the screen lifts off
+# saver_page before main_page's toggles appear. Every release (waking or not)
+# restarts the saver's countdown.
+touchscreen:
+  - id: !extend tft_touch
+    on_release:
+      - globals.set:
+          id: last_touch_ms
+          value: !lambda 'return millis();'
+      - script.execute: wake_screen
+
+# -----------------------------------------------------------------------------
+# Fonts: Montserrat semibold at the mock-up's sizes (bold for the pills).
+# ASCII only. Icons are Material Design Icons with only the glyphs drawn.
+# -----------------------------------------------------------------------------
+font:
+  - file: "gfonts://Montserrat@600"
+    id: ui_font_13
+    size: 13
+    bpp: 4
+    glyphs: &ascii_glyphs ' !"#$%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^_`abcdefghijklmnopqrstuvwxyz{|}~'
+  - file: "gfonts://Montserrat@600"
+    id: ui_font_14
+    size: 14
+    bpp: 4
+    glyphs: *ascii_glyphs
+  - file: "gfonts://Montserrat@600"
+    id: ui_font_15
+    size: 15
+    bpp: 4
+    glyphs: *ascii_glyphs
+  - file: "gfonts://Montserrat@600"
+    id: ui_font_20
+    size: 20
+    bpp: 4
+    glyphs: *ascii_glyphs
+  - file: "gfonts://Montserrat@700"
+    id: ui_font_pill
+    size: 11
+    bpp: 4
+    glyphs: "ONF-"
+  # Screen saver: the time and its AM/PM.
+  - file: "gfonts://Montserrat@600"
+    id: ui_font_saver
+    size: 44
+    bpp: 4
+    glyphs: "0123456789:"
+  - file: "gfonts://Montserrat@600"
+    id: ui_font_saver_ampm
+    size: 16
+    bpp: 4
+    glyphs: "AMP"
+  - file: 'https://github.com/Templarian/MaterialDesign-Webfont/raw/v7.4.47/fonts/materialdesignicons-webfont.ttf'
+    id: icon_font_38
+    size: 38
+    bpp: 4
+    glyphs: ["${icon_desk_lamp}", "${icon_dice}", "${icon_home_bulb}"]
+
+# -----------------------------------------------------------------------------
+# Four LVGL pages: connecting_page (the default at boot, and whenever wifi
+# drops), setup_page once the fallback AP is up, main_page and saver_page. A
+# toggle's lit (amber) style is its `checked` state, which only the imported
+# HA state ever sets.
+# -----------------------------------------------------------------------------
+lvgl:
+  displays: [tft_display]
+  touchscreens: [tft_touch]
+  rotation: ${screen_rotation}
+  # Shared tile look, the CrowPanel's scaled down: a 2px pressed outline
+  # instead of 3, radius 16 instead of 28. See layouts/crowpanel-5.yaml.
+  theme:
+    button:
+      bg_color: ${ui_card}
+      bg_opa: COVER
+      text_color: ${ui_ink}
+      radius: 16
+      pad_all: 0
+      border_width: 1
+      border_color: ${ui_card_edge}
+      shadow_opa: TRANSP
+      checked:
+        bg_color: ${ui_amber}
+        border_color: ${ui_amber}
+      pressed:
+        bg_color: ${ui_press}
+        recolor_opa: TRANSP
+        outline_width: 2
+        outline_pad: 0
+        outline_color: ${ui_ink}
+  pages:
+    - id: connecting_page
+      bg_color: ${ui_bg}
+      bg_opa: COVER
+      widgets:
+        - label:
+            align: CENTER
+            y: -50
+            text: "Connecting to WiFi"
+            text_font: ui_font_14
+            text_color: ${ui_ink}
+        - label:
+            align: CENTER
+            y: -20
+            text: "${friendly_name}"
+            text_font: ui_font_20
+            text_color: ${ui_ink}
+        # Updated by show_ip to include the last address.
+        - label:
+            id: lbl_connecting_ip
+            align: CENTER
+            y: 40
+            text: "Not connected"
+            text_font: ui_font_14
+            text_color: ${ui_quiet}
+            text_align: CENTER
+    - id: setup_page
+      bg_color: ${ui_bg}
+      bg_opa: COVER
+      widgets:
+        - label:
+            align: CENTER
+            y: -75
+            text: "Connect to WiFi"
+            text_font: ui_font_14
+            text_color: ${ui_ink}
+        - label:
+            align: CENTER
+            y: -45
+            text: "'${friendly_name} Setup'"
+            text_font: ui_font_20
+            text_color: ${ui_ink}
+        - label:
+            align: CENTER
+            y: 10
+            text: "Join it from a phone to\nenter your wifi details"
+            text_font: ui_font_14
+            text_color: ${ui_ink}
+            text_align: CENTER
+        # For phones that don't pop the captive portal up by themselves.
+        # 192.168.4.1 is ESPHome's default fallback AP address.
+        - label:
+            align: CENTER
+            y: 65
+            text: "Then open http://192.168.4.1"
+            text_font: ui_font_14
+            text_color: ${ui_quiet}
+    - id: main_page
+      bg_color: ${ui_bg}
+      bg_opa: COVER
+      scrollable: false
+      widgets:
+        # --- Header --------------------------------------------------------
+        - label:
+            x: 10
+            y: 6
+            text: "Basement"
+            text_font: ui_font_15
+            text_color: ${ui_ink}
+        - label:
+            id: lbl_clock
+            align: TOP_RIGHT
+            x: -10
+            y: 7
+            text: ""
+            text_font: ui_font_14
+            text_color: ${ui_quiet}
+
+        # --- Tiles ---------------------------------------------------------
+        # 100x200 each, 4px apart, from y 32. Positions are from the tile's
+        # centre (50, 100): halo/icon centre 66 from the top, the name's
+        # 127, the pill's 177.
+        - button:
+            id: btn_office
+            x: 6
+            y: 32
+            width: 100
+            height: 200
+            widgets:
+              - obj: &tile_halo
+                  align: CENTER
+                  y: -34
+                  width: 60
+                  height: 60
+                  radius: 30
+                  bg_color: ${ui_off_halo}
+                  bg_opa: COVER
+                  border_width: 0
+                  pad_all: 0
+                  scrollable: false
+                  clickable: false
+                  checked:
+                    bg_color: ${ui_amber_halo}
+                  pressed:
+                    bg_color: ${ui_press_halo}
+              - label: &tile_icon
+                  align: CENTER
+                  y: -34
+                  text: "${icon_desk_lamp}"
+                  text_font: icon_font_38
+                  text_color: ${ui_quiet}
+                  checked:
+                    text_color: ${ui_on_amber}
+                  pressed:
+                    text_color: ${ui_ink}
+              - label: &tile_name
+                  align: CENTER
+                  y: 27
+                  text: "Office"
+                  text_font: ui_font_13
+                  text_color: ${ui_ink}
+                  checked:
+                    text_color: ${ui_on_amber}
+                  pressed:
+                    text_color: ${ui_ink}
+              - label: &tile_pill
+                  id: pill_office
+                  align: CENTER
+                  y: 77
+                  text: "--"
+                  text_font: ui_font_pill
+                  text_letter_space: 1
+                  text_color: ${ui_quiet}
+                  bg_color: ${ui_off_halo}
+                  bg_opa: COVER
+                  radius: 11
+                  pad_left: 8
+                  pad_right: 7
+                  pad_top: 4
+                  pad_bottom: 4
+                  checked:
+                    text_color: ${ui_on_amber}
+                    bg_color: 0x000000
+                    bg_opa: 20%
+                  pressed:
+                    text_color: ${ui_ink}
+                    bg_color: ${ui_press_halo}
+                    bg_opa: COVER
+            on_click:
+              - homeassistant.service:
+                  service: light.toggle
+                  data:
+                    entity_id: ${office_group}
+        - button:
+            id: btn_games
+            x: 110
+            y: 32
+            width: 100
+            height: 200
+            widgets:
+              - obj:
+                  <<: *tile_halo
+              - label:
+                  <<: *tile_icon
+                  text: "${icon_dice}"
+              - label:
+                  <<: *tile_name
+                  text: "Board Games"
+              - label:
+                  <<: *tile_pill
+                  id: pill_games
+            on_click:
+              - homeassistant.service:
+                  service: light.toggle
+                  data:
+                    entity_id: ${games_group}
+        # Toggles light.basement_lights: with either room on, a tap turns
+        # everything off; with both off, everything on.
+        - button:
+            id: btn_all
+            x: 214
+            y: 32
+            width: 100
+            height: 200
+            widgets:
+              - obj:
+                  <<: *tile_halo
+              - label:
+                  <<: *tile_icon
+                  text: "${icon_home_bulb}"
+              - label:
+                  <<: *tile_name
+                  text: "All lights"
+              - label:
+                  <<: *tile_pill
+                  id: pill_all
+            on_click:
+              - homeassistant.service:
+                  service: light.toggle
+                  data:
+                    entity_id: ${all_group}
+
+    # Screen saver: the time and AM/PM side by side in one container, which
+    # refresh_clock moves as a whole.
+    - id: saver_page
+      bg_color: 0x000000
+      bg_opa: COVER
+      scrollable: false
+      widgets:
+        - obj:
+            id: saver_clock
+            width: SIZE_CONTENT
+            height: SIZE_CONTENT
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            radius: 0
+            scrollable: false
+            clickable: false
+            layout:
+              type: FLEX
+              flex_flow: ROW
+              flex_align_main: START
+              flex_align_cross: END
+              flex_align_track: START
+              pad_column: 5
+            widgets:
+              - label:
+                  id: lbl_saver_time
+                  text: ""
+                  text_font: ui_font_saver
+                  text_color: ${ui_ink}
+              # pad_bottom lifts AM/PM to sit on the digits' baseline (the
+              # big font's line box has more room below its numerals).
+              - label:
+                  id: lbl_saver_ampm
+                  text: ""
+                  text_font: ui_font_saver_ampm
+                  text_color: ${ui_quiet}
+                  pad_bottom: 7
