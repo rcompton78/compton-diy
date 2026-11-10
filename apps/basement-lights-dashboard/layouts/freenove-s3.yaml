@@ -13,16 +13,17 @@
 # design_l1, which has every coordinate): a slim header with the title and
 # the time, and three side-by-side tiles, Office, Board Games and All.
 #
-# Screen saver (mock-up S1): no motion sensor here, so after saver_after
+# Screen saver (mock-up S1): no motion sensor here, so after saver_after_s
 # seconds with no touch, saver_page replaces main_page: just the time, on
 # black, with the backlight dimmed to saver_brightness. The time jumps to a
 # random spot every minute, which also guards against image retention (the
 # toggles are only up for saver_after_s after a touch, so they need no pixel
 # shift; the exception is before HA has ever sent the time, when the saver
-# can't start and main_page stays up). The screen never goes fully dark. A touch brings main_page back on
-# release; the whole waking tap lands on saver_page, which has nothing to
-# press, so it never toggles a light. Unlike the CrowPanel, HA going away
-# changes nothing here: the toggles show "--" and the saver still runs.
+# can't start and main_page stays up). The screen never goes fully dark. A
+# touch brings main_page back on release; the whole waking tap lands on
+# saver_page, which has nothing to press, so it never toggles a light. Unlike
+# the CrowPanel, HA going away changes nothing here: the toggles show "--" and
+# the saver still runs.
 # =============================================================================
 
 substitutions:

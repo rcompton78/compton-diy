@@ -1,11 +1,11 @@
 # basement-lights-dashboard
 
 ESPHome touchscreen for the basement lights, on two boards: an Elecrow
-CrowPanel 5.0" HMI on the wall, in portrait (COM-533), and a Freenove
-ESP32-S3 2.8" CYD in a desk stand, in landscape (COM-629). Three toggles,
-**Office**, **Board Games** and **All**, each call Home Assistant directly
-over the native API and light up amber to show the real state. Like `media-room-dashboard`, it's a remote with
-feedback, not a general HA dashboard.
+CrowPanel 5.0" HMI on the wall, in portrait (COM-533), and a Freenove ESP32-S3
+2.8" CYD in a desk stand, in landscape (COM-629). Three toggles, **Office**,
+**Board Games** and **All**, each call Home Assistant directly over the native
+API and light up amber to show the real state. Like `media-room-dashboard`,
+it's a remote with feedback, not a general HA dashboard.
 
 Each toggle is bound to an HA light group, not to individual lights, so
 adding or removing a light is a group edit in HA and never needs a reflash.
@@ -43,14 +43,13 @@ and the amber only changes once HA reports the new state (usually well under
 a second). A pressed toggle shows a grey fill with a white outline. While HA
 isn't connected, every toggle drops to neutral with a `--` pill.
 
-A published firmware update installs on its own while the screen is idle
-(off on the CrowPanel, the screen saver on the Freenove), so it never
-interrupts someone using it. The manifest is checked every 6 hours and the
-idle state every 15 minutes, so a release can take up to about 6¼ hours to
-install. Local `dev` builds never
-auto-install; see [Admin portal](#admin-portal). The backlight isn't exposed
-to HA: switched from outside, it would fall out of step with the screen
-logic.
+A published firmware update installs on its own while the screen is idle (off
+on the CrowPanel, the screen saver on the Freenove), so it never interrupts
+someone using it. The manifest is checked every 6 hours and the idle state
+every 15 minutes, so a release can take up to about 6¼ hours to install. Local
+`dev` builds never auto-install; see [Admin portal](#admin-portal). The
+backlight isn't exposed to HA: switched from outside, it would fall out of
+step with the screen logic.
 
 ## CrowPanel 5": screen layout
 
@@ -247,8 +246,8 @@ toggling anything.
 
 ## Adding to Home Assistant
 
-After flashing, HA's ESPHome integration discovers each device under
-Settings > Devices & Services > Discovered. Click Configure and enter the API key from
+After flashing, HA's ESPHome integration discovers each device under Settings
+> Devices & Services > Discovered. Click Configure and enter the API key from
 [Secrets](#secrets).
 
 **Also required:** on the device's ESPHome entry, ⋮ > Reconfigure, check
@@ -275,8 +274,8 @@ manifest can only hold one of them; the release keeps the CrowPanel in it
 polling that URL, and would otherwise never see another update.
 
 A local build reports version `dev`, always shows "update available", and
-never auto-installs; pressing **Install Firmware
-Update** replaces it with the latest release.
+never auto-installs; pressing **Install Firmware Update** replaces it with the
+latest release.
 
 ## Build / flash / monitor
 
