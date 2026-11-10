@@ -246,9 +246,9 @@ toggling anything.
 
 ## Adding to Home Assistant
 
-After flashing, HA's ESPHome integration discovers each device under Settings
-> Devices & Services > Discovered. Click Configure and enter the API key from
-[Secrets](#secrets).
+After flashing, HA's ESPHome integration discovers each device under
+Settings > Devices & Services > Discovered. Click Configure and enter the
+API key from [Secrets](#secrets).
 
 **Also required:** on the device's ESPHome entry, ⋮ > Reconfigure, check
 "Allow the device to perform Home Assistant actions". It defaults to off,
