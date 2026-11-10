@@ -25,7 +25,8 @@ Output:
         <app-slug>-<env>.bin    merged firmware per variant
         <app-slug>-<env>-ota.bin  app-only image per variant, for OTA
         manifest.json           shared manifest: every variant whose chipFamily
-                                is unique across the app's variants
+                                is unique across the app's variants, plus
+                                any --shared-manifest variant
         manifest-<env>.json     one single-build manifest per variant
                                 (multi-variant apps only)
         index.html              web flasher page
@@ -37,6 +38,12 @@ S3 kept resolving to the Freenove S3 build). Apps with two variants on the
 same chip get them only in their own manifest-<env>.json; the flasher page
 then shows one install button per device instead of one auto-detecting
 button.
+
+--shared-manifest ENV keeps one such variant in manifest.json anyway, for a
+device already deployed polling manifest.json when a second board on its
+chip joins the app (COM-629: the basement lights CrowPanel 5" when the
+Freenove S3 build arrived). Without it, that device's manifest loses its
+build and it never finds the update. Still only one build per chipFamily.
 """
 
 import argparse
@@ -214,16 +221,21 @@ def variant_manifest_name(env):
     return f"manifest-{env}.json"
 
 
-def write_manifests(app_name, version, builds, dist_dir):
+def write_manifests(app_name, version, builds, dist_dir, shared_envs=()):
     """
     Writes the shared manifest.json plus, for a multi-variant app, one
     manifest-<env>.json per variant. Each build needs "env" and "label" keys
     on top of generate_manifest()'s. Returns True when two variants share a
     chipFamily, i.e. the shared manifest can't serve them and the flasher
-    page needs per-device buttons.
+    page needs per-device buttons. Variants whose env is in shared_envs stay
+    in manifest.json despite a shared chipFamily (see --shared-manifest);
+    two of them on one chip still raise.
     """
+    unknown = set(shared_envs) - {b["env"] for b in builds}
+    if unknown:
+        raise ValueError(f"--shared-manifest names no variant: {', '.join(sorted(unknown))}")
     dupes = duplicate_chip_families(builds)
-    shared = [b for b in builds if b["chipFamily"] not in dupes]
+    shared = [b for b in builds if b["chipFamily"] not in dupes or b["env"] in shared_envs]
     generate_manifest(app_name, version, shared,
                       os.path.join(dist_dir, "manifest.json"))
     if len(builds) > 1:
@@ -278,6 +290,10 @@ def main():
                              "ESPHome already merges bootloader+partitions+app, so unlike --build this just "
                              "copies builds/.esphome/build/ESPHOME_NAME/.pioenvs/ESPHOME_NAME/firmware{.factory,}.bin. "
                              "LABEL names the device on the flasher page (defaults to ENV). Repeat for multiple.")
+    parser.add_argument("--shared-manifest", action="append", default=[], metavar="ENV",
+                        help="Keep this variant in manifest.json even though another variant shares "
+                             "its chip, for devices already deployed polling manifest.json. At most "
+                             "one per chipFamily. Repeat for multiple.")
     parser.add_argument("--version",     default="dev")
     args = parser.parse_args()
 
@@ -365,7 +381,8 @@ def main():
         })
 
     print("==> Generating manifests")
-    per_device = write_manifests(args.name, args.version, builds_for_manifest, dist_dir)
+    per_device = write_manifests(args.name, args.version, builds_for_manifest, dist_dir,
+                                 args.shared_manifest)
 
     print("==> Copying flasher HTML")
     copy_flasher_html(args.name, app_slug, args.version, builds_for_manifest,

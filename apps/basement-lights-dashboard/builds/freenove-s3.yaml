@@ -1,0 +1,23 @@
+# =============================================================================
+# BUILD: Basement Lights Dashboard - Freenove ESP32-S3 CYD 2.8" (COM-629)
+# =============================================================================
+# Entrypoint passed to `esphome`/scripts/espframe-esphome.sh. Combines the
+# freenove-s3 board HAL, the shared dashboard app logic and the 320x240
+# landscape layout with its floating-clock screen saver.
+# =============================================================================
+
+substitutions:
+  name: "basement-lights-freenove-s3"
+  friendly_name: "Basement Lights"
+  # Its own manifest: the CrowPanel is an ESP32-S3 too, and keeps the shared
+  # manifest.json it was deployed with (see project.json's release target).
+  firmware_manifest_url: "https://rcompton78.github.io/compton-diy/basement-lights-dashboard/manifest-freenove-s3.json"
+
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+
+packages:
+  board: !include ../boards/freenove-s3.yaml
+  dashboard: !include ../common/dashboard.yaml
+  layout: !include ../layouts/freenove-s3.yaml

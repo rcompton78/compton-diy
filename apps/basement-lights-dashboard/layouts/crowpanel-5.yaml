@@ -1,0 +1,526 @@
+# =============================================================================
+# LAYOUT: 480x800 portrait, motion-driven backlight (CrowPanel 5", COM-533)
+# =============================================================================
+# The screen half of the CrowPanel build: fonts, LVGL pages and when the
+# screen turns off. common/dashboard.yaml has the HA side and documents what a
+# layout has to provide.
+#
+# Requires a board package to have already defined `tft_display` (an 800x480
+# display, turned to portrait by LVGL's rotation below), `tft_touch`
+# (touchscreen) and `backlight` (a light), see boards/crowpanel-5.yaml.
+#
+# Screen on/off (COM-533): the backlight is on at full or off, never dimmed.
+# It turns on when the basement motion sensor fires or the screen is touched,
+# and off after screen_on_time with neither. While it's off, a touch only
+# wakes it and never reaches a toggle. While HA isn't connected there's no
+# motion to wake it, so it stays on. Burn-in: the whole main page moves a
+# few pixels every pixel_shift_interval (an LCD doesn't burn in like an
+# OLED, but a fixed layout can leave faint image retention).
+# =============================================================================
+
+substitutions:
+  # Basement PIR (Tuya, Zigbee). It reports "on" for ~35-70 s per movement,
+  # so the screen holds for screen_on_time after the last one.
+  motion_sensor: "binary_sensor.0xa4c138abf0cc23b5_occupancy"
+  screen_on_time: "1h"
+  # Panel orientation. 90 or 270 is portrait; use the other one if the
+  # picture comes out upside down for the way the panel is mounted.
+  screen_rotation: "90"
+  pixel_shift_interval: "10min"
+  # The main page moves to each of the 3x3 offsets {-px, 0, +px} in turn.
+  pixel_shift_px: "4"
+
+esphome:
+  on_boot:
+    - priority: -200
+      then:
+        # Screen on from boot; motion or touch keep it on from here.
+        - script.execute: screen_off_countdown
+
+wifi:
+  on_disconnect:
+    # Never leave a stale address in the footer; show_ip repaints it on the
+    # next connect.
+    - lvgl.label.update:
+        id: lbl_ip_footer
+        text: ""
+
+globals:
+  # Which of the nine pixel-shift offsets main_page is at, see shift_pixels.
+  - id: pixel_shift_step
+    type: int
+    initial_value: "0"
+
+interval:
+  - interval: ${pixel_shift_interval}
+    then:
+      - script.execute: shift_pixels
+
+api:
+  # HA is back: motion can wake the screen again, so the off timer runs.
+  on_client_connected:
+    - script.execute: screen_off_countdown
+  # With no motion to wake it, the screen stays on until HA is back.
+  on_client_disconnected:
+    - if:
+        condition:
+          not:
+            api.connected:
+              state_subscription_only: true
+        then:
+          - script.stop: screen_off_countdown
+          - script.execute: wake_screen
+
+text_sensor:
+  # Basement motion from HA, as text like the group states, so
+  # "unavailable"/"unknown" read as not-motion (a homeassistant binary sensor
+  # keeps its last state on those, which would hold the screen on forever if
+  # the PIR dropped off while reading "on"). "on" turns the screen on and
+  # restarts the off timer, whether the screen was on or off; any other value
+  # restarts the timer too, so screen_on_time counts from the last movement,
+  # and screen_off never fires while the sensor still reads "on".
+  - platform: homeassistant
+    id: basement_motion
+    entity_id: ${motion_sensor}
+    internal: true
+    on_value:
+      - if:
+          condition:
+            lambda: 'return x == "on";'
+          then:
+            - script.execute: wake_screen
+      - script.execute: screen_off_countdown
+
+script:
+  # The All row's summary line reads the two rooms rather than the All group,
+  # so it can say which one is on.
+  - id: !extend refresh_toggles
+    then:
+      - lambda: |-
+          const std::string &office = id(office_state).state;
+          const std::string &games = id(games_state).state;
+          const char *summary = "";
+          if (office == "on" && games == "on")
+            summary = "Both rooms on";
+          else if (office == "on")
+            summary = "Office is on";
+          else if (games == "on")
+            summary = "Board Games is on";
+          else if (office == "off" && games == "off")
+            summary = "Everything is off";
+          lv_label_set_text(id(lbl_all_summary), summary);
+
+  - id: !extend reset_toggle_states
+    then:
+      - lambda: 'lv_label_set_text(id(lbl_all_summary), "");'
+
+  - id: !extend show_ip
+    then:
+      - lvgl.label.update:
+          id: lbl_ip_footer
+          text: !lambda 'return "http://" + ip;'
+
+  # Burn-in guard: step main_content through the nine offsets of a 3x3 grid
+  # (-px, 0, +px on each axis), one step per pixel_shift_interval. The page
+  # around it is the same background colour, so only the content moves.
+  - id: shift_pixels
+    then:
+      - lambda: |-
+          id(pixel_shift_step) = (id(pixel_shift_step) + 1) % 9;
+          int dx = (id(pixel_shift_step) % 3 - 1) * ${pixel_shift_px};
+          int dy = (id(pixel_shift_step) / 3 - 1) * ${pixel_shift_px};
+          lv_obj_set_pos(id(main_content), dx, dy);
+
+  # Restarted by every motion sensor state from HA (motion, clear, or
+  # unavailable), every touch release and HA connecting; turns the screen off
+  # once it runs out (unless the motion sensor still reads motion, see
+  # screen_off). Never while HA is away (nothing could wake the screen but a
+  # touch), see api on_client_disconnected.
+  - id: screen_off_countdown
+    mode: restart
+    then:
+      - delay: ${screen_on_time}
+      - if:
+          condition:
+            api.connected:
+              state_subscription_only: true
+          then:
+            - script.execute: screen_off
+
+  # Backlight off and LVGL paused. Paused (with resume_on_input off, see
+  # lvgl: below) LVGL doesn't read touch at all, so the touch that wakes the
+  # screen never reaches a toggle.
+  - id: screen_off
+    then:
+      - if:
+          condition:
+            lambda: 'return !id(screen_idle) && id(basement_motion).state != "on" && id(main_page)->is_showing();'
+          then:
+            - globals.set:
+                id: screen_idle
+                value: "true"
+            - logger.log:
+                format: "No motion or touch for ${screen_on_time}: screen off"
+                level: INFO
+            - lvgl.pause:
+            - light.turn_off: backlight
+
+  - id: wake_screen
+    then:
+      - if:
+          condition:
+            lambda: 'return id(screen_idle);'
+          then:
+            - globals.set:
+                id: screen_idle
+                value: "false"
+            - lvgl.resume:
+            - light.turn_on:
+                id: backlight
+                brightness: 100%
+
+# Wake on release, not touch: LVGL is still paused while the finger is down,
+# so the whole waking tap is swallowed and only the next one acts. Every
+# release (waking or not) restarts the off timer.
+touchscreen:
+  - id: !extend tft_touch
+    on_release:
+      - script.execute: wake_screen
+      - script.execute: screen_off_countdown
+
+# -----------------------------------------------------------------------------
+# Fonts: Montserrat semibold at the mock-up's sizes (bold for the pills), plus
+# LVGL's built-in montserrat_14/28 for the status pages. ASCII plus the "·"
+# member separator. Icons are Material Design Icons with only the glyphs drawn.
+# -----------------------------------------------------------------------------
+font:
+  - file: "gfonts://Montserrat@600"
+    id: ui_font_13
+    size: 13
+    bpp: 4
+    glyphs: &ascii_glyphs ' !"#$%&''()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[]^_`abcdefghijklmnopqrstuvwxyz{|}~·'
+  - file: "gfonts://Montserrat@600"
+    id: ui_font_14
+    size: 14
+    bpp: 4
+    glyphs: *ascii_glyphs
+  - file: "gfonts://Montserrat@600"
+    id: ui_font_16
+    size: 16
+    bpp: 4
+    glyphs: *ascii_glyphs
+  - file: "gfonts://Montserrat@600"
+    id: ui_font_22
+    size: 22
+    bpp: 4
+    glyphs: *ascii_glyphs
+  - file: "gfonts://Montserrat@600"
+    id: ui_font_24
+    size: 24
+    bpp: 4
+    glyphs: *ascii_glyphs
+  - file: "gfonts://Montserrat@600"
+    id: ui_font_30
+    size: 30
+    bpp: 4
+    glyphs: *ascii_glyphs
+  - file: "gfonts://Montserrat@700"
+    id: ui_font_pill
+    size: 14
+    bpp: 4
+    glyphs: "ONF-"
+  - file: 'https://github.com/Templarian/MaterialDesign-Webfont/raw/v7.4.47/fonts/materialdesignicons-webfont.ttf'
+    id: icon_font_64
+    size: 64
+    bpp: 4
+    glyphs: ["${icon_desk_lamp}", "${icon_dice}", "${icon_home_bulb}"]
+
+# -----------------------------------------------------------------------------
+# Three LVGL pages. connecting_page (the default at boot, and whenever wifi
+# drops), setup_page once the fallback AP is up, and main_page, COM-533's
+# design P2 (a "switch plate"): a header (title and clock), three equal
+# full-width rows (Office, Board Games, All), and the portal address in the
+# footer. Every coordinate and colour is from
+# docs/com-533-mockups/generate.py's design_p2. A toggle's lit (amber) style is
+# its `checked` state, which only the imported HA state ever sets.
+# -----------------------------------------------------------------------------
+lvgl:
+  displays: [tft_display]
+  touchscreens: [tft_touch]
+  rotation: ${screen_rotation}
+  # The wake touch is handled by wake_screen, not LVGL (see screen_off).
+  resume_on_input: false
+  # Shared toggle look. Pressed: the press fill plus a 3px outline, which
+  # sits outside the button so its contents don't shift; recolor_opa cancels
+  # the default theme's 35% darken. Theme pressed beats a widget's own
+  # default and checked styles (LVGL picks the highest matching state bits).
+  theme:
+    button:
+      bg_color: ${ui_card}
+      bg_opa: COVER
+      text_color: ${ui_ink}
+      radius: 28
+      pad_all: 0
+      border_width: 1
+      border_color: ${ui_card_edge}
+      shadow_opa: TRANSP
+      checked:
+        bg_color: ${ui_amber}
+        border_color: ${ui_amber}
+      pressed:
+        bg_color: ${ui_press}
+        recolor_opa: TRANSP
+        outline_width: 3
+        outline_pad: 0
+        outline_color: ${ui_ink}
+  pages:
+    - id: connecting_page
+      bg_color: ${ui_bg}
+      bg_opa: COVER
+      widgets:
+        - label:
+            align: CENTER
+            y: -60
+            text: "Connecting to WiFi"
+            text_font: montserrat_14
+            text_color: ${ui_ink}
+        - label:
+            align: CENTER
+            y: -20
+            text: "${friendly_name}"
+            text_font: montserrat_28
+            text_color: ${ui_ink}
+        # Updated by show_ip to include the last address.
+        - label:
+            id: lbl_connecting_ip
+            align: CENTER
+            y: 60
+            text: "Not connected"
+            text_font: montserrat_14
+            text_color: ${ui_quiet}
+            text_align: CENTER
+    - id: setup_page
+      bg_color: ${ui_bg}
+      bg_opa: COVER
+      widgets:
+        - label:
+            align: CENTER
+            y: -80
+            text: "Connect to WiFi"
+            text_font: montserrat_14
+            text_color: ${ui_ink}
+        - label:
+            align: CENTER
+            y: -40
+            text: "'${friendly_name} Setup'"
+            text_font: montserrat_28
+            text_color: ${ui_ink}
+        - label:
+            align: CENTER
+            y: 30
+            text: "Join it from a phone to\nenter your wifi details"
+            text_font: montserrat_14
+            text_color: ${ui_ink}
+            text_align: CENTER
+        # For phones that don't pop the captive portal up by themselves.
+        # 192.168.4.1 is ESPHome's default fallback AP address.
+        - label:
+            align: CENTER
+            y: 80
+            text: "Then open http://192.168.4.1"
+            text_font: montserrat_14
+            text_color: ${ui_quiet}
+    - id: main_page
+      bg_color: ${ui_bg}
+      bg_opa: COVER
+      # The pixel shift pushes main_content a few pixels past the edge; that
+      # must not make the page scrollable.
+      scrollable: false
+      widgets:
+        # Everything on the page lives in this transparent, full-size
+        # container, which shift_pixels moves as one.
+        - obj:
+            id: main_content
+            x: 0
+            y: 0
+            width: 480
+            height: 800
+            bg_opa: TRANSP
+            border_width: 0
+            pad_all: 0
+            radius: 0
+            scrollable: false
+            clickable: false
+            widgets:
+              # --- Header ----------------------------------------------------
+              - label:
+                  x: 28
+                  y: 18
+                  text: "Basement"
+                  text_font: ui_font_24
+                  text_color: ${ui_ink}
+              - label:
+                  id: lbl_clock
+                  align: TOP_RIGHT
+                  x: -28
+                  y: 21
+                  text: ""
+                  text_font: ui_font_22
+                  text_color: ${ui_quiet}
+
+              # --- Rows ------------------------------------------------------
+              # 432x214 each, 14px apart. The halo and icon are positioned
+              # from the row's centre (216, 107): halo centre (82, 107).
+              - button:
+                  id: btn_office
+                  x: 24
+                  y: 76
+                  width: 432
+                  height: 214
+                  widgets:
+                    - obj: &row_halo
+                        align: CENTER
+                        x: -134
+                        y: 0
+                        width: 108
+                        height: 108
+                        radius: 54
+                        bg_color: ${ui_off_halo}
+                        bg_opa: COVER
+                        border_width: 0
+                        pad_all: 0
+                        scrollable: false
+                        clickable: false
+                        checked:
+                          bg_color: ${ui_amber_halo}
+                        pressed:
+                          bg_color: ${ui_press_halo}
+                    - label: &row_icon
+                        align: CENTER
+                        x: -134
+                        y: 0
+                        text: "${icon_desk_lamp}"
+                        text_font: icon_font_64
+                        text_color: ${ui_quiet}
+                        checked:
+                          text_color: ${ui_on_amber}
+                        pressed:
+                          text_color: ${ui_ink}
+                    - label: &toggle_pill
+                        id: pill_office
+                        align: TOP_RIGHT
+                        x: -23
+                        y: 23
+                        text: "--"
+                        text_font: ui_font_pill
+                        text_letter_space: 2
+                        text_color: ${ui_quiet}
+                        bg_color: ${ui_off_halo}
+                        bg_opa: COVER
+                        radius: 15
+                        pad_left: 13
+                        pad_right: 11
+                        pad_top: 6
+                        pad_bottom: 6
+                        checked:
+                          text_color: ${ui_on_amber}
+                          bg_color: 0x000000
+                          bg_opa: 20%
+                        pressed:
+                          text_color: ${ui_ink}
+                          bg_color: ${ui_press_halo}
+                          bg_opa: COVER
+                    - label: &row_name
+                        x: 159
+                        y: 72
+                        text: "Office"
+                        text_font: ui_font_30
+                        text_color: ${ui_ink}
+                        checked:
+                          text_color: ${ui_on_amber}
+                        pressed:
+                          text_color: ${ui_ink}
+                    - label: &row_sub
+                        x: 159
+                        y: 117
+                        text: "Lamp · Desk light · Socket"
+                        text_font: ui_font_14
+                        text_color: ${ui_quiet}
+                        checked:
+                          text_color: ${ui_on_amber}
+                        pressed:
+                          text_color: ${ui_quiet}
+                  on_click:
+                    - homeassistant.service:
+                        service: light.toggle
+                        data:
+                          entity_id: ${office_group}
+              - button:
+                  id: btn_games
+                  x: 24
+                  y: 304
+                  width: 432
+                  height: 214
+                  widgets:
+                    - obj:
+                        <<: *row_halo
+                    - label:
+                        <<: *row_icon
+                        text: "${icon_dice}"
+                    - label:
+                        <<: *toggle_pill
+                        id: pill_games
+                    - label:
+                        <<: *row_name
+                        text: "Board Games"
+                    - label:
+                        <<: *row_sub
+                        text: "Lightbar · Socket · Server socket"
+                  on_click:
+                    - homeassistant.service:
+                        service: light.toggle
+                        data:
+                          entity_id: ${games_group}
+              # Toggles light.basement_lights: with either room on, a tap
+              # turns everything off; with both off, everything on.
+              - button:
+                  id: btn_all
+                  x: 24
+                  y: 532
+                  width: 432
+                  height: 214
+                  widgets:
+                    - obj:
+                        <<: *row_halo
+                    - label:
+                        <<: *row_icon
+                        text: "${icon_home_bulb}"
+                    - label:
+                        <<: *toggle_pill
+                        id: pill_all
+                    - label:
+                        <<: *row_name
+                        text: "All lights"
+                    - label:
+                        <<: *row_sub
+                        id: lbl_all_summary
+                        text: ""
+                        text_font: ui_font_16
+                  on_click:
+                    - homeassistant.service:
+                        service: light.toggle
+                        data:
+                          entity_id: ${all_group}
+
+              # Web portal address, filled in by show_ip and cleared by wifi
+              # on_disconnect.
+              - label:
+                  id: lbl_ip_footer
+                  x: 0
+                  y: 776
+                  width: 480
+                  long_mode: DOT
+                  text: ""
+                  text_font: ui_font_13
+                  text_color: ${ui_faint}
+                  text_align: CENTER

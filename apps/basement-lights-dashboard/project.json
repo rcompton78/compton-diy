@@ -16,7 +16,7 @@
         "command": "echo done",
         "cwd": "."
       },
-      "dependsOn": ["build-crowpanel-5"]
+      "dependsOn": ["build-crowpanel-5", "build-freenove-s3"]
     },
     "build-crowpanel-5": {
       "executor": "nx:run-commands",
@@ -30,6 +30,18 @@
       "inputs": ["default", "{projectRoot}/builds/secrets.yaml", "{workspaceRoot}/scripts/espframe-esphome.sh", "{workspaceRoot}/apps/espframe/product/contract/project.json", "{workspaceRoot}/scripts/write-secrets.sh", { "env": "RELEASE_VERSION" }, { "env": "BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY" }],
       "outputs": ["{projectRoot}/builds/.esphome/build/basement-lights-crowpanel-5"]
     },
+    "build-freenove-s3": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/espframe-esphome.sh compile apps/basement-lights-dashboard/builds/freenove-s3.yaml",
+        "cwd": "."
+      },
+      "dependsOn": ["write-secrets"],
+      "parallelism": false,
+      "cache": true,
+      "inputs": ["default", "{projectRoot}/builds/secrets.yaml", "{workspaceRoot}/scripts/espframe-esphome.sh", "{workspaceRoot}/apps/espframe/product/contract/project.json", "{workspaceRoot}/scripts/write-secrets.sh", { "env": "RELEASE_VERSION" }, { "env": "BASEMENT_LIGHTS_DASHBOARD_API_ENCRYPTION_KEY" }],
+      "outputs": ["{projectRoot}/builds/.esphome/build/basement-lights-freenove-s3"]
+    },
     "flash-crowpanel-5": {
       "executor": "nx:run-commands",
       "options": {
@@ -38,6 +50,14 @@
       },
       "dependsOn": ["build-crowpanel-5"]
     },
+    "flash-freenove-s3": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/espframe-esphome.sh upload apps/basement-lights-dashboard/builds/freenove-s3.yaml --device /dev/ttyACM0",
+        "cwd": "."
+      },
+      "dependsOn": ["build-freenove-s3"]
+    },
     "monitor-crowpanel-5": {
       "executor": "nx:run-commands",
       "options": {
@@ -45,13 +65,20 @@
         "cwd": "."
       }
     },
+    "monitor-freenove-s3": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "scripts/espframe-esphome.sh logs apps/basement-lights-dashboard/builds/freenove-s3.yaml --device /dev/ttyACM0",
+        "cwd": "."
+      }
+    },
     "release": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "python3 tools/esp-flasher/generate_release.py --project-dir apps/basement-lights-dashboard --name \"Basement Lights Dashboard\" --esphome crowpanel-5:ESP32-S3:basement-lights-crowpanel-5 --version ${RELEASE_VERSION:-dev}",
+        "command": "python3 tools/esp-flasher/generate_release.py --project-dir apps/basement-lights-dashboard --name \"Basement Lights Dashboard\" --esphome \"crowpanel-5:ESP32-S3:basement-lights-crowpanel-5:Elecrow CrowPanel 5.0 HMI\" --esphome \"freenove-s3:ESP32-S3:basement-lights-freenove-s3:Freenove ESP32-S3 CYD 2.8\" --shared-manifest crowpanel-5 --version ${RELEASE_VERSION:-dev}",
         "cwd": "."
       },
-      "dependsOn": ["build-crowpanel-5"]
+      "dependsOn": ["build-crowpanel-5", "build-freenove-s3"]
     }
   }
 }
