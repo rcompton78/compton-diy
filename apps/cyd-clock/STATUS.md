@@ -1222,6 +1222,50 @@ wrap handling (see COM-513).
 | `cyd` | 1,209,721 B | 1,214,053 B | +4,332 B | 92.3% → 92.6% (~94.3KB left) |
 | `freenove-s3` | 1,163,213 B | 1,167,505 B | +4,292 B | 34.8% → 34.9% |
 
+## December-only Christmas Store Items (COM-637, 2026-11-16)
+
+Four Christmas items and a bundle, sold only in December by the clock's local date (or any time
+the Christmas theme week, COM-636, is in Preview). It's the Haunted Pumpkin Patch model (COM-503):
+only buying is limited, and anything bought stays owned and equippable all year.
+
+- **Items** (`CHRISTMAS_STORE_ITEMS[]`, each appended at a fixed index after COM-636's entries):
+  - **Cozy Fireplace** room theme, legendary (350), `ROOM_THEME_IDX_COZY_FIREPLACE` = 14: a warm
+    red wall (also the bgColor) with a brick fireplace, stockings and a wreath in the left column,
+    and a garland across the top. The fire flickers between three flame frames every 120–300 ms
+    (`updateCozyFireplaceAnim()`), repainting only the firebox. It follows the COM-379/COM-378
+    placement rules: the fireplace is at x<=46, left of the "Zz" column, and ends at ANIMAL_Y+94,
+    above the Meds button. The garland ends at x=160, left of the badge column, so nothing is
+    ever drawn over an animated pixel.
+  - **Reindeer Antlers** (100), `ACCESSORY_IDX_REINDEER_ANTLERS` = 14: tan antlers with a dark
+    2px outline and a holly sprig, inside drawCat()'s clear rect and above the blink rect.
+  - **Candy Cane Glasses** (50), `GLASSES_IDX_CANDY_CANE` = 4: red-rimmed round lenses with
+    diagonal candy-cane stripes.
+  - **Reindeer** stuffy (150), `STUFFY_IDX_REINDEER` = 10, in all four poses: antlers, a red
+    collar and a gold bell.
+  - **Christmas Bundle**: all four for 520 (full 650, the usual ~20% off), the first combo flagged
+    `christmas`. `assertCombosValid()` requires a Christmas combo to hold only Christmas items and
+    every other combo to hold none.
+- **Glasses store rule**: `GLASSES_STORE_COUNT` (a prefix bound) couldn't express a store entry
+  after the theme-week glasses, so glasses now use `isStoreGlasses()` (cost > 0) like accessories
+  and room themes. The `*_STORE_COUNT` constants are gone; `storeCatalogStoreCount()` counts
+  `isStoreCatalogEntry()` entries instead, which gives the same numbers as before for every
+  existing catalog, so saved seen counts stay valid.
+- **Never NEW**: the Christmas items aren't counted store entries, so they never show NEW or
+  start the points flash. The December-only **❄ Christmas** section at the top of the store menu
+  announces them, and each row and the bundle carry a "❄ CHRISTMAS · leaves Jan 1" tag. The items
+  also appear in their usual sections and on the All page while the store is open; the Christmas
+  section isn't on All (like Combos). A purchase from the section posts `from=christmas`, so
+  the redirect lands back on it.
+- **Flash sales**: allowed while the Christmas store is open. Any other month
+  `isKnownStoreItemId()` (via `isSeasonalItemIdOffSale()`) rejects a sale on a Christmas item or
+  the bundle, the same as Pumpkin Patch outside October.
+- **Flash** (`pio run` size report, against COM-636's tip, 8a2758b):
+
+| Board | Before | After | Delta | % used |
+|---|---|---|---|---|
+| `cyd` | 1,214,001 B | 1,218,009 B | +4,008 B | 92.6% → 92.9% (~90.5KB left) |
+| `freenove-s3` | 1,167,457 B | 1,171,445 B | +3,988 B | 34.9% → 35.0% |
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`
