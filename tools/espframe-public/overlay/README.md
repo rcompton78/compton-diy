@@ -56,7 +56,7 @@ A local build reports version `dev` and has **no update manifest**, so it doesn'
 FIRMWARE_MANIFEST_URL=https://<your-user>.github.io/<repo>/manifest.json
 ```
 
-`.env` is gitignored and read as plain `NAME=value` lines. A `dev` build finds updates but never installs one on its own: press **Install** on the frame's web page, or also set `RELEASE_VERSION=` to a version of your own in `.env` so auto-update works. You can also set or change the URL later on the frame's web page, under **Firmware** → **Advanced**.
+`.env` is gitignored and read as plain `NAME=value` lines. It takes only `FIRMWARE_MANIFEST_URL`, `RELEASE_VERSION` and `DEVICE` (the default `--device` for `flash` and `logs`); any other name stops the script with an error, so a misspelt setting can't be silently ignored. A `dev` build finds updates but never installs one on its own: press **Install** on the frame's web page, or also set `RELEASE_VERSION=` to a version of your own in `.env` so auto-update works. You can also set or change the URL later on the frame's web page, under **Firmware** → **Advanced**.
 
 ## Set up the frame
 
