@@ -22,12 +22,12 @@
 # Build and log
 # -----------------------------------------------------------------------------
 substitutions:
-  espframe_component_url: "https://github.com/rcompton78/espframe"
-  # No dedicated upstream branch for this device exists (unlike freenove-s3's
-  # "add-freenove-s3-device") -- this repo's fork of espframe is fully
-  # vendored here with no more upstream sync, and the remote_image/espframe
-  # components themselves aren't board-specific, so "main" is the honest
-  # choice rather than inventing a branch name that doesn't exist.
+  # Only satisfies this git source: every build entry point (builds/*.yaml)
+  # also adds the local ../components, which is what compiles. ESPHome still
+  # clones this on each build, so it must exist: the old rcompton78/espframe
+  # fork was replaced by the 10"-only public repo (COM-628), and jtenniswood's
+  # main carries remote_image and espframe.
+  espframe_component_url: "https://github.com/jtenniswood/espframe"
   espframe_component_ref: "main"
   log_level: "INFO"
 

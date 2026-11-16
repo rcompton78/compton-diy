@@ -10,6 +10,12 @@
 #
 # firmware_version: default for local builds; overridden by main config
 # (e.g. factory.yaml) or by -s firmware_version when building releases.
+#
+# firmware_manifest_url: each device's packages.yaml sets its own. An empty
+# URL (a build with no manifest to poll, e.g. a fork's local build) turns
+# update checks off: nothing below calls update() while the saved URL is
+# empty, and the update component gets a placeholder source only because
+# ESPHome requires a valid URL there.
 # =============================================================================
 
 substitutions:
@@ -47,7 +53,9 @@ esphome:
               global_preferences->sync();
               ESP_LOGI("firmware", "Migrated firmware manifest URL from the shared manifest to %s", default_url.c_str());
             }
-            id(firmware_update).set_source_url(id(firmware_manifest_url_text).state);
+            if (!id(firmware_manifest_url_text).state.empty()) {
+              id(firmware_update).set_source_url(id(firmware_manifest_url_text).state);
+            }
         - component.update: firmware_version_sensor
 
 # -----------------------------------------------------------------------------
@@ -127,7 +135,8 @@ update:
     id: firmware_update
     name: "Firmware: Update"
     internal: true
-    source: ${firmware_manifest_url}
+    # Never fetched while the URL is empty (see the header): checks are skipped.
+    source: "${firmware_manifest_url if firmware_manifest_url else 'http://update-checks-off.invalid/manifest.json'}"
     update_interval: never
     on_update_available:
       then:
@@ -169,6 +178,13 @@ text:
       - lambda: |-
           std::string url = strip_trailing_slashes(x);
           if (url.empty()) url = "${firmware_manifest_url}";
+          if (url.empty()) {
+            // No default manifest in this build: an empty URL turns update checks off.
+            id(firmware_manifest_url_text).publish_state(url);
+            global_preferences->sync();
+            ESP_LOGI("firmware", "Firmware manifest URL cleared; update checks are off");
+            return;
+          }
           if (!is_valid_http_url(url)) {
             ESP_LOGW("firmware", "Firmware manifest URL must be a valid http(s)://host[:port]/path URL");
             return;
@@ -218,6 +234,7 @@ interval:
     then:
       - lambda: |-
           if (!id(auto_update_switch).state) return;
+          if (id(firmware_manifest_url_text).state.empty()) return;
           int counter = id(update_check_counter);
           std::string freq = id(update_frequency_select).current_option();
           int threshold = 24;
@@ -253,8 +270,17 @@ button:
       sorting_group_id: sg_firmware
     on_press:
       - lambda: 'id(manual_check_only) = true;'
-      - lambda: |-
-          id(firmware_update).set_source_url(id(firmware_manifest_url_text).state);
-      - component.update: firmware_update
+      - if:
+          condition:
+            lambda: 'return id(firmware_manifest_url_text).state.empty();'
+          then:
+            - logger.log:
+                level: WARN
+                tag: firmware
+                format: "No firmware manifest URL set; update checks are off"
+          else:
+            - lambda: |-
+                id(firmware_update).set_source_url(id(firmware_manifest_url_text).state);
+            - component.update: firmware_update
       - delay: 15s
       - lambda: 'id(manual_check_only) = false;'

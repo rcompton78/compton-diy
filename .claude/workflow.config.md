@@ -21,6 +21,8 @@
   - cyd-clock: COM / Cyd Clock
   - tamagotchi-plus: COM / Tamagotchi+
   - basement-lights-dashboard: COM / Basement Lights
+  - espframe: COM / EspFrame
+  - media-room-dashboard: COM / Mediaroom Remote
 
 ## Commands
 

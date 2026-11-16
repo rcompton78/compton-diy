@@ -15,8 +15,10 @@
 # Build and log
 # -----------------------------------------------------------------------------
 substitutions:
-  espframe_component_url: "https://github.com/rcompton78/espframe"
-  espframe_component_ref: "add-freenove-s3-device"
+  # See the Waveshare device.yaml: builds compile the local ../components; this
+  # git source only has to exist (the old rcompton78/espframe fork is gone, COM-628).
+  espframe_component_url: "https://github.com/jtenniswood/espframe"
+  espframe_component_ref: "main"
   log_level: "INFO"
 
 esp32:
