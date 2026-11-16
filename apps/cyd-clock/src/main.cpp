@@ -3114,7 +3114,7 @@ static void drawChristmasNightBackground(int x, int y, int w, int h) {
     // above the Meds button (MEDS_Y = ANIMAL_Y+96) and never shows in its rounded corners.
     // There's deliberately no snow behind the buttons: any drift there reads as a white box
     // framing each button (COM-636's first on-device try).
-    tft.fillEllipse(26, ANIMAL_Y + 92, 26, 3, C_XMAS_SNOW);
+    tft.fillEllipse(CHRISTMAS_TREE_X, ANIMAL_Y + 92, 26, 3, C_XMAS_SNOW);
 
     // Tree: trunk, then each tier with its right half shaded, then the bulbs and the star.
     const int tx = CHRISTMAS_TREE_X;
