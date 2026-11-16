@@ -676,8 +676,8 @@ static void drawHogwartsNightBackground(int x, int y, int w, int h);
 static void drawPumpkinPatchBackground(int x, int y, int w, int h);
 
 // Forward declaration: theme-week-exclusive (COM-636) "Christmas Night" backdrop (lit tree,
-// string of lights, snowfall, snowdrifts, plus presents on Dec 25), defined further below
-// alongside drawPumpkinPatchBackground().
+// string of lights, snowfall, a snow mound under the tree, plus presents on Dec 25), defined
+// further below alongside drawPumpkinPatchBackground().
 static void drawChristmasNightBackground(int x, int y, int w, int h);
 
 // Room theme catalog — same purchase/equip model as blanket colors and stuffies. `id` is
@@ -3060,12 +3060,12 @@ static constexpr ChristmasPoint CHRISTMAS_TREE_BULBS[] = {
 static constexpr uint16_t CHRISTMAS_BULB_COLORS[] = {TFT_RED, C_XMAS_GOLD, C_XMAS_BULB_BLUE, TFT_WHITE};
 // Snowflakes: x, dy from ANIMAL_Y, and whether it's a big 5x5 one (else a 3x3 one). Placed only in
 // sky nothing prints text over: clear of both "Zz" boxes (left x 48–70 y +17..+51, right x
-// 188–210 y +74..+88), the badge column (x>=168, y +0..+70) and the middle of the name strip.
+// 188–210 y +74..+88), the badge column (x>=168, y +0..+70) and the name strip (y>=+148).
 struct ChristmasFlake { int16_t x, dy; bool big; };
 static constexpr ChristmasFlake CHRISTMAS_FLAKES[] = {
     {8, 24, true}, {44, 30, false}, {6, 56, false}, {52, 62, true}, {60, 86, false},
     {112, 14, false}, {176, 80, true}, {226, 78, false}, {214, 92, true}, {178, 102, false},
-    {62, 130, false}, {178, 132, true}, {60, 160, false}, {180, 166, false},
+    {62, 130, false}, {178, 132, true}, {64, 142, false}, {176, 142, false},
 };
 
 /**
@@ -3110,10 +3110,11 @@ static void drawChristmasNightBackground(int x, int y, int w, int h) {
         }
     }
 
-    // A small snow mound for the tree to stand on, above the Meds button (ANIMAL_Y+96 down is
-    // only covered while sick). There's deliberately no snow behind the buttons: any drift there
-    // reads as a white box framing each button (COM-636's first on-device try).
-    tft.fillEllipse(26, ANIMAL_Y + 96, 26, 6, C_XMAS_SNOW);
+    // A small, flat snow mound for the tree to stand on, spanning ANIMAL_Y+89..+95 so it ends
+    // above the Meds button (MEDS_Y = ANIMAL_Y+96) and never shows in its rounded corners.
+    // There's deliberately no snow behind the buttons: any drift there reads as a white box
+    // framing each button (COM-636's first on-device try).
+    tft.fillEllipse(26, ANIMAL_Y + 92, 26, 3, C_XMAS_SNOW);
 
     // Tree: trunk, then each tier with its right half shaded, then the bulbs and the star.
     const int tx = CHRISTMAS_TREE_X;

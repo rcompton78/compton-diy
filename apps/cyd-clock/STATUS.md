@@ -1202,7 +1202,7 @@ wrap handling (see COM-513).
     lesson: the tree sits at x<=46 (left of the "Zz" column) with its trunk and the presents
     ending at ANIMAL_Y+93, above the Meds button (ANIMAL_Y+96), so nothing ever covers them.
     `checkThemeWeekTransition()` repaints the backdrop once when they appear or disappear.
-  - Snowflakes avoid the "Zz" boxes, the badge column and the middle of the name strip, since
+  - Snowflakes avoid the "Zz" boxes, the badge column and the name strip, since
     those print text with a bgColor box.
 - **Admin override**: a Christmas Auto/Preview/Off select on `/config/admin/themeweek`, posting
   to `/config/admin/themeweek/christmas`, persisted as `themeWeekChristmasMode` and included in
