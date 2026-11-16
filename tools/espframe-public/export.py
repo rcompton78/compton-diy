@@ -7,22 +7,25 @@ compton-diy is the only source of espframe code; this copies it one way into a
 checkout of the public repo (rcompton78/espframe), which friends fork to build,
 flash and update their own Guition ESP32-P4 10" frames. It:
 
+  0. refuses a <dest> that isn't empty, an espframe checkout or an earlier
+     export (and, with --commit, a source tree with uncommitted changes);
   1. empties <dest> (everything but .git) and copies apps/espframe's tracked
      files to its root, leaving out the other boards, the 7" stand, Nx targets
      and internal notes (EXCLUDE);
   2. cuts the product contract down to the Guition, with no default update
-     manifest (a local build never checks for updates; the public repo's
-     release workflow bakes in the fork's own GitHub Pages manifest), and
-     regenerates the files built from it;
-  3. applies text patches for docs that talk about the other boards or
-     compton-diy (PATCHES; each must match exactly once, so a source change
-     that breaks one fails here rather than shipping stale text);
-  4. copies overlay/ on top: the public repo's README, workflows and build
-     scripts, which exist only there;
-  5. scans the result for secrets and private details, then runs the checks
-     the public CI runs. Any hit or failure stops the export.
+     manifest (a local build doesn't check for updates; the public repo's
+     release workflow bakes in the fork's own GitHub Pages manifest);
+  3. applies text patches for docs that talk about the other boards or the
+     source repo (PATCHES; each must match exactly once, so a source change
+     that breaks one fails here rather than shipping stale text) and rewrites
+     the docs' site-root links into links GitHub can follow;
+  4. copies overlay/'s tracked files on top: the public repo's README,
+     workflows and build scripts, which exist only there;
+  5. regenerates the files built from the contract, scans the result for
+     secrets and private details, then runs package.json's check:ci. Any hit
+     or failure stops the export.
 
-With --commit it commits the result in <dest> as "Sync from compton-diy <sha>".
+With --commit it commits the result in <dest> as "Sync <source sha>".
 Pushing is left to you. Never edit the public repo's files by hand: change
 apps/espframe or overlay/ here and export again.
 """
@@ -67,6 +70,7 @@ EXCLUDE = [
     "docs/roadmap.md",
     "docs/testing.md",  # the source repo's CI and setup flows
     "docs/repository-governance.md",  # the original project's branch rules
+    "docs/.vitepress/",  # the original project's docs site; the docs are read on GitHub here
     "README.md",  # replaced by overlay/README.md
 ]
 
@@ -217,6 +221,23 @@ PATCHES: list[tuple[str, str, str]] = [
         "        # threads a real RELEASE_VERSION in via -s -- an",
     ),
     (
+        "package.json",
+        '    "docs:dev": "vitepress dev docs",\n'
+        '    "docs:build": "vitepress build docs",\n'
+        '    "docs:preview": "vitepress preview docs"\n',
+        "",
+    ),
+    (
+        "package.json",
+        '    "webserver:typecheck": "tsc --noEmit --strict --target ES2018 --lib ES2018,DOM --skipLibCheck docs/webserver/src/web_contracts.ts",\n',
+        '    "webserver:typecheck": "tsc --noEmit --strict --target ES2018 --lib ES2018,DOM --skipLibCheck docs/webserver/src/web_contracts.ts"\n',
+    ),
+    (
+        "package.json",
+        " && npm run docs:build\"",
+        "\"",
+    ),
+    (
         "docs/install.md",
         "<EspInstallButton />",
         "Open your fork's install page, `https://<owner>.github.io/<repo>/` (see the README), and click **Install** there.",
@@ -243,17 +264,21 @@ FIRMWARE_UPDATE_INTRO = """OTA and HTTP updates from GitHub. A frame flashed fro
 # Private-detail scan, over every non-binary file's text and every file's path.
 # A hit fails the export unless the matched text is in ALLOW or the file is
 # under ALLOW_PATHS for that kind of hit.
-CREDENTIAL_KEY = r"[\w-]*(?:ssid|password|passwd|api_key|apikey|encryption_key|secret|token)"
+CREDENTIAL_KEY = r"[\w-]*(?:ssid|password|passwd|api_key|api-key|apikey|encryption_key|secret|token)"
 SCAN = [
-    (re.compile(r"compton|linear\.app|/hdd/|home-diy|homelab|bytesafe|bitwarden|\bbws\b|/home/|t3clones|\.t3/|\.secrets\b", re.I), "private name or path"),
-    (re.compile(r"\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3})\b"), "private IP"),
-    (re.compile(r"\b[\w-]+\.(?:lan|home\.arpa|ts\.net)\b", re.I), "private hostname"),
+    (re.compile(r"compton|linear\.app|/hdd/|home-diy|homelab|bytesafe|bitwarden|\bbws\b|/home/|/Users/|/mnt/[a-z]/|[A-Z]:\\\\Users|t3clones|\.t3/|\.secrets\b|runs-on:.*self-hosted", re.I), "private name or path"),
+    (re.compile(r"\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}|169\.254\.\d{1,3}\.\d{1,3})\b|\bf[cd][0-9a-f]{2}:[0-9a-f:]+", re.I), "private IP"),
+    (re.compile(r"\b[\w-]+\.(?:lan|home\.arpa|ts\.net|duckdns\.org|local)\b", re.I), "private hostname"),
+    # Any URL whose host isn't a known public site or an example (see URL_HOSTS_OK).
+    (re.compile(r"https?://(?P<host>[^/\s\"'`)<>\]]+)", re.I), "URL host"),
     (re.compile(r"\b[\w.+-]+@(?:gmail|googlemail|outlook|hotmail|live|icloud|me|proton|protonmail|yahoo)\.\w+", re.I), "personal email"),
     # A literal value for a credential-like key: quoted anywhere (YAML, JSON,
     # code), or bare at the start of a YAML or env line. Substitutions, !secret,
     # <placeholders> and the values in CREDENTIAL_OK are fine.
-    (re.compile(r"[\"']?" + CREDENTIAL_KEY + r"[\"']?\s*[:=]\s*[\"'](?P<v>[^\"'\s]{4,})[\"']", re.I), "literal credential"),
-    (re.compile(r"^\s*" + CREDENTIAL_KEY + r"\s*[:=]\s*(?P<v>[^\s\"'#]{4,})", re.I), "literal credential"),
+    (re.compile(r"[\"']?" + CREDENTIAL_KEY + r"[\"']?\s*(?::\s*\w+\s*)?[:=]\s*[\"'](?P<v>[^\"'\n]{4,})[\"']", re.I), "literal credential"),
+    # An Immich API key in a header (curl -H "x-api-key: ...").
+    (re.compile(r"api-key\s*:\s*(?P<v>[^\s\"'`]{4,})", re.I), "literal credential"),
+    (re.compile(r"^\s*(?:#\s*|export\s+)?" + CREDENTIAL_KEY + r"\s*[:=]\s*(?P<v>[^\s\"'#]{4,})", re.I), "literal credential"),
     (re.compile(r"freenove|waveshare|\.\./stand\b|hardware/stand/|apps/espframe|pnpm nx", re.I), "source-repo or other-board reference"),
     (re.compile(r"(?:ghp|github_pat|gho|ghs|ghu)_[A-Za-z0-9_]{20,}|xox[bp]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY"), "token or key"),
 ]
@@ -268,14 +293,28 @@ ALLOW = {
 # another key, a workflow permission), booleans, substitutions, !secret and
 # <placeholders>, and the tests' made-up keys.
 CREDENTIAL_OK = re.compile(
-    r"[a-z]+(?:_[a-z]+)+|read|write|true|false|True|False|null|none|None|\$\{.*|!secret.*|<.*"
+    r"api_key|read|write|true|false|True|False|null|none|None|\$\{.*|!secret.*|!lambda.*|<.*"
     r"|fixture-read-only-api-key|imported-api-key"
+    # Code, not values: a TS type or a property/expression (`apiKey: string;`).
+    r"|\w+[;,]|string|number|boolean|\w+\.\w+.*|\w+\(.*"
+)
+URL_HOSTS_OK = re.compile(
+    r"(?:[\w-]+\.)*(?:github\.com|github\.io|githubusercontent\.com|npmjs\.org|immich\.app|esphome\.io"
+    r"|home-assistant\.io|polyformproject\.org|opencollective\.com|w3\.org|schema\.org|json-schema\.org"
+    r"|makerworld\.com|buymeacoffee\.com|aliexpress\.com|gnu\.org|fsf\.org|wikipedia\.org|laskakit\.cz"
+    r"|unpkg\.com|valgrind\.org|tidelift\.com|opensource\.org|libjpeg-turbo\.org|microsoft\.com"
+    r"|google\.com|googlesource\.com|cppreference\.com|mozilla\.org|ietf\.org|espressif\.com|pool\.ntp\.org"
+    r"|example\.com|example\.org|example\.net|example\.test|[\w-]+\.invalid|immich\.local)(?::\d*\w*)?"
+    r"|localhost(?::\d+)?|127\.0\.0\.1(?::\S*)?|<[^>]+>(?::\d+)?|\$\{[^}]+\}|\{[^}]+\}"
+    r"|192\.168\.(?:4\.1|1\.30|0\.1)(?::\d+)?|\.\.\.|\*",
+    re.I,
 )
 # Vendored third-party source credits its authors by email.
 ALLOW_PATHS = {"personal email": ("components/libwebp-esp32/",)}
 
 # package.json's check:ci: the checks that pass on the exported tree, which the
-# public Build workflow also runs. (The public repo ships package-lock.json and
+# public Build workflow also runs (plus scripts/check_timezones.py, which needs
+# the pinned tzdata from pip). (The public repo ships package-lock.json and
 # its CI uses npm, so the export runs npm too.)
 CHECK_SCRIPT = "check:ci"
 
@@ -311,17 +350,20 @@ def check_dest(dest: Path) -> None:
     home = Path.home().resolve()
     if dest == REPO or REPO in dest.parents or dest in REPO.parents or dest in (home, Path(dest.anchor)):
         die(f"refusing {dest}: it is, contains or is inside this repo, or is your home or a root dir")
-    if not dest.exists() or not any(dest.iterdir()):
+    if dest.exists() and not dest.is_dir():
+        die(f"refusing {dest}: it isn't a directory")
+    if not dest.exists() or not [c for c in dest.iterdir() if c.name != ".git"]:
+        return
+    # Files copy_tree writes first, so an export that failed part-way still counts.
+    if (dest / "product" / "contract" / "devices.json").is_file() and (dest / "common" / "addon" / "firmware_update.yaml").is_file():
         return
     if (dest / ".git").exists():
         origin = subprocess.run(
             ["git", "remote", "get-url", "origin"], cwd=dest, capture_output=True, text=True
         ).stdout.strip()
-        if not origin or re.search(r"/espframe(?:\.git)?/?$", origin):
+        if re.search(r"[:/]rcompton78/espframe(?:\.git)?/?$", origin):
             return
-        die(f"refusing {dest}: its origin ({origin}) isn't an espframe repo")
-    if (dest / "scripts" / "firmware.sh").is_file() and (dest / "product" / "contract" / "devices.json").is_file():
-        return
+        die(f"refusing {dest}: it has files and its origin ({origin or 'none'}) isn't rcompton78/espframe")
     die(f"refusing {dest}: it isn't empty, an espframe checkout or an earlier export, and the export empties it")
 
 
@@ -388,11 +430,11 @@ def apply_patches(dest: Path) -> None:
         path.write_text(text[:i] + replacement + text[j:])
     # Issue-tracker links point at a private workspace; keep the ticket ids, drop the URLs.
     for path in text_files(dest):
-        text = path.read_text()
+        text = path.read_bytes().decode("utf-8", errors="surrogateescape")
         new = re.sub(r" ?\(https://linear\.app/[^)\s]*\)", "", text)
         new = re.sub(r"https://linear\.app/[^\s)\]>,]*", "", new)
         if new != text:
-            path.write_text(new)
+            path.write_bytes(new.encode("utf-8", errors="surrogateescape"))
     rewrite_doc_links(dest)
     with (dest / ".gitignore").open("a") as f:
         f.write(GITIGNORE_EXTRA)
@@ -478,7 +520,11 @@ def scan(dest: Path) -> None:
             for m in pattern.finditer(text):
                 if m.group(0) in ALLOW.get(what, ()):
                     continue
-                if what == "literal credential" and CREDENTIAL_OK.fullmatch(m.group("v")):
+                if what == "literal credential" and CREDENTIAL_OK.fullmatch(m.group("v").strip()):
+                    continue
+                if what == "URL host" and URL_HOSTS_OK.fullmatch(m.group("host")):
+                    continue
+                if what == "private hostname" and m.group(0).lower() in ("immich.local",):
                     continue
                 if rel.startswith(ALLOW_PATHS.get(what, ())):
                     continue
@@ -489,13 +535,14 @@ def scan(dest: Path) -> None:
             continue
         rel = str(path.relative_to(dest))
         check_text(rel, f"{rel} (path)", rel)
-        if path.name in ("secrets.yaml", ".env") or path.name.startswith(".env."):
+        if path.name in ("secrets.yaml", ".env") or (path.name.startswith(".env.") and path.name != ".env.example"):
             hits.append(f"{rel}: must never be exported")
     for path in text_files(dest):
         rel = str(path.relative_to(dest))
         text = path.read_bytes().decode("utf-8", errors="replace")
         for lineno, line in enumerate(text.splitlines(), 1):
             check_text(rel, f"{rel}:{lineno}", line)
+    hits = list(dict.fromkeys(hits))
     if hits:
         print("\n".join(hits), file=sys.stderr)
         die(f"private-detail scan found {len(hits)} hit(s); fix the source or PATCHES and export again")
@@ -530,7 +577,7 @@ def commit(dest: Path) -> None:
     if not subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=dest).returncode:
         print("export: nothing changed since the last sync")
         return
-    run(["git", "commit", "-q", "-m", f"Sync from compton-diy {sha}"], dest)
+    run(["git", "commit", "-q", "-m", f"Sync {sha}"], dest)
     print(f"export: committed in {dest}; review it, then push")
 
 
@@ -559,12 +606,11 @@ def main() -> None:
         regenerate(dest)
         scan(dest)
         check(dest)
-    except SystemExit:
-        print(
-            f"export: {dest} is incomplete; don't commit it. "
-            f"Fix the problem and export again (or restore it with `git -C {dest} checkout . && git -C {dest} clean -fd`).",
-            file=sys.stderr,
-        )
+    except BaseException:
+        hint = ""
+        if subprocess.run(["git", "-C", str(dest), "rev-parse", "--verify", "-q", "HEAD"], capture_output=True).returncode == 0:
+            hint = f" (or restore it with `git -C {dest} checkout . && git -C {dest} clean -fd`)"
+        print(f"export: {dest} is incomplete; don't commit it. Fix the problem and export again{hint}.", file=sys.stderr)
         raise
     print(f"export: {dest} is ready")
     if args.commit:

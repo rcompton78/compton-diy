@@ -123,7 +123,7 @@ ota:
             global_preferences->sync();
 
 # External components (remote_image, espframe) come from this repo's components/, added
-# as a local source by each entry point (builds/*.yaml, dev.yaml). No git
+# as a local source by each entry point (builds/*.yaml). No git
 # source: ESPHome would clone it on every build for code that never compiles.
 
 espframe:

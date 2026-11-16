@@ -50,7 +50,7 @@ scripts/firmware.sh logs  --device /dev/ttyUSB0
 
 On macOS the port looks like `/dev/cu.usbserial-*` or `/dev/cu.usbmodem*`. On Windows, use WSL and attach the USB port to it with [usbipd-win](https://learn.microsoft.com/windows/wsl/connect-usb); it then shows up as `/dev/ttyUSB0` or `/dev/ttyACM0`. Once the frame is on Wi-Fi, `--device <frame-ip>` flashes and reads logs over the network.
 
-A local build reports version `dev` and has **no update manifest**, so it doesn't check for updates. (A manifest URL the frame already saved, e.g. from an earlier install from your Pages site, still applies: reinstall from the install page with erase, or change it under **Firmware** → **Advanced**.) To have a local build check your fork's releases, put the manifest URL in a `.env` file in the repo root before building:
+A local build reports version `dev` and has **no update manifest**, so it doesn't check for updates. (A manifest URL you set on the frame under **Firmware** → **Advanced**, or restored from a backup, still applies until you clear it there or reinstall with erase.) To have a local build check your fork's releases, put the manifest URL in a `.env` file in the repo root before building:
 
 ```bash
 FIRMWARE_MANIFEST_URL=https://<your-user>.github.io/<repo>/manifest.json
