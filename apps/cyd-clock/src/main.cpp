@@ -3045,8 +3045,8 @@ static bool isChristmasPresentsShown();
 
 // Christmas Night (COM-636) tree, centred at x=CHRISTMAS_TREE_X in the left column. Three stacked
 // tiers, each {apex dy, base dy, base half-width} relative to ANIMAL_Y. The tree stays at x<=46,
-// left of the boredom "Zz" column (x 48–70, y ANIMAL_Y+17..+51), and its trunk ends above the
-// Meds button (MEDS_Y = ANIMAL_Y+96), so it's never covered except by Meds' top while sick.
+// left of the boredom "Zz" column (x 48–70, y ANIMAL_Y+17..+51), and its trunk and snow mound
+// end above the Meds button (MEDS_Y = ANIMAL_Y+96), so nothing ever covers it.
 static constexpr int CHRISTMAS_TREE_X = 26;
 struct ChristmasTier { int8_t apexDy, baseDy, halfW; };
 static constexpr ChristmasTier CHRISTMAS_TREE_TIERS[] = {

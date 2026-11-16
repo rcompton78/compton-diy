@@ -1196,11 +1196,13 @@ wrap handling (see COM-513).
     sagging across the top (mostly behind the cat's head, ending at x=157 so it stays out of the
     badge column), and a lit tree with a gold star on a small snow mound in the left column.
     The first version also had snowdrifts behind the buttons, but on the device they framed each
-    button in a white box, so they were dropped. The name strip stays plain navy (the theme's bgColor) because the
-    label erases its glyph cells with bgColor, the same reason as Hogwarts' lake.
+    button in a white box, so they were dropped. The name strip stays plain navy (the theme's
+    bgColor) because the label erases its glyph cells with bgColor, the same reason as
+    Hogwarts' lake.
   - **Dec 25 only**: three presents at the foot of the tree. Placement follows the COM-379 ghost
-    lesson: the tree sits at x<=46 (left of the "Zz" column) with its trunk and the presents
-    ending at ANIMAL_Y+93, above the Meds button (ANIMAL_Y+96), so nothing ever covers them.
+    lesson: the tree sits at x<=46 (left of the "Zz" column), and the trunk (ANIMAL_Y+90), the
+    presents (+92) and the snow mound (+95) all end above the Meds button (ANIMAL_Y+96), so
+    nothing ever covers them.
     `checkThemeWeekTransition()` repaints the backdrop once when they appear or disappear.
   - Snowflakes avoid the "Zz" boxes, the badge column and the name strip, since
     those print text with a bgColor box.
