@@ -46,8 +46,10 @@ rather than trusting a hardcoded list here, since the catalogs grow over time:
 grep -A3 'CAT_COLORS\[\] = {\|STUFFIES\[\] = {\|BLANKET_COLORS\[\] = {\|ROOM_THEMES\[\] = {\|ACCESSORIES\[\] = {' apps/cyd-clock/src/main.cpp
 ```
 
-Plus the one special case not from a catalog array: `right_arm_slot` (the one-time
-right-arm buddy slot unlock).
+Plus two special cases not from a catalog array: `right_arm_slot` (the one-time
+right-arm buddy slot unlock), and `advent_calendar` (the Advent calendar, COM-655). The device
+only accepts a sale on the calendar between Nov 20 and Dec 24 (or in Christmas Preview), like
+the other seasonal items; outside that window it rejects the sale and shows no SALE banner.
 
 Store combos (COM-507) are valid sale targets too: their `combo_*` ids live in `STORE_COMBOS[]`.
 A sale on a combo id discounts that combo; a sale on one of its items doesn't change the combo's

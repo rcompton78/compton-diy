@@ -125,6 +125,23 @@ struct AppConfig {
     // 1 = Preview (forced on, with the Dec 25 presents), 2 = Off. See CHRISTMAS_MODE_* and
     // isChristmasWeekActive() in main.cpp.
     uint8_t themeWeekChristmasMode = 0;
+
+    // Advent calendar (COM-655), a one-year legendary store item; see AdventCalendar.h.
+    // You own it exactly when adventYear is the clock's current local year, so it lapses on its
+    // own on Jan 1 and is back in the store the next November; 0 = never bought.
+    uint16_t adventYear = 0;
+    // Bit d-1 set = door d has been opened (25 bits used). Cleared on each purchase.
+    uint32_t adventOpened = 0;
+    // What each of the three gift doors gave, one byte each (byte 0 = the first gift door),
+    // packed by main.cpp's packAdventGift(); 0xFF = not opened yet, or the points fallback.
+    uint32_t adventGifts = 0xFFFFFFFF;
+    // Unspent 50%-off coupons and Christmas vouchers (a free item). Never expire, and kept
+    // across years even though the calendar itself lapses.
+    uint8_t adventCoupons  = 0;
+    uint8_t adventVouchers = 0;
+    // Admin-page test setting, only used while the Christmas theme week is in Preview:
+    // 0 = every door unlocked, 1–25 = act as if today were that day of December.
+    uint8_t adventPreviewDay = 0;
 };
 
 class ConfigManager {
