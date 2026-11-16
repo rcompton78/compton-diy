@@ -30,6 +30,7 @@ constexpr int GRID_X    = 3;
 constexpr int GRID_Y    = 50;
 constexpr int CELL      = 45;
 constexpr int PITCH     = 47;
+static_assert(DOOR_COUNT == 5 * 5, "the layout below is hard-coded to a 5x5 grid");
 constexpr int FOOTER_Y  = GRID_Y + 5 * PITCH + 2;  // 287
 constexpr int CARD_X = 12, CARD_Y = 52, CARD_W = 216, CARD_H = 248;
 constexpr int CARD_ICON_CY = CARD_Y + 62;
@@ -340,7 +341,7 @@ void AdventCalendarUi::drawReveal() {
         drawCentredLines(_tft, "Couldn't save.\nPlease try again.", CARD_TEXT_Y - 30, TFT_RED, C_CARD);
     } else {
         const advent::Door& door = DOORS[_day - 1];
-        char buf[48];
+        char buf[64];  // the longest text (the Christmas card) is 52 chars
         switch (door.reward) {
             case Reward::Points:
                 snprintf(buf, sizeof(buf), "%u", (unsigned)door.value);

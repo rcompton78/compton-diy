@@ -12,7 +12,7 @@
 //   - On sale Nov 20 to Dec 24 (or any time in Christmas Preview), 350 points, one year only:
 //     owned exactly while ConfigManager's adventYear is the current local year.
 //   - Door d opens from Dec d. Missed doors can be caught up any time until Dec 31.
-//   - The same 25 doors every year (DOORS below).
+//   - The same 25 doors every year (DOORS, defined in AdventCalendar.cpp).
 namespace advent {
 
 static constexpr int DOOR_COUNT     = 25;
@@ -43,44 +43,15 @@ struct Door {
     uint8_t value;
 };
 
-// Door d is DOORS[d - 1].
-static constexpr Door DOORS[DOOR_COUNT] = {
-    {Reward::Ornament, 0},  //  1 red ball
-    {Reward::Points, 10},   //  2
-    {Reward::Joke, 0},      //  3
-    {Reward::Points, 10},   //  4
-    {Reward::Ornament, 1},  //  5 gold bell
-    {Reward::Gift, 0},      //  6
-    {Reward::Points, 10},   //  7
-    {Reward::Points, 10},   //  8
-    {Reward::Ornament, 2},  //  9 candy cane
-    {Reward::Coupon, 0},    // 10
-    {Reward::Joke, 1},      // 11
-    {Reward::Points, 15},   // 12
-    {Reward::Gift, 1},      // 13
-    {Reward::Points, 15},   // 14
-    {Reward::Ornament, 3},  // 15 blue ball
-    {Reward::Points, 15},   // 16
-    {Reward::Coupon, 0},    // 17
-    {Reward::Points, 15},   // 18
-    {Reward::Ornament, 4},  // 19 snowflake
-    {Reward::Gift, 2},      // 20
-    {Reward::Points, 25},   // 21
-    {Reward::Joke, 2},      // 22
-    {Reward::Points, 25},   // 23
-    {Reward::Ornament, 5},  // 24 gingerbread
-    {Reward::Christmas, 0}, // 25
-};
+// Door d is DOORS[d - 1]. Defined once in AdventCalendar.cpp (which static_asserts the mix),
+// so each file that includes this header doesn't get its own copy (COM-386 flash diet).
+extern const Door DOORS[DOOR_COUNT];
 
 struct Joke {
     const char* question;  // '\n' marks a line break on the reveal card
     const char* answer;
 };
-static constexpr Joke JOKES[JOKE_COUNT] = {
-    {"What do you call a\ncat on the beach\nat Christmas?", "Sandy Claws!"},
-    {"What is a cat's\nfavourite carol?", "Deck the Halls\nwith Balls of Yarn!"},
-    {"What do snowmen\neat for breakfast?", "Frosted Flakes!"},
-};
+extern const Joke JOKES[JOKE_COUNT];
 
 // Whether the calendar is sold on this local date (MMDD; -1 = clock not synced yet). Ignores
 // Preview and ownership, which the caller adds.
@@ -97,13 +68,19 @@ bool isSaleDate(int mmdd);
  */
 int todayDoor(bool owned, int mmdd, bool preview, uint8_t previewDay);
 
+// The helpers below take door numbers 1..DOOR_COUNT. 0 is a real value in this design ("no
+// door": todayDoor() and ornamentDoor() return it), and any day outside 1..DOOR_COUNT is simply
+// never opened or openable, so callers can pass those results straight through.
+
+// Whether door `day` is opened in `openedMask` (bit day-1). False for a day outside 1..DOOR_COUNT.
 bool isOpened(uint32_t openedMask, int day);
-// Door `day` can be opened now: it's at or before `today` and not opened yet.
+// Whether door `day` can be opened now: a real door, at or before `today`, and not opened yet.
 bool isOpenable(uint32_t openedMask, int day, int today);
-// Any door can be opened now (drives the room's pulsing gift icon).
+// Whether any door can be opened now (drives the room's pulsing gift icon). `today` = todayDoor().
 bool anyOpenable(uint32_t openedMask, int today);
+// How many doors are opened; mask bits beyond the DOOR_COUNT doors are ignored.
 int openedCount(uint32_t openedMask);
-// The door that holds ornament `k`.
+// The door that holds ornament `k`, or 0 when `k` isn't an ornament (out of range).
 int ornamentDoor(int k);
 
 }  // namespace advent

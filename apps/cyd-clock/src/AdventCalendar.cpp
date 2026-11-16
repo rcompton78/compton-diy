@@ -2,6 +2,41 @@
 
 namespace advent {
 
+// The schedule (declared in the header). constexpr so the static_asserts below can check it.
+constexpr Door DOORS[DOOR_COUNT] = {
+    {Reward::Ornament, 0},  //  1 red ball
+    {Reward::Points, 10},   //  2
+    {Reward::Joke, 0},      //  3
+    {Reward::Points, 10},   //  4
+    {Reward::Ornament, 1},  //  5 gold bell
+    {Reward::Gift, 0},      //  6
+    {Reward::Points, 10},   //  7
+    {Reward::Points, 10},   //  8
+    {Reward::Ornament, 2},  //  9 candy cane
+    {Reward::Coupon, 0},    // 10
+    {Reward::Joke, 1},      // 11
+    {Reward::Points, 15},   // 12
+    {Reward::Gift, 1},      // 13
+    {Reward::Points, 15},   // 14
+    {Reward::Ornament, 3},  // 15 blue ball
+    {Reward::Points, 15},   // 16
+    {Reward::Coupon, 0},    // 17
+    {Reward::Points, 15},   // 18
+    {Reward::Ornament, 4},  // 19 snowflake
+    {Reward::Gift, 2},      // 20
+    {Reward::Points, 25},   // 21
+    {Reward::Joke, 2},      // 22
+    {Reward::Points, 25},   // 23
+    {Reward::Ornament, 5},  // 24 gingerbread
+    {Reward::Christmas, 0}, // 25
+};
+
+constexpr Joke JOKES[JOKE_COUNT] = {
+    {"What do you call a\ncat on the beach\nat Christmas?", "Sandy Claws!"},
+    {"What is a cat's\nfavourite carol?", "Deck the Halls\nwith Balls of Yarn!"},
+    {"What do snowmen\neat for breakfast?", "Frosted Flakes!"},
+};
+
 // The schedule agreed on the card: 10 points days worth 150 in all, 3 gifts, 2 coupons,
 // 3 jokes, 6 ornaments, and the Dec 25 door. Checked at compile time so an edit can't quietly
 // change the mix. Recursive so each stays a constant expression.
@@ -48,15 +83,19 @@ bool isOpened(uint32_t openedMask, int day) {
 }
 
 bool isOpenable(uint32_t openedMask, int day, int today) {
-    return day >= 1 && day <= today && !isOpened(openedMask, day);
+    return day >= 1 && day <= DOOR_COUNT && day <= today && !isOpened(openedMask, day);
 }
 
 bool anyOpenable(uint32_t openedMask, int today) {
-    for (int d = 1; d <= today; d++) {
+    for (int d = 1; d <= today && d <= DOOR_COUNT; d++) {
         if (!isOpened(openedMask, d)) return true;
     }
     return false;
 }
+
+// The opened-doors mask is 32 bits (ConfigManager::adventOpened, and 1u << (day - 1) above).
+// Strictly below 32, since openedCount() also shifts by DOOR_COUNT.
+static_assert(DOOR_COUNT < 32, "the opened-doors mask holds at most 31 doors");
 
 int openedCount(uint32_t openedMask) {
     return __builtin_popcount(openedMask & ((1u << DOOR_COUNT) - 1));
