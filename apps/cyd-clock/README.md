@@ -7,8 +7,10 @@ gamified points/levels, and a cosmetics store (colors, hats, glasses, chest badg
 toys, room themes, plus a few pricey legendary items like a Sorting Hat, Hogwarts and Gryffindor chest badges, a Hogwarts at Night room theme, and a Haunted Pumpkin
 Patch room theme that's only sold in October but stays yours all year once bought) — all configurable from a web UI served by the device itself. A few times a year
 the cat gets a seasonal theme week: Halloween (Oct 24–31) dresses it in a witch hat and
-candy-corn sunglasses in front of a Haunted Night backdrop, and the device can also be given
-a birthday week. Both turn on and off by themselves.
+candy-corn sunglasses in front of a Haunted Night backdrop, Christmas (Dec 1–26) brings a Santa
+hat, Christmas tree glasses and a snowy Christmas Night backdrop (with presents under the tree
+on the 25th), and the device can also be given a birthday week. They all turn on and off by
+themselves.
 
 ## Install (no cables, no toolchain)
 

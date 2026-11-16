@@ -37,7 +37,7 @@ Done: room/background themes (DIY-38) — `RoomTheme`/`ROOM_THEMES[]` in `apps/c
 
 ## Theme-week exclusives
 
-Theme weeks (DIY-108 Birthday, COM-379 Halloween) hand out cosmetics that can't be bought:
+Theme weeks (DIY-108 Birthday, COM-379 Halloween, COM-636 Christmas) hand out cosmetics that can't be bought:
 they're appended to their catalogs with cost 0 (or past `GLASSES_STORE_COUNT` in `GLASSES[]`) and granted/revoked by date. Ideas
 left on the table:
 
@@ -45,8 +45,10 @@ left on the table:
   revisit if flash on the `cyd` board is ever freed up.
 - ~~Flickering jack-o'-lantern eyes on Oct 31.~~ Done in COM-503, as the legendary Haunted
   Pumpkin Patch room theme (bought, not granted by the theme week).
-- A Christmas week (Dec 18–25?) on the same pattern: santa hat, snowflake glasses, a
-  fireplace/snowfall room theme.
+- ~~A Christmas week on the same pattern.~~ Done in COM-636 (Dec 1–26: Santa hat, Christmas
+  tree glasses, Christmas Night backdrop). Its snow is static; falling snow would be an
+  animated backdrop, which has to stay clear of every overlay (see Hogwarts at Night). December
+  store items are COM-637.
 
 ## Legendary tier
 

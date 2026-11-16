@@ -189,6 +189,8 @@ void ConfigManager::fromJson(JsonDocument& doc) {
         // reach isHalloweenWeekActive(), which treats anything but Preview/Off as Auto anyway.
         uint8_t mode = doc["themeWeekHalloweenMode"] | _config.themeWeekHalloweenMode;
         if (mode <= 2) _config.themeWeekHalloweenMode = mode;
+        mode = doc["themeWeekChristmasMode"] | _config.themeWeekChristmasMode;
+        if (mode <= 2) _config.themeWeekChristmasMode = mode;
     }
 }
 
@@ -254,6 +256,7 @@ void ConfigManager::toJson(JsonDocument& doc) const {
     doc["themeWeekActive"]         = _config.activeThemeWeekKey;
     doc["themeWeekPrevRoomTheme"]  = _config.preThemeWeekRoomTheme;
     doc["themeWeekHalloweenMode"]  = _config.themeWeekHalloweenMode;
+    doc["themeWeekChristmasMode"]  = _config.themeWeekChristmasMode;
 }
 
 // load()/save() go through a String rather than handing ArduinoJson the fs::File stream

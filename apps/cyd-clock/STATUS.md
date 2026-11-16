@@ -1175,6 +1175,53 @@ render; the first pass was drawn from memory and got the colours, leg rings and 
   (1,161,633 → 1,163,085 B, 34.8%), on top of COM-517. Baselines were re-measured on master,
   which is why the `cyd` one is 48 B under the figure recorded in the section above.
 
+## Theme Weeks — Christmas Theme (COM-636, 2026-11-16)
+
+The third theme week, a copy of Halloween's (COM-379) mechanism. It's on from **Dec 1 00:00 to
+Dec 27 00:00 local time, every year** (the card's suggested window), with no setup. Dec 1–26
+doesn't cross New Year, so the plain MMDD range check works; a window into January would need
+wrap handling (see COM-513).
+
+- **Cosmetics** (all exclusive, cost 0 / past `GLASSES_STORE_COUNT`), each appended at a new
+  index, never inserted: `ACCESSORY_IDX_SANTA_HAT` = 13 (after the Sorting Hat),
+  `GLASSES_IDX_CHRISTMAS_TREE` = 3 (`GLASSES_STORE_COUNT` is now `GLASSES_COUNT - 3`; a
+  `static_assert` pins all three theme-week glasses indices), `ROOM_THEME_IDX_CHRISTMAS` = 13
+  (after Haunted Pumpkin Patch).
+  - **Santa Hat**: a red cone flopping to the right into a white pompom, on a white fur brim.
+    The white parts have a 1px grey outline so they don't vanish on a white cat.
+  - **Christmas Tree Glasses**: a point-up green tree over each eye with a gold star and
+    ornament dots, a gold bridge and arms. Like the candy-corn lenses, the eye rect is
+    repainted with fur colour first.
+  - **Christmas Night** room theme: a navy night sky with static snowflakes, a string of lights
+    sagging across the top (mostly behind the cat's head, ending at x=157 so it stays out of the
+    badge column), and a lit tree with a gold star on a small snow mound in the left column.
+    The first version also had snowdrifts behind the buttons, but on the device they framed each
+    button in a white box, so they were dropped. The name strip stays plain navy (the theme's
+    bgColor) because the label erases its glyph cells with bgColor, the same reason as
+    Hogwarts' lake.
+  - **Dec 25 only**: three presents at the foot of the tree. Placement follows the COM-379 ghost
+    lesson: the tree sits at x<=46 (left of the "Zz" column), and the trunk (ANIMAL_Y+90), the
+    presents (+92) and the snow mound (+95) all end above the Meds button (ANIMAL_Y+96), so
+    nothing ever covers them.
+    `checkThemeWeekTransition()` repaints the backdrop once when they appear or disappear.
+  - Snowflakes avoid the "Zz" boxes, the badge column and the name strip, since
+    those print text with a bgColor box.
+- **Admin override**: a Christmas Auto/Preview/Off select on `/config/admin/themeweek`, posting
+  to `/config/admin/themeweek/christmas`, persisted as `themeWeekChristmasMode` and included in
+  backups. Preview forces the full look, presents included. The Halloween and Christmas POST
+  handlers now share `handleThemeWeekModePost()`.
+- **Overlap order**: Birthday, then Halloween, then Christmas. The Auto windows never overlap,
+  so Halloween over Christmas only matters if both are in Preview.
+- **Not done here**: December-only store items (COM-637, which will reuse the Christmas Preview
+  flag). Falling snow was left static: an animated backdrop has to keep every animated pixel
+  clear of every overlay.
+- **Flash** (`pio run` size report):
+
+| Board | Before | After | Delta | % used |
+|---|---|---|---|---|
+| `cyd` | 1,209,721 B | 1,214,053 B | +4,332 B | 92.3% → 92.6% (~94.3KB left) |
+| `freenove-s3` | 1,163,213 B | 1,167,505 B | +4,292 B | 34.8% → 34.9% |
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`
