@@ -1270,6 +1270,43 @@ only buying is limited, and anything bought stays owned and equippable all year.
 | `cyd` | 1,214,001 B | 1,218,257 B | +4,256 B | 92.6% → 92.9% (~90.3KB left) |
 | `freenove-s3` | 1,167,457 B | 1,171,709 B | +4,252 B | 34.9% → 35.1% |
 
+## Advent Calendar (COM-655, 2026-11-16)
+
+A one-year legendary store item (350): one door a day from Dec 1 to 25, opened on the device.
+
+- **Code layout**: the first cyd-clock feature built mostly outside `main.cpp`.
+  `src/AdventCalendar.h/.cpp` is pure logic (the 25-door schedule, jokes, `static_assert`s on the
+  agreed mix, and the today/openable math), with no globals. `src/AdventCalendarUi.h/.cpp` is the
+  full-screen overlay plus the shared art (ornaments, present, star); it gets a `TFT_eSPI&` and an
+  `AdventUiHost` struct of callbacks and never touches `main.cpp` statics. `main.cpp` keeps the
+  glue: date gates, rewards, store/admin handlers, touch routing and the loop takeover.
+- **Ownership**: `adventYear` in ConfigManager; owned exactly while it's the current local year,
+  so it lapses on Jan 1 and is sold again the next November. `adventOpened` (25 bits),
+  `adventGifts` (one packed byte per gift door, so an opened door can name its item),
+  `adventCoupons`, `adventVouchers` and `adventPreviewDay` are all new, default to "never
+  bought", and are read with range checks, so old configs and backups load unchanged.
+- **Store**: `advent_calendar`, first row of the Christmas section, which now also opens from
+  Nov 20 to Dec 24 (`isAdventCalendarOnSale()`) with only the calendar until Dec 1. Flash sales
+  work inside that window only (`isSeasonalItemIdOffSale()`).
+- **Doors**: a pulsing present in the badge column's top row, left of the level medal, while any
+  door can be opened (`adventIconShown()`, hidden in the sleep window). Tapping it opens a
+  full-screen takeover modelled on the fireworks: garland, 5×5 doors, a 6-frame door swing and a
+  reveal card. Missed doors can be caught up until Dec 31. The overlay ignores taps for 500 ms
+  after each screen change, because the touch drivers repeat a held press every 350 ms.
+- **Rewards** (`openAdventDoor()`): 10 points days (150 in all, no XP), 3 gifts (a random unowned
+  non-legendary item on sale now, not equipped; 50 points if none), 2 coupons, 3 jokes, 6
+  ornaments (drawn on the Christmas Night tree at fixed spots clear of its bulbs), and on Dec 25
+  100 points plus a voucher. Coupons (half price, not with a flash sale) and vouchers (free) are
+  spent from any item row through `pay=coupon|voucher`; never combos or the calendar.
+- **Admin** (theme-week page): status, a Preview day (all doors, or act as Dec N), and Reset
+  (with an optional ownership clear). In Christmas Preview, tapping an opened door replays it.
+- **Flash** (`pio run` size report against master 33b10fe):
+
+| Board | Before | After | Delta | % used |
+|---|---|---|---|---|
+| `cyd` | 1,218,257 B | 1,230,825 B | +12,568 B | 92.9% → 93.9% (~78KB left) |
+| `freenove-s3` | 1,171,709 B | 1,184,453 B | +12,744 B | 35.1% → 35.4% |
+
 ## Branch & Files
 
 - Branch: `feature/DIY-1-cyd-clock-weather-timer`

@@ -192,6 +192,18 @@ void ConfigManager::fromJson(JsonDocument& doc) {
         mode = doc["themeWeekChristmasMode"] | _config.themeWeekChristmasMode;
         if (mode <= 2) _config.themeWeekChristmasMode = mode;
     }
+    // Advent calendar (COM-655). Missing keys keep the defaults, so older configs and backups
+    // load as "never bought"; out-of-range values (e.g. from a newer firmware) are masked or
+    // ignored rather than trusted.
+    _config.adventYear     = doc["adventYear"]     | _config.adventYear;
+    _config.adventOpened   = (doc["adventOpened"]  | _config.adventOpened) & 0x1FFFFFFu;  // 25 doors
+    _config.adventGifts    = doc["adventGifts"]    | _config.adventGifts;
+    _config.adventCoupons  = doc["adventCoupons"]  | _config.adventCoupons;
+    _config.adventVouchers = doc["adventVouchers"] | _config.adventVouchers;
+    {
+        uint8_t day = doc["adventPreviewDay"] | _config.adventPreviewDay;
+        if (day <= 25) _config.adventPreviewDay = day;
+    }
 }
 
 void ConfigManager::toJson(JsonDocument& doc) const {
@@ -257,6 +269,12 @@ void ConfigManager::toJson(JsonDocument& doc) const {
     doc["themeWeekPrevRoomTheme"]  = _config.preThemeWeekRoomTheme;
     doc["themeWeekHalloweenMode"]  = _config.themeWeekHalloweenMode;
     doc["themeWeekChristmasMode"]  = _config.themeWeekChristmasMode;
+    doc["adventYear"]       = _config.adventYear;
+    doc["adventOpened"]     = _config.adventOpened;
+    doc["adventGifts"]      = _config.adventGifts;
+    doc["adventCoupons"]    = _config.adventCoupons;
+    doc["adventVouchers"]   = _config.adventVouchers;
+    doc["adventPreviewDay"] = _config.adventPreviewDay;
 }
 
 // load()/save() go through a String rather than handing ArduinoJson the fs::File stream
