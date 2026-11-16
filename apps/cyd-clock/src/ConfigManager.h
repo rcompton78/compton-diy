@@ -98,7 +98,8 @@ struct AppConfig {
     // Special theme weeks (DIY-108) — entirely local/offline, set via the device's own 7-tap
     // secret admin page (/config/admin/themeweek), not any server. Each theme gets its own
     // hardcoded fields rather than a generic table: "birthday" has the admin-picked date range
-    // below, and "halloween" (COM-379) has fixed dates plus themeWeekHalloweenMode further down.
+    // below, and "halloween" (COM-379) and "christmas" (COM-636) have fixed dates plus their own
+    // themeWeekHalloweenMode/themeWeekChristmasMode further down.
     // See main.cpp's Theme weeks section for the full mechanism.
     // Calendar dates only (no time-of-day — the admin page is a plain date picker), packed as
     // YYYYMMDD; 0 = unset. The theme is active for the whole of both the start and end date,
@@ -120,6 +121,10 @@ struct AppConfig {
     // every year from the local clock), 1 = Preview (forced on, with the Oct 31 ghost),
     // 2 = Off. See HALLOWEEN_MODE_* and isHalloweenWeekActive() in main.cpp.
     uint8_t themeWeekHalloweenMode = 0;
+    // Christmas theme week (COM-636) override, same encoding: 0 = Auto (Dec 1–26 every year),
+    // 1 = Preview (forced on, with the Dec 25 presents), 2 = Off. See CHRISTMAS_MODE_* and
+    // isChristmasWeekActive() in main.cpp.
+    uint8_t themeWeekChristmasMode = 0;
 };
 
 class ConfigManager {

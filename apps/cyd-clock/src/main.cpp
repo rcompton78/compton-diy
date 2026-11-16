@@ -217,6 +217,20 @@ static constexpr uint16_t C_WITCH_HAT_RIM    = 0x9B5A;  // 1px lavender outline 
 static constexpr uint16_t C_WITCH_HAT_BAND   = 0xFC40;  // witch hat band, candy-corn temple arms (~#ff8a00)
 static constexpr uint16_t C_CANDY_CORN_TOP   = 0xFE83;  // candy-corn lens wide yellow band (~#ffd21f)
 
+// Christmas theme-week colors (COM-636). Christmas Night's sky doubles as the theme's bgColor, so
+// the strip behind the cat's name stays this flat navy (no snow there), like Hogwarts' lake. The
+// Santa hat's white fur gets a grey outline so it doesn't vanish on a white cat.
+static constexpr uint16_t C_XMAS_SKY        = 0x08A6;  // deep navy night sky (~#081430)
+static constexpr uint16_t C_XMAS_SNOW       = 0xEF9F;  // the snow mound under the tree, a cool white (~#e8f0ff)
+static constexpr uint16_t C_XMAS_TREE       = 0x1BC6;  // tree and tree-lens green (~#1f7a30)
+static constexpr uint16_t C_XMAS_TREE_DARK  = 0x12C5;  // shaded tree tiers (~#145a28)
+static constexpr uint16_t C_XMAS_TRUNK      = 0x69E3;  // tree trunk (~#6b3e1e)
+static constexpr uint16_t C_XMAS_GOLD       = 0xFEA0;  // tree-top star, tree-glasses stars and arms (~#ffd400)
+static constexpr uint16_t C_XMAS_WIRE       = 0x2204;  // light-string wire (~#204020)
+static constexpr uint16_t C_XMAS_BULB_BLUE  = 0x3D9F;  // blue light bulb (~#38b0ff)
+static constexpr uint16_t C_SANTA_RED       = 0xD104;  // Santa hat, red present (~#d42020)
+static constexpr uint16_t C_SANTA_FUR_LINE  = 0xA534;  // grey outline around the hat's white fur (~#a0a4a0)
+
 // Legendary Harry Potter items (COM-382). The Sorting Hat is charcoal (COM-447, brown before), so
 // its dark fill reads on pale furs and pale themes, while its mid-grey outline and creases are what
 // separate it from a black cat and the dark themes (black, navy, plum) and keep the crumples and
@@ -349,6 +363,7 @@ static void drawBowFlamingoPink(int cx, int cy);
 static void drawPartyHat(int cx, int cy);
 static void drawWitchHat(int cx, int cy);
 static void drawSortingHat(int cx, int cy);
+static void drawSantaHat(int cx, int cy);
 
 // Accessory catalog — same purchase/equip model as cat colors, but layered independently
 // on top of whichever cat color is equipped (an accessory works with any fur color). `id` is
@@ -389,6 +404,9 @@ static constexpr Accessory ACCESSORIES[] = {
     // one mid-theme-week. Store code skips the theme-week entries with isStoreAccessory() instead
     // of assuming the purchasable entries are a contiguous prefix.
     {"sorting_hat", "Sorting Hat", STORE_COST_LEGENDARY, "#A8A8A8", drawSortingHat},
+    // Theme-week exclusive again (cost 0), appended after the Sorting Hat for the same
+    // index-keyed-bitmask reason: never insert, only append.
+    {"santa_hat", "Santa Hat", 0, "#D42020", drawSantaHat},  // Christmas (COM-636)
 };
 static constexpr int ACCESSORY_COUNT = sizeof(ACCESSORIES) / sizeof(ACCESSORIES[0]);
 static_assert(ACCESSORY_COUNT <= 16, "ownedAccessories bitmask is uint16_t");
@@ -398,8 +416,10 @@ static_assert(ACCESSORY_COUNT <= 16, "ownedAccessories bitmask is uint16_t");
 // with cost 0 and gets its own fixed index here.
 static constexpr int ACCESSORY_IDX_PARTY_HAT = 10;
 static constexpr int ACCESSORY_IDX_WITCH_HAT = 11;
-static_assert(ACCESSORY_COUNT > ACCESSORY_IDX_WITCH_HAT, "theme-week accessory indices out of range");
-static_assert(ACCESSORIES[ACCESSORY_IDX_PARTY_HAT].cost == 0 && ACCESSORIES[ACCESSORY_IDX_WITCH_HAT].cost == 0,
+static constexpr int ACCESSORY_IDX_SANTA_HAT = 13;
+static_assert(ACCESSORY_COUNT > ACCESSORY_IDX_SANTA_HAT, "theme-week accessory indices out of range");
+static_assert(ACCESSORIES[ACCESSORY_IDX_PARTY_HAT].cost == 0 && ACCESSORIES[ACCESSORY_IDX_WITCH_HAT].cost == 0 &&
+              ACCESSORIES[ACCESSORY_IDX_SANTA_HAT].cost == 0,
               "theme-week exclusives must be cost 0, or isStoreAccessory() would put them in the store");
 
 /**
@@ -435,6 +455,7 @@ static void drawSunglassesPinkRim(int cx, int cy);
 // store-purchasable — see GLASSES_STORE_COUNT below.
 static void drawBalloonSunglasses(int cx, int cy);
 static void drawCandyCornSunglasses(int cx, int cy);
+static void drawChristmasTreeGlasses(int cx, int cy);
 
 // Glasses catalog — a separate accessory slot from ACCESSORIES[] (own store section, own
 // dressing-room control, own owned/equipped bitmask), even though the struct shape and
@@ -456,6 +477,7 @@ static constexpr Glasses GLASSES[] = {
     // store-purchasable entry above; see GLASSES_STORE_COUNT.
     {"balloon_sunglasses", "Birthday Balloon Sunglasses", 0, "#FF0000", drawBalloonSunglasses},
     {"candy_corn_sunglasses", "Candy Corn Sunglasses", 0, "#FFD21F", drawCandyCornSunglasses},  // Halloween (COM-379)
+    {"christmas_tree_glasses", "Christmas Tree Glasses", 0, "#2E9E48", drawChristmasTreeGlasses},  // Christmas (COM-636)
 };
 static constexpr int GLASSES_COUNT = sizeof(GLASSES) / sizeof(GLASSES[0]);
 static_assert(GLASSES_COUNT <= 8, "ownedGlasses bitmask is uint8_t");
@@ -464,9 +486,12 @@ static_assert(GLASSES_COUNT <= 8, "ownedGlasses bitmask is uint8_t");
 // GLASSES_COUNT, so theme-exclusive entries never show up as purchasable and never trip the
 // "new store items!" badge (see hasNewStoreItems()). The subtracted number is the size of that
 // exclusive block: bump it whenever a theme week appends another entry.
-static constexpr int GLASSES_STORE_COUNT = GLASSES_COUNT - 2;
-static constexpr int GLASSES_IDX_BALLOON    = GLASSES_STORE_COUNT;
-static constexpr int GLASSES_IDX_CANDY_CORN = GLASSES_STORE_COUNT + 1;
+static constexpr int GLASSES_STORE_COUNT = GLASSES_COUNT - 3;
+static constexpr int GLASSES_IDX_BALLOON        = GLASSES_STORE_COUNT;
+static constexpr int GLASSES_IDX_CANDY_CORN     = GLASSES_STORE_COUNT + 1;
+static constexpr int GLASSES_IDX_CHRISTMAS_TREE = GLASSES_STORE_COUNT + 2;
+static_assert(GLASSES_IDX_BALLOON == 1 && GLASSES_IDX_CANDY_CORN == 2 && GLASSES_IDX_CHRISTMAS_TREE == 3,
+              "glasses ownership is an index-keyed bitmask: theme-week glasses must keep their indices");
 
 // Forward-declared for the same reason as the bow functions above.
 static void drawHogwartsCrest(int cx, int cy);
@@ -650,6 +675,11 @@ static void drawHogwartsNightBackground(int x, int y, int w, int h);
 // drawHogwartsNightBackground().
 static void drawPumpkinPatchBackground(int x, int y, int w, int h);
 
+// Forward declaration: theme-week-exclusive (COM-636) "Christmas Night" backdrop (lit tree,
+// string of lights, snowfall, snowdrifts, plus presents on Dec 25), defined further below
+// alongside drawPumpkinPatchBackground().
+static void drawChristmasNightBackground(int x, int y, int w, int h);
+
 // Room theme catalog — same purchase/equip model as blanket colors and stuffies. `id` is
 // the stable identifier used in store/dressing-room form requests; ConfigManager persists
 // ownership as an `ownedRoomThemes` bitmask and the equipped selection as a numeric
@@ -690,6 +720,8 @@ static constexpr RoomTheme ROOM_THEMES[] = {
     {"hogwarts_night", "Hogwarts at Night", STORE_COST_LEGENDARY, C_HOGWARTS_SKY, drawHogwartsNightBackground, "#E8B030"},  // legendary: castle + lit windows + shooting star, gold label
     // Legendary, sold only in October (COM-503, see isPumpkinPatchOnSale()); owners keep it all year.
     {"pumpkin_patch", "Haunted Pumpkin Patch", STORE_COST_LEGENDARY, C_PUMPKIN_PATCH_SKY, drawPumpkinPatchBackground, "#FF9A1F"},  // moon + haunted house + flickering jack-o'-lanterns + bat, orange label
+    // Theme-week exclusive again (cost 0), appended, never inserted (index-keyed bitmask).
+    {"christmas_night", "Christmas Night", 0, C_XMAS_SKY, drawChristmasNightBackground, nullptr},  // Christmas (COM-636): tree + lights + snow — label stays white
 };
 static constexpr int ROOM_THEME_COUNT = sizeof(ROOM_THEMES) / sizeof(ROOM_THEMES[0]);
 static_assert(ROOM_THEME_COUNT <= 16, "ownedRoomThemes bitmask is uint16_t");
@@ -699,8 +731,10 @@ static constexpr int ROOM_THEME_IDX_BIRTHDAY       = 9;
 static constexpr int ROOM_THEME_IDX_HAUNTED_NIGHT  = 10;
 static constexpr int ROOM_THEME_IDX_HOGWARTS_NIGHT = 11;
 static constexpr int ROOM_THEME_IDX_PUMPKIN_PATCH  = 12;
-static_assert(ROOM_THEME_COUNT > ROOM_THEME_IDX_PUMPKIN_PATCH, "room theme indices out of range");
-static_assert(ROOM_THEMES[ROOM_THEME_IDX_BIRTHDAY].cost == 0 && ROOM_THEMES[ROOM_THEME_IDX_HAUNTED_NIGHT].cost == 0,
+static constexpr int ROOM_THEME_IDX_CHRISTMAS      = 13;
+static_assert(ROOM_THEME_COUNT > ROOM_THEME_IDX_CHRISTMAS, "room theme indices out of range");
+static_assert(ROOM_THEMES[ROOM_THEME_IDX_BIRTHDAY].cost == 0 && ROOM_THEMES[ROOM_THEME_IDX_HAUNTED_NIGHT].cost == 0 &&
+              ROOM_THEMES[ROOM_THEME_IDX_CHRISTMAS].cost == 0,
               "theme-week exclusives must be cost 0, or isStoreRoomTheme() would put them in the store");
 
 /**
@@ -970,6 +1004,28 @@ static void drawSortingHat(int cx, int cy) {
     tft.drawLine(cx - 1, cy - 61, cx + 5, cy - 62, C_SORTING_HAT_LINE);
 }
 
+/**
+ * Santa hat (theme-week exclusive, COM-636): a red cone whose tip flops over to the right and
+ * ends in a white pompom, on a white fur brim. The brim and pompom are white, so each gets a 1px
+ * grey outline (C_SANTA_FUR_LINE) to keep them visible on a white cat. The apex stops at cy-86,
+ * inside drawCat()'s cy-88 clear rect, and the brim's lowest row (cy-62) stays above
+ * drawEyes()'s blink rect (cy-50), like drawPartyHat().
+ *
+ * @param cx Cat center x (CAT_CX).
+ * @param cy Cat center y, including any bounce offset.
+ */
+static void drawSantaHat(int cx, int cy) {
+    // Cone, then the flopped tip: apex, a point on the cone's right edge, and the tip.
+    tft.fillTriangle(cx - 14, cy - 66, cx + 14, cy - 66, cx + 4, cy - 86, C_SANTA_RED);
+    tft.fillTriangle(cx + 4, cy - 86, cx + 9, cy - 76, cx + 20, cy - 76, C_SANTA_RED);
+    // Pompom on the tip.
+    tft.fillCircle(cx + 21, cy - 75, 4, C_SANTA_FUR_LINE);
+    tft.fillCircle(cx + 21, cy - 75, 3, TFT_WHITE);
+    // Fur brim across the top of the head.
+    tft.fillRoundRect(cx - 18, cy - 69, 36, 8, 3, C_SANTA_FUR_LINE);
+    tft.fillRoundRect(cx - 17, cy - 68, 34, 6, 3, TFT_WHITE);
+}
+
 // Glasses art (declared earlier alongside GLASSES[]). Called from drawCat() after the eyes
 // (unlike the bow above, which is drawn before them) so the round lenses sit over the eye
 // shapes drawn by drawEyeShapes() at (cx-15/+15, cy-37, r=11). Round rim + round lens per
@@ -1058,6 +1114,46 @@ static void drawCandyCornSunglasses(int cx, int cy) {
     for (int w = -1; w <= 1; w++) {
         tft.drawLine(cx - 30, cy - 48 + w, cx - 43, cy - 54 + w, C_WITCH_HAT_BAND);
         tft.drawLine(cx + 30, cy - 48 + w, cx + 43, cy - 54 + w, C_WITCH_HAT_BAND);
+    }
+}
+
+/**
+ * One Christmas-tree lens for drawChristmasTreeGlasses(): a point-up green triangle with a
+ * charcoal outline, a gold star on top and four ornament dots. Flat fills only, the same
+ * no-fine-detail rule as the other theme-week glasses.
+ *
+ * @param lx Lens center x (the eye's x).
+ * @param cy Cat center y, including any bounce offset.
+ */
+static void drawChristmasTreeLens(int lx, int cy) {
+    tft.fillTriangle(lx, cy - 54, lx - 14, cy - 24, lx + 14, cy - 24, C_XMAS_TREE);
+    tft.drawTriangle(lx, cy - 54, lx - 14, cy - 24, lx + 14, cy - 24, C_DARK);
+    tft.fillCircle(lx - 1, cy - 42, 1, C_XMAS_BULB_BLUE);
+    tft.fillCircle(lx + 4, cy - 35, 1, C_XMAS_GOLD);
+    tft.fillCircle(lx - 5, cy - 30, 1, TFT_RED);
+    tft.fillCircle(lx + 6, cy - 28, 1, TFT_WHITE);
+    tft.drawFastHLine(lx - 2, cy - 56, 5, C_XMAS_GOLD);  // star
+    tft.drawFastVLine(lx, cy - 58, 5, C_XMAS_GOLD);
+    tft.drawPixel(lx, cy - 56, TFT_WHITE);
+}
+
+/**
+ * Theme-week-exclusive glasses (COM-636): a little Christmas tree over each eye, joined by a
+ * gold bridge, with gold temple arms. Same layering as drawCandyCornSunglasses(): drawn after
+ * the eyes, the eye rect is first repainted with fur colour because the tree narrows to a point
+ * where the round eye doesn't, and the cat skips blinking while any glasses are equipped.
+ *
+ * @param cx Cat center x (CAT_CX).
+ * @param cy Cat center y, including any bounce offset.
+ */
+static void drawChristmasTreeGlasses(int cx, int cy) {
+    tft.fillRect(cx - 28, cy - 50, 56, 26, catBodyColor());
+    drawChristmasTreeLens(cx - 15, cy);
+    drawChristmasTreeLens(cx + 15, cy);
+    tft.fillRect(cx - 3, cy - 34, 6, 2, C_XMAS_GOLD);  // bridge
+    for (int w = -1; w <= 1; w++) {
+        tft.drawLine(cx - 24, cy - 34 + w, cx - 43, cy - 47 + w, C_XMAS_GOLD);
+        tft.drawLine(cx + 24, cy - 34 + w, cx + 43, cy - 47 + w, C_XMAS_GOLD);
     }
 }
 
@@ -2943,6 +3039,117 @@ static void updatePumpkinPatchAnim(unsigned long now) {
     if (x1 >= x0) zoneFillRect(x0, by - 5, x1 - x0 + 1, PUMPKIN_BAT_DY + 10);
 }
 
+// Defined in the Theme weeks section below (it needs flashSaleNow()); declared here so
+// drawChristmasNightBackground() can decide whether to add the Dec 25 presents.
+static bool isChristmasPresentsShown();
+
+// Christmas Night (COM-636) tree, centred at x=CHRISTMAS_TREE_X in the left column. Three stacked
+// tiers, each {apex dy, base dy, base half-width} relative to ANIMAL_Y. The tree stays at x<=46,
+// left of the boredom "Zz" column (x 48–70, y ANIMAL_Y+17..+51), and its trunk ends above the
+// Meds button (MEDS_Y = ANIMAL_Y+96), so it's never covered except by Meds' top while sick.
+static constexpr int CHRISTMAS_TREE_X = 26;
+struct ChristmasTier { int8_t apexDy, baseDy, halfW; };
+static constexpr ChristmasTier CHRISTMAS_TREE_TIERS[] = {
+    {12, 40, 12}, {26, 60, 16}, {42, 82, 20},
+};
+// Light bulbs on the tree: x, dy from ANIMAL_Y. Colors cycle through CHRISTMAS_BULB_COLORS.
+struct ChristmasPoint { int16_t x, dy; };
+static constexpr ChristmasPoint CHRISTMAS_TREE_BULBS[] = {
+    {23, 30}, {30, 36}, {18, 48}, {29, 44}, {35, 55}, {13, 70}, {24, 63}, {37, 73}, {28, 78},
+};
+static constexpr uint16_t CHRISTMAS_BULB_COLORS[] = {TFT_RED, C_XMAS_GOLD, C_XMAS_BULB_BLUE, TFT_WHITE};
+// Snowflakes: x, dy from ANIMAL_Y, and whether it's a big 5x5 one (else a 3x3 one). Placed only in
+// sky nothing prints text over: clear of both "Zz" boxes (left x 48–70 y +17..+51, right x
+// 188–210 y +74..+88), the badge column (x>=168, y +0..+70) and the middle of the name strip.
+struct ChristmasFlake { int16_t x, dy; bool big; };
+static constexpr ChristmasFlake CHRISTMAS_FLAKES[] = {
+    {8, 24, true}, {44, 30, false}, {6, 56, false}, {52, 62, true}, {60, 86, false},
+    {112, 14, false}, {176, 80, true}, {226, 78, false}, {214, 92, true}, {178, 102, false},
+    {62, 130, false}, {178, 132, true}, {60, 160, false}, {180, 166, false},
+};
+
+/**
+ * "Christmas Night" room theme (theme-week exclusive, COM-636), only owned while the Christmas
+ * theme week is applied. It draws a navy night sky with static snowflakes, a string of coloured
+ * lights hanging across the top (mostly behind the cat's head), and a lit tree with a gold star
+ * standing on a small snow mound in the left column. The strip behind the
+ * cat's name stays plain sky, since the label erases its glyph cells with bgColor. On Dec 25 (or
+ * in the admin Preview mode) presents sit at the foot of the tree, above the Meds button; like
+ * Halloween's ghost they're plain backdrop art, and checkThemeWeekTransition() repaints the
+ * backdrop once when they appear or disappear. Uses the same setViewport/resetViewport clipping
+ * as drawStarryNightBackground(), so it can draw the whole scene on every small erase.
+ *
+ * @param x Left edge of the rect to repaint.
+ * @param y Top edge of the rect to repaint (already clamped to the animal zone).
+ * @param w Width of the rect.
+ * @param h Height of the rect.
+ */
+static void drawChristmasNightBackground(int x, int y, int w, int h) {
+    tft.setViewport(x, y, w, h, false);
+    tft.fillRect(x, y, w, h, C_XMAS_SKY);
+
+    for (const ChristmasFlake& f : CHRISTMAS_FLAKES) {
+        int fy = ANIMAL_Y + f.dy, r = f.big ? 2 : 1;
+        tft.drawFastHLine(f.x - r, fy, 2 * r + 1, TFT_WHITE);
+        tft.drawFastVLine(f.x, fy - r, 2 * r + 1, TFT_WHITE);
+    }
+
+    // String of lights sagging from x=40 to x=157 (well left of the badge column at x>=168), with a bulb
+    // hanging under each joint.
+    {
+        const int x0 = 40, x1 = 157, step = 9, sag = 8;
+        const int mid = (x0 + x1) / 2, half = (x1 - x0) / 2;
+        int px = x0, py = ANIMAL_Y + 2, n = 0;
+        for (int lx = x0 + step; lx <= x1; lx += step) {
+            int d = lx - mid;
+            int ly = ANIMAL_Y + 2 + sag - sag * d * d / (half * half);
+            tft.drawLine(px, py, lx, ly, C_XMAS_WIRE);
+            tft.fillCircle(lx, ly + 3, 2, CHRISTMAS_BULB_COLORS[n++ % 4]);
+            px = lx;
+            py = ly;
+        }
+    }
+
+    // A small snow mound for the tree to stand on, above the Meds button (ANIMAL_Y+96 down is
+    // only covered while sick). There's deliberately no snow behind the buttons: any drift there
+    // reads as a white box framing each button (COM-636's first on-device try).
+    tft.fillEllipse(26, ANIMAL_Y + 96, 26, 6, C_XMAS_SNOW);
+
+    // Tree: trunk, then each tier with its right half shaded, then the bulbs and the star.
+    const int tx = CHRISTMAS_TREE_X;
+    tft.fillRect(tx - 3, ANIMAL_Y + 82, 7, 9, C_XMAS_TRUNK);
+    for (const ChristmasTier& t : CHRISTMAS_TREE_TIERS) {
+        int ay = ANIMAL_Y + t.apexDy, by = ANIMAL_Y + t.baseDy;
+        tft.fillTriangle(tx, ay, tx - t.halfW, by, tx + t.halfW, by, C_XMAS_TREE);
+        tft.fillTriangle(tx, ay, tx, by, tx + t.halfW, by, C_XMAS_TREE_DARK);
+    }
+    int n = 0;
+    for (const ChristmasPoint& b : CHRISTMAS_TREE_BULBS) {
+        tft.fillCircle(b.x, ANIMAL_Y + b.dy, 1, CHRISTMAS_BULB_COLORS[n++ % 4]);
+    }
+    tft.fillTriangle(tx, ANIMAL_Y + 4, tx - 5, ANIMAL_Y + 13, tx + 5, ANIMAL_Y + 13, C_XMAS_GOLD);
+    tft.fillTriangle(tx, ANIMAL_Y + 16, tx - 5, ANIMAL_Y + 7, tx + 5, ANIMAL_Y + 7, C_XMAS_GOLD);
+
+    if (isChristmasPresentsShown()) {
+        // Three presents at the foot of the tree, bottoms at ANIMAL_Y+93, above the Meds
+        // button (ANIMAL_Y+96) and left of the "Zz" column, so nothing ever covers them.
+        tft.fillRect(4, ANIMAL_Y + 82, 13, 11, C_SANTA_RED);           // red box, gold ribbon
+        tft.fillRect(9, ANIMAL_Y + 82, 3, 11, C_XMAS_GOLD);
+        tft.fillRect(4, ANIMAL_Y + 86, 13, 2, C_XMAS_GOLD);
+        tft.fillCircle(8, ANIMAL_Y + 80, 2, C_XMAS_GOLD);
+        tft.fillCircle(13, ANIMAL_Y + 80, 2, C_XMAS_GOLD);
+        tft.fillRect(33, ANIMAL_Y + 80, 14, 13, C_XMAS_BULB_BLUE);     // blue box, white ribbon
+        tft.fillRect(39, ANIMAL_Y + 80, 3, 13, TFT_WHITE);
+        tft.fillRect(33, ANIMAL_Y + 85, 14, 2, TFT_WHITE);
+        tft.fillCircle(38, ANIMAL_Y + 78, 2, TFT_WHITE);
+        tft.fillCircle(43, ANIMAL_Y + 78, 2, TFT_WHITE);
+        tft.fillRect(18, ANIMAL_Y + 86, 12, 7, C_XMAS_GOLD);           // small gold box, red ribbon
+        tft.fillRect(23, ANIMAL_Y + 86, 2, 7, C_SANTA_RED);
+    }
+
+    tft.resetViewport();
+}
+
 // Perceived luminance of an RGB565 color, used below to pick a contrasting tape color —
 // standard ITU-R BT.601 weights on the 5/6/5-bit channels scaled up to 8 bits each.
 // Threshold of 128 matches the usual "midpoint" cutoff for light-vs-dark text/UI contrast.
@@ -4357,21 +4564,26 @@ static void assertStoreIdsUnique() {
     }
 }
 
-// ── Theme weeks (DIY-108, COM-379) ───────────────────────────────────────────
+// ── Theme weeks (DIY-108, COM-379, COM-636) ───────────────────────────────────────────
 // Special theme weeks are entirely local/offline. Everything is evaluated against the device's
 // own NTP-synced local clock (flashSaleNow()), with no network round trip and no cat-buddy-api
 // dependency. This intentionally replaced an earlier design that polled a cat-buddy-api
 // endpoint for the range (see DIY-108 history); the user decided against storing theme-week
 // schedules server-side at all.
 //
-// Two themes exist, each hardcoded rather than driven by a generic table:
+// Three themes exist, each hardcoded rather than driven by a generic table:
 //   - "birthday" (DIY-108): the admin enters a date range on the device's 7-tap secret admin
 //     page (/config/admin/themeweek), persisted as themeWeekBirthdayStartDate/EndDate.
 //   - "halloween" (COM-379): fixed to Oct 24–31 inclusive every year, so it needs no setup.
 //     The same admin page has an Auto/Preview/Off override (themeWeekHalloweenMode): Preview
 //     forces the full Oct 31 look on any date for on-device checks, Off skips it.
-// Only one theme is ever applied at a time. When both are active, Birthday wins (it's a range
-// someone scheduled on purpose; Halloween is automatic). See desiredThemeWeekKey().
+//   - "christmas" (COM-636): fixed to Dec 1–26 inclusive every year, with presents under the
+//     tree on Dec 25, and its own Auto/Preview/Off override (themeWeekChristmasMode) that works
+//     the same way. Dec 1–26 doesn't cross New Year, so a plain MMDD range check is enough.
+// Only one theme is ever applied at a time. When more than one is active, Birthday wins (it's a
+// range someone scheduled on purpose; the others are automatic), then Halloween, then Christmas
+// (their Auto windows never overlap, so that order only matters with Preview). See
+// desiredThemeWeekKey().
 //
 // Each theme owns one exclusive entry in ACCESSORIES[], GLASSES[] and ROOM_THEMES[], never
 // buyable (see the *_IDX_* constants beside each catalog). A future theme appends its entries
@@ -4383,6 +4595,7 @@ static void assertStoreIdsUnique() {
 // key, isXActive() check and themeWeekItems() branch.
 static constexpr const char* THEME_WEEK_BIRTHDAY  = "birthday";
 static constexpr const char* THEME_WEEK_HALLOWEEN = "halloween";
+static constexpr const char* THEME_WEEK_CHRISTMAS = "christmas";
 
 // themeWeekHalloweenMode values (ConfigManager), set from the admin page.
 static constexpr uint8_t HALLOWEEN_MODE_AUTO    = 0;  // Oct 24–31 from the clock (default)
@@ -4393,6 +4606,16 @@ static constexpr uint8_t HALLOWEEN_MODE_OFF     = 2;  // never applies
 static constexpr int HALLOWEEN_START_MMDD = 1024;
 static constexpr int HALLOWEEN_END_MMDD   = 1031;
 static constexpr int HALLOWEEN_DAY_MMDD   = 1031;
+
+// themeWeekChristmasMode values (ConfigManager): the same Auto/Preview/Off scheme as Halloween.
+static constexpr uint8_t CHRISTMAS_MODE_AUTO    = 0;  // Dec 1–26 from the clock (default)
+static constexpr uint8_t CHRISTMAS_MODE_PREVIEW = 1;  // forced on, including the Dec 25 presents
+static constexpr uint8_t CHRISTMAS_MODE_OFF     = 2;  // never applies
+
+// Christmas's fixed window as MMDD, inclusive at both ends, plus the presents day.
+static constexpr int CHRISTMAS_START_MMDD = 1201;
+static constexpr int CHRISTMAS_END_MMDD   = 1226;
+static constexpr int CHRISTMAS_DAY_MMDD   = 1225;
 
 // Adds one calendar day to a YYYYMMDD date-only int (e.g. 20260831 -> 20260901) — used to turn
 // an inclusive admin-picked end date into the exclusive end-of-day boundary
@@ -4465,6 +4688,33 @@ static bool isHalloweenGhostShown() {
 }
 
 /**
+ * Whether the Christmas theme week should be applied right now, ignoring any Birthday overlap
+ * (desiredThemeWeekKey() resolves that). Auto means Dec 1 00:00 up to Dec 27 00:00 local time,
+ * every year. Preview is always on and Off is always off.
+ *
+ * @return true while Christmas is active.
+ */
+static bool isChristmasWeekActive() {
+    uint8_t mode = configMgr.config().themeWeekChristmasMode;
+    if (mode == CHRISTMAS_MODE_OFF) return false;
+    if (mode == CHRISTMAS_MODE_PREVIEW) return true;
+    int mmdd = localTodayMmdd();
+    return mmdd >= CHRISTMAS_START_MMDD && mmdd <= CHRISTMAS_END_MMDD;
+}
+
+/**
+ * Whether the Christmas Night backdrop should include the presents under the tree: on Dec 25 in
+ * Auto mode, or at any time in Preview mode, like isHalloweenGhostShown().
+ *
+ * @return true when drawChristmasNightBackground() should draw the presents.
+ */
+static bool isChristmasPresentsShown() {
+    uint8_t mode = configMgr.config().themeWeekChristmasMode;
+    if (mode == CHRISTMAS_MODE_PREVIEW) return true;
+    return mode == CHRISTMAS_MODE_AUTO && localTodayMmdd() == CHRISTMAS_DAY_MMDD;
+}
+
+/**
  * Whether the store sells Haunted Pumpkin Patch right now (COM-503), the first limited-time store
  * item: all of October local time, or at any time while the Halloween theme week is in Preview
  * mode so it can be checked on-device. Only buying is limited; an owned copy stays equippable all
@@ -4479,15 +4729,17 @@ static bool isPumpkinPatchOnSale() {
 }
 
 /**
- * Picks which theme week should be applied right now. Birthday wins over Halloween when both
- * are active, so a birthday scheduled inside Oct 24–31 shows for its own days. Halloween then
- * takes over for whatever's left of the week.
+ * Picks which theme week should be applied right now. Birthday wins over Halloween and
+ * Christmas, so a birthday scheduled inside Oct 24–31 or Dec 1–26 shows for its own days, and
+ * the fixed-date theme takes over for whatever's left of its window. Halloween beats Christmas,
+ * which only matters when Christmas is in Preview during Halloween.
  *
- * @return THEME_WEEK_BIRTHDAY, THEME_WEEK_HALLOWEEN, or "" for none.
+ * @return THEME_WEEK_BIRTHDAY, THEME_WEEK_HALLOWEEN, THEME_WEEK_CHRISTMAS, or "" for none.
  */
 static const char* desiredThemeWeekKey() {
     if (isBirthdayWeekActive()) return THEME_WEEK_BIRTHDAY;
     if (isHalloweenWeekActive()) return THEME_WEEK_HALLOWEEN;
+    if (isChristmasWeekActive()) return THEME_WEEK_CHRISTMAS;
     return "";
 }
 
@@ -4510,6 +4762,10 @@ static bool themeWeekItems(const String& key, ThemeWeekItems& out) {
         out = {ACCESSORY_IDX_WITCH_HAT, GLASSES_IDX_CANDY_CORN, ROOM_THEME_IDX_HAUNTED_NIGHT};
         return true;
     }
+    if (key == THEME_WEEK_CHRISTMAS) {
+        out = {ACCESSORY_IDX_SANTA_HAT, GLASSES_IDX_CHRISTMAS_TREE, ROOM_THEME_IDX_CHRISTMAS};
+        return true;
+    }
     return false;
 }
 
@@ -4520,7 +4776,7 @@ static bool themeWeekItems(const String& key, ThemeWeekItems& out) {
  * room theme the user had equipped beforehand (preThemeWeekRoomTheme), so
  * revertThemeWeekCosmetics() can restore it if the theme-week backdrop is still on at the end.
  *
- * @param key THEME_WEEK_BIRTHDAY or THEME_WEEK_HALLOWEEN.
+ * @param key THEME_WEEK_BIRTHDAY, THEME_WEEK_HALLOWEEN or THEME_WEEK_CHRISTMAS.
  */
 static void applyThemeWeekCosmetics(const char* key) {
     ThemeWeekItems items;
@@ -4582,9 +4838,9 @@ static void revertThemeWeekCosmetics() {
 // tick (see that call site). The admin page's handlers call it directly too, so a schedule or
 // mode change takes effect on the very same request rather than waiting for the next tick.
 //
-// It also repaints the backdrop once when the Halloween ghost appears or disappears (local
-// midnight going into and out of Oct 31, or a Preview toggle), since that change otherwise
-// wouldn't redraw anything.
+// It also repaints the backdrop once when the Halloween ghost or the Christmas presents appear or
+// disappear (local midnight going into and out of Oct 31 / Dec 25, or a Preview toggle), since
+// that change otherwise wouldn't redraw anything.
 //
 // Bails out entirely while the clock hasn't NTP-synced yet (flashSaleNow() < 0) rather than
 // letting isBirthdayWeekActive()/isHalloweenWeekActive() report that as "inactive" — a device
@@ -4606,6 +4862,12 @@ static void checkThemeWeekTransition() {
     if (ghost != ghostShown) {
         ghostShown = ghost;
         if (equippedRoomThemeIndex() == ROOM_THEME_IDX_HAUNTED_NIGHT) dirty.animalBg = true;
+    }
+    static bool presentsShown = false;
+    bool presents = isChristmasPresentsShown();
+    if (presents != presentsShown) {
+        presentsShown = presents;
+        if (equippedRoomThemeIndex() == ROOM_THEME_IDX_CHRISTMAS) dirty.animalBg = true;
     }
 }
 
@@ -5206,11 +5468,12 @@ static const char CONFIG_THEMEWEEK_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <a class="back" href="/config/admin">&larr; Admin</a>
 <h2>Theme Week</h2>
 %%MSG%%
-<p class="dim">Seasonal cosmetics for the cat. While a theme week is on, its hat, glasses and room theme are added and equipped, then removed again when it ends (the previous room theme comes back). Everything is stored on this device and checked against its own clock/timezone, the same one the clock screen uses. Nothing is sent anywhere. If a birthday overlaps Halloween, the birthday shows on its days.</p>
+<p class="dim">Seasonal cosmetics for the cat. While a theme week is on, its hat, glasses and room theme are added and equipped, then removed again when it ends (the previous room theme comes back). Everything is stored on this device and checked against its own clock/timezone, the same one the clock screen uses. Nothing is sent anywhere. If a birthday overlaps Halloween or Christmas, the birthday shows on its days.</p>
 
 <h3>Status</h3>
 <p>%%STATUS%%</p>
 <p>%%HALLOWEEN_STATUS%%</p>
+<p>%%CHRISTMAS_STATUS%%</p>
 
 <h3>Birthday</h3>
 <form method="POST" action="/config/admin/themeweek/set">
@@ -5234,6 +5497,17 @@ static const char CONFIG_THEMEWEEK_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <button type="submit" style="width:100%">Save</button>
 </form>
 <p class="dim" style="font-size:.82rem">Preview stays on until you switch back to Auto.</p>
+
+<h3>Christmas</h3>
+<form method="POST" action="/config/admin/themeweek/christmas">
+<label>Mode<select name="mode">
+<option value="auto"%%XM_AUTO%%>Auto (Dec 1 &ndash; Dec 26)</option>
+<option value="preview"%%XM_PREVIEW%%>Preview now (includes the Dec 25 presents)</option>
+<option value="off"%%XM_OFF%%>Off</option>
+</select></label>
+<button type="submit" style="width:100%">Save</button>
+</form>
+<p class="dim" style="font-size:.82rem">Preview stays on until you switch back to Auto. If Halloween is also in Preview, Halloween shows.</p>
 </body></html>
 )html";
 
@@ -6563,6 +6837,28 @@ static String halloweenStatusText() {
     return s;
 }
 
+/**
+ * One-line summary of the Christmas theme week for the /config/admin/themeweek page, the same
+ * shape as halloweenStatusText().
+ *
+ * @return HTML-safe status text.
+ */
+static String christmasStatusText() {
+    uint8_t mode = configMgr.config().themeWeekChristmasMode;
+    if (mode == CHRISTMAS_MODE_OFF) return "Christmas: <strong>off</strong> (won't apply).";
+    // Birthday always wins; Halloween only overlaps Christmas while one of them is in Preview.
+    const char* shadow = isBirthdayWeekActive() ? "the birthday" : isHalloweenWeekActive() ? "Halloween" : nullptr;
+    if (mode == CHRISTMAS_MODE_PREVIEW) {
+        return String("Christmas: <strong>preview</strong> (forced on, with the Dec 25 presents)") +
+               (shadow ? String(", waiting for ") + shadow + " to end." : String("."));
+    }
+    String s = "Christmas: <strong>Dec 1 \xE2\x80\x93 Dec 26</strong>, automatic";
+    if (!isChristmasWeekActive()) s += " (not active now).";
+    else if (shadow)              s += String(" (") + shadow + " is showing instead).";
+    else                          s += " (currently active).";
+    return s;
+}
+
 static void handleConfigThemeWeekGet() {
     String page = loadPage(CONFIG_THEMEWEEK_HTML);
     page.replace("%%STATUS%%", themeWeekStatusText());
@@ -6571,12 +6867,18 @@ static void handleConfigThemeWeekGet() {
     page.replace("%%HW_AUTO%%",    mode == HALLOWEEN_MODE_AUTO    ? " selected" : "");
     page.replace("%%HW_PREVIEW%%", mode == HALLOWEEN_MODE_PREVIEW ? " selected" : "");
     page.replace("%%HW_OFF%%",     mode == HALLOWEEN_MODE_OFF     ? " selected" : "");
+    page.replace("%%CHRISTMAS_STATUS%%", christmasStatusText());
+    uint8_t xmode = configMgr.config().themeWeekChristmasMode;
+    page.replace("%%XM_AUTO%%",    xmode == CHRISTMAS_MODE_AUTO    ? " selected" : "");
+    page.replace("%%XM_PREVIEW%%", xmode == CHRISTMAS_MODE_PREVIEW ? " selected" : "");
+    page.replace("%%XM_OFF%%",     xmode == CHRISTMAS_MODE_OFF     ? " selected" : "");
     page.replace("%%START_VALUE%%", dateToInputValue(configMgr.config().themeWeekBirthdayStartDate));
     page.replace("%%END_VALUE%%", dateToInputValue(configMgr.config().themeWeekBirthdayEndDate));
     String msg = "";
     if (wm.server->hasArg("scheduled")) msg = "<div class='banner ok'>Scheduled — see status below.</div>";
     else if (wm.server->hasArg("cleared")) msg = "<div class='banner ok'>Cleared.</div>";
     else if (wm.server->hasArg("halloween")) msg = "<div class='banner ok'>Halloween mode saved.</div>";
+    else if (wm.server->hasArg("christmas")) msg = "<div class='banner ok'>Christmas mode saved.</div>";
     else if (wm.server->hasArg("err")) msg = "<div class='banner err'>End date must be on or after the start date.</div>";
     page.replace("%%MSG%%", msg);
     sendHtmlPage(page);
@@ -6608,12 +6910,17 @@ static void handleConfigThemeWeekClearPost() {
 }
 
 /**
- * POST /config/admin/themeweek/halloween: saves the Halloween override (`mode` = auto,
- * preview or off) and runs checkThemeWeekTransition() straight away, so Preview applies and
- * Off reverts on this request. Redirects back to the theme-week page, or answers 400 for an
- * unknown mode.
+ * Shared body of the per-theme Auto/Preview/Off POST handlers: parses `mode` (auto, preview or
+ * off, the same 0/1/2 values for every theme), stores it in `field`, and runs
+ * checkThemeWeekTransition() straight away so Preview applies and Off reverts on this request.
+ * Redirects to the theme-week page with `?<flag>=1`, or answers 400 for an unknown mode.
+ *
+ * @param field The theme's mode field in AppConfig.
+ * @param flag  Query flag for the "saved" banner, e.g. "halloween".
  */
-static void handleConfigThemeWeekHalloweenPost() {
+static void handleThemeWeekModePost(uint8_t& field, const char* flag) {
+    static_assert(HALLOWEEN_MODE_AUTO == CHRISTMAS_MODE_AUTO && HALLOWEEN_MODE_PREVIEW == CHRISTMAS_MODE_PREVIEW &&
+                  HALLOWEEN_MODE_OFF == CHRISTMAS_MODE_OFF, "theme-week modes share one encoding");
     String m = wm.server->arg("mode");
     uint8_t mode;
     if (m == "auto")         mode = HALLOWEEN_MODE_AUTO;
@@ -6623,11 +6930,29 @@ static void handleConfigThemeWeekHalloweenPost() {
         wm.server->send(400, "text/plain", "Invalid mode");
         return;
     }
-    configMgr.config().themeWeekHalloweenMode = mode;
+    field = mode;
     configMgr.save();
     checkThemeWeekTransition();
-    wm.server->sendHeader("Location", "/config/admin/themeweek?halloween=1");
+    wm.server->sendHeader("Location", String("/config/admin/themeweek?") + flag + "=1");
     wm.server->send(302, "text/plain", "");
+}
+
+/**
+ * POST /config/admin/themeweek/halloween: saves the Halloween override (`mode` = auto,
+ * preview or off) and runs checkThemeWeekTransition() straight away, so Preview applies and
+ * Off reverts on this request. Redirects back to the theme-week page, or answers 400 for an
+ * unknown mode.
+ */
+static void handleConfigThemeWeekHalloweenPost() {
+    handleThemeWeekModePost(configMgr.config().themeWeekHalloweenMode, "halloween");
+}
+
+/**
+ * POST /config/admin/themeweek/christmas: saves the Christmas override, the same way as
+ * handleConfigThemeWeekHalloweenPost().
+ */
+static void handleConfigThemeWeekChristmasPost() {
+    handleThemeWeekModePost(configMgr.config().themeWeekChristmasMode, "christmas");
 }
 
 static void handleConfigCatPost() {
@@ -7309,6 +7634,7 @@ static void runWiFiManager(ConfigManager& cfg) {
         wm.server->on("/config/admin/themeweek/set",   HTTP_POST, handleConfigThemeWeekSetPost);
         wm.server->on("/config/admin/themeweek/clear", HTTP_POST, handleConfigThemeWeekClearPost);
         wm.server->on("/config/admin/themeweek/halloween", HTTP_POST, handleConfigThemeWeekHalloweenPost);
+        wm.server->on("/config/admin/themeweek/christmas", HTTP_POST, handleConfigThemeWeekChristmasPost);
         wm.server->on("/save-config/setup",        HTTP_POST, handleSetupPost);
         wm.server->on("/save-config/cat",          HTTP_POST, handleConfigCatPost);
         wm.server->on("/save-config/city",         HTTP_POST, handleConfigCityPost);
