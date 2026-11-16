@@ -1267,8 +1267,8 @@ only buying is limited, and anything bought stays owned and equippable all year.
 
 | Board | Before | After | Delta | % used |
 |---|---|---|---|---|
-| `cyd` | 1,214,001 B | 1,218,253 B | +4,252 B | 92.6% → 92.9% (~90.3KB left) |
-| `freenove-s3` | 1,167,457 B | 1,171,705 B | +4,248 B | 34.9% → 35.1% |
+| `cyd` | 1,214,001 B | 1,218,257 B | +4,256 B | 92.6% → 92.9% (~90.3KB left) |
+| `freenove-s3` | 1,167,457 B | 1,171,709 B | +4,252 B | 34.9% → 35.1% |
 
 ## Branch & Files
 

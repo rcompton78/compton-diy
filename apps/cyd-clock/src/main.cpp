@@ -2469,14 +2469,15 @@ static void drawUmbreonHeldPeeking(int cx, int cy, uint16_t accentColor) {
 // Shared antler/ear/head/snout/face art for every reindeer pose (December-only, COM-637): the
 // teddy's layout with a pair of small 2px tan antlers (each with one tine) rising from the top of
 // the head, and small oval ears out to the sides. The snout takes the accent colour, like the
-// other stuffies' snouts. Everything stays within bx±9, the teddy's footprint: in the right-arm
-// pose (bx = cx+38) that's x <= 167, inside drawAnimal()'s cat clear rect (x 70–169) and left of
-// the badge column (x >= 168), whose SALE strip is repainted every 500 ms.
+// other stuffies' snouts. Everything stays within bx±9, the teddy's footprint, and the antlers
+// within bx±7: in the right-arm poses (bx = cx+38 by day, cx+40 at night) that keeps the head
+// inside drawAnimal()'s cat clear rect (x 70–169) and the antlers left of the badge column's SALE
+// strip (x >= 168, y up to ANIMAL_Y+69), which drawSaleFlash() repaints after the stuffy.
 static void drawReindeerHead(int bx, int by, uint16_t snoutColor) {
     for (int side = -1; side <= 1; side += 2) {
         for (int t = 0; t < 2; t++) {
             tft.drawLine(bx + side * (2 + t), by - 7, bx + side * (5 + t), by - 19, C_ANTLER);    // beam
-            tft.drawLine(bx + side * 4, by - 12 - t, bx + side * 8, by - 15 - t, C_ANTLER);      // tine
+            tft.drawLine(bx + side * 4, by - 12 - t, bx + side * 7, by - 15 - t, C_ANTLER);      // tine
         }
         tft.fillEllipse(bx + side * 7, by - 4, 2, 2, C_REINDEER);  // ear, peeking out past the head
     }
