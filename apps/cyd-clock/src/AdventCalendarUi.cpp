@@ -426,7 +426,14 @@ void AdventCalendarUi::handleTouch(int x, int y, unsigned long now) {
     if (col > 4) return;
     int day = row * 5 + col + 1;
 
-    _today = _host.todayDoor();
+    // If the day turned since the grid was drawn, show the new day first rather than acting on a
+    // stale grid (update() makes the same check on its pulse).
+    int today = _host.todayDoor();
+    if (today != _today) {
+        if (today == 0) close();
+        else drawAll();
+        return;
+    }
     uint32_t opened = _host.openedMask();
     if (advent::isOpened(opened, day)) {
         // Shows what was inside. In Preview it replays the whole opening, for testing; nothing

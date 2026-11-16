@@ -1307,8 +1307,8 @@ A one-year legendary store item (350): one door a day from Dec 1 to 25, opened o
 
 | Board | Before | After | Delta | % used |
 |---|---|---|---|---|
-| `cyd` | 1,218,257 B | 1,231,377 B | +13,120 B | 92.9% → 93.9% (~77KB left) |
-| `freenove-s3` | 1,171,709 B | 1,185,017 B | +13,308 B | 35.1% → 35.5% |
+| `cyd` | 1,218,257 B | 1,231,385 B | +13,128 B | 92.9% → 93.9% (~77KB left) |
+| `freenove-s3` | 1,171,709 B | 1,185,025 B | +13,316 B | 35.1% → 35.5% |
 
 ## Branch & Files
 
