@@ -25,8 +25,12 @@ compare="$(gh api "repos/$repo/compare/$sha...$head")"
 if [ "$(jq -r .status <<<"$compare")" = "ahead" ]; then
   # Both names of a rename count. GitHub lists at most 300 files: past that,
   # or with no list at all, refuse rather than guess.
-  files="$(jq -r 'if (.files | type) != "array" or (.files | length) >= 300 then error("no usable file list")
-                  else .files[] | .filename, (.previous_filename // empty) end' <<<"$compare")"
+  if ! files="$(jq -r 'if (.files | type) != "array" or (.files | length) >= 300 then error("no usable file list")
+                      else .files[] | .filename, (.previous_filename // empty) end' <<<"$compare")"; then
+    echo "::error title=Not the newest commit::Could not read the files changed after $sha. Run the Release workflow on $branch instead of re-running this run."
+    exit 1
+  fi
+  # Keep in step with release.yml's on.push.paths-ignore (README.md, docs/**/*.md).
   others="$(grep -Ev '^(README\.md|docs/.*\.md)$' <<<"$files" || true)"
   if [ -n "$files" ] && [ -z "$others" ]; then
     exit 0

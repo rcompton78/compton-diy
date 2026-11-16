@@ -12,6 +12,8 @@ name: Release
 on:
   push:
     branches: [main]
+    # Keep in step with scripts/release/check_publish.sh, which lets a run
+    # publish when only these paths changed after its commit.
     paths-ignore:
       - "README.md"
       - "docs/**/*.md"

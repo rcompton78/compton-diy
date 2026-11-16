@@ -41,7 +41,12 @@ if [ -f "$ROOT/.env" ]; then
         fi
         # Strip one pair of matching surrounding quotes.
         if [[ "$value" =~ ^\"(.*)\"$ ]] || [[ "$value" =~ ^\'(.*)\'$ ]]; then value="${BASH_REMATCH[1]}"; fi
-        export "$key=$value"
+        # Only the documented settings: anything else could overwrite this
+        # script's own variables (VENV is rm -rf'd on a reinstall).
+        case "$key" in
+            FIRMWARE_MANIFEST_URL | RELEASE_VERSION | DEVICE) export "$key=$value" ;;
+            *) die ".env: unsupported setting '$key' (only FIRMWARE_MANIFEST_URL, RELEASE_VERSION, DEVICE)" ;;
+        esac
     done < "$ROOT/.env"
 fi
 
@@ -58,7 +63,13 @@ python_bin() {
 }
 
 pinned_version() {
-    "$(python_bin)" -c 'import json, sys; print(json.load(open(sys.argv[1]))["esphome_version"])' "$CONTRACT"
+    local py pin
+    [ -f "$CONTRACT" ] || die "missing $CONTRACT"
+    py="$(python_bin)" || exit 1
+    pin="$("$py" -c 'import json, sys; print(json.load(open(sys.argv[1]))["esphome_version"])' "$CONTRACT" 2>/dev/null)" \
+        || die "could not read esphome_version from $CONTRACT"
+    [ -n "$pin" ] || die "no esphome_version in $CONTRACT"
+    echo "$pin"
 }
 
 installed_version() {
@@ -68,8 +79,8 @@ installed_version() {
 # Prints the esphome to run: a CI-installed one on PATH if it matches the pin,
 # else this repo's .venv, installed on first use.
 esphome_bin() {
-    local pin on_path
-    pin="$(pinned_version)"
+    local pin on_path py
+    pin="$(pinned_version)" || exit 1
     on_path="$(command -v esphome 2>/dev/null || true)"
     if [ -n "$on_path" ] && [ "$on_path" != "$VENV/bin/esphome" ] && [ "$(installed_version "$on_path")" = "$pin" ]; then
         echo "$on_path"
@@ -78,7 +89,8 @@ esphome_bin() {
     if [ ! -x "$VENV/bin/esphome" ] || [ "$(installed_version "$VENV/bin/esphome")" != "$pin" ]; then
         echo "firmware.sh: installing ESPHome $pin into .venv (one-time, takes a few minutes)..." >&2
         rm -rf "$VENV"
-        "$(python_bin)" -m venv "$VENV" >&2
+        py="$(python_bin)" || exit 1
+        "$py" -m venv "$VENV" >&2
         "$VENV/bin/pip" install --quiet --upgrade pip >&2
         "$VENV/bin/pip" install --quiet "esphome==$pin" >&2 || die "pip install esphome==$pin failed"
         [ "$(installed_version "$VENV/bin/esphome")" = "$pin" ] || die "ESPHome in .venv does not report $pin"
@@ -111,24 +123,24 @@ cmd="${1:-}"
 [ $# -gt 0 ] && shift
 case "$cmd" in
     install)
-        bin="$(esphome_bin)"
+        bin="$(esphome_bin)" || exit 1
         echo "ESPHome $(installed_version "$bin") ready at $bin"
         ;;
     compile)
         [ $# -eq 0 ] || die "compile takes no options"
-        bin="$(esphome_bin)"; substitutions
+        bin="$(esphome_bin)" || exit 1; substitutions
         exec "$bin" "${SUBS[@]}" compile "$CONFIG"
         ;;
     flash)
-        bin="$(esphome_bin)"; substitutions; device_args "$@"
+        device_args "$@"; bin="$(esphome_bin)" || exit 1; substitutions
         exec "$bin" "${SUBS[@]}" run --no-logs "$CONFIG" ${DEV_ARGS[@]+"${DEV_ARGS[@]}"}
         ;;
     logs)
-        bin="$(esphome_bin)"; substitutions; device_args "$@"
+        device_args "$@"; bin="$(esphome_bin)" || exit 1; substitutions
         exec "$bin" "${SUBS[@]}" logs "$CONFIG" ${DEV_ARGS[@]+"${DEV_ARGS[@]}"}
         ;;
     esphome)
-        bin="$(esphome_bin)"; substitutions
+        bin="$(esphome_bin)" || exit 1; substitutions
         exec "$bin" "${SUBS[@]}" "$@"
         ;;
     *)

@@ -266,7 +266,7 @@ FIRMWARE_UPDATE_INTRO = """OTA and HTTP updates from GitHub. A frame flashed fro
 # under ALLOW_PATHS for that kind of hit.
 CREDENTIAL_KEY = r"[\w-]*(?:ssid|password|passwd|api_key|api-key|apikey|encryption_key|secret|token)"
 SCAN = [
-    (re.compile(r"compton|linear\.app|/hdd/|home-diy|homelab|bytesafe|bitwarden|\bbws\b|/home/|/Users/|/mnt/[a-z]/|[A-Z]:\\\\Users|t3clones|\.t3/|\.secrets\b|runs-on:.*self-hosted", re.I), "private name or path"),
+    (re.compile(r"compton|linear\.app|/hdd/|home-diy|homelab|bytesafe|bitwarden|\bbws\b|/home/|/Users/|/mnt/[a-z]/|[A-Z]:\\Users|t3clones|\.t3/|\.secrets\b|runs-on:.*self-hosted", re.I), "private name or path"),
     (re.compile(r"\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3}|169\.254\.\d{1,3}\.\d{1,3})\b|\bf[cd][0-9a-f]{2}:[0-9a-f:]+", re.I), "private IP"),
     (re.compile(r"\b[\w-]+\.(?:lan|home\.arpa|ts\.net|duckdns\.org|local)\b", re.I), "private hostname"),
     # Any URL whose host isn't a known public site or an example (see URL_HOSTS_OK).
@@ -361,8 +361,8 @@ def check_dest(dest: Path) -> None:
         if re.search(r"[:/]rcompton78/espframe(?:\.git)?/?$", origin):
             return
         die(f"refusing {dest}: it has files and its origin ({origin or 'none'}) isn't rcompton78/espframe")
-    # Files copy_tree writes first, so an export that failed part-way still counts.
-    if (dest / "product" / "contract" / "devices.json").is_file() and (dest / "common" / "addon" / "firmware_update.yaml").is_file():
+    # Files copy_tree writes early, so an export that failed part-way still counts.
+    if (dest / "common" / "addon" / "firmware_update.yaml").is_file() or (dest / "product" / "contract" / "devices.json").is_file():
         return
     die(f"refusing {dest}: it isn't empty, an espframe checkout or an earlier export, and the export empties it")
 
@@ -391,7 +391,7 @@ def copy_tree(dest: Path) -> None:
 
 def filter_contract(dest: Path) -> None:
     path = dest / "product" / "contract" / "devices.json"
-    devices = json.loads(path.read_text())
+    devices = json.loads(path.read_text(encoding="utf-8"))
     keep = [d for d in devices if d.get("slug") == DEVICE_SLUG]
     if len(keep) != 1:
         die(f"expected one device with slug {DEVICE_SLUG!r} in devices.json, found {len(keep)}")
@@ -400,34 +400,34 @@ def filter_contract(dest: Path) -> None:
     if not isinstance(subs, dict) or "firmware_manifest_url" not in subs:
         die("the Guition device has no package_substitutions.firmware_manifest_url to clear")
     subs["firmware_manifest_url"] = ""
-    path.write_text(json.dumps(keep, indent=2) + "\n")
+    path.write_text(json.dumps(keep, indent=2) + "\n", encoding="utf-8")
 
     fw = dest / "common" / "addon" / "firmware_update.yaml"
-    text = fw.read_text()
+    text = fw.read_text(encoding="utf-8")
     for key in ("firmware_manifest_url", "legacy_firmware_manifest_url"):
         new, n = re.subn(rf'^(  {key}: )"[^"]*"$', r'\1""', text, flags=re.M)
         if n != 1:
             die(f"common/addon/firmware_update.yaml: expected one {key} substitution, found {n}")
         text = new
-    fw.write_text(text)
+    fw.write_text(text, encoding="utf-8")
 
 
 def apply_patches(dest: Path) -> None:
     for rel, old, new in PATCHES:
         path = dest / rel
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         count = text.count(old)
         if count != 1:
             die(f"patch for {rel} matched {count} times (expected 1): {old[:80]!r}")
-        path.write_text(text.replace(old, new))
+        path.write_text(text.replace(old, new), encoding="utf-8")
     for rel, start, end in DROP_SECTIONS:
         path = dest / rel
-        text = path.read_text()
+        text = path.read_text(encoding="utf-8")
         i, j = text.find(start), text.find(end)
         if i < 0 or j < i or text.count(start) != 1:
             die(f"section {start[:40]!r}..{end[:40]!r} not found once in {rel}")
         replacement = FIRMWARE_UPDATE_INTRO if rel == "docs/firmware-update.md" else ""
-        path.write_text(text[:i] + replacement + text[j:])
+        path.write_text(text[:i] + replacement + text[j:], encoding="utf-8")
     # Issue-tracker links point at a private workspace; keep the ticket ids, drop the URLs.
     for path in text_files(dest):
         text = path.read_bytes().decode("utf-8", errors="surrogateescape")
@@ -457,7 +457,7 @@ def rewrite_doc_links(dest: Path) -> None:
         return None
 
     for page in sorted(docs.glob("*.md")):
-        text = page.read_text()
+        text = page.read_text(encoding="utf-8")
 
         def link(m: re.Match) -> str:
             t = target(m.group(1), page.name)
@@ -470,7 +470,7 @@ def rewrite_doc_links(dest: Path) -> None:
         new = re.sub(r"\]\(/([^)#\s]*)(#[^)\s]*)?\)", link, text)
         new = re.sub(r'src="/([^"]+)"', src, new)
         if new != text:
-            page.write_text(new)
+            page.write_text(new, encoding="utf-8")
     if missing:
         die("docs link to pages the export leaves out:\n  " + "\n  ".join(missing))
 

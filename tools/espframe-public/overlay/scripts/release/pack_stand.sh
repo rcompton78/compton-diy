@@ -14,6 +14,9 @@
 set -euo pipefail
 
 VERSION="${1:-${RELEASE_VERSION:-dev}}"
+case "$VERSION" in
+  '' | *[!A-Za-z0-9._-]*) echo "ERROR: invalid version '$VERSION' (use A-Z, a-z, 0-9, '.', '_', '-')." >&2; exit 1 ;;
+esac
 NAME="espframe-stand-10"
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 SRC="$ROOT/hardware/stand-10"
@@ -38,6 +41,9 @@ trap 'rm -rf "$STAGE"' EXIT
 PKG="$STAGE/$NAME-$VERSION"
 mkdir -p "$PKG/docs" "$DEST"
 
+for f in "$SRC/README.md" "$ROOT/LICENSE" "$ROOT/NOTICE"; do
+  [ -f "$f" ] || { echo "ERROR: $f not found; the release must ship it." >&2; exit 1; }
+done
 cp "${prints[@]}" "$CHECKS" "$SRC/README.md" "$ROOT/LICENSE" "$ROOT/NOTICE" "$PKG/"
 if [ ${#renders[@]} -gt 0 ]; then cp "${renders[@]}" "$PKG/docs/"; fi
 {
@@ -46,7 +52,8 @@ if [ ${#renders[@]} -gt 0 ]; then cp "${renders[@]}" "$PKG/docs/"; fi
 } > "$PKG/VERSION"
 
 rm -f "$DEST/$NAME"-*.tar.gz
-# Sorted entries for a reproducible tarball; bsdtar (macOS) has no --sort.
+# Entries in a stable, sorted order (file times and owners still vary by build);
+# bsdtar (macOS) has no --sort.
 if tar --version 2>/dev/null | grep -q 'GNU tar'; then
   tar --sort=name -czf "$DEST/$NAME-$VERSION.tar.gz" -C "$STAGE" "$NAME-$VERSION"
 else
