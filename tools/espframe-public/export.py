@@ -296,7 +296,7 @@ CREDENTIAL_OK = re.compile(
     r"api_key|read|write|true|false|True|False|null|none|None|\$\{.*|!secret.*|!lambda.*|<.*"
     r"|fixture-read-only-api-key|imported-api-key"
     # Code, not values: a TS type or a property/expression (`apiKey: string;`).
-    r"|\w+[;,]|string|number|boolean|\w+\.\w+.*|\w+\(.*"
+    r"|\w+[;,]|string|number|boolean|(?:self|this|state|props|os|process|id|args|config|S)\.\w+.*|\w+\(.*"
 )
 URL_HOSTS_OK = re.compile(
     r"(?:[\w-]+\.)*(?:github\.com|github\.io|githubusercontent\.com|npmjs\.org|immich\.app|esphome\.io"
@@ -304,7 +304,7 @@ URL_HOSTS_OK = re.compile(
     r"|makerworld\.com|buymeacoffee\.com|aliexpress\.com|gnu\.org|fsf\.org|wikipedia\.org|laskakit\.cz"
     r"|unpkg\.com|valgrind\.org|tidelift\.com|opensource\.org|libjpeg-turbo\.org|microsoft\.com"
     r"|google\.com|googlesource\.com|cppreference\.com|mozilla\.org|ietf\.org|espressif\.com|pool\.ntp\.org"
-    r"|example\.com|example\.org|example\.net|example\.test|[\w-]+\.invalid|immich\.local)(?::\d*\w*)?"
+    r"|example\.com|example\.org|example\.net|example\.test|[\w-]+\.invalid|immich\.local|homeassistant\.local|espframe\.local|immich-frame[\w-]*\.local)(?::\d*\w*)?"
     r"|localhost(?::\d+)?|127\.0\.0\.1(?::\S*)?|<[^>]+>(?::\d+)?|\$\{[^}]+\}|\{[^}]+\}"
     r"|192\.168\.(?:4\.1|1\.30|0\.1)(?::\d+)?|\.\.\.|\*",
     re.I,
@@ -354,9 +354,6 @@ def check_dest(dest: Path) -> None:
         die(f"refusing {dest}: it isn't a directory")
     if not dest.exists() or not [c for c in dest.iterdir() if c.name != ".git"]:
         return
-    # Files copy_tree writes first, so an export that failed part-way still counts.
-    if (dest / "product" / "contract" / "devices.json").is_file() and (dest / "common" / "addon" / "firmware_update.yaml").is_file():
-        return
     if (dest / ".git").exists():
         origin = subprocess.run(
             ["git", "remote", "get-url", "origin"], cwd=dest, capture_output=True, text=True
@@ -364,6 +361,9 @@ def check_dest(dest: Path) -> None:
         if re.search(r"[:/]rcompton78/espframe(?:\.git)?/?$", origin):
             return
         die(f"refusing {dest}: it has files and its origin ({origin or 'none'}) isn't rcompton78/espframe")
+    # Files copy_tree writes first, so an export that failed part-way still counts.
+    if (dest / "product" / "contract" / "devices.json").is_file() and (dest / "common" / "addon" / "firmware_update.yaml").is_file():
+        return
     die(f"refusing {dest}: it isn't empty, an espframe checkout or an earlier export, and the export empties it")
 
 
@@ -524,7 +524,7 @@ def scan(dest: Path) -> None:
                     continue
                 if what == "URL host" and URL_HOSTS_OK.fullmatch(m.group("host")):
                     continue
-                if what == "private hostname" and m.group(0).lower() in ("immich.local",):
+                if what == "private hostname" and re.fullmatch(r"immich|homeassistant|espframe|immich-frame[\w-]*", m.group(0).lower().removesuffix(".local")):
                     continue
                 if rel.startswith(ALLOW_PATHS.get(what, ())):
                     continue

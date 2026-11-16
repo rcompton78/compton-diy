@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Exits 0 if this run's commit may be published as the newest release: it is the
-# head of the default branch, or every commit after it only changes files that
+# head of the default branch, or the commits after it together only change files that
 # release.yml's paths-ignore skips (README.md, Markdown under docs/), which
 # start no release of their own.
 #
@@ -23,8 +23,12 @@ fi
 
 compare="$(gh api "repos/$repo/compare/$sha...$head")"
 if [ "$(jq -r .status <<<"$compare")" = "ahead" ]; then
-  others="$(jq -r '.files[].filename' <<<"$compare" | grep -Ev '^(README\.md|docs/.*\.md)$' || true)"
-  if [ -z "$others" ]; then
+  # Both names of a rename count. GitHub lists at most 300 files: past that,
+  # or with no list at all, refuse rather than guess.
+  files="$(jq -r 'if (.files | type) != "array" or (.files | length) >= 300 then error("no usable file list")
+                  else .files[] | .filename, (.previous_filename // empty) end' <<<"$compare")"
+  others="$(grep -Ev '^(README\.md|docs/.*\.md)$' <<<"$files" || true)"
+  if [ -n "$files" ] && [ -z "$others" ]; then
     exit 0
   fi
 fi
