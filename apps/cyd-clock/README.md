@@ -5,7 +5,10 @@ Freenove ESP32-S3 2.8" boards. Shows the time, date, and local weather, doubles 
 countdown timer/stopwatch, and includes a virtual pet cat with care mechanics,
 gamified points/levels, and a cosmetics store (colors, hats, glasses, chest badges, stuffies,
 toys, room themes, plus a few pricey legendary items like a Sorting Hat, Hogwarts and Gryffindor chest badges, a Hogwarts at Night room theme, and a Haunted Pumpkin
-Patch room theme that's only sold in October but stays yours all year once bought) — all configurable from a web UI served by the device itself. A few times a year
+Patch room theme that's only sold in October but stays yours all year once bought). Every December
+the store also opens a Christmas section with a legendary Cozy Fireplace room theme, Reindeer
+Antlers, Candy Cane Glasses, a Reindeer stuffy and a Christmas Bundle of all four; they leave the
+store on January 1, but anything bought stays yours. It's all configurable from a web UI served by the device itself. A few times a year
 the cat gets a seasonal theme week: Halloween (Oct 24–31) dresses it in a witch hat and
 candy-corn sunglasses in front of a Haunted Night backdrop, Christmas (Dec 1–26) brings a Santa
 hat, Christmas tree glasses and a snowy Christmas Night backdrop (with presents under the tree

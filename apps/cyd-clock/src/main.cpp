@@ -96,6 +96,11 @@ static constexpr uint32_t STORE_COST_ACCESSORY_GLASSES = 50;  // matches bow pri
 static constexpr uint32_t STORE_COST_RIGHT_ARM_SLOT = 200;  // one-time unlock, not per-stuffy
 static constexpr uint32_t STORE_COST_HOCKEY_STICK = 100;
 static constexpr uint32_t STORE_COST_MAGIC_WAND = 100;
+// December-only Christmas items (COM-637), priced like their everyday counterparts: the antlers
+// sit with the toys (real art, not a recolor), the reindeer with the premium Snowman/Penguin tier.
+// Cozy Fireplace uses STORE_COST_LEGENDARY and Candy Cane Glasses STORE_COST_ACCESSORY_GLASSES.
+static constexpr uint32_t STORE_COST_REINDEER_ANTLERS = 100;
+static constexpr uint32_t STORE_COST_REINDEER = 150;
 // Legendary tier (COM-382): the top-of-store price shared by every legendary item (COM-375 to
 // COM-378 reuse it too), just above the Pikachu/Eevee/Sylveon/Umbreon 300 tier. Any item priced at or above it
 // gets the gold "LEGENDARY" store tag — see appendStoreItemTags() — so keep every non-legendary price
@@ -231,6 +236,18 @@ static constexpr uint16_t C_XMAS_BULB_BLUE  = 0x3D9F;  // blue light bulb (~#38b
 static constexpr uint16_t C_SANTA_RED       = 0xD104;  // Santa hat, red present (~#d42020)
 static constexpr uint16_t C_SANTA_FUR_LINE  = 0xA534;  // grey outline around the hat's white fur (~#a0a4a0)
 
+// December-only Christmas store items (COM-637). The Cozy Fireplace wall doubles as that theme's
+// bgColor, so every text cell over the backdrop (badge column, "Zz", the cat's name) erases to it.
+static constexpr uint16_t C_FIREPLACE_WALL   = 0x48E2;  // warm deep-red wallpaper (~#4a1c14)
+static constexpr uint16_t C_FIREPLACE_BRICK  = 0x89C4;  // brick (~#8c3a24)
+static constexpr uint16_t C_FIREPLACE_MORTAR = 0x5943;  // mortar lines (~#5a2a1e)
+static constexpr uint16_t C_FIREPLACE_HEARTH = 0x1040;  // the dark firebox (~#120806)
+static constexpr uint16_t C_FIREPLACE_WOOD   = 0x3902;  // mantel shadow, log ends (~#3c2210)
+static constexpr uint16_t C_FIRE_CORE        = 0xFF94;  // pale-yellow flame core (~#fff0a0)
+static constexpr uint16_t C_ANTLER           = 0xB3C8;  // antler tan (~#b07840)
+static constexpr uint16_t C_ANTLER_LINE      = 0x4962;  // antler outline, so it reads on a pale or dark cat (~#4a2c14)
+static constexpr uint16_t C_REINDEER         = 0x8AC6;  // reindeer stuffy fur (~#8a5a32)
+
 // Legendary Harry Potter items (COM-382). The Sorting Hat is charcoal (COM-447, brown before), so
 // its dark fill reads on pale furs and pale themes, while its mid-grey outline and creases are what
 // separate it from a black cat and the dark themes (black, navy, plum) and keep the crumples and
@@ -364,6 +381,7 @@ static void drawPartyHat(int cx, int cy);
 static void drawWitchHat(int cx, int cy);
 static void drawSortingHat(int cx, int cy);
 static void drawSantaHat(int cx, int cy);
+static void drawReindeerAntlers(int cx, int cy);
 
 // Accessory catalog — same purchase/equip model as cat colors, but layered independently
 // on top of whichever cat color is equipped (an accessory works with any fur color). `id` is
@@ -407,6 +425,9 @@ static constexpr Accessory ACCESSORIES[] = {
     // Theme-week exclusive again (cost 0), appended after the Sorting Hat for the same
     // index-keyed-bitmask reason: never insert, only append.
     {"santa_hat", "Santa Hat", 0, "#D42020", drawSantaHat},  // Christmas (COM-636)
+    // December-only store item (COM-637): sold only while isChristmasStoreOpen(); owners keep it
+    // all year. See CHRISTMAS_STORE_ITEMS[].
+    {"reindeer_antlers", "Reindeer Antlers", STORE_COST_REINDEER_ANTLERS, "#C8925A", drawReindeerAntlers},
 };
 static constexpr int ACCESSORY_COUNT = sizeof(ACCESSORIES) / sizeof(ACCESSORIES[0]);
 static_assert(ACCESSORY_COUNT <= 16, "ownedAccessories bitmask is uint16_t");
@@ -421,6 +442,10 @@ static_assert(ACCESSORY_COUNT > ACCESSORY_IDX_SANTA_HAT, "theme-week accessory i
 static_assert(ACCESSORIES[ACCESSORY_IDX_PARTY_HAT].cost == 0 && ACCESSORIES[ACCESSORY_IDX_WITCH_HAT].cost == 0 &&
               ACCESSORIES[ACCESSORY_IDX_SANTA_HAT].cost == 0,
               "theme-week exclusives must be cost 0, or isStoreAccessory() would put them in the store");
+// The December-only Reindeer Antlers (COM-637), at a fixed index for CHRISTMAS_STORE_ITEMS[].
+static constexpr int ACCESSORY_IDX_REINDEER_ANTLERS = 14;
+static_assert(ACCESSORY_COUNT > ACCESSORY_IDX_REINDEER_ANTLERS && ACCESSORIES[ACCESSORY_IDX_REINDEER_ANTLERS].cost > 0,
+              "Christmas store accessory index out of range, or not priced");
 
 /**
  * Whether an ACCESSORIES[] entry can be bought in the store. The invariant is
@@ -437,25 +462,16 @@ static constexpr bool isStoreAccessory(int i) {
     return ACCESSORIES[i].cost > 0;
 }
 
-// Counts the store-purchasable ACCESSORIES[] entries from index `i` onward (recursive, so it
-// stays a C++11 constexpr function).
-static constexpr int countStoreAccessories(int i) {
-    return i >= ACCESSORY_COUNT ? 0 : (isStoreAccessory(i) ? 1 : 0) + countStoreAccessories(i + 1);
-}
-// Count of normal, store-purchasable accessories, derived from isStoreAccessory() so it can't
-// drift when a theme week appends another cost-0 entry. hasNewStoreItems() compares the seen
-// count against this, so theme-exclusive entries never trip the "new store items!" badge.
-static constexpr int ACCESSORY_STORE_COUNT = countStoreAccessories(0);
-
 // Forward-declared for the same reason as the bow functions above — GLASSES[] needs this
 // before drawCat() (and `tft`) are declared.
 static void drawSunglassesPinkRim(int cx, int cy);
 
-// Forward-declared for the same reason. Unlike the sunglasses above, this one isn't
-// store-purchasable — see GLASSES_STORE_COUNT below.
+// Forward-declared for the same reason. Unlike the sunglasses above, these three aren't
+// store-purchasable — see isStoreGlasses() below.
 static void drawBalloonSunglasses(int cx, int cy);
 static void drawCandyCornSunglasses(int cx, int cy);
 static void drawChristmasTreeGlasses(int cx, int cy);
+static void drawCandyCaneGlasses(int cx, int cy);
 
 // Glasses catalog — a separate accessory slot from ACCESSORIES[] (own store section, own
 // dressing-room control, own owned/equipped bitmask), even though the struct shape and
@@ -473,25 +489,39 @@ struct Glasses {
 };
 static constexpr Glasses GLASSES[] = {
     {"sunglasses_pink", "Pink-Rim Sunglasses", STORE_COST_ACCESSORY_GLASSES, "#FF80C0", drawSunglassesPinkRim},
-    // Below: theme-week exclusive (DIY-108) — MUST stay appended after every real
-    // store-purchasable entry above; see GLASSES_STORE_COUNT.
+    // Below: theme-week exclusives (DIY-108), cost 0 so isStoreGlasses() keeps them out of the store.
     {"balloon_sunglasses", "Birthday Balloon Sunglasses", 0, "#FF0000", drawBalloonSunglasses},
     {"candy_corn_sunglasses", "Candy Corn Sunglasses", 0, "#FFD21F", drawCandyCornSunglasses},  // Halloween (COM-379)
     {"christmas_tree_glasses", "Christmas Tree Glasses", 0, "#2E9E48", drawChristmasTreeGlasses},  // Christmas (COM-636)
+    // December-only store item (COM-637), appended after the theme-week block (index-keyed
+    // bitmask: never insert, only append). See CHRISTMAS_STORE_ITEMS[].
+    {"candy_cane_glasses", "Candy Cane Glasses", STORE_COST_ACCESSORY_GLASSES, "#FF5050", drawCandyCaneGlasses},
 };
 static constexpr int GLASSES_COUNT = sizeof(GLASSES) / sizeof(GLASSES[0]);
 static_assert(GLASSES_COUNT <= 8, "ownedGlasses bitmask is uint8_t");
-// Count of normal, store-purchasable glasses — everything before the theme-week-exclusive block
-// above. Store rendering/purchase/seen-count logic bounds itself to this, not the full
-// GLASSES_COUNT, so theme-exclusive entries never show up as purchasable and never trip the
-// "new store items!" badge (see hasNewStoreItems()). The subtracted number is the size of that
-// exclusive block: bump it whenever a theme week appends another entry.
-static constexpr int GLASSES_STORE_COUNT = GLASSES_COUNT - 3;
-static constexpr int GLASSES_IDX_BALLOON        = GLASSES_STORE_COUNT;
-static constexpr int GLASSES_IDX_CANDY_CORN     = GLASSES_STORE_COUNT + 1;
-static constexpr int GLASSES_IDX_CHRISTMAS_TREE = GLASSES_STORE_COUNT + 2;
-static_assert(GLASSES_IDX_BALLOON == 1 && GLASSES_IDX_CANDY_CORN == 2 && GLASSES_IDX_CHRISTMAS_TREE == 3,
-              "glasses ownership is an index-keyed bitmask: theme-week glasses must keep their indices");
+// Catalog index of each theme-week-exclusive pair, and of the December-only Candy Cane Glasses.
+// Fixed, not derived from the catalog size, since a store entry now sits after the exclusives.
+static constexpr int GLASSES_IDX_BALLOON        = 1;
+static constexpr int GLASSES_IDX_CANDY_CORN     = 2;
+static constexpr int GLASSES_IDX_CHRISTMAS_TREE = 3;
+static constexpr int GLASSES_IDX_CANDY_CANE     = 4;
+static_assert(GLASSES_COUNT > GLASSES_IDX_CANDY_CANE, "glasses indices out of range");
+static_assert(GLASSES[GLASSES_IDX_BALLOON].cost == 0 && GLASSES[GLASSES_IDX_CANDY_CORN].cost == 0 &&
+              GLASSES[GLASSES_IDX_CHRISTMAS_TREE].cost == 0,
+              "theme-week exclusives must be cost 0, or isStoreGlasses() would put them in the store");
+
+/**
+ * Whether a GLASSES[] entry can be bought in the store: the same **store-purchasable ⇔ cost > 0**
+ * invariant as isStoreAccessory(). Glasses used to bound the store to a prefix instead, which
+ * stopped working once a store entry (Candy Cane Glasses, COM-637) was appended after the
+ * theme-week block.
+ *
+ * @param i Index into GLASSES[].
+ * @return true if the entry has a price, false for the cost-0 theme-week exclusives.
+ */
+static constexpr bool isStoreGlasses(int i) {
+    return GLASSES[i].cost > 0;
+}
 
 // Forward-declared for the same reason as the bow functions above.
 static void drawHogwartsCrest(int cx, int cy);
@@ -515,9 +545,6 @@ static constexpr Badge BADGES[] = {
 };
 static constexpr int BADGE_COUNT = sizeof(BADGES) / sizeof(BADGES[0]);
 static_assert(BADGE_COUNT <= 8, "ownedBadges bitmask is uint8_t");
-// Count of store-purchasable badges. No theme-week badges exist yet, so it's the whole catalog;
-// if one is ever appended, subtract it here like GLASSES_STORE_COUNT does.
-static constexpr int BADGE_STORE_COUNT = BADGE_COUNT;
 
 // Forward declarations: each stuffy's sleep-scene art, defined further below alongside
 // drawSleepingCat(). Declared here so the STUFFIES[] catalog can reference them directly —
@@ -563,6 +590,10 @@ static void drawPikachuHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawEeveeHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawSylveonHeldPeeking(int cx, int cy, uint16_t accentColor);
 static void drawUmbreonHeldPeeking(int cx, int cy, uint16_t accentColor);
+static void drawReindeerPeeking(int cx, int cy, uint16_t accentColor);
+static void drawReindeerFull(int cx, int cy, uint16_t accentColor);
+static void drawReindeerHeld(int cx, int cy, uint16_t accentColor);
+static void drawReindeerHeldPeeking(int cx, int cy, uint16_t accentColor);
 
 // Stuffy catalog — same purchase/equip model as blanket colors, so more stuffies can be
 // added later without changing the store/dressing-room plumbing. `id` is the stable
@@ -599,9 +630,14 @@ static constexpr Stuffy STUFFIES[] = {
     {"eevee",    "Eevee",        STORE_COST_EEVEE,    drawEeveePeeking,    drawEeveeFull,    drawEeveeHeld,   drawEeveeHeldPeeking},
     {"sylveon",  "Sylveon",      STORE_COST_SYLVEON,  drawSylveonPeeking,  drawSylveonFull,  drawSylveonHeld, drawSylveonHeldPeeking},
     {"umbreon",  "Umbreon",      STORE_COST_UMBREON,  drawUmbreonPeeking,  drawUmbreonFull,  drawUmbreonHeld, drawUmbreonHeldPeeking},
+    // December-only store item (COM-637): sold only while isChristmasStoreOpen(); owners keep it
+    // all year. See CHRISTMAS_STORE_ITEMS[].
+    {"reindeer", "Reindeer",     STORE_COST_REINDEER, drawReindeerPeeking, drawReindeerFull, drawReindeerHeld, drawReindeerHeldPeeking},
 };
 static constexpr int STUFFY_COUNT = sizeof(STUFFIES) / sizeof(STUFFIES[0]);
 static_assert(STUFFY_COUNT <= 16, "ownedStuffies bitmask is uint16_t");
+static constexpr int STUFFY_IDX_REINDEER = 10;
+static_assert(STUFFY_COUNT > STUFFY_IDX_REINDEER, "stuffy index out of range");
 
 // Forward declaration: the mini hockey stick's art, defined further below alongside
 // drawTeddyHead() and friends. Declared here so the TOYS[] catalog can reference it
@@ -680,6 +716,11 @@ static void drawPumpkinPatchBackground(int x, int y, int w, int h);
 // further below alongside drawPumpkinPatchBackground().
 static void drawChristmasNightBackground(int x, int y, int w, int h);
 
+// Forward declaration: December-only legendary (COM-637) "Cozy Fireplace" backdrop (brick
+// fireplace with a flickering fire, stockings, a wreath and a garland), defined further below
+// alongside drawChristmasNightBackground().
+static void drawCozyFireplaceBackground(int x, int y, int w, int h);
+
 // Room theme catalog — same purchase/equip model as blanket colors and stuffies. `id` is
 // the stable identifier used in store/dressing-room form requests; ConfigManager persists
 // ownership as an `ownedRoomThemes` bitmask and the equipped selection as a numeric
@@ -710,8 +751,7 @@ static constexpr RoomTheme ROOM_THEMES[] = {
     {"starry_night",       "Starry Night",  STORE_COST_STARRY_NIGHT, TFT_BLACK, drawStarryNightBackground, nullptr},  // moon + stars on black — not a straight color, label stays white
     {"six_seven",          "6-7",           STORE_COST_SIX_SEVEN,    TFT_BLACK, drawSixSevenBackground,    nullptr},  // rotated "67" digit pairs on black (DIY-87) — not a straight color, label stays white
     {"clear_sky",          "Clear Sky",     STORE_COST_SKY,          0x5D9C,    drawSkyBackground,         nullptr},  // light blue sky + clouds + rainbow (DIY-90) — not a straight color, label stays white
-    // Below: theme-week exclusive (DIY-108) — MUST stay appended after every real
-    // store-purchasable entry above; see ROOM_THEME_STORE_COUNT.
+    // Below: theme-week exclusives (DIY-108), cost 0 so isStoreRoomTheme() keeps them out of the store.
     {"birthday", "Birthday", 0, 0xFCF3, drawBirthdayBackground, nullptr},  // confetti + balloons — not a straight color, label stays white
     {"haunted_night", "Haunted Night", 0, C_HAUNTED_SKY, drawHauntedNightBackground, nullptr},  // Halloween (COM-379): moon + bats + jack-o'-lantern — label stays white
     // Below: store-purchasable again (COM-378). Appended after the theme-week block for the same
@@ -722,6 +762,8 @@ static constexpr RoomTheme ROOM_THEMES[] = {
     {"pumpkin_patch", "Haunted Pumpkin Patch", STORE_COST_LEGENDARY, C_PUMPKIN_PATCH_SKY, drawPumpkinPatchBackground, "#FF9A1F"},  // moon + haunted house + flickering jack-o'-lanterns + bat, orange label
     // Theme-week exclusive again (cost 0), appended, never inserted (index-keyed bitmask).
     {"christmas_night", "Christmas Night", 0, C_XMAS_SKY, drawChristmasNightBackground, nullptr},  // Christmas (COM-636): tree + lights + snow — label stays white
+    // Legendary, sold only in December (COM-637, see CHRISTMAS_STORE_ITEMS[]); owners keep it all year.
+    {"cozy_fireplace", "Cozy Fireplace", STORE_COST_LEGENDARY, C_FIREPLACE_WALL, drawCozyFireplaceBackground, "#FF8A3C"},  // brick fireplace + fire + stockings, ember-orange label
 };
 static constexpr int ROOM_THEME_COUNT = sizeof(ROOM_THEMES) / sizeof(ROOM_THEMES[0]);
 static_assert(ROOM_THEME_COUNT <= 16, "ownedRoomThemes bitmask is uint16_t");
@@ -732,7 +774,9 @@ static constexpr int ROOM_THEME_IDX_HAUNTED_NIGHT  = 10;
 static constexpr int ROOM_THEME_IDX_HOGWARTS_NIGHT = 11;
 static constexpr int ROOM_THEME_IDX_PUMPKIN_PATCH  = 12;
 static constexpr int ROOM_THEME_IDX_CHRISTMAS      = 13;
-static_assert(ROOM_THEME_COUNT > ROOM_THEME_IDX_CHRISTMAS, "room theme indices out of range");
+static constexpr int ROOM_THEME_IDX_COZY_FIREPLACE = 14;  // December-only store item (COM-637)
+static_assert(ROOM_THEME_COUNT > ROOM_THEME_IDX_COZY_FIREPLACE, "room theme indices out of range");
+static_assert(ROOM_THEMES[ROOM_THEME_IDX_COZY_FIREPLACE].cost > 0, "a Christmas store item must be priced");
 static_assert(ROOM_THEMES[ROOM_THEME_IDX_BIRTHDAY].cost == 0 && ROOM_THEMES[ROOM_THEME_IDX_HAUNTED_NIGHT].cost == 0 &&
               ROOM_THEMES[ROOM_THEME_IDX_CHRISTMAS].cost == 0,
               "theme-week exclusives must be cost 0, or isStoreRoomTheme() would put them in the store");
@@ -748,15 +792,6 @@ static_assert(ROOM_THEMES[ROOM_THEME_IDX_BIRTHDAY].cost == 0 && ROOM_THEMES[ROOM
 static constexpr bool isStoreRoomTheme(int i) {
     return ROOM_THEMES[i].cost > 0;
 }
-
-// Counts the store-purchasable ROOM_THEMES[] entries from index `i` onward (recursive, so it
-// stays a C++11 constexpr function).
-static constexpr int countStoreRoomThemes(int i) {
-    return i >= ROOM_THEME_COUNT ? 0 : (isStoreRoomTheme(i) ? 1 : 0) + countStoreRoomThemes(i + 1);
-}
-// Count of normal, store-purchasable room themes, derived from isStoreRoomTheme() — see
-// ACCESSORY_STORE_COUNT's comment for why.
-static constexpr int ROOM_THEME_STORE_COUNT = countStoreRoomThemes(0);
 
 // Sentinel stored in equippedBlanketColor/equippedStuffy/equippedRoomTheme to mean
 // "explicitly unequipped by the user in the dressing room", as opposed to 0 which means "no
@@ -1026,6 +1061,54 @@ static void drawSantaHat(int cx, int cy) {
     tft.fillRoundRect(cx - 17, cy - 68, 34, 6, 3, TFT_WHITE);
 }
 
+// A line `r` px thick each way: the same line redrawn at every offset within a diamond of
+// radius r, which keeps diagonal strokes as solid as straight ones.
+static void drawThickLine(int x0, int y0, int x1, int y1, int r, uint16_t color) {
+    for (int ox = -r; ox <= r; ox++) {
+        for (int oy = -r; oy <= r; oy++) {
+            if (abs(ox) + abs(oy) <= r) tft.drawLine(x0 + ox, y0 + oy, x1 + ox, y1 + oy, color);
+        }
+    }
+}
+
+// One of drawReindeerAntlers()' antlers as a list of strokes, {x0, y0, x1, y1} relative to the
+// cat's center, for the left antler (the right one mirrors x): a beam rising from the top of the
+// head with an outer and an inner tine. Every point stays inside drawCat()'s clear rect (x within
+// ±50, y from cy-88), counting the 2px outline.
+struct AntlerStroke { int8_t x0, y0, x1, y1; };
+static constexpr AntlerStroke ANTLER_STROKES[] = {
+    {-8, -62, -13, -76}, {-13, -76, -11, -85},  // beam
+    {-12, -72, -24, -78}, {-24, -78, -28, -85},  // outer tine
+    {-13, -79, -6, -84},                          // inner tine
+};
+
+/**
+ * Reindeer Antlers (December-only store item, COM-637): two branching tan antlers on top of the
+ * head with a sprig of holly between them. Each stroke is drawn first 2px thick in a dark brown
+ * outline, then 1px thick in tan, so the antlers read on a pale or a dark cat and on any theme.
+ * The holly's lowest row (cy-62) stays above drawEyes()' blink rect (cy-50), like drawSantaHat().
+ *
+ * @param cx Cat center x (CAT_CX).
+ * @param cy Cat center y, including any bounce offset.
+ */
+static void drawReindeerAntlers(int cx, int cy) {
+    for (int pass = 0; pass < 2; pass++) {
+        int r = pass == 0 ? 2 : 1;
+        uint16_t color = pass == 0 ? C_ANTLER_LINE : C_ANTLER;
+        for (int side = -1; side <= 1; side += 2) {
+            for (const AntlerStroke& st : ANTLER_STROKES) {
+                drawThickLine(cx - side * st.x0, cy + st.y0, cx - side * st.x1, cy + st.y1, r, color);
+            }
+        }
+    }
+    // Holly: two leaves and three berries.
+    tft.fillEllipse(cx - 5, cy - 64, 5, 2, C_XMAS_TREE);
+    tft.fillEllipse(cx + 5, cy - 64, 5, 2, C_XMAS_TREE);
+    tft.fillCircle(cx - 1, cy - 65, 1, C_SANTA_RED);
+    tft.fillCircle(cx + 2, cy - 65, 1, C_SANTA_RED);
+    tft.fillCircle(cx, cy - 63, 1, C_SANTA_RED);
+}
+
 // Glasses art (declared earlier alongside GLASSES[]). Called from drawCat() after the eyes
 // (unlike the bow above, which is drawn before them) so the round lenses sit over the eye
 // shapes drawn by drawEyeShapes() at (cx-15/+15, cy-37, r=11). Round rim + round lens per
@@ -1154,6 +1237,52 @@ static void drawChristmasTreeGlasses(int cx, int cy) {
     for (int w = -1; w <= 1; w++) {
         tft.drawLine(cx - 24, cy - 34 + w, cx - 43, cy - 47 + w, C_XMAS_GOLD);
         tft.drawLine(cx + 24, cy - 34 + w, cx + 43, cy - 47 + w, C_XMAS_GOLD);
+    }
+}
+
+/**
+ * One candy-cane lens for drawCandyCaneGlasses(): a red rim around a white lens crossed by
+ * diagonal red stripes. Each stripe is a run of 45° lines x + y = c (relative to the lens
+ * center), which tile solidly for consecutive c, clipped to a chord of the lens circle.
+ *
+ * @param lx Lens center x (the eye's x).
+ * @param ly Lens center y.
+ */
+static void drawCandyCaneLens(int lx, int ly) {
+    static constexpr int RIM_R = 13, LENS_R = 10, STRIPE_R = 9;
+    tft.fillCircle(lx, ly, RIM_R, C_SANTA_RED);
+    tft.fillCircle(lx, ly, LENS_R, TFT_WHITE);
+    for (int c = -12; c <= 12; c++) {
+        if ((c + 12) % 8 >= 3) continue;  // 3 lines of red, then 5 of white
+        float h2 = STRIPE_R * STRIPE_R - c * c / 2.0f;
+        if (h2 <= 0) continue;
+        float half = sqrtf(h2) / 1.41421356f;  // the chord's half-length, in x
+        int xa = lroundf(c / 2.0f - half), xb = lroundf(c / 2.0f + half);
+        tft.drawLine(lx + xa, ly + c - xa, lx + xb, ly + c - xb, C_SANTA_RED);
+    }
+}
+
+/**
+ * Candy Cane Glasses (December-only store item, COM-637): round red-rimmed lenses with candy-cane
+ * stripes, a striped bridge and red temple arms with white bands. Same layering as
+ * drawSunglassesPinkRim(): called after the eyes, the round rim covers the round eye entirely,
+ * and the cat skips blinking while any glasses are equipped.
+ *
+ * @param cx Cat center x (CAT_CX).
+ * @param cy Cat center y, including any bounce offset.
+ */
+static void drawCandyCaneGlasses(int cx, int cy) {
+    drawCandyCaneLens(cx - 15, cy - 37);
+    drawCandyCaneLens(cx + 15, cy - 37);
+    tft.fillRect(cx - 4, cy - 40, 8, 4, TFT_WHITE);  // bridge
+    tft.fillRect(cx - 1, cy - 40, 3, 4, C_SANTA_RED);
+    for (int w = -1; w <= 1; w++) {
+        tft.drawLine(cx - 27, cy - 37 + w, cx - 43, cy - 47 + w, C_SANTA_RED);
+        tft.drawLine(cx + 27, cy - 37 + w, cx + 43, cy - 47 + w, C_SANTA_RED);
+    }
+    for (int side = -1; side <= 1; side += 2) {
+        tft.fillRect(cx + side * 32 - 1, cy - 42, 3, 3, TFT_WHITE);  // white bands on each arm
+        tft.fillRect(cx + side * 38 - 1, cy - 46, 3, 3, TFT_WHITE);
     }
 }
 
@@ -2337,6 +2466,64 @@ static void drawUmbreonHeldPeeking(int cx, int cy, uint16_t accentColor) {
     drawUmbreonHead(bx, by);
 }
 
+// Shared antler/ear/head/snout/face art for every reindeer pose (December-only, COM-637): the
+// teddy's layout with a pair of small 2px tan antlers (each with one tine) rising from the top of
+// the head, and small oval ears out to the sides. The snout takes the accent colour, like the
+// other stuffies' snouts. Everything stays within bx±9, the teddy's footprint, and the antlers
+// within bx±7: in the right-arm poses (bx = cx+38 by day, cx+40 at night) that keeps the head
+// inside drawAnimal()'s cat clear rect (x 70–169) and the antlers left of the badge column's SALE
+// strip (x >= 168, y up to ANIMAL_Y+69), which drawSaleFlash() repaints after the stuffy.
+static void drawReindeerHead(int bx, int by, uint16_t snoutColor) {
+    for (int side = -1; side <= 1; side += 2) {
+        for (int t = 0; t < 2; t++) {
+            tft.drawLine(bx + side * (2 + t), by - 7, bx + side * (5 + t), by - 19, C_ANTLER);    // beam
+            tft.drawLine(bx + side * 4, by - 12 - t, bx + side * 7, by - 15 - t, C_ANTLER);      // tine
+        }
+        tft.fillEllipse(bx + side * 7, by - 4, 2, 2, C_REINDEER);  // ear, peeking out past the head
+    }
+    tft.fillCircle(bx, by, 9, C_REINDEER);                   // head
+    tft.fillEllipse(bx, by + 4, 5, 3, snoutColor);           // snout
+    tft.fillCircle(bx, by + 2, 2, C_DARK);                   // nose
+    tft.fillCircle(bx - 3, by - 3, 1, C_DARK);               // left eye
+    tft.fillCircle(bx + 3, by - 3, 1, C_DARK);               // right eye
+}
+
+// Body shared by the reindeer's full-body poses: the teddy's body with a red collar and a gold
+// bell at the neck, a belly patch in the accent colour and dark hooves. Symmetric, so the left
+// and right poses need no mirroring.
+static void drawReindeerBody(int bx, int by, uint16_t accentColor) {
+    tft.fillRoundRect(bx - 8, by + 7, 16, 24, 8, C_REINDEER);  // body
+    tft.fillCircle(bx, by + 21, 4, accentColor);               // belly patch
+    tft.fillCircle(bx - 5, by + 31, 4, C_FIREPLACE_WOOD);      // left hoof
+    tft.fillCircle(bx + 5, by + 31, 4, C_FIREPLACE_WOOD);      // right hoof
+    tft.fillRect(bx - 7, by + 10, 14, 2, C_SANTA_RED);         // collar, just below the head
+    tft.fillCircle(bx, by + 13, 2, C_XMAS_GOLD);               // bell
+}
+
+// Reindeer peeking out beside the head, tucked into the blanket's top edge.
+static void drawReindeerPeeking(int cx, int cy, uint16_t accentColor) {
+    drawReindeerHead(cx - 40, cy - 6, accentColor);
+}
+
+// Full-body reindeer sitting beside the cat, used when it's owned without the blanket.
+static void drawReindeerFull(int cx, int cy, uint16_t accentColor) {
+    int bx = cx - 38, by = cy - 8;
+    drawReindeerBody(bx, by, accentColor);
+    drawReindeerHead(bx, by, accentColor);
+}
+
+// Right-arm slot pose (DIY-64): drawReindeerFull() on the other side.
+static void drawReindeerHeld(int cx, int cy, uint16_t accentColor) {
+    int bx = cx + 38, by = cy - 8;
+    drawReindeerBody(bx, by, accentColor);
+    drawReindeerHead(bx, by, accentColor);
+}
+
+// Night-only right-arm variant (DIY-64) — see drawTeddyHeldPeeking() for rationale.
+static void drawReindeerHeldPeeking(int cx, int cy, uint16_t accentColor) {
+    drawReindeerHead(cx + 40, cy - 6, accentColor);
+}
+
 // Deeply-closed, sleepy eyes for the sleep-window peek — thinner and gently curled at
 // the outer corners than drawEyes()'s blink-style dash, so the cat reads as actually
 // asleep rather than mid-blink.
@@ -3149,6 +3336,143 @@ static void drawChristmasNightBackground(int x, int y, int w, int h) {
     }
 
     tft.resetViewport();
+}
+
+// Cozy Fireplace (COM-637) layout. The fireplace fills the left column (x 0–46, ANIMAL_Y+10..+94):
+// left of the boredom "Zz" column (x 48–70), above the Meds button (MEDS_Y = ANIMAL_Y+96) and left
+// of the cat's clear rect, sparkles and stuffies (x >= 61), so nothing is ever drawn over it. The
+// garland sags across the top between x 50 and 160, left of the badge column (x >= 168) and above
+// the left "Zz" (ANIMAL_Y+17). Everything else is flat wall (bgColor), which every text cell over
+// the backdrop erases to.
+static constexpr int FIREPLACE_MANTEL_DY = 36;
+static constexpr int FIREPLACE_BRICK_X = 3, FIREPLACE_BRICK_W = 41;
+static constexpr int FIREPLACE_BRICK_DY = 42, FIREPLACE_BRICK_H = 50;     // ANIMAL_Y+42..+91
+static constexpr int FIREBOX_X = 12, FIREBOX_W = 23;                       // x 12–34
+static constexpr int FIREBOX_DY = 60, FIREBOX_H = 32;                      // ANIMAL_Y+60..+91, plus an arch above
+static constexpr int FIREPLACE_HEARTH_DY = 92;                              // ANIMAL_Y+92..+94
+// Each flame frame: the three flames' tip heights above the logs and the middle flame's lean.
+struct FlameFrame { int8_t left, mid, right, lean; };
+static constexpr FlameFrame FIREPLACE_FLAMES[] = {
+    {12, 18, 10, 0}, {9, 21, 13, -2}, {14, 16, 8, 2},
+};
+static constexpr int FIREPLACE_FLAME_FRAMES = sizeof(FIREPLACE_FLAMES) / sizeof(FIREPLACE_FLAMES[0]);
+// The flame frame shown, read by drawCozyFireplaceBackground() so every partial redraw of the
+// zone agrees with what updateCozyFireplaceAnim() last put on screen.
+static int8_t fireplaceFlameFrame = 0;
+
+// One flame: an orange outer triangle, a yellow middle and a pale core, base on the logs.
+static void drawFlame(int x, int baseY, int halfW, int height, int lean) {
+    tft.fillTriangle(x - halfW, baseY, x + halfW, baseY, x + lean, baseY - height, C_PUMPKIN);
+    tft.fillTriangle(x - halfW + 2, baseY, x + halfW - 2, baseY, x + lean, baseY - height * 2 / 3, C_CANDLE_GLOW);
+    tft.fillTriangle(x - 1, baseY, x + 1, baseY, x + lean / 2, baseY - height / 3, C_FIRE_CORE);
+}
+
+// The firebox's dark arch, the fire in flame frame `frame` and the logs in front of it. Called
+// by drawCozyFireplaceBackground(), inside its viewport.
+static void drawFirebox(int frame) {
+    const int fy = ANIMAL_Y + FIREBOX_DY, cx = FIREBOX_X + FIREBOX_W / 2;
+    tft.fillEllipse(cx, fy, FIREBOX_W / 2, 6, C_FIREPLACE_HEARTH);
+    tft.fillRect(FIREBOX_X, fy, FIREBOX_W, FIREBOX_H, C_FIREPLACE_HEARTH);
+    const FlameFrame& f = FIREPLACE_FLAMES[frame];
+    const int logY = ANIMAL_Y + FIREPLACE_HEARTH_DY - 5;
+    drawFlame(cx - 6, logY, 4, f.left, 0);
+    drawFlame(cx + 6, logY, 4, f.right, 0);
+    drawFlame(cx, logY, 5, f.mid, f.lean);
+    tft.fillRoundRect(FIREBOX_X + 2, logY, FIREBOX_W - 4, 4, 2, C_XMAS_TRUNK);  // logs
+    tft.fillCircle(FIREBOX_X + 3, logY + 2, 2, C_FIREPLACE_WOOD);
+    tft.fillCircle(FIREBOX_X + FIREBOX_W - 4, logY + 2, 2, C_FIREPLACE_WOOD);
+}
+
+// A Christmas stocking hanging from the mantel at x, toe pointing toward `toe` (+1 right, -1 left).
+static void drawStocking(int x, int toe) {
+    const int top = ANIMAL_Y + FIREPLACE_MANTEL_DY + 5;
+    tft.fillRect(x, top + 2, 6, 9, C_SANTA_RED);
+    tft.fillEllipse(x + 3 + toe * 2, top + 11, 4, 2, C_SANTA_RED);
+    tft.fillRect(x - 1, top, 8, 3, TFT_WHITE);  // cuff
+}
+
+/**
+ * "Cozy Fireplace" room theme (December-only legendary, COM-637): a warm red wall with a brick
+ * fireplace in the left column, its fire flickering (see updateCozyFireplaceAnim()), two
+ * stockings on the mantel, a wreath above it and a garland with berries sagging across the top
+ * of the zone. See the FIREPLACE_* layout comment for why everything sits where it does. Uses the
+ * same setViewport/resetViewport clipping as drawStarryNightBackground(), so it can draw the
+ * whole scene on every small erase.
+ *
+ * @param x Left edge of the rect to repaint.
+ * @param y Top edge of the rect to repaint (already clamped to the animal zone).
+ * @param w Width of the rect.
+ * @param h Height of the rect.
+ */
+static void drawCozyFireplaceBackground(int x, int y, int w, int h) {
+    tft.setViewport(x, y, w, h, false);
+    tft.fillRect(x, y, w, h, C_FIREPLACE_WALL);
+
+    // Garland: a thick green swag from x=50 to x=160 with red berries at every other joint.
+    {
+        const int x0 = 50, x1 = 160, step = 10, sag = 9;
+        const int mid = (x0 + x1) / 2, half = (x1 - x0) / 2;
+        int px = x0, py = ANIMAL_Y + 3, n = 0;
+        for (int lx = x0 + step; lx <= x1; lx += step) {
+            int d = lx - mid;
+            int ly = ANIMAL_Y + 3 + sag - sag * d * d / (half * half);
+            drawThickLine(px, py, lx, ly, 2, C_XMAS_TREE);
+            if (n++ % 2 == 0) tft.fillCircle(px, py + 2, 2, C_SANTA_RED);
+            px = lx;
+            py = ly;
+        }
+    }
+
+    // Wreath above the mantel, with a red bow at the bottom.
+    const int wx = FIREBOX_X + FIREBOX_W / 2, wy = ANIMAL_Y + 21;
+    tft.fillCircle(wx, wy, 10, C_XMAS_TREE);
+    tft.fillCircle(wx, wy, 5, C_FIREPLACE_WALL);
+    tft.fillCircle(wx - 6, wy - 6, 1, C_SANTA_RED);
+    tft.fillCircle(wx + 7, wy - 3, 1, C_SANTA_RED);
+    tft.fillCircle(wx - 7, wy + 3, 1, C_SANTA_RED);
+    tft.fillTriangle(wx, wy + 9, wx - 5, wy + 6, wx - 5, wy + 12, C_SANTA_RED);
+    tft.fillTriangle(wx, wy + 9, wx + 5, wy + 6, wx + 5, wy + 12, C_SANTA_RED);
+
+    // Brick chimney breast with staggered mortar joints, then the mantel shelf and the hearth.
+    const int by = ANIMAL_Y + FIREPLACE_BRICK_DY;
+    tft.fillRect(FIREPLACE_BRICK_X, by, FIREPLACE_BRICK_W, FIREPLACE_BRICK_H, C_FIREPLACE_BRICK);
+    for (int row = 0; row * 6 < FIREPLACE_BRICK_H; row++) {
+        int ry = by + row * 6;
+        tft.drawFastHLine(FIREPLACE_BRICK_X, ry, FIREPLACE_BRICK_W, C_FIREPLACE_MORTAR);
+        for (int jx = FIREPLACE_BRICK_X + (row % 2 ? 4 : 10); jx < FIREPLACE_BRICK_X + FIREPLACE_BRICK_W; jx += 12) {
+            tft.drawFastVLine(jx, ry, 6, C_FIREPLACE_MORTAR);
+        }
+    }
+    tft.fillRect(0, ANIMAL_Y + FIREPLACE_MANTEL_DY, 47, 5, C_XMAS_TRUNK);
+    tft.drawFastHLine(0, ANIMAL_Y + FIREPLACE_MANTEL_DY + 5, 47, C_FIREPLACE_WOOD);
+    tft.fillRect(0, ANIMAL_Y + FIREPLACE_HEARTH_DY, 47, 3, C_XMAS_TRUNK);
+
+    drawFirebox(fireplaceFlameFrame);
+    drawStocking(5, 1);
+    drawStocking(36, -1);
+
+    tft.resetViewport();
+}
+
+/**
+ * Flickers Cozy Fireplace's fire, called every awake loop() tick: every 120–300 ms it switches to
+ * another FIREPLACE_FLAMES frame and repaints just the firebox, which sits where nothing else is
+ * ever drawn (see the FIREPLACE_* layout comment). The sleep-window peek scene stays static (the
+ * fire holds its current frame), and the state resets while another theme is equipped.
+ *
+ * @param now The loop's millis() reading.
+ */
+static void updateCozyFireplaceAnim(unsigned long now) {
+    static unsigned long nextFrameMs = 0;
+    if (equippedRoomThemeIndex() != ROOM_THEME_IDX_COZY_FIREPLACE) {
+        fireplaceFlameFrame = 0;
+        return;
+    }
+    if (peekingAsleep) return;  // hold whichever frame is showing
+    if ((long)(now - nextFrameMs) < 0) return;
+    nextFrameMs = now + random(120, 301);
+    fireplaceFlameFrame = (fireplaceFlameFrame + 1 + random(0, FIREPLACE_FLAME_FRAMES - 1)) % FIREPLACE_FLAME_FRAMES;
+    zoneFillRect(FIREBOX_X, ANIMAL_Y + FIREBOX_DY - 6, FIREBOX_W, FIREBOX_H + 6);
 }
 
 // Perceived luminance of an RGB565 color, used below to pick a contrasting tape color —
@@ -4321,12 +4645,17 @@ static int64_t parseIso8601ToLocalStamp(const char* iso) {
 // the items' full price. A combo you partly own charges the same discount on just the missing
 // items (comboPrice()). Combo ids share the store id space, so a flash sale can target a combo,
 // but a sale on one of its items doesn't change the combo's price.
+//
+// A `christmas` combo (COM-637) is the exception to the non-seasonal rule: it holds only
+// December-only Christmas items (CHRISTMAS_STORE_ITEMS[]) and, like them, is listed, buyable and
+// open to a flash sale only while isChristmasStoreOpen() (see isComboOnSale()).
 struct StoreCombo {
     const char* id;
     const char* label;
     uint32_t price;               // the combo price with none of its items owned
     const char* const* items;     // store item ids
     uint8_t itemCount;
+    bool christmas;               // December-only, holding only Christmas store items
 };
 static constexpr const char* COMBO_COZY_STARTER[]   = {"teddy", "cream", "bow_cream", "amber"};
 static constexpr const char* COMBO_PRETTY_IN_PINK[] = {"pink", "bow_hot_pink", "sunglasses_pink", "hot_pink_blanket", "flamingo_pink_room"};
@@ -4335,19 +4664,21 @@ static constexpr const char* COMBO_POKEMON_PALS[]   = {"pikachu", "eevee"};
 static constexpr const char* COMBO_EEVEELUTION_TRIO[] = {"eevee", "sylveon", "umbreon"};
 // Includes the Right Arm Slot because the wand can't be held without it.
 static constexpr const char* COMBO_WIZARDS_KIT[]    = {"sorting_hat", "hogwarts_crest", "magic_wand", "right_arm_slot", "hogwarts_night"};
+static constexpr const char* COMBO_CHRISTMAS[]      = {"cozy_fireplace", "reindeer_antlers", "candy_cane_glasses", "reindeer"};
 #define COMBO_ITEMS(a) a, (uint8_t)(sizeof(a) / sizeof(a[0]))
 static constexpr StoreCombo STORE_COMBOS[] = {
-    {"combo_cozy_starter",   "Cozy Starter",    150, COMBO_ITEMS(COMBO_COZY_STARTER)},    // full 190
-    {"combo_pretty_in_pink", "Pretty in Pink",  225, COMBO_ITEMS(COMBO_PRETTY_IN_PINK)},  // full 280
-    {"combo_winter_day",     "Winter Day",      350, COMBO_ITEMS(COMBO_WINTER_DAY)},      // full 440
-    {"combo_pokemon_pals",   "Pok\xC3\xA9mon Pals", 480, COMBO_ITEMS(COMBO_POKEMON_PALS)},  // full 600
-    {"combo_eeveelution_trio", "Eeveelution Trio", 720, COMBO_ITEMS(COMBO_EEVEELUTION_TRIO)},  // full 900
-    {"combo_wizards_kit",    "Wizard's Kit",   1080, COMBO_ITEMS(COMBO_WIZARDS_KIT)},     // full 1350
+    {"combo_cozy_starter",   "Cozy Starter",    150, COMBO_ITEMS(COMBO_COZY_STARTER), false},    // full 190
+    {"combo_pretty_in_pink", "Pretty in Pink",  225, COMBO_ITEMS(COMBO_PRETTY_IN_PINK), false},  // full 280
+    {"combo_winter_day",     "Winter Day",      350, COMBO_ITEMS(COMBO_WINTER_DAY), false},      // full 440
+    {"combo_pokemon_pals",   "Pok\xC3\xA9mon Pals", 480, COMBO_ITEMS(COMBO_POKEMON_PALS), false},  // full 600
+    {"combo_eeveelution_trio", "Eeveelution Trio", 720, COMBO_ITEMS(COMBO_EEVEELUTION_TRIO), false},  // full 900
+    {"combo_wizards_kit",    "Wizard's Kit",   1080, COMBO_ITEMS(COMBO_WIZARDS_KIT), false},     // full 1350
+    {"combo_christmas",      "Christmas Bundle", 520, COMBO_ITEMS(COMBO_CHRISTMAS), true},     // full 650, December only
 };
 #undef COMBO_ITEMS
 static constexpr int STORE_COMBO_COUNT = sizeof(STORE_COMBOS) / sizeof(STORE_COMBOS[0]);
-// The largest combo's item count, which sizes purchaseCombo()'s rollback list. Recursive (like
-// countStoreAccessories()) so it stays a constant expression.
+// The largest combo's item count, which sizes purchaseCombo()'s rollback list. Recursive so it
+// stays a C++11 constant expression.
 static constexpr int maxComboItemsFrom(int i) {
     return i >= STORE_COMBO_COUNT ? 0
          : STORE_COMBOS[i].itemCount > maxComboItemsFrom(i + 1) ? STORE_COMBOS[i].itemCount : maxComboItemsFrom(i + 1);
@@ -4390,11 +4721,12 @@ static int collectStoreItemIds(const char** ids, int cap) {
 // flash sale for an item id that doesn't exist (typo, removed item, catalog drift) rather than
 // letting the device show an active "SALE!" flash for an item that can never actually go on
 // sale (flashSalePrice() would never match it either, so the sale would silently do nothing
-// while still visually announcing itself). Haunted Pumpkin Patch only counts while it's on sale
-// (COM-503), since outside October the store doesn't list it.
-static bool isPumpkinPatchOnSale();
+// while still visually announcing itself). Seasonal items only count while they're on sale, since
+// the store doesn't list them otherwise: Haunted Pumpkin Patch in October (COM-503), and the
+// Christmas items and Christmas Bundle in December (COM-637).
+static bool isSeasonalItemIdOffSale(const char* id);
 static bool isKnownStoreItemId(const char* id) {
-    if (strcmp(id, ROOM_THEMES[ROOM_THEME_IDX_PUMPKIN_PATCH].id) == 0) return isPumpkinPatchOnSale();
+    if (isSeasonalItemIdOffSale(id)) return false;
     const char* ids[STORE_ITEM_ID_COUNT];
     int n = collectStoreItemIds(ids, STORE_ITEM_ID_COUNT);
     for (int i = 0; i < n; i++) {
@@ -4528,9 +4860,12 @@ static void fetchFlashSale() {
 }
 
 // True while the last-polled flash sale is both valid and inside its window — all badges and
-// on-device "SALE!" indicators should gate on this rather than naming a specific sale.
+// on-device "SALE!" indicators should gate on this rather than naming a specific sale. A sale on a
+// seasonal item stops counting the moment its season ends (Jan 1 for the Christmas items, or
+// Christmas Preview switched off), not at the next poll, which can be up to 15 minutes later.
 static bool isFlashSaleActive() {
     if (!currentFlashSale.valid) return false;
+    if (isSeasonalItemIdOffSale(currentFlashSale.itemId)) return false;
     int64_t now = flashSaleNow();
     if (now < 0) return false;
     return now >= currentFlashSale.start && now < currentFlashSale.end;
@@ -4588,12 +4923,11 @@ static void assertStoreIdsUnique() {
 //
 // Each theme owns one exclusive entry in ACCESSORIES[], GLASSES[] and ROOM_THEMES[], never
 // buyable (see the *_IDX_* constants beside each catalog). A future theme appends its entries
-// to each catalog and gives each one a fixed *_IDX_* constant. In GLASSES[] they go past
-// GLASSES_STORE_COUNT, so also bump that subtraction. In ACCESSORIES[] and ROOM_THEMES[] the
-// entry must be cost 0 instead: store-purchasable there means cost > 0 (isStoreAccessory()/
-// isStoreRoomTheme()), because a store item (the Sorting Hat, Hogwarts at Night) already sits
-// after the exclusives. The theme also gets its own
-// key, isXActive() check and themeWeekItems() branch.
+// to each catalog and gives each one a fixed *_IDX_* constant. The entry must be cost 0:
+// store-purchasable means cost > 0 (isStoreAccessory()/isStoreGlasses()/isStoreRoomTheme()),
+// because store items (the Sorting Hat, Hogwarts at Night, the December-only Christmas items)
+// already sit after the exclusives. The theme also gets its own key, isXActive() check and
+// themeWeekItems() branch.
 static constexpr const char* THEME_WEEK_BIRTHDAY  = "birthday";
 static constexpr const char* THEME_WEEK_HALLOWEEN = "halloween";
 static constexpr const char* THEME_WEEK_CHRISTMAS = "christmas";
@@ -4727,6 +5061,21 @@ static bool isPumpkinPatchOnSale() {
     if (configMgr.config().themeWeekHalloweenMode == HALLOWEEN_MODE_PREVIEW) return true;
     int mmdd = localTodayMmdd();
     return mmdd >= 1001 && mmdd <= 1031;
+}
+
+/**
+ * Whether the store sells the December-only Christmas items and the Christmas Bundle right now
+ * (COM-637, see CHRISTMAS_STORE_ITEMS[]): all of December local time, or at any time while the
+ * Christmas theme week (COM-636) is in Preview mode so they can be checked on-device. Like
+ * isPumpkinPatchOnSale(), only buying is limited: owned items stay equippable all year. The theme
+ * week's Off mode doesn't close the store, since these are bought, not handed out.
+ *
+ * @return true in December (or Preview), false otherwise or while the clock hasn't NTP-synced yet.
+ */
+static bool isChristmasStoreOpen() {
+    if (configMgr.config().themeWeekChristmasMode == CHRISTMAS_MODE_PREVIEW) return true;
+    int mmdd = localTodayMmdd();
+    return mmdd >= 1201 && mmdd <= 1231;
 }
 
 /**
@@ -5853,7 +6202,8 @@ enum ItemCategory : uint8_t {
     // STORE_SECTIONS[] and the purchase redirect can tell them apart. Never index catalog arrays
     // with these.
     ITEM_RIGHT_ARM_SLOT = ITEM_CATEGORY_COUNT,
-    ITEM_COMBO  // STORE_COMBOS[] (COM-507)
+    ITEM_COMBO,     // STORE_COMBOS[] (COM-507)
+    ITEM_CHRISTMAS  // the December-only Christmas section (COM-637)
 };
 
 // One catalog entry's web-facing fields. `webColor` is nullptr for catalogs whose labels are
@@ -5884,40 +6234,77 @@ static CatalogEntry catalogEntry(ItemCategory cat, int i) {
     }
 }
 
-// Whether entry `i` is one of the catalog's store entries at all, i.e. counted by its
-// *_STORE_COUNT. The theme-week exclusives (DIY-108) aren't: cost-0 entries in
-// ACCESSORIES[]/ROOM_THEMES[], and the tail of GLASSES[] past GLASSES_STORE_COUNT.
+// The December-only Christmas store items (COM-637): a catalog entry in each of four catalogs,
+// sold only while isChristmasStoreOpen() and kept all year once bought, the same model as Haunted
+// Pumpkin Patch. The Christmas section lists them in this order, followed by the Christmas Bundle.
+struct CatalogRef {
+    ItemCategory cat;
+    int8_t idx;
+};
+static constexpr CatalogRef CHRISTMAS_STORE_ITEMS[] = {
+    {ITEM_ROOM_THEME, ROOM_THEME_IDX_COZY_FIREPLACE},
+    {ITEM_ACCESSORY,  ACCESSORY_IDX_REINDEER_ANTLERS},
+    {ITEM_GLASSES,    GLASSES_IDX_CANDY_CANE},
+    {ITEM_STUFFY,     STUFFY_IDX_REINDEER},
+};
+
+// Whether catalog entry `i` of `cat` is one of CHRISTMAS_STORE_ITEMS[].
+static bool isChristmasStoreItem(ItemCategory cat, int i) {
+    for (const CatalogRef& ref : CHRISTMAS_STORE_ITEMS) {
+        if (ref.cat == cat && ref.idx == i) return true;
+    }
+    return false;
+}
+
+// Resolves `id` to one of CHRISTMAS_STORE_ITEMS[] whether or not the store is open right now.
+// Returns false for any other id.
+static bool findChristmasStoreItem(const char* id, ItemCategory& cat, int& idx) {
+    for (const CatalogRef& ref : CHRISTMAS_STORE_ITEMS) {
+        if (strcmp(catalogEntry(ref.cat, ref.idx).id, id) == 0) {
+            cat = ref.cat;
+            idx = ref.idx;
+            return true;
+        }
+    }
+    return false;
+}
+
+// Whether entry `i` is one of the catalog's year-round store entries, the ones its seen*Count
+// counts (COM-517). Theme-week exclusives (DIY-108, the cost-0 entries) aren't store entries at
+// all. The December-only Christmas items (COM-637) are sold but never counted, so they never
+// show NEW: the December-only Christmas section is what announces them, and counting them would
+// either re-flag them every December or, once the count dropped back in January, hide the NEW on
+// the next year-round item appended after them. Haunted Pumpkin Patch predates this and stays
+// counted, since dropping it now would shift every device's saved room-theme count.
 static bool isStoreCatalogEntry(ItemCategory cat, int i) {
+    if (isChristmasStoreItem(cat, i)) return false;
     switch (cat) {
         case ITEM_ROOM_THEME: return isStoreRoomTheme(i);
         case ITEM_ACCESSORY:  return isStoreAccessory(i);
-        case ITEM_GLASSES:    return i < GLASSES_STORE_COUNT;
-        case ITEM_BADGE:      return i < BADGE_STORE_COUNT;
+        case ITEM_GLASSES:    return isStoreGlasses(i);
         default:              return true;
     }
 }
 
 // Whether entry `i` is sold in the store right now. Theme-week exclusives (see
 // isStoreCatalogEntry()) must never show up or be purchasable, whatever item id is posted.
-// Haunted Pumpkin Patch (COM-503) is also skipped outside October; see isPumpkinPatchOnSale().
+// Seasonal items are sold only in their window: Haunted Pumpkin Patch (COM-503) in October, see
+// isPumpkinPatchOnSale(), and the Christmas items (COM-637) in December, see isChristmasStoreOpen().
 static bool isStoreItem(ItemCategory cat, int i) {
+    if (isChristmasStoreItem(cat, i)) return isChristmasStoreOpen();
     if (cat == ITEM_ROOM_THEME && i == ROOM_THEME_IDX_PUMPKIN_PATCH && !isPumpkinPatchOnSale()) return false;
     return isStoreCatalogEntry(cat, i);
 }
 
 // How many store entries the catalog has: the count its seen*Count is compared against
-// (COM-517). *_STORE_COUNT, not the full *_COUNT, so theme-week exclusives never count as new.
+// (COM-517). Counted with isStoreCatalogEntry(), not the full catalog size, so theme-week
+// exclusives and the Christmas items never count as new.
 static int storeCatalogStoreCount(ItemCategory cat) {
-    switch (cat) {
-        case ITEM_STUFFY:     return STUFFY_COUNT;
-        case ITEM_BLANKET:    return BLANKET_COLOR_COUNT;
-        case ITEM_ROOM_THEME: return ROOM_THEME_STORE_COUNT;
-        case ITEM_CAT_COLOR:  return CAT_COLOR_COUNT;
-        case ITEM_ACCESSORY:  return ACCESSORY_STORE_COUNT;
-        case ITEM_GLASSES:    return GLASSES_STORE_COUNT;
-        case ITEM_BADGE:      return BADGE_STORE_COUNT;
-        default:              return TOY_COUNT;
+    int n = 0;
+    for (int i = 0; i < ITEM_CATALOG_COUNTS[cat]; i++) {
+        if (isStoreCatalogEntry(cat, i)) n++;
     }
+    return n;
 }
 
 // The category's seen*Count field: how many of its store entries the user has been shown,
@@ -6028,12 +6415,41 @@ static void setStoreItemOwned(ItemCategory cat, int idx, bool owned) {
     else setItemOwned(cat, idx, owned);
 }
 
-// Index into STORE_COMBOS[] of the combo whose id is `id`, or -1.
+// Whether STORE_COMBOS[i] is sold right now: always, except the December-only Christmas Bundle
+// (COM-637), which follows isChristmasStoreOpen() like the items in it.
+static bool isComboOnSale(int i) {
+    return !STORE_COMBOS[i].christmas || isChristmasStoreOpen();
+}
+
+// Index into STORE_COMBOS[] of the combo whose id is `id` and that's on sale right now
+// (isComboOnSale()), or -1. Purchases and storeSectionHasSale() go through this, so a closed
+// Christmas Bundle can be neither bought nor mark a section on sale (and its rows aren't listed).
 static int findCombo(const String& id) {
     for (int i = 0; i < STORE_COMBO_COUNT; i++) {
-        if (id == STORE_COMBOS[i].id) return i;
+        if (id == STORE_COMBOS[i].id) return isComboOnSale(i) ? i : -1;
     }
     return -1;
+}
+
+// Resolves one of `combo`'s item ids to its category and index. A Christmas combo's items are
+// looked up among CHRISTMAS_STORE_ITEMS[] (open or not, so assertCombosValid() can check it any
+// month); every other combo's with the store-only findStoreItem().
+static bool findComboItem(const StoreCombo& combo, const char* id, ItemCategory& cat, int& idx) {
+    return combo.christmas ? findChristmasStoreItem(id, cat, idx) : findStoreItem(id, cat, idx);
+}
+
+// Whether `id` names a seasonal item or combo that isn't on sale right now (declared earlier for
+// isKnownStoreItemId()): Haunted Pumpkin Patch outside October, or a Christmas item or the
+// Christmas Bundle outside December.
+static bool isSeasonalItemIdOffSale(const char* id) {
+    if (strcmp(id, ROOM_THEMES[ROOM_THEME_IDX_PUMPKIN_PATCH].id) == 0) return !isPumpkinPatchOnSale();
+    ItemCategory cat;
+    int idx;
+    if (findChristmasStoreItem(id, cat, idx)) return !isChristmasStoreOpen();
+    for (int i = 0; i < STORE_COMBO_COUNT; i++) {
+        if (strcmp(id, STORE_COMBOS[i].id) == 0) return !isComboOnSale(i);
+    }
+    return false;
 }
 
 // A combo's prices against what's owned right now: `full` is the summed catalog price of the
@@ -6053,7 +6469,7 @@ static ComboPrice comboPrice(const StoreCombo& combo) {
     for (int i = 0; i < combo.itemCount; i++) {
         ItemCategory cat;
         int idx;
-        if (!findStoreItem(combo.items[i], cat, idx)) continue;  // assertCombosValid() rules this out
+        if (!findComboItem(combo, combo.items[i], cat, idx)) continue;  // assertCombosValid() rules this out
         uint32_t cost = storeItemCost(cat, idx);
         fullAll += cost;
         if (cost >= STORE_COST_LEGENDARY && !storeItemOwned(cat, idx)) p.legendary = true;
@@ -6070,8 +6486,10 @@ static ComboPrice comboPrice(const StoreCombo& combo) {
 
 // Halts at boot if a combo is malformed: every item must resolve to a purchasable store item
 // that costs more than 0 (so never a theme-week exclusive), must not be a seasonal item (the
-// October-only Haunted Pumpkin Patch, which isStoreItem() hides the rest of the year), and must
-// appear only once in its combo; and the combo price must be below the items' full price.
+// October-only Haunted Pumpkin Patch or a December-only Christmas item, which isStoreItem() hides
+// the rest of the year), and must appear only once in its combo; and the combo price must be
+// below the items' full price. A Christmas combo (COM-637) is the reverse: every item must be a
+// Christmas item, so the whole combo comes and goes with them.
 static void assertCombosValid() {
     for (int c = 0; c < STORE_COMBO_COUNT; c++) {
         const StoreCombo& combo = STORE_COMBOS[c];
@@ -6081,10 +6499,11 @@ static void assertCombosValid() {
             ItemCategory cat;
             int idx;
             bool ok = strcmp(id, ROOM_THEMES[ROOM_THEME_IDX_PUMPKIN_PATCH].id) != 0
-                   && findStoreItem(id, cat, idx) && storeItemCost(cat, idx) > 0;
+                   && findComboItem(combo, id, cat, idx) && storeItemCost(cat, idx) > 0
+                   && (combo.christmas || !isChristmasStoreItem(cat, idx));
             for (int j = 0; ok && j < i; j++) ok = strcmp(combo.items[j], id) != 0;
             if (!ok) {
-                Serial.printf("FATAL: combo \"%s\" item \"%s\" isn't a unique, purchasable, non-seasonal store item\n", combo.id, id);
+                Serial.printf("FATAL: combo \"%s\" item \"%s\" isn't a unique, purchasable store item of the combo's season\n", combo.id, id);
                 Serial.flush();
                 abort();
             }
@@ -6104,6 +6523,12 @@ static void assertCombosValid() {
 static const char STORE_TAG_LEGENDARY[] = " <span style='color:#ffcc33;font-weight:bold'>\xE2\x98\x85 LEGENDARY</span>";
 static const char STORE_TAG_NEW[]       = " <span style='color:#00ffff;font-weight:bold'>\xE2\x9C\xA8 NEW</span>";
 static const char STORE_TAG_SALE[]      = " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
+// The December-only Christmas items and bundle (COM-637). One span, like the other tags, so it's
+// a single flex item in the row. Rows that can still be bought add when they leave the store;
+// owned ones don't, since an owned item is kept.
+static const char STORE_TAG_CHRISTMAS[] = " <span style='color:#7fd18b;font-weight:bold'>\xE2\x9D\x84 CHRISTMAS"
+                                          "<span style='color:#888;font-weight:normal;font-size:.8rem'> \xC2\xB7 leaves Jan 1</span></span>";
+static const char STORE_TAG_CHRISTMAS_OWNED[] = " <span style='color:#7fd18b;font-weight:bold'>\xE2\x9D\x84 CHRISTMAS</span>";
 
 /**
  * The tags shown after a store item's label: a gold "LEGENDARY" marker for anything priced at
@@ -6124,16 +6549,20 @@ static void appendStoreItemTags(String& html, uint32_t baseCost, uint32_t cost, 
 // The store's All page (COM-516): every section on one page, at /config/store?s=all. It isn't a
 // STORE_SECTIONS[] entry, so no section may use this key (checked below).
 static constexpr char STORE_ALL_KEY[] = "all";
+// The December-only Christmas section's key (COM-637). Its items are also sold in their own
+// sections, so a purchase made from it posts from=christmas to come back here.
+static constexpr char STORE_CHRISTMAS_KEY[] = "christmas";
 
-// Opens a buy form posting `item` to /save-config/store. On the All page the form also posts
-// from=all, so redirectToStoreSection() sends the result back to All instead of the item's section.
-static void appendBuyFormOpen(String& html, const char* item, bool fromAll) {
+// Opens a buy form posting `item` to /save-config/store. `from` is the page to return to when it
+// isn't the item's own section: STORE_ALL_KEY on the All page, STORE_CHRISTMAS_KEY on the
+// Christmas section, else nullptr. redirectToStoreSection() honours only those two values.
+static void appendBuyFormOpen(String& html, const char* item, const char* from) {
     html += "<form method='POST' action='/save-config/store'><input type='hidden' name='item' value='";
     html += item;
     html += "'>";
-    if (fromAll) {
+    if (from) {
         html += "<input type='hidden' name='from' value='";
-        html += STORE_ALL_KEY;
+        html += from;
         html += "'>";
     }
 }
@@ -6146,13 +6575,13 @@ static void appendBuyFormOpen(String& html, const char* item, bool fromAll) {
  * @param labelPrefix Text before the label (e.g. "Blanket - "), or "".
  * @param ownedText The owned marker's text, or nullptr when the item can still be bought.
  * @param buyText The buy button's text before the price ("Buy for " / "Buy 2nd for ").
- * @param fromAll Whether the row is on the All page (see appendBuyFormOpen()).
+ * @param from The page to return to after buying (see appendBuyFormOpen()), or nullptr.
  * @param isNew Whether to tag the row NEW (see appendStoreItemTags()).
  */
 static void appendStoreItemRow(String& html, const char* item, const char* webColor,
                                const char* labelPrefix, const char* label, uint32_t baseCost,
                                const char* ownedText, const char* buyText, uint32_t points,
-                               bool fromAll, bool isNew) {
+                               const char* from, bool isNew) {
     uint32_t cost = flashSalePrice(item, baseCost);
     html += "<div class='item'><span";
     if (webColor) { html += " style='color:"; html += webColor; html += "'"; }
@@ -6161,12 +6590,15 @@ static void appendStoreItemRow(String& html, const char* item, const char* webCo
     html += label;
     html += "</span>";
     appendStoreItemTags(html, baseCost, cost, isNew);
+    ItemCategory xmasCat;
+    int xmasIdx;
+    if (findChristmasStoreItem(item, xmasCat, xmasIdx)) html += ownedText ? STORE_TAG_CHRISTMAS_OWNED : STORE_TAG_CHRISTMAS;
     if (ownedText) {
         html += "<span class='owned'>";
         html += ownedText;
         html += "</span>";
     } else {
-        appendBuyFormOpen(html, item, fromAll);
+        appendBuyFormOpen(html, item, from);
         html += "<button type='submit'";
         if (points < cost) html += " disabled";
         html += ">";
@@ -6180,7 +6612,7 @@ static void appendStoreItemRow(String& html, const char* item, const char* webCo
 // Store row for catalog entry `i` of `cat`. Stuffies can be bought twice (DIY-106), so the
 // same item id posts a second purchase once the first copy is owned, labeled "Buy 2nd for N"
 // so it's clear the button re-buys the same item; only owning both copies shows as owned.
-static void appendStoreRow(String& html, ItemCategory cat, int i, uint32_t points, bool fromAll, bool isNew) {
+static void appendStoreRow(String& html, ItemCategory cat, int i, uint32_t points, const char* from, bool isNew) {
     static const char* const LABEL_PREFIXES[ITEM_CATEGORY_COUNT] = {"", "Blanket - ", "", "Cat - ", "", "", "", ""};
     CatalogEntry e = catalogEntry(cat, i);
     bool owned = ownedItems(cat) & (1u << i);
@@ -6191,13 +6623,13 @@ static void appendStoreRow(String& html, ItemCategory cat, int i, uint32_t point
         ownedText = ownedSecond ? "Owned (x2)" : nullptr;
         if (owned) buyText = "Buy 2nd for ";
     }
-    appendStoreItemRow(html, e.id, e.webColor, LABEL_PREFIXES[cat], e.label, e.cost, ownedText, buyText, points, fromAll, isNew);
+    appendStoreItemRow(html, e.id, e.webColor, LABEL_PREFIXES[cat], e.label, e.cost, ownedText, buyText, points, from, isNew);
 }
 
 // Store row for STORE_COMBOS[i] (COM-507): the label and tags, the item list (owned ones ticked),
 // then "Owned" once every item is, or a buy form posting the combo id. The price shows the
 // missing items' full price struck through, then the combo charge.
-static void appendComboRow(String& html, int i, uint32_t points, bool fromAll) {
+static void appendComboRow(String& html, int i, uint32_t points, const char* from) {
     const StoreCombo& combo = STORE_COMBOS[i];
     ComboPrice p = comboPrice(combo);
     html += "<div class='item'><div><span>";
@@ -6205,12 +6637,13 @@ static void appendComboRow(String& html, int i, uint32_t points, bool fromAll) {
     html += "</span>";
     if (p.legendary) html += STORE_TAG_LEGENDARY;
     if (p.missing > 0 && isFlashSaleActive() && strcmp(currentFlashSale.itemId, combo.id) == 0) html += STORE_TAG_SALE;
+    if (combo.christmas) html += p.missing > 0 ? STORE_TAG_CHRISTMAS : STORE_TAG_CHRISTMAS_OWNED;
     html += "<div style='font-size:.8rem;color:#888;margin-top:4px'>";
     bool first = true;
     for (int j = 0; j < combo.itemCount; j++) {
         ItemCategory cat;
         int idx;
-        if (!findStoreItem(combo.items[j], cat, idx)) continue;
+        if (!findComboItem(combo, combo.items[j], cat, idx)) continue;
         if (!first) html += ", ";
         first = false;
         html += storeItemLabel(cat, idx);
@@ -6223,7 +6656,7 @@ static void appendComboRow(String& html, int i, uint32_t points, bool fromAll) {
     if (p.missing == 0) {
         html += "<span class='owned'>Owned</span>";
     } else {
-        appendBuyFormOpen(html, combo.id, fromAll);
+        appendBuyFormOpen(html, combo.id, from);
         html += "<button type='submit'";
         if (points < p.charge) html += " disabled";
         html += ">Buy for <s>";
@@ -6238,7 +6671,8 @@ static void appendComboRow(String& html, int i, uint32_t points, bool fromAll) {
 // The store's sections (COM-506): the landing page lists one button per entry, in this order,
 // and /config/store?s=<key> shows that section's items alone. `cat` is the catalog the section
 // sells, or a non-catalog value such as ITEM_RIGHT_ARM_SLOT or ITEM_COMBO. `key` is
-// part of the section page's URL, so keep existing keys stable.
+// part of the section page's URL, so keep existing keys stable. The Christmas section
+// (ITEM_CHRISTMAS, COM-637) only appears while isChristmasStoreOpen(); see isStoreSectionShown().
 struct StoreSection {
     const char* key;
     const char* title;
@@ -6246,6 +6680,7 @@ struct StoreSection {
     ItemCategory cat;
 };
 static constexpr StoreSection STORE_SECTIONS[] = {
+    {STORE_CHRISTMAS_KEY, "\xE2\x9D\x84 Christmas", "On sale through December 31. Anything you buy is yours to keep all year.", ITEM_CHRISTMAS},
     {"combos",      "Combos",             "Several items together, about 20% off. Items you already own are left out of the price.", ITEM_COMBO},
     {"cat_colors",  "Cat Colors",         nullptr,                                            ITEM_CAT_COLOR},
     {"stuffies",    "Stuffies",           nullptr,                                            ITEM_STUFFY},
@@ -6258,12 +6693,13 @@ static constexpr StoreSection STORE_SECTIONS[] = {
     {"right_arm",   "Right Arm Slot",     "Day &amp; night, holds either a Buddy or a Toy.",  ITEM_RIGHT_ARM_SLOT},
 };
 static constexpr int STORE_SECTION_COUNT = sizeof(STORE_SECTIONS) / sizeof(STORE_SECTIONS[0]);
-// One section per catalog plus the Right Arm Slot and Combos, so a new ItemCategory can't ship
-// without a store page (storeSectionFor() would otherwise fall back to the first section). A
-// section that isn't a catalog gets its own value after ITEM_COMBO and adds to the right-hand side.
-static_assert(STORE_SECTION_COUNT == ITEM_CATEGORY_COUNT + 2, "every ItemCategory needs a STORE_SECTIONS[] entry");
+// One section per catalog plus the Right Arm Slot, Combos and Christmas, so a new ItemCategory
+// can't ship without a store page (storeSectionFor() would otherwise fall back to the first
+// section). A section that isn't a catalog gets its own value after ITEM_CHRISTMAS and adds to
+// the right-hand side.
+static_assert(STORE_SECTION_COUNT == ITEM_CATEGORY_COUNT + 3, "every ItemCategory needs a STORE_SECTIONS[] entry");
 // No two sections may share a `cat`: storeSectionFor() returns the first match, so a reused value
-// would send one section's purchases to the other's page. Recursive (like countStoreAccessories())
+// would send one section's purchases to the other's page. Recursive (like maxComboItemsFrom())
 // so it stays a constant expression.
 static constexpr bool storeSectionCatUniqueFrom(int i, int j) {
     return i >= STORE_SECTION_COUNT ? true
@@ -6281,6 +6717,15 @@ static constexpr bool storeSectionKeysAvoidAll(int i) {
          : !storeKeyEquals(STORE_SECTIONS[i].key, STORE_ALL_KEY) && storeSectionKeysAvoidAll(i + 1);
 }
 static_assert(storeSectionKeysAvoidAll(0), "a STORE_SECTIONS[] entry uses the All page's key");
+// redirectToStoreSection() sends from=christmas purchases to STORE_CHRISTMAS_KEY's page.
+static_assert(STORE_SECTIONS[0].cat == ITEM_CHRISTMAS && storeKeyEquals(STORE_SECTIONS[0].key, STORE_CHRISTMAS_KEY),
+              "the Christmas section must use STORE_CHRISTMAS_KEY");
+
+// Whether `section` is offered right now: every section always, except Christmas (COM-637),
+// which is only listed or reachable while isChristmasStoreOpen().
+static bool isStoreSectionShown(const StoreSection& section) {
+    return section.cat != ITEM_CHRISTMAS || isChristmasStoreOpen();
+}
 
 // The section that sells `cat` (or a non-catalog value like ITEM_RIGHT_ARM_SLOT). Every category has one.
 static const StoreSection& storeSectionFor(ItemCategory cat) {
@@ -6297,15 +6742,23 @@ static bool storeSectionHasSale(const StoreSection& section) {
     if (!isFlashSaleActive()) return false;
     if (section.cat == ITEM_RIGHT_ARM_SLOT) return strcmp(currentFlashSale.itemId, "right_arm_slot") == 0;
     if (section.cat == ITEM_COMBO) return findCombo(currentFlashSale.itemId) >= 0;
+    if (section.cat == ITEM_CHRISTMAS) {
+        int combo = findCombo(currentFlashSale.itemId);
+        if (combo >= 0) return STORE_COMBOS[combo].christmas;
+        ItemCategory cat;
+        int idx;
+        return isChristmasStoreOpen() && findChristmasStoreItem(currentFlashSale.itemId, cat, idx);
+    }
     return findCatalogIndex(section.cat, currentFlashSale.itemId, true) >= 0;
 }
 
 // Whether `section` has an item the user hasn't been shown yet (COM-517): its catalog has grown
 // past its seen*Count (a firmware update appended an item), or the Right Arm Slot was never seen.
-// Combos have no seen tracking, so they're never NEW.
+// Combos have no seen tracking, so they're never NEW, and neither is the Christmas section
+// (COM-637): it only exists in December, which is announcement enough (see isStoreCatalogEntry()).
 static bool storeSectionHasNew(const StoreSection& section) {
     if (section.cat == ITEM_RIGHT_ARM_SLOT) return !configMgr.config().seenRightArmSlot;
-    if (section.cat == ITEM_COMBO) return false;
+    if (section.cat == ITEM_COMBO || section.cat == ITEM_CHRISTMAS) return false;
     return storeCatalogStoreCount(section.cat) > storeSeenCount(section.cat);
 }
 
@@ -6346,6 +6799,7 @@ static void sendStoreLandingPage(uint32_t points) {
     bool anySale = false;
     for (int i = 0; i < STORE_SECTION_COUNT; i++) {
         const StoreSection& section = STORE_SECTIONS[i];
+        if (!isStoreSectionShown(section)) continue;
         sections += "<a class='nav' href='/config/store?s=";
         sections += section.key;
         sections += "'>";
@@ -6356,7 +6810,9 @@ static void sendStoreLandingPage(uint32_t points) {
         }
         if (storeSectionHasSale(section)) {
             sections += STORE_TAG_SALE;
-            if (section.cat != ITEM_COMBO) anySale = true;  // All leaves combos out
+            // All leaves combos and the Christmas section out (it lists the Christmas items in
+            // their own sections), so neither marks All; an item on sale still does via its section.
+            if (section.cat != ITEM_COMBO && section.cat != ITEM_CHRISTMAS) anySale = true;
         }
         sections += "</a>\n";
     }
@@ -6380,12 +6836,24 @@ static void sendStoreLandingPage(uint32_t points) {
 // Appends `section`'s rows, as shown on its own page and on the All page (`fromAll`). Rows are
 // tagged NEW from the seen counts as they are before this visit marks the section seen.
 static void appendStoreSectionRows(String& rows, const StoreSection& section, uint32_t points, bool fromAll) {
+    // Where a buy form returns to (see appendBuyFormOpen()): All, the Christmas section (whose
+    // items belong to other sections), or else the item's own section.
+    const char* from = fromAll ? STORE_ALL_KEY : section.cat == ITEM_CHRISTMAS ? STORE_CHRISTMAS_KEY : nullptr;
     if (section.cat == ITEM_RIGHT_ARM_SLOT) {
         appendStoreItemRow(rows, "right_arm_slot", nullptr, "", "Right Arm Slot", STORE_COST_RIGHT_ARM_SLOT,
-                           configMgr.config().rightArmSlotUnlocked ? "Owned" : nullptr, "Buy for ", points, fromAll,
+                           configMgr.config().rightArmSlotUnlocked ? "Owned" : nullptr, "Buy for ", points, from,
                            !configMgr.config().seenRightArmSlot);
     } else if (section.cat == ITEM_COMBO) {
-        for (int i = 0; i < STORE_COMBO_COUNT; i++) appendComboRow(rows, i, points, fromAll);
+        for (int i = 0; i < STORE_COMBO_COUNT; i++) {
+            if (isComboOnSale(i)) appendComboRow(rows, i, points, from);
+        }
+    } else if (section.cat == ITEM_CHRISTMAS) {
+        // The December-only items (COM-637), then their bundle. Never NEW (see isStoreCatalogEntry()).
+        if (!isChristmasStoreOpen()) return;
+        for (const CatalogRef& ref : CHRISTMAS_STORE_ITEMS) appendStoreRow(rows, ref.cat, ref.idx, points, from, false);
+        for (int i = 0; i < STORE_COMBO_COUNT; i++) {
+            if (STORE_COMBOS[i].christmas) appendComboRow(rows, i, points, from);
+        }
     } else {
         // White isn't a CAT_COLORS[] entry (it's the always-available default, equipped via
         // EQUIP_NONE — see the comment above that catalog) but the wizard and Dress page both
@@ -6395,13 +6863,13 @@ static void appendStoreSectionRows(String& rows, const StoreSection& section, ui
         // store entries aren't a contiguous prefix (theme-week exclusives sit between them), so
         // a row is NEW when its rank among the catalog's store entries is past the seen count.
         // The rank counts every store entry, even the October-only Pumpkin Patch when it's
-        // hidden, the same way *_STORE_COUNT does.
+        // hidden, the same way storeCatalogStoreCount() does. The December-only Christmas items
+        // aren't counted entries, so they take no rank and are never NEW.
         int seen = storeSeenCount(section.cat);
         int rank = 0;
         for (int i = 0; i < ITEM_CATALOG_COUNTS[section.cat]; i++) {
-            if (!isStoreCatalogEntry(section.cat, i)) continue;
-            bool isNew = rank++ >= seen;
-            if (isStoreItem(section.cat, i)) appendStoreRow(rows, section.cat, i, points, fromAll, isNew);
+            bool isNew = isStoreCatalogEntry(section.cat, i) && rank++ >= seen;
+            if (isStoreItem(section.cat, i)) appendStoreRow(rows, section.cat, i, points, from, isNew);
         }
     }
 }
@@ -6436,9 +6904,9 @@ static void sendStoreSectionPage(const StoreSection& section, uint32_t points) {
     sendHtmlPage(page);
 }
 
-// The All page (COM-516): every section in STORE_SECTIONS[] order except Combos, each under its
-// own heading, through the section page template. Combos are left out because they only repackage
-// items All already lists one by one. The whole catalog is far bigger than one section, so it's
+// The All page (COM-516): every section in STORE_SECTIONS[] order except Combos and Christmas
+// (COM-637), each under its own heading, through the section page template. Both are left out
+// because they only repackage items All already lists one by one. The whole catalog is far bigger than one section, so it's
 // streamed as a chunked response, one section at a time, rather than built as one String: the
 // peak heap use stays about one section page's, however many items the store grows to.
 static void sendStoreAllPage(uint32_t points) {
@@ -6461,7 +6929,8 @@ static void sendStoreAllPage(uint32_t points) {
     page = String();  // free the head before building sections
     for (int i = 0; i < STORE_SECTION_COUNT; i++) {
         const StoreSection& section = STORE_SECTIONS[i];
-        if (section.cat == ITEM_COMBO) continue;
+        // Combos and the Christmas section only repackage items All already lists one by one.
+        if (section.cat == ITEM_COMBO || section.cat == ITEM_CHRISTMAS) continue;
         String chunk = "<h3>";
         chunk += section.title;
         chunk += "</h3>\n";
@@ -6492,7 +6961,7 @@ static void handleConfigStoreGet() {
     } else {
         const StoreSection* section = nullptr;
         for (int i = 0; i < STORE_SECTION_COUNT; i++) {
-            if (key == STORE_SECTIONS[i].key) section = &STORE_SECTIONS[i];
+            if (key == STORE_SECTIONS[i].key && isStoreSectionShown(STORE_SECTIONS[i])) section = &STORE_SECTIONS[i];
         }
         if (section) {
             sendStoreSectionPage(*section, points);
@@ -7009,12 +7478,15 @@ static void handleConfigCityPost() {
 }
 
 // Sends the purchase result back to the section the item is sold in (COM-506), so buying keeps
-// the user on that section's page, or to the All page when the form posted from=all (COM-516).
-// Only that exact value is honoured, so the arg can't redirect anywhere else. `cat` is
-// ITEM_RIGHT_ARM_SLOT for the Right Arm Slot.
+// the user on that section's page, or to the All page when the form posted from=all (COM-516), or
+// to the Christmas section for from=christmas (COM-637). Only those exact values are honoured, so
+// the arg can't redirect anywhere else. `cat` is ITEM_RIGHT_ARM_SLOT for the Right Arm Slot.
 static void redirectToStoreSection(ItemCategory cat, const char* query) {
+    String from = wm.server->arg("from");
     String location = "/config/store?s=";
-    location += wm.server->arg("from") == STORE_ALL_KEY ? STORE_ALL_KEY : storeSectionFor(cat).key;
+    location += from == STORE_ALL_KEY ? STORE_ALL_KEY
+              : from == STORE_CHRISTMAS_KEY ? STORE_CHRISTMAS_KEY
+              : storeSectionFor(cat).key;
     location += "&";
     location += query;
     wm.server->sendHeader("Location", location);
@@ -7041,7 +7513,7 @@ static void purchaseCombo(int comboIdx) {
     for (int i = 0; i < combo.itemCount; i++) {
         ItemCategory cat;
         int idx;
-        if (!findStoreItem(combo.items[i], cat, idx) || storeItemOwned(cat, idx)) continue;
+        if (!findComboItem(combo, combo.items[i], cat, idx) || storeItemOwned(cat, idx)) continue;
         setStoreItemOwned(cat, idx, true);
         granted[i] = true;
     }
@@ -7050,7 +7522,7 @@ static void purchaseCombo(int comboIdx) {
         for (int i = 0; i < combo.itemCount; i++) {
             ItemCategory cat;
             int idx;
-            if (granted[i] && findStoreItem(combo.items[i], cat, idx)) setStoreItemOwned(cat, idx, false);
+            if (granted[i] && findComboItem(combo, combo.items[i], cat, idx)) setStoreItemOwned(cat, idx, false);
         }
         redirectToStoreSection(ITEM_COMBO, "err=save");
         return;
@@ -7912,6 +8384,7 @@ void loop() {
     // lantern flicker and bat (COM-503); each is a no-op under any other theme.
     updateHogwartsNightAnim(now);
     updatePumpkinPatchAnim(now);
+    updateCozyFireplaceAnim(now);
 
     // Timer row refresh while running
     {

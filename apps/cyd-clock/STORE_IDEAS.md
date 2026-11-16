@@ -20,16 +20,18 @@ easy to slot in, no other plumbing changes needed.
 - Hats/accessories worn directly on the cat (party hat, bow, tiny crown) rather than a stuffy beside it — a different equip slot, more visible since it's on the cat itself
 - Blanket patterns (polka dot, plaid) instead of just solid colors — reuses the existing blanket color-catalog mechanic with an extra draw variant
 
-Done: room/background themes (DIY-38) — `RoomTheme`/`ROOM_THEMES[]` in `apps/cyd-clock/src/main.cpp`, rendered behind the cat at all times (not just the sleep scene). Five flat-color themes pairing with the blanket palette, plus a "Starry Night" theme (moon + fixed star field) as the first real-art entry. Later real-art themes: "6-7" (DIY-87), "Clear Sky" (DIY-90), the legendary "Hogwarts at Night" (COM-378, castle silhouette with flickering windows and a rare shooting star) and the legendary, October-only "Haunted Pumpkin Patch" (COM-503, haunted house, flickering jack-o'-lanterns and a bat across the moon). More (fireplace, etc.) are still open — reuse `drawStarryNightBackground()`'s `tft.setViewport()` clipping pattern for any theme with per-pixel art rather than a flat fill.
+Done: room/background themes (DIY-38) — `RoomTheme`/`ROOM_THEMES[]` in `apps/cyd-clock/src/main.cpp`, rendered behind the cat at all times (not just the sleep scene). Five flat-color themes pairing with the blanket palette, plus a "Starry Night" theme (moon + fixed star field) as the first real-art entry. Later real-art themes: "6-7" (DIY-87), "Clear Sky" (DIY-90), the legendary "Hogwarts at Night" (COM-378, castle silhouette with flickering windows and a rare shooting star) and the legendary, October-only "Haunted Pumpkin Patch" (COM-503, haunted house, flickering jack-o'-lanterns and a bat across the moon). The legendary, December-only "Cozy Fireplace" (COM-637) has a brick fireplace with a flickering fire. More are still open — reuse `drawStarryNightBackground()`'s `tft.setViewport()` clipping pattern for any theme with per-pixel art rather than a flat fill.
 
 ## Mechanics-flavored (ties into the points economy)
 
 - Limited-time/rotating item that changes weekly, using the RTC already available. First step
   done (COM-503): Haunted Pumpkin Patch is only sold in October (`isPumpkinPatchOnSale()`, checked
-  by `isStoreItem()`), and an owned copy stays equippable all year. A weekly rotation would reuse
-  the same `isStoreItem()` hook.
+  by `isStoreItem()`), and an owned copy stays equippable all year. COM-637 added four
+  December-only Christmas items and a bundle the same way (`CHRISTMAS_STORE_ITEMS[]`,
+  `isChristmasStoreOpen()`), with their own December-only store section. A weekly rotation would
+  reuse the same `isStoreItem()` hook.
 - Combo bundles: done (COM-507). `STORE_COMBOS[]` sells a few existing items together at about
-  20% off as the store's first section, pro-rating the price to the items you don't own yet.
+  20% off as the store's first section (after the December-only Christmas one, COM-637), pro-rating the price to the items you don't own yet.
   More combos only need a new `STORE_COMBOS[]` entry; `assertCombosValid()` checks it at boot.
   The Eeveelution Trio (Eevee, Sylveon, Umbreon; 720 instead of 900) is done too (COM-522).
 - "Lucky" cheap item with a random color each purchase — surprise mechanic reusing the existing bitmask ownership
@@ -38,7 +40,7 @@ Done: room/background themes (DIY-38) — `RoomTheme`/`ROOM_THEMES[]` in `apps/c
 ## Theme-week exclusives
 
 Theme weeks (DIY-108 Birthday, COM-379 Halloween, COM-636 Christmas) hand out cosmetics that can't be bought:
-they're appended to their catalogs with cost 0 (or past `GLASSES_STORE_COUNT` in `GLASSES[]`) and granted/revoked by date. Ideas
+they're appended to their catalogs with cost 0 and granted/revoked by date. Ideas
 left on the table:
 
 - Pumpkin or ghost **stuffy** for Halloween. It was skipped because a stuffy needs four poses;
@@ -48,7 +50,7 @@ left on the table:
 - ~~A Christmas week on the same pattern.~~ Done in COM-636 (Dec 1–26: Santa hat, Christmas
   tree glasses, Christmas Night backdrop). Its snow is static; falling snow would be an
   animated backdrop, which has to stay clear of every overlay (see Hogwarts at Night). December
-  store items are COM-637.
+  store items are done in COM-637 (see Legendary tier and the limited-time item above).
 
 ## Legendary tier
 
@@ -74,6 +76,12 @@ COM-382 introduced the legendary tier: `STORE_COST_LEGENDARY` (350 points, the t
 - **Haunted Pumpkin Patch** room theme (COM-503), the first item sold only for part of the year
   (October): a crooked haunted house in front of a big orange moon, jack-o'-lanterns whose faces
   flicker, and a bat flapping across the moon every 30–60 s (`updatePumpkinPatchAnim()`).
+
+- **Cozy Fireplace** room theme (COM-637), sold only in December with the other Christmas items
+  (Reindeer Antlers, Candy Cane Glasses, a Reindeer stuffy, and a Christmas Bundle of all four):
+  a brick fireplace with a flickering fire, stockings and a wreath, and a garland across the top
+  (`updateCozyFireplaceAnim()`). Ideas for later Decembers: one new Christmas item a year (a
+  Snowy White coat, a plaid blanket, Northern Lights), appended to `CHRISTMAS_STORE_ITEMS[]`.
 
 Still planned on the same tier: COM-375 (Glory the RainWing), COM-376 (Golden Snitch) and COM-377
 (Shiny Mew).
