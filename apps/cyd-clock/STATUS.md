@@ -1252,19 +1252,23 @@ only buying is limited, and anything bought stays owned and equippable all year.
   existing catalog, so saved seen counts stay valid.
 - **Never NEW**: the Christmas items aren't counted store entries, so they never show NEW or
   start the points flash. The December-only **❄ Christmas** section at the top of the store menu
-  announces them, and each row and the bundle carry a "❄ CHRISTMAS · leaves Jan 1" tag. The items
+  announces them, and each row and the bundle carry a "❄ CHRISTMAS · leaves Jan 1" tag (just
+  "❄ CHRISTMAS" once owned, since an owned item is kept). The items
   also appear in their usual sections and on the All page while the store is open; the Christmas
   section isn't on All (like Combos). A purchase from the section posts `from=christmas`, so
   the redirect lands back on it.
 - **Flash sales**: allowed while the Christmas store is open. Any other month
   `isKnownStoreItemId()` (via `isSeasonalItemIdOffSale()`) rejects a sale on a Christmas item or
-  the bundle, the same as Pumpkin Patch outside October.
-- **Flash** (`pio run` size report, against COM-636's tip, 8a2758b):
+  the bundle, the same as Pumpkin Patch outside October, and `isFlashSaleActive()` now also drops
+  a sale the moment its seasonal item goes off sale, so the device's "SALE!" banner doesn't keep
+  flashing until the next poll (this covers Pumpkin Patch too).
+- **Flash** (`pio run` size report, re-measured on COM-636's last branch commit 8a2758b, whose code
+  matches the merged ee1d410 apart from a one-line refactor; hence 52 B under COM-636's own figure):
 
 | Board | Before | After | Delta | % used |
 |---|---|---|---|---|
-| `cyd` | 1,214,001 B | 1,218,009 B | +4,008 B | 92.6% → 92.9% (~90.5KB left) |
-| `freenove-s3` | 1,167,457 B | 1,171,445 B | +3,988 B | 34.9% → 35.0% |
+| `cyd` | 1,214,001 B | 1,218,253 B | +4,252 B | 92.6% → 92.9% (~90.3KB left) |
+| `freenove-s3` | 1,167,457 B | 1,171,705 B | +4,248 B | 34.9% → 35.1% |
 
 ## Branch & Files
 

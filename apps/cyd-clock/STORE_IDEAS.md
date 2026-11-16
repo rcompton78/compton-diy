@@ -31,7 +31,7 @@ Done: room/background themes (DIY-38) — `RoomTheme`/`ROOM_THEMES[]` in `apps/c
   `isChristmasStoreOpen()`), with their own December-only store section. A weekly rotation would
   reuse the same `isStoreItem()` hook.
 - Combo bundles: done (COM-507). `STORE_COMBOS[]` sells a few existing items together at about
-  20% off as the store's first section, pro-rating the price to the items you don't own yet.
+  20% off as the store's first section (after the December-only Christmas one, COM-637), pro-rating the price to the items you don't own yet.
   More combos only need a new `STORE_COMBOS[]` entry; `assertCombosValid()` checks it at boot.
   The Eeveelution Trio (Eevee, Sylveon, Umbreon; 720 instead of 900) is done too (COM-522).
 - "Lucky" cheap item with a random color each purchase — surprise mechanic reusing the existing bitmask ownership

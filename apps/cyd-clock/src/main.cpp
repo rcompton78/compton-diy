@@ -1086,7 +1086,7 @@ static constexpr AntlerStroke ANTLER_STROKES[] = {
  * Reindeer Antlers (December-only store item, COM-637): two branching tan antlers on top of the
  * head with a sprig of holly between them. Each stroke is drawn first 2px thick in a dark brown
  * outline, then 1px thick in tan, so the antlers read on a pale or a dark cat and on any theme.
- * The holly's lowest row (cy-61) stays above drawEyes()' blink rect (cy-50), like drawSantaHat().
+ * The holly's lowest row (cy-62) stays above drawEyes()' blink rect (cy-50), like drawSantaHat().
  *
  * @param cx Cat center x (CAT_CX).
  * @param cy Cat center y, including any bounce offset.
@@ -2468,15 +2468,17 @@ static void drawUmbreonHeldPeeking(int cx, int cy, uint16_t accentColor) {
 
 // Shared antler/ear/head/snout/face art for every reindeer pose (December-only, COM-637): the
 // teddy's layout with a pair of small 2px tan antlers (each with one tine) rising from the top of
-// the head, and floppy oval ears out to the sides. The snout takes the accent colour, like the
-// other stuffies' snouts. The antlers top out at by-19, well inside every pose's clear area.
+// the head, and small oval ears out to the sides. The snout takes the accent colour, like the
+// other stuffies' snouts. Everything stays within bx±9, the teddy's footprint: in the right-arm
+// pose (bx = cx+38) that's x <= 167, inside drawAnimal()'s cat clear rect (x 70–169) and left of
+// the badge column (x >= 168), whose SALE strip is repainted every 500 ms.
 static void drawReindeerHead(int bx, int by, uint16_t snoutColor) {
     for (int side = -1; side <= 1; side += 2) {
         for (int t = 0; t < 2; t++) {
-            tft.drawLine(bx + side * (3 + t), by - 7, bx + side * (6 + t), by - 19, C_ANTLER);    // beam
-            tft.drawLine(bx + side * 5, by - 12 - t, bx + side * 10, by - 15 - t, C_ANTLER);     // tine
+            tft.drawLine(bx + side * (2 + t), by - 7, bx + side * (5 + t), by - 19, C_ANTLER);    // beam
+            tft.drawLine(bx + side * 4, by - 12 - t, bx + side * 8, by - 15 - t, C_ANTLER);      // tine
         }
-        tft.fillEllipse(bx + side * 10, by - 3, 4, 2, C_REINDEER);  // ear
+        tft.fillEllipse(bx + side * 7, by - 4, 2, 2, C_REINDEER);  // ear, peeking out past the head
     }
     tft.fillCircle(bx, by, 9, C_REINDEER);                   // head
     tft.fillEllipse(bx, by + 4, 5, 3, snoutColor);           // snout
@@ -4857,9 +4859,12 @@ static void fetchFlashSale() {
 }
 
 // True while the last-polled flash sale is both valid and inside its window — all badges and
-// on-device "SALE!" indicators should gate on this rather than naming a specific sale.
+// on-device "SALE!" indicators should gate on this rather than naming a specific sale. A sale on a
+// seasonal item stops counting the moment its season ends (Jan 1 for the Christmas items, or
+// Christmas Preview switched off), not at the next poll, which can be up to 15 minutes later.
 static bool isFlashSaleActive() {
     if (!currentFlashSale.valid) return false;
+    if (isSeasonalItemIdOffSale(currentFlashSale.itemId)) return false;
     int64_t now = flashSaleNow();
     if (now < 0) return false;
     return now >= currentFlashSale.start && now < currentFlashSale.end;
@@ -6416,8 +6421,8 @@ static bool isComboOnSale(int i) {
 }
 
 // Index into STORE_COMBOS[] of the combo whose id is `id` and that's on sale right now
-// (isComboOnSale()), or -1. Purchases and the SALE tags both go through this, so a closed
-// Christmas Bundle can be neither bought nor marked on sale.
+// (isComboOnSale()), or -1. Purchases and storeSectionHasSale() go through this, so a closed
+// Christmas Bundle can be neither bought nor mark a section on sale (and its rows aren't listed).
 static int findCombo(const String& id) {
     for (int i = 0; i < STORE_COMBO_COUNT; i++) {
         if (id == STORE_COMBOS[i].id) return isComboOnSale(i) ? i : -1;
@@ -6517,9 +6522,12 @@ static void assertCombosValid() {
 static const char STORE_TAG_LEGENDARY[] = " <span style='color:#ffcc33;font-weight:bold'>\xE2\x98\x85 LEGENDARY</span>";
 static const char STORE_TAG_NEW[]       = " <span style='color:#00ffff;font-weight:bold'>\xE2\x9C\xA8 NEW</span>";
 static const char STORE_TAG_SALE[]      = " <span style='color:#ff4444;font-weight:bold'>\xF0\x9F\x94\xA5 SALE</span>";
-// The December-only Christmas items and bundle (COM-637), with when they leave the store.
-static const char STORE_TAG_CHRISTMAS[] = " <span style='color:#7fd18b;font-weight:bold'>\xE2\x9D\x84 CHRISTMAS</span>"
-                                          "<span style='color:#888;font-size:.8rem'> \xC2\xB7 leaves Jan 1</span>";
+// The December-only Christmas items and bundle (COM-637). One span, like the other tags, so it's
+// a single flex item in the row. Rows that can still be bought add when they leave the store;
+// owned ones don't, since an owned item is kept.
+static const char STORE_TAG_CHRISTMAS[] = " <span style='color:#7fd18b;font-weight:bold'>\xE2\x9D\x84 CHRISTMAS"
+                                          "<span style='color:#888;font-weight:normal;font-size:.8rem'> \xC2\xB7 leaves Jan 1</span></span>";
+static const char STORE_TAG_CHRISTMAS_OWNED[] = " <span style='color:#7fd18b;font-weight:bold'>\xE2\x9D\x84 CHRISTMAS</span>";
 
 /**
  * The tags shown after a store item's label: a gold "LEGENDARY" marker for anything priced at
@@ -6583,7 +6591,7 @@ static void appendStoreItemRow(String& html, const char* item, const char* webCo
     appendStoreItemTags(html, baseCost, cost, isNew);
     ItemCategory xmasCat;
     int xmasIdx;
-    if (findChristmasStoreItem(item, xmasCat, xmasIdx)) html += STORE_TAG_CHRISTMAS;
+    if (findChristmasStoreItem(item, xmasCat, xmasIdx)) html += ownedText ? STORE_TAG_CHRISTMAS_OWNED : STORE_TAG_CHRISTMAS;
     if (ownedText) {
         html += "<span class='owned'>";
         html += ownedText;
@@ -6628,7 +6636,7 @@ static void appendComboRow(String& html, int i, uint32_t points, const char* fro
     html += "</span>";
     if (p.legendary) html += STORE_TAG_LEGENDARY;
     if (p.missing > 0 && isFlashSaleActive() && strcmp(currentFlashSale.itemId, combo.id) == 0) html += STORE_TAG_SALE;
-    if (combo.christmas) html += STORE_TAG_CHRISTMAS;
+    if (combo.christmas) html += p.missing > 0 ? STORE_TAG_CHRISTMAS : STORE_TAG_CHRISTMAS_OWNED;
     html += "<div style='font-size:.8rem;color:#888;margin-top:4px'>";
     bool first = true;
     for (int j = 0; j < combo.itemCount; j++) {
@@ -6895,9 +6903,9 @@ static void sendStoreSectionPage(const StoreSection& section, uint32_t points) {
     sendHtmlPage(page);
 }
 
-// The All page (COM-516): every section in STORE_SECTIONS[] order except Combos, each under its
-// own heading, through the section page template. Combos are left out because they only repackage
-// items All already lists one by one. The whole catalog is far bigger than one section, so it's
+// The All page (COM-516): every section in STORE_SECTIONS[] order except Combos and Christmas
+// (COM-637), each under its own heading, through the section page template. Both are left out
+// because they only repackage items All already lists one by one. The whole catalog is far bigger than one section, so it's
 // streamed as a chunked response, one section at a time, rather than built as one String: the
 // peak heap use stays about one section page's, however many items the store grows to.
 static void sendStoreAllPage(uint32_t points) {
