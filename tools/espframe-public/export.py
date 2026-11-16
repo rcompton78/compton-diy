@@ -31,7 +31,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -66,6 +65,8 @@ EXCLUDE = [
     "docs/reset-architecture-v2.md",
     "docs/tech-debt-cleanup-backlog.md",
     "docs/roadmap.md",
+    "docs/testing.md",  # the source repo's CI and setup flows
+    "docs/repository-governance.md",  # the original project's branch rules
     "README.md",  # replaced by overlay/README.md
 ]
 
@@ -77,46 +78,6 @@ dist/
 
 # (file, old, new): old must occur exactly once in the copied file.
 PATCHES: list[tuple[str, str, str]] = [
-    # Builds compile only this repo's components/ (the builds/*.yaml entry points
-    # add them as a local source). The source repo's device.yaml also names a git
-    # copy for ESPHome-dashboard package installs, which every build would clone.
-    (
-        "devices/guition-esp32-p4-jc8012p4a1/device/device.yaml",
-        '  espframe_component_url: "https://github.com/jtenniswood/espframe"\n'
-        '  espframe_component_ref: "main"\n',
-        "",
-    ),
-    (
-        "devices/guition-esp32-p4-jc8012p4a1/device/device.yaml",
-        "# -----------------------------------------------------------------------------\n"
-        "# External components (espframe: gsl3680, remote_image, espframe)\n"
-        "# -----------------------------------------------------------------------------\n"
-        "external_components:\n"
-        "  - source:\n"
-        "      type: git\n"
-        "      url: ${espframe_component_url}\n"
-        "      ref: ${espframe_component_ref}\n"
-        "      path: components\n"
-        "    components: [gsl3680, remote_image, espframe]\n"
-        "    refresh: 0s\n\n",
-        "# External components (gsl3680, remote_image, espframe) come from this repo's\n"
-        "# components/, added by each entry point (builds/*.yaml, dev.yaml).\n\n",
-    ),
-    (
-        "devices/guition-esp32-p4-jc8012p4a1/dev.yaml",
-        '  espframe_component_url: "../.."\n  espframe_component_ref: "HEAD"\n',
-        "",
-    ),
-    (
-        "devices/guition-esp32-p4-jc8012p4a1/dev.yaml",
-        "packages:\n  espframe: !include packages.yaml",
-        "packages:\n  espframe: !include packages.yaml\n\n"
-        "external_components:\n"
-        "  - source:\n"
-        "      type: local\n"
-        "      path: ../../components\n"
-        "    components: [gsl3680, remote_image, espframe]",
-    ),
     (
         "docs/manual-setup.md",
         "# ESPHome Manual Setup for Espframe\n\n",
@@ -196,6 +157,70 @@ PATCHES: list[tuple[str, str, str]] = [
         "rebuild with `pnpm nx run espframe-stand-10:cad`.",
         "rebuild with `.venv/bin/python -m stand10.build`.",
     ),
+    (
+        "hardware/stand-10/requirements.txt",
+        "Rebuild the venv with `pnpm nx run espframe-stand-10:cad-setup`.",
+        "Rebuild the venv with `hardware/stand-10/setup.sh`.",
+    ),
+    (
+        "hardware/stand-10/stand10/params.py",
+        "the 7\" stand's printed and measured fits (apps/espframe/hardware/stand).",
+        "an earlier 7\" stand's printed and measured fits.",
+    ),
+    (
+        "hardware/stand-10/docs/background.md",
+        "the lessons carried over from the 7\" stand in `../stand`.",
+        "the lessons carried over from an earlier 7\" stand.",
+    ),
+    (
+        "hardware/stand-10/README.md",
+        "the frame is wood-look PLA (the 7\" README's wood-look notes apply).",
+        "the frame is wood-look PLA.",
+    ),
+    (
+        "scripts/check_timezones.py",
+        'f"run scripts/setup.sh (installs it into apps/espframe/.venv, which "\n'
+        '    f"npm run test:timezones uses), or pip install -r {REQUIREMENTS_PATH} in a venv"',
+        'f"pip install -r {REQUIREMENTS_PATH} into .venv (which npm run "\n'
+        '    f"test:timezones uses) or another venv"',
+    ),
+    (
+        "scripts/requirements-timezones.txt",
+        "# (and fix any zone the checker then flags) when the weekly tzdata-drift\n"
+        "# workflow reports a newer release with real-world rule changes.",
+        "# (and fix any zone the checker then flags) when a newer tzdata release\n"
+        "# has real-world rule changes.",
+    ),
+    (
+        "docs/screen-settings.md",
+        "On the 7\" and 10\" models, 0 and 180 are landscape",
+        "On the 10\" model, 0 and 180 are landscape",
+    ),
+    (
+        "docs/home-assistant.md",
+        "portrait on the 7\" and 10\")",
+        "portrait on the 10\")",
+    ),
+    (
+        "builds/guition-esp32-p4-jc8012p4a1.factory.yaml",
+        "# Compiled by CI (see .github/workflows/release.yml) — not used locally.\n"
+        "# For local development, see devices/guition-esp32-p4-jc8012p4a1/esphome.yaml.",
+        "# Built by scripts/firmware.sh, locally and in .github/workflows/*.yml.\n"
+        "# devices/guition-esp32-p4-jc8012p4a1/dev.yaml is a local alternative that\n"
+        "# takes Wi-Fi from secrets.yaml.",
+    ),
+    (
+        "common/addon/firmware_update.yaml",
+        "        # firmware_version defaults to \"dev\" unless scripts/espframe-esphome.sh\n"
+        "        # threads a real RELEASE_VERSION in via -s (see COM-279) -- an",
+        "        # firmware_version defaults to \"dev\" unless scripts/firmware.sh\n"
+        "        # threads a real RELEASE_VERSION in via -s -- an",
+    ),
+    (
+        "docs/install.md",
+        "<EspInstallButton />",
+        "Open your fork's install page, `https://<owner>.github.io/<repo>/` (see the README), and click **Install** there.",
+    ),
 ]
 
 # Whole sections to drop: (file, start marker, end marker); the end marker is kept.
@@ -215,39 +240,44 @@ FIRMWARE_UPDATE_INTRO = """OTA and HTTP updates from GitHub. A frame flashed fro
 
 """
 
-# Private-detail scan. Each hit fails the export unless the line matches ALLOW.
+# Private-detail scan, over every non-binary file's text and every file's path.
+# A hit fails the export unless the matched text is in ALLOW or the file is
+# under ALLOW_PATHS for that kind of hit.
+CREDENTIAL_KEY = r"[\w-]*(?:ssid|password|passwd|api_key|apikey|encryption_key|secret|token)"
 SCAN = [
-    (re.compile(r"compton-diy|compton-apps|linear\.app|/hdd/|home-diy|homelab|bytesafe|bitwarden|\bbws\b", re.I), "private name or path"),
-    (re.compile(r"\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3})\b"), "private IP"),
-    (re.compile(r"\b[\w.+-]+@(?:gmail|outlook|hotmail|icloud|proton)\.\w+", re.I), "personal email"),
-    (re.compile(r"^\s*(?:wifi_)?(?:ssid|password|api_key|api_encryption_key|immich_api_key)\s*:\s*(?![\"']?(?:\$\{|!secret|\s*$|[\"']))[\"']?[^\s#]{4,}", re.I | re.M), "literal credential"),
-    (re.compile(r"freenove|waveshare|stand/README", re.I), "other board"),
-    (re.compile(r"(?:ghp|github_pat|gho|ghs)_[A-Za-z0-9_]{20,}|xox[bp]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}"), "token"),
+    (re.compile(r"compton|linear\.app|/hdd/|home-diy|homelab|bytesafe|bitwarden|\bbws\b|/home/|t3clones|\.t3/|\.secrets\b", re.I), "private name or path"),
+    (re.compile(r"\b(?:10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}|192\.168\.\d{1,3}\.\d{1,3}|100\.(?:6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d{1,3}\.\d{1,3})\b"), "private IP"),
+    (re.compile(r"\b[\w-]+\.(?:lan|home\.arpa|ts\.net)\b", re.I), "private hostname"),
+    (re.compile(r"\b[\w.+-]+@(?:gmail|googlemail|outlook|hotmail|live|icloud|me|proton|protonmail|yahoo)\.\w+", re.I), "personal email"),
+    # A literal value for a credential-like key: quoted anywhere (YAML, JSON,
+    # code), or bare at the start of a YAML or env line. Substitutions, !secret,
+    # <placeholders> and the values in CREDENTIAL_OK are fine.
+    (re.compile(r"[\"']?" + CREDENTIAL_KEY + r"[\"']?\s*[:=]\s*[\"'](?P<v>[^\"'\s]{4,})[\"']", re.I), "literal credential"),
+    (re.compile(r"^\s*" + CREDENTIAL_KEY + r"\s*[:=]\s*(?P<v>[^\s\"'#]{4,})", re.I), "literal credential"),
+    (re.compile(r"freenove|waveshare|\.\./stand\b|hardware/stand/|apps/espframe|pnpm nx", re.I), "source-repo or other-board reference"),
+    (re.compile(r"(?:ghp|github_pat|gho|ghs|ghu)_[A-Za-z0-9_]{20,}|xox[bp]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY"), "token or key"),
 ]
 ALLOW = {
-    "private IP": [
-        re.compile(r"192\.168\.4\.1\b"),  # the setup hotspot's captive portal
-        re.compile(r"192\.168\.1\.30\b"),  # docs and test example Immich host
-        re.compile(r"192\.168\.0\.1:2283"),  # web UI placeholder Immich URL
-    ],
+    "private IP": {
+        "192.168.4.1",  # the setup hotspot's captive portal
+        "192.168.1.30",  # docs and test example Immich host
+        "192.168.0.1",  # web UI placeholder Immich URL
+    },
 }
+# Credential-like values that aren't credentials: identifiers (a key naming
+# another key, a workflow permission), booleans, substitutions, !secret and
+# <placeholders>, and the tests' made-up keys.
+CREDENTIAL_OK = re.compile(
+    r"[a-z]+(?:_[a-z]+)+|read|write|true|false|True|False|null|none|None|\$\{.*|!secret.*|<.*"
+    r"|fixture-read-only-api-key|imported-api-key"
+)
 # Vendored third-party source credits its authors by email.
 ALLOW_PATHS = {"personal email": ("components/libwebp-esp32/",)}
-TEXT_SUFFIXES = {".md", ".yaml", ".yml", ".json", ".py", ".sh", ".ts", ".js", ".mjs", ".mts", ".css", ".html", ".txt", ".h", ".cpp", ".c", ".toml", ".cfg", ""}
 
-# The checks that pass on the exported tree; overlay/.github/workflows/build.yml runs the same list.
-CHECKS = [
-    "check:schema",
-    "check:generated",
-    "check:ownership",
-    "check:budgets",
-    "check:firmware-fields",
-    "webserver:typecheck",
-    "test:web-compat",
-    "test:web-modules",
-    "test:web-smoke-cli",
-    "test:helpers",
-]
+# package.json's check:ci: the checks that pass on the exported tree, which the
+# public Build workflow also runs. (The public repo ships package-lock.json and
+# its CI uses npm, so the export runs npm too.)
+CHECK_SCRIPT = "check:ci"
 
 
 def die(msg: str) -> None:
@@ -260,6 +290,7 @@ def run(cmd: list[str], cwd: Path, **kw) -> subprocess.CompletedProcess:
 
 
 def tracked_files() -> list[str]:
+    """apps/espframe's tracked files, relative to it."""
     out = subprocess.run(
         ["git", "ls-files", "-z", "--", "."], cwd=SRC, check=True, capture_output=True
     ).stdout.decode()
@@ -273,6 +304,25 @@ def excluded(path: str) -> bool:
         if path == ex:
             return True
     return False
+
+
+def check_dest(dest: Path) -> None:
+    """Refuse any dest that isn't empty, a public-repo checkout or an earlier export."""
+    home = Path.home().resolve()
+    if dest == REPO or REPO in dest.parents or dest in REPO.parents or dest in (home, Path(dest.anchor)):
+        die(f"refusing {dest}: it is, contains or is inside this repo, or is your home or a root dir")
+    if not dest.exists() or not any(dest.iterdir()):
+        return
+    if (dest / ".git").exists():
+        origin = subprocess.run(
+            ["git", "remote", "get-url", "origin"], cwd=dest, capture_output=True, text=True
+        ).stdout.strip()
+        if not origin or re.search(r"/espframe(?:\.git)?/?$", origin):
+            return
+        die(f"refusing {dest}: its origin ({origin}) isn't an espframe repo")
+    if (dest / "scripts" / "firmware.sh").is_file() and (dest / "product" / "contract" / "devices.json").is_file():
+        return
+    die(f"refusing {dest}: it isn't empty, an espframe checkout or an earlier export, and the export empties it")
 
 
 def clear_dest(dest: Path) -> None:
@@ -340,61 +390,112 @@ def apply_patches(dest: Path) -> None:
     for path in text_files(dest):
         text = path.read_text()
         new = re.sub(r" ?\(https://linear\.app/[^)\s]*\)", "", text)
-        new = re.sub(r"https://linear\.app/\S*", "", new)
+        new = re.sub(r"https://linear\.app/[^\s)\]>,]*", "", new)
         if new != text:
             path.write_text(new)
+    rewrite_doc_links(dest)
     with (dest / ".gitignore").open("a") as f:
         f.write(GITIGNORE_EXTRA)
 
 
+def rewrite_doc_links(dest: Path) -> None:
+    """Point docs/*.md's site-root links (VitePress) at files GitHub can show."""
+    docs = dest / "docs"
+    missing = []
+
+    def target(path: str, md: str) -> str | None:
+        path = path.strip("/")
+        if not path:
+            return "index.md"
+        if (docs / f"{path}.md").is_file():
+            return f"{path}.md"
+        if (docs / "public" / path).is_file():
+            return f"public/{path}"
+        missing.append(f"docs/{md}: /{path}")
+        return None
+
+    for page in sorted(docs.glob("*.md")):
+        text = page.read_text()
+
+        def link(m: re.Match) -> str:
+            t = target(m.group(1), page.name)
+            return m.group(0) if t is None else f"]({t}{m.group(2) or ''})"
+
+        def src(m: re.Match) -> str:
+            t = target(m.group(1), page.name)
+            return m.group(0) if t is None else f'src="{t}"'
+
+        new = re.sub(r"\]\(/([^)#\s]*)(#[^)\s]*)?\)", link, text)
+        new = re.sub(r'src="/([^"]+)"', src, new)
+        if new != text:
+            page.write_text(new)
+    if missing:
+        die("docs link to pages the export leaves out:\n  " + "\n  ".join(missing))
+
+
 def copy_overlay(dest: Path) -> None:
-    for src in sorted(OVERLAY.rglob("*")):
-        if src.is_dir() or "__pycache__" in src.parts:
+    # Tracked files only: an ignored .env or .venv left in overlay/ must never ship.
+    out = subprocess.run(
+        ["git", "ls-files", "-z", "--", "."], cwd=OVERLAY, check=True, capture_output=True
+    ).stdout.decode()
+    for rel in filter(None, out.split("\0")):
+        src = OVERLAY / rel
+        if not src.exists():
             continue
-        out = dest / src.relative_to(OVERLAY)
-        out.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, out)
+        target = dest / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, target)
 
 
 def regenerate(dest: Path) -> None:
     # The web bundle needs esbuild; borrow the source's node_modules for the run.
     modules = dest / "node_modules"
-    if not (SRC / "node_modules").is_dir():
-        die("apps/espframe/node_modules is missing; run `pnpm nx run espframe:install` first")
     modules.symlink_to(SRC / "node_modules")
     try:
-        run([sys.executable, "scripts/generate_assets.py"], dest)
+        r = subprocess.run([sys.executable, "scripts/generate_assets.py"], cwd=dest)
+        if r.returncode != 0:
+            die("scripts/generate_assets.py failed in the export (output above)")
     finally:
         modules.unlink()
 
 
 def text_files(dest: Path):
-    for path in dest.rglob("*"):
+    """Every file in dest that isn't binary (no NUL in its first 8 KB)."""
+    for path in sorted(dest.rglob("*")):
         if ".git" in path.parts or "node_modules" in path.parts or not path.is_file():
             continue
-        if path.suffix.lower() in TEXT_SUFFIXES:
-            yield path
+        with path.open("rb") as f:
+            if b"\0" in f.read(8192):
+                continue
+        yield path
 
 
 def scan(dest: Path) -> None:
     hits = []
+
+    def check_text(rel: str, where: str, text: str) -> None:
+        for pattern, what in SCAN:
+            for m in pattern.finditer(text):
+                if m.group(0) in ALLOW.get(what, ()):
+                    continue
+                if what == "literal credential" and CREDENTIAL_OK.fullmatch(m.group("v")):
+                    continue
+                if rel.startswith(ALLOW_PATHS.get(what, ())):
+                    continue
+                hits.append(f"{where}: {what}: {text.strip()[:160]}")
+
+    for path in sorted(dest.rglob("*")):
+        if ".git" in path.parts or "node_modules" in path.parts:
+            continue
+        rel = str(path.relative_to(dest))
+        check_text(rel, f"{rel} (path)", rel)
+        if path.name in ("secrets.yaml", ".env") or path.name.startswith(".env."):
+            hits.append(f"{rel}: must never be exported")
     for path in text_files(dest):
-        rel = path.relative_to(dest)
-        if path.name == "secrets.yaml":
-            hits.append(f"{rel}: secrets.yaml must never be exported")
-            continue
-        try:
-            text = path.read_text()
-        except UnicodeDecodeError:
-            continue
+        rel = str(path.relative_to(dest))
+        text = path.read_bytes().decode("utf-8", errors="replace")
         for lineno, line in enumerate(text.splitlines(), 1):
-            for pattern, what in SCAN:
-                for m in pattern.finditer(line):
-                    if any(a.search(line) for a in ALLOW.get(what, [])):
-                        continue
-                    if str(rel).startswith(ALLOW_PATHS.get(what, ())):
-                        continue
-                    hits.append(f"{rel}:{lineno}: {what}: {line.strip()[:160]}")
+            check_text(rel, f"{rel}:{lineno}", line)
     if hits:
         print("\n".join(hits), file=sys.stderr)
         die(f"private-detail scan found {len(hits)} hit(s); fix the source or PATCHES and export again")
@@ -404,28 +505,27 @@ def check(dest: Path) -> None:
     modules = dest / "node_modules"
     modules.symlink_to(SRC / "node_modules")
     try:
-        failed = []
-        for name in CHECKS:
-            r = subprocess.run(["npm", "run", "-s", name], cwd=dest, capture_output=True, text=True)
-            if r.returncode != 0:
-                failed.append(name)
-                sys.stderr.write(r.stdout[-2000:] + r.stderr[-2000:])
-        if failed:
-            die(f"checks failed in the export: {', '.join(failed)}")
+        r = subprocess.run(["npm", "run", "-s", CHECK_SCRIPT], cwd=dest, capture_output=True, text=True)
+        if r.returncode != 0:
+            sys.stderr.write(r.stdout[-4000:] + r.stderr[-4000:])
+            die(f"npm run {CHECK_SCRIPT} failed in the export")
     finally:
         modules.unlink()
 
 
-def commit(dest: Path) -> None:
-    sha = subprocess.run(
-        ["git", "rev-parse", "--short", "HEAD"], cwd=REPO, check=True, capture_output=True, text=True
-    ).stdout.strip()
+def require_clean_source() -> None:
     dirty = subprocess.run(
         ["git", "status", "--porcelain", "--", "apps/espframe", "tools/espframe-public"],
         cwd=REPO, check=True, capture_output=True, text=True,
     ).stdout.strip()
     if dirty:
         die("apps/espframe or tools/espframe-public has uncommitted changes; commit them before --commit")
+
+
+def commit(dest: Path) -> None:
+    sha = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"], cwd=REPO, check=True, capture_output=True, text=True
+    ).stdout.strip()
     run(["git", "add", "-A"], dest)
     if not subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=dest).returncode:
         print("export: nothing changed since the last sync")
@@ -441,20 +541,31 @@ def main() -> None:
     args = parser.parse_args()
     dest: Path = args.dest.resolve()
 
-    if dest == REPO or REPO in dest.parents:
-        die("dest must be outside this repo")
+    check_dest(dest)
+    if args.commit:
+        if not (dest / ".git").exists():
+            die("--commit needs dest to be a git checkout")
+        require_clean_source()
+    if not (SRC / "node_modules").is_dir():
+        die("apps/espframe/node_modules is missing; run `pnpm nx run espframe:install` first")
     dest.mkdir(parents=True, exist_ok=True)
-    if args.commit and not (dest / ".git").exists():
-        die("--commit needs dest to be a git checkout")
 
     clear_dest(dest)
-    copy_tree(dest)
-    filter_contract(dest)
-    apply_patches(dest)
-    copy_overlay(dest)
-    regenerate(dest)
-    scan(dest)
-    check(dest)
+    try:
+        copy_tree(dest)
+        filter_contract(dest)
+        apply_patches(dest)
+        copy_overlay(dest)
+        regenerate(dest)
+        scan(dest)
+        check(dest)
+    except SystemExit:
+        print(
+            f"export: {dest} is incomplete; don't commit it. "
+            f"Fix the problem and export again (or restore it with `git -C {dest} checkout . && git -C {dest} clean -fd`).",
+            file=sys.stderr,
+        )
+        raise
     print(f"export: {dest} is ready")
     if args.commit:
         commit(dest)

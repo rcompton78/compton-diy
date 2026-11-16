@@ -9,14 +9,17 @@
 #
 # The ESPHome version is pinned in product/contract/project.json (esphome_version);
 # `install` (and any other command, on first use) puts exactly that version in this
-# repo's .venv. Needs Python 3.11-3.13.
+# repo's .venv. Needs Python 3.11-3.13, on Linux, macOS or WSL (not Git Bash).
 #
 # Settings come from the environment or a .env file in the repo root (plain
-# VAR=value lines; .env wins):
-#   FIRMWARE_MANIFEST_URL  manifest the frame checks for updates. Unset, a local
-#                          build never checks. CI sets it to the fork's Pages URL.
-#   RELEASE_VERSION        version baked into the firmware (default "dev"; the
-#                          frame never auto-installs over a "dev" build's version).
+# VAR=value lines, read as text, not run; .env wins):
+#   FIRMWARE_MANIFEST_URL  manifest the build checks for updates. Unset, it has
+#                          none (a manifest URL the frame already saved, under
+#                          Firmware -> Advanced, still applies). CI sets it to
+#                          the fork's Pages URL.
+#   RELEASE_VERSION        version baked into the firmware (default "dev"). A
+#                          "dev" build finds updates but never auto-installs
+#                          them; press Install on the frame's web page.
 #   DEVICE                 default --device for flash/logs.
 set -euo pipefail
 
@@ -28,10 +31,18 @@ CONTRACT="$ROOT/product/contract/project.json"
 die() { echo "firmware.sh: $*" >&2; exit 1; }
 
 if [ -f "$ROOT/.env" ]; then
-    set -a
-    # shellcheck disable=SC1091
-    . "$ROOT/.env"
-    set +a
+    while IFS= read -r line || [ -n "$line" ]; do
+        line="${line%$'\r'}"
+        case "$line" in '' | '#'*) continue ;; esac
+        key="${line%%=*}"
+        value="${line#*=}"
+        if [ "$key" = "$line" ] || ! [[ "$key" =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]]; then
+            die ".env: not a VAR=value line: $line"
+        fi
+        # Strip one pair of matching surrounding quotes.
+        if [[ "$value" =~ ^\"(.*)\"$ ]] || [[ "$value" =~ ^\'(.*)\'$ ]]; then value="${BASH_REMATCH[1]}"; fi
+        export "$key=$value"
+    done < "$ROOT/.env"
 fi
 
 python_bin() {

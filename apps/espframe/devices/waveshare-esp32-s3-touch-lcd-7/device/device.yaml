@@ -22,13 +22,6 @@
 # Build and log
 # -----------------------------------------------------------------------------
 substitutions:
-  # Only satisfies this git source: every build entry point (builds/*.yaml)
-  # also adds the local ../components, which is what compiles. ESPHome still
-  # clones this on each build, so it must exist: the old rcompton78/espframe
-  # fork was replaced by the 10"-only public repo (COM-628), and jtenniswood's
-  # main carries remote_image and espframe.
-  espframe_component_url: "https://github.com/jtenniswood/espframe"
-  espframe_component_ref: "main"
   log_level: "INFO"
 
 esp32:
@@ -166,17 +159,9 @@ ota:
             id(firmware_update_reboot_pending) = true;
             global_preferences->sync();
 
-# -----------------------------------------------------------------------------
-# External components (espframe: remote_image, espframe)
-# -----------------------------------------------------------------------------
-external_components:
-  - source:
-      type: git
-      url: ${espframe_component_url}
-      ref: ${espframe_component_ref}
-      path: components
-    components: [remote_image, espframe]
-    refresh: 0s
+# External components (remote_image, espframe) come from this repo's components/, added
+# as a local source by each entry point (builds/*.yaml, dev.yaml). No git
+# source: ESPHome would clone it on every build for code that never compiles.
 
 espframe:
   id: espframe_core

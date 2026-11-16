@@ -1,61 +1,84 @@
-# Checks and compiles the 10" firmware on every pull request and on pushes to
-# branches other than main (main's pushes are built by release.yml).
+# Checks, compiles the 10" firmware and builds the stand's print files on every
+# pull request. release.yml also calls it, so main is checked before each release.
 # GitHub-hosted runners only; nothing here needs a secret.
 name: Build
 
 on:
   pull_request:
-  push:
-    branches-ignore: [main]
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      checks_only:
+        description: Run only the checks (release.yml builds the firmware and stand itself)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 concurrency:
-  group: build-${{ github.ref }}
-  cancel-in-progress: true
+  # Called from release.yml it shares the caller's run, so key on the workflow too.
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 22
           cache: npm
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
       - run: npm ci
       - name: Checks
-        run: |
-          for check in check:schema check:generated check:ownership check:budgets check:firmware-fields \
-                       webserver:typecheck test:web-compat test:web-modules test:web-smoke-cli test:helpers; do
-            echo "::group::$check"
-            npm run -s "$check"
-            echo "::endgroup::"
-          done
+        run: npm run check:ci
       - name: Timezone table
         run: |
           pip install -r scripts/requirements-timezones.txt
           python3 scripts/check_timezones.py
 
   firmware:
+    if: ${{ !inputs.checks_only }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: py
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - name: Install the pinned ESPHome
-        run: pip install "esphome==$(python3 -c "import json; print(json.load(open('product/contract/project.json'))['esphome_version'])")"
-      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+      - id: pin
+        name: Install the pinned ESPHome
+        run: |
+          version="$(python3 -c "import json; print(json.load(open('product/contract/project.json'))['esphome_version'])")"
+          pip install "esphome==$version"
+          echo "esphome=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.platformio
             builds/.esphome/.espressif
-          key: esphome-${{ hashFiles('product/contract/project.json') }}
+          key: esphome-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}
       - name: Compile
         run: scripts/firmware.sh compile
+
+  stand:
+    if: ${{ !inputs.checks_only }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: py
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: hardware/stand-10/.venv
+          key: stand-venv-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ hashFiles('hardware/stand-10/requirements.txt') }}
+      - name: Build the print files and run the fit checks
+        run: |
+          hardware/stand-10/setup.sh
+          cd hardware/stand-10 && .venv/bin/python -m stand10.build

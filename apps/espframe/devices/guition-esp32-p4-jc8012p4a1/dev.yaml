@@ -7,8 +7,6 @@
 substitutions:
   name: "immich-frame-10inch-dev"
   friendly_name: "Immich Frame 10inch Dev"
-  espframe_component_url: "../.."
-  espframe_component_ref: "HEAD"
 
 wifi:
   ssid: !secret wifi_ssid
@@ -16,3 +14,9 @@ wifi:
 
 packages:
   espframe: !include packages.yaml
+
+external_components:
+  - source:
+      type: local
+      path: ../../components
+    components: [gsl3680, remote_image, espframe]

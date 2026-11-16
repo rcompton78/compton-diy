@@ -33,7 +33,7 @@
       <li>Use Chrome or Edge on a desktop computer.</li>
       <li>Plug a USB-C <strong>data</strong> cable into the frame's bottom USB-C port (labelled USB).</li>
       <li>Click <strong>Install</strong>, pick the frame's serial port and confirm. It takes a few minutes.</li>
-      <li>Enter your Wi-Fi when asked. If you aren't asked, join the <strong>immich-frame-10inch</strong> hotspot from a phone and set Wi-Fi there.</li>
+      <li>When it's done, the frame starts a Wi-Fi hotspot called <strong>immich-frame-10inch</strong>. Join it from a phone and pick your Wi-Fi network.</li>
       <li>Open the IP address shown on the frame in a browser and enter your Immich server URL and API key.</li>
     </ol>
     <esp-web-install-button manifest="manifest.json">
@@ -41,7 +41,8 @@
       <span slot="unsupported">Your browser can't flash over USB. Use Chrome or Edge on a desktop computer.</span>
       <span slot="not-allowed">Flashing needs a secure (https) page.</span>
     </esp-web-install-button>
-    <p class="note">A frame installed from this page checks this site's manifest.json for updates, so it only installs releases from this repository.</p>
+    <p class="note">A frame installed from this page (with its settings erased when asked) checks this site's manifest.json for updates, so it only installs releases from this repository.</p>
+    <p class="note">Espframe is by <a href="https://github.com/jtenniswood/espframe">jtenniswood</a> and contributors, licensed under the <a href="https://polyformproject.org/licenses/noncommercial/1.0.0/">PolyForm Noncommercial License 1.0.0</a>. Required Notice: Copyright 2025-2026 Espframe contributors.</p>
   </div>
 </main>
 </body>
