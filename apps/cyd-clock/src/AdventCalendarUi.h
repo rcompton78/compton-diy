@@ -77,5 +77,5 @@ void drawAdventOrnament(TFT_eSPI& tft, int k, int cx, int cy, int scale);
 // A wrapped present centred on (cx, cy), about 12×13 px at scale 1. `lit` swaps the ribbon
 // colour, which is how the room's gift icon pulses.
 void drawAdventPresent(TFT_eSPI& tft, int cx, int cy, int scale, bool lit);
-// A five-point-ish gold star of radius `r` centred on (cx, cy).
+// A six-point gold star (two opposed triangles) of radius `r` centred on (cx, cy).
 void drawAdventStar(TFT_eSPI& tft, int cx, int cy, int r);

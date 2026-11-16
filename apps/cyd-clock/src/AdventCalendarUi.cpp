@@ -167,6 +167,8 @@ void drawAdventStar(TFT_eSPI& tft, int cx, int cy, int r) {
 void AdventCalendarUi::open(unsigned long now) {
     _open = true;
     _phase = Phase::Grid;
+    _saveFailed = false;
+    _jokeAnswerShown = false;
     _lastActivityMs = now;
     _acceptTapsAtMs = now + TAP_GUARD_MS;
     _nextPulseMs = now;
@@ -354,7 +356,7 @@ void AdventCalendarUi::drawReveal() {
                     y = drawCentredLines(_tft, label, y, TFT_YELLOW, C_CARD);
                     drawCentredLines(_tft, "Find it in the\nDressing Room.", y + 6, TFT_WHITE, C_CARD);
                 } else {
-                    snprintf(buf, sizeof(buf), "You own everything!\nHere's %lu points\ninstead.",
+                    snprintf(buf, sizeof(buf), "Nothing left to gift!\nHere's %lu points\ninstead.",
                              (unsigned long)advent::GIFT_FALLBACK_POINTS);
                     drawCentredLines(_tft, buf, CARD_TEXT_Y, TFT_WHITE, C_CARD);
                 }
@@ -363,7 +365,7 @@ void AdventCalendarUi::drawReveal() {
             case Reward::Coupon:
                 _tft.setTextColor(C_COUPON, C_CARD);
                 _tft.drawCentreString("50% OFF", 120, CARD_ICON_CY - 12, 4);
-                drawCentredLines(_tft, "A coupon for any\nitem in the store.\nIt never expires!", CARD_TEXT_Y,
+                drawCentredLines(_tft, "A coupon for one\nitem in the store.\nIt never expires!", CARD_TEXT_Y,
                                  TFT_WHITE, C_CARD);
                 break;
             case Reward::Joke: {
@@ -383,7 +385,7 @@ void AdventCalendarUi::drawReveal() {
                          (unsigned long)advent::CHRISTMAS_POINTS);
                 {
                     int y = drawCentredLines(_tft, buf, CARD_TEXT_Y, TFT_WHITE, C_CARD);
-                    drawCentredLines(_tft, "pick any item free\nin the store!", y, TFT_YELLOW, C_CARD);
+                    drawCentredLines(_tft, "pick one item free\nin the store!", y, TFT_YELLOW, C_CARD);
                 }
                 break;
         }
@@ -395,8 +397,11 @@ void AdventCalendarUi::drawReveal() {
 void AdventCalendarUi::handleTouch(int x, int y, unsigned long now) {
     if (!_open) return;
     _lastActivityMs = now;
-    if ((long)(now - _acceptTapsAtMs) < 0) return;  // the same press, still held
-    _acceptTapsAtMs = now + TAP_GUARD_MS;            // every handled tap changes the screen
+    // A held press repeats every 350 ms (< TAP_GUARD_MS), so pushing the guard out on every
+    // ignored repeat keeps it shut until the finger lifts; a new tap needs a short release first.
+    bool held = (long)(now - _acceptTapsAtMs) < 0;
+    _acceptTapsAtMs = now + TAP_GUARD_MS;  // every handled tap changes the screen too
+    if (held) return;
 
     if (_phase == Phase::Animating) return;  // let the swing finish
     if (_phase == Phase::Reveal) {
@@ -461,6 +466,13 @@ void AdventCalendarUi::update(unsigned long now) {
     }
     if (_phase == Phase::Grid && (long)(now - _nextPulseMs) >= 0) {
         _nextPulseMs = now + PULSE_MS;
+        // The day can turn while the calendar is open (midnight, or Jan 1 ending it).
+        int today = _host.todayDoor();
+        if (today != _today) {
+            if (today == 0) close();
+            else drawAll();
+            return;
+        }
         if (_today >= 1 && !advent::isOpened(_host.openedMask(), _today)) {
             _pulseOn = !_pulseOn;
             drawCell(_today);

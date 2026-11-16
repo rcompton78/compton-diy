@@ -1288,11 +1288,14 @@ A one-year legendary store item (350): one door a day from Dec 1 to 25, opened o
 - **Store**: `advent_calendar`, first row of the Christmas section, which now also opens from
   Nov 20 to Dec 24 (`isAdventCalendarOnSale()`) with only the calendar until Dec 1. Flash sales
   work inside that window only (`isSeasonalItemIdOffSale()`).
-- **Doors**: a pulsing present in the badge column's top row, left of the level medal, while any
-  door can be opened (`adventIconShown()`, hidden in the sleep window). Tapping it opens a
-  full-screen takeover modelled on the fireworks: garland, 5×5 doors, a 6-frame door swing and a
-  reveal card. Missed doors can be caught up until Dec 31. The overlay ignores taps for 500 ms
-  after each screen change, because the touch drivers repeat a held press every 350 ms.
+- **Doors**: a present in the badge column's top row, left of the level medal, whenever the
+  calendar can be opened (owned and December, or Preview; `adventIconShown()`, hidden in the
+  sleep window and during the fireworks). It pulses while a door is waiting and stays steady
+  otherwise, so opened doors can always be looked at again. Tapping it opens a full-screen
+  takeover modelled on the fireworks: garland, 5×5 doors, a 6-frame door swing and a reveal
+  card; the fireworks close it. Missed doors can be caught up until Dec 31. The touch drivers
+  repeat a held press every 350 ms, so the overlay ignores taps until the finger has been lifted
+  for 500 ms after each screen change. It redraws itself when the day turns while it's open.
 - **Rewards** (`openAdventDoor()`): 10 points days (150 in all, no XP), 3 gifts (a random unowned
   non-legendary item on sale now, not equipped; 50 points if none), 2 coupons, 3 jokes, 6
   ornaments (drawn on the Christmas Night tree at fixed spots clear of its bulbs), and on Dec 25
@@ -1304,8 +1307,8 @@ A one-year legendary store item (350): one door a day from Dec 1 to 25, opened o
 
 | Board | Before | After | Delta | % used |
 |---|---|---|---|---|
-| `cyd` | 1,218,257 B | 1,230,825 B | +12,568 B | 92.9% → 93.9% (~78KB left) |
-| `freenove-s3` | 1,171,709 B | 1,184,453 B | +12,744 B | 35.1% → 35.4% |
+| `cyd` | 1,218,257 B | 1,231,377 B | +13,120 B | 92.9% → 93.9% (~77KB left) |
+| `freenove-s3` | 1,171,709 B | 1,185,017 B | +13,308 B | 35.1% → 35.5% |
 
 ## Branch & Files
 

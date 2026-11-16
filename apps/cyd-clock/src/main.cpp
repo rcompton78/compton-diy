@@ -3261,11 +3261,12 @@ static constexpr ChristmasPoint CHRISTMAS_TREE_BULBS[] = {
 };
 static constexpr uint16_t CHRISTMAS_BULB_COLORS[] = {TFT_RED, C_XMAS_GOLD, C_XMAS_BULB_BLUE, TFT_WHITE};
 // Where each Advent calendar ornament hangs (COM-655): its centre as x, dy from ANIMAL_Y, indexed
-// by ornament (advent::ORNAMENT_COUNT). Each is 7×7 px, inside the tiers, at least a pixel clear
-// of every CHRISTMAS_TREE_BULBS bulb and the star, left of the "Zz" column (x <= 46) and above the
-// Dec 25 presents (bottoms at dy <= +79).
+// by ornament (advent::ORNAMENT_COUNT). Each is 7×7 px with every drawn pixel inside the tiers
+// (checked by rasterising them against CHRISTMAS_TREE_TIERS), at least a pixel clear of every
+// CHRISTMAS_TREE_BULBS bulb and the star, left of the "Zz" column (x <= 46) and above the Dec 25
+// presents (bottoms at dy <= +79).
 static constexpr ChristmasPoint ADVENT_TREE_ORNAMENTS[] = {
-    {27, 24}, {20, 40}, {24, 52}, {33, 64}, {17, 60}, {19, 76},
+    {27, 24}, {22, 42}, {24, 52}, {33, 64}, {19, 60}, {19, 76},
 };
 static_assert(sizeof(ADVENT_TREE_ORNAMENTS) / sizeof(ADVENT_TREE_ORNAMENTS[0]) == advent::ORNAMENT_COUNT,
               "one tree spot per Advent ornament");
@@ -3954,7 +3955,7 @@ static_assert(ADVENT_ICON_X >= CAT_CX + 50 && ADVENT_ICON_X >= BADGE_COL_X &&
               ADVENT_ICON_X + ADVENT_ICON_W <= LEVEL_MEDAL_CX - LEVEL_MEDAL_R &&
               ADVENT_ICON_Y + ADVENT_ICON_H <= ANIMAL_Y + LEVEL_BADGE_H,
               "the Advent icon must sit in the medal's row, between the cat and the medal");
-static bool adventIconLit = false;  // toggled by loop() to pulse the icon
+static bool adventIconLit = true;   // toggled by loop() to pulse the icon; steady (lit) otherwise
 static bool adventIconShown();      // defined in the Advent calendar section below
 
 // Repaints the icon's rect: the icon while adventIconShown(), else just the backdrop.
@@ -5201,10 +5202,17 @@ static uint32_t adventHostOpenedMask() {
     return configMgr.config().adventOpened;
 }
 
-// The room's gift icon shows while some door can be opened, except in the sleep window (the
-// peek scene is for the sleeping cat; its taps don't reach the room's buttons either).
+// The room's gift icon shows whenever the calendar can be opened: owned and in December (or in
+// Preview), so opened doors can always be looked at again. It pulses only while a door is waiting
+// (adventDoorWaiting()). It's hidden in the sleep window (the peek scene is for the sleeping cat;
+// its taps don't reach the room's buttons either) and during the level-up fireworks, which own
+// the whole screen and would paint over the calendar.
 static bool adventIconShown() {
-    if (asleep || peekingAsleep) return false;
+    if (asleep || peekingAsleep || fireworks.active) return false;
+    return adventTodayDoor() > 0;
+}
+
+static bool adventDoorWaiting() {
     return advent::anyOpenable(configMgr.config().adventOpened, adventTodayDoor());
 }
 
@@ -5349,6 +5357,15 @@ static void checkThemeWeekTransition() {
         presentsShown = presents;
         if (equippedRoomThemeIndex() == ROOM_THEME_IDX_CHRISTMAS) dirty.animalBg = true;
     }
+    // Advent ornaments (COM-655) depend on ownership, which needs the synced clock: a backdrop
+    // painted before NTP synced at boot has none, so repaint once ownership or the opened doors
+    // change (opening doors also repaints, via the calendar's close).
+    static uint32_t ornamentState = 0;
+    uint32_t ornaments = ownsAdventCalendar() ? (configMgr.config().adventOpened | (1u << 31)) : 0;
+    if (ornaments != ornamentState) {
+        ornamentState = ornaments;
+        if (equippedRoomThemeIndex() == ROOM_THEME_IDX_CHRISTMAS) dirty.animalBg = true;
+    }
 }
 
 // Level-up fireworks — a full-screen takeover distinct from the small in-zone Celebrate
@@ -5363,6 +5380,7 @@ static constexpr FireworksBurst FIREWORKS_BURSTS[] = {
 static constexpr int FIREWORKS_BURST_N = 3;
 
 static void triggerFireworks(uint32_t bonusPoints) {
+    adventUi.close();  // the fireworks own the screen; loop() repaints everything once they end
     fireworks.active      = true;
     fireworks.since       = millis();
     fireworks.lastFrame   = 0;
@@ -5488,6 +5506,8 @@ button:hover{background:#005ec4}
 .balance{font-size:1.4rem;margin-bottom:14px}
 .item{display:flex;justify-content:space-between;align-items:center;padding:14px;margin-bottom:10px;background:#1e1e1e;border:1px solid #333;border-radius:8px}
 .item button{margin:0}
+.pays{display:flex;flex-direction:column;gap:8px}
+.pays button{width:100%}
 .item button:disabled{background:#333;color:#777;cursor:not-allowed}
 .owned{color:#4b6}
 .err{background:#631}
@@ -5996,8 +6016,8 @@ static const char CONFIG_THEMEWEEK_HTML[] PROGMEM = R"html(<!DOCTYPE html>
 <button type="submit" style="width:100%">Save</button>
 </form>
 <p class="dim" style="font-size:.82rem">Christmas Preview only (it also puts the calendar on sale). A day acts as that date in December. Tapping an opened door replays it, giving nothing.</p>
-<form method="POST" action="/config/admin/themeweek/advent-reset" style="margin-top:12px">
-<label><input type="checkbox" name="ownership" value="1"> Also clear ownership</label>
+<form method="POST" action="/config/admin/themeweek/advent-reset" style="margin-top:12px" onsubmit="return confirm('Reset the Advent calendar?')">
+<label class="pick"><input type="checkbox" name="ownership" value="1"> Also clear ownership</label>
 <button type="submit" style="width:100%">Reset Advent calendar</button>
 </form>
 <p class="dim" style="font-size:.82rem">Shuts every door; rewards already won are kept. Reset before Dec 1 if you opened doors while testing.</p>
@@ -6346,7 +6366,7 @@ enum ItemCategory : uint8_t {
     // with these.
     ITEM_RIGHT_ARM_SLOT = ITEM_CATEGORY_COUNT,
     ITEM_COMBO,     // STORE_COMBOS[] (COM-507)
-    ITEM_CHRISTMAS  // the December-only Christmas section (COM-637)
+    ITEM_CHRISTMAS  // the Christmas section (COM-637; also from Nov 20 for the Advent calendar, COM-655)
 };
 
 // One catalog entry's web-facing fields. `webColor` is nullptr for catalogs whose labels are
@@ -6415,7 +6435,7 @@ static bool findChristmasStoreItem(const char* id, ItemCategory& cat, int& idx) 
 // Whether entry `i` is one of the catalog's year-round store entries, the ones its seen*Count
 // counts (COM-517). Theme-week exclusives (DIY-108, the cost-0 entries) aren't store entries at
 // all. The December-only Christmas items (COM-637) are sold but never counted, so they never
-// show NEW: the December-only Christmas section is what announces them, and counting them would
+// show NEW: the Christmas section, which only appears for the season, announces them; counting them would
 // either re-flag them every December or, once the count dropped back in January, hide the NEW on
 // the next year-round item appended after them. Haunted Pumpkin Patch predates this and stays
 // counted, since dropping it now would shift every device's saved room-theme count.
@@ -6807,6 +6827,13 @@ static const char STORE_TAG_CHRISTMAS[] = " <span style='color:#7fd18b;font-weig
                                           "<span style='color:#888;font-weight:normal;font-size:.8rem'> \xC2\xB7 leaves Jan 1</span></span>";
 static const char STORE_TAG_CHRISTMAS_OWNED[] = " <span style='color:#7fd18b;font-weight:bold'>\xE2\x9D\x84 CHRISTMAS</span>";
 
+// What an item costs with an Advent calendar coupon (COM-655): half its catalog price, the same
+// discount and rounding as a flash sale, never free.
+static uint32_t adventCouponPrice(uint32_t baseCost) {
+    uint32_t half = baseCost / 2;
+    return half > 0 ? half : 1;
+}
+
 /**
  * The tags shown after a store item's label: a gold "LEGENDARY" marker for anything priced at
  * the legendary tier (COM-382), the cyan "NEW" tag until the user has opened its section once
@@ -6817,13 +6844,6 @@ static const char STORE_TAG_CHRISTMAS_OWNED[] = " <span style='color:#7fd18b;fon
  * @param cost The price actually charged, from flashSalePrice().
  * @param isNew Whether the item is still unseen.
  */
-// What an item costs with an Advent calendar coupon (COM-655): half its catalog price, the same
-// discount and rounding as a flash sale, never free.
-static uint32_t adventCouponPrice(uint32_t baseCost) {
-    uint32_t half = baseCost / 2;
-    return half > 0 ? half : 1;
-}
-
 static void appendStoreItemTags(String& html, uint32_t baseCost, uint32_t cost, bool isNew) {
     if (baseCost >= STORE_COST_LEGENDARY) html += STORE_TAG_LEGENDARY;
     if (isNew) html += STORE_TAG_NEW;
@@ -6833,7 +6853,7 @@ static void appendStoreItemTags(String& html, uint32_t baseCost, uint32_t cost, 
 // The store's All page (COM-516): every section on one page, at /config/store?s=all. It isn't a
 // STORE_SECTIONS[] entry, so no section may use this key (checked below).
 static constexpr char STORE_ALL_KEY[] = "all";
-// The December-only Christmas section's key (COM-637). Its items are also sold in their own
+// The seasonal Christmas section's key (COM-637, and the Advent calendar's from Nov 20, COM-655). Its items are also sold in their own
 // sections, so a purchase made from it posts from=christmas to come back here.
 static constexpr char STORE_CHRISTMAS_KEY[] = "christmas";
 
@@ -6889,7 +6909,7 @@ static void appendStoreItemRow(String& html, const char* item, const char* webCo
         // stack and the cheaper price is always the one shown.
         bool coupon = adventPay && configMgr.config().adventCoupons > 0 && cost == baseCost;
         bool voucher = adventPay && configMgr.config().adventVouchers > 0;
-        if (coupon || voucher) html += "<div style='display:flex;flex-direction:column;gap:6px'>";
+        if (coupon || voucher) html += "<div class='pays'>";
         appendBuyFormOpen(html, item, from);
         html += "<button type='submit'";
         if (points < cost) html += " disabled";
@@ -6978,7 +6998,8 @@ static void appendComboRow(String& html, int i, uint32_t points, const char* fro
 // and /config/store?s=<key> shows that section's items alone. `cat` is the catalog the section
 // sells, or a non-catalog value such as ITEM_RIGHT_ARM_SLOT or ITEM_COMBO. `key` is
 // part of the section page's URL, so keep existing keys stable. The Christmas section
-// (ITEM_CHRISTMAS, COM-637) only appears while isChristmasStoreOpen(); see isStoreSectionShown().
+// (ITEM_CHRISTMAS, COM-637) only appears in December, or while the Advent calendar is on sale; see
+// isStoreSectionShown().
 struct StoreSection {
     const char* key;
     const char* title;
@@ -7063,7 +7084,8 @@ static bool storeSectionHasSale(const StoreSection& section) {
 // Whether `section` has an item the user hasn't been shown yet (COM-517): its catalog has grown
 // past its seen*Count (a firmware update appended an item), or the Right Arm Slot was never seen.
 // Combos have no seen tracking, so they're never NEW, and neither is the Christmas section
-// (COM-637): it only exists in December, which is announcement enough (see isStoreCatalogEntry()).
+// (COM-637): it only appears for the season (December, plus the Advent calendar from Nov 20),
+// which is announcement enough (see isStoreCatalogEntry()).
 static bool storeSectionHasNew(const StoreSection& section) {
     if (section.cat == ITEM_RIGHT_ARM_SLOT) return !configMgr.config().seenRightArmSlot;
     if (section.cat == ITEM_COMBO || section.cat == ITEM_CHRISTMAS) return false;
@@ -7099,6 +7121,8 @@ static bool markAllStoreSectionsSeen() {
 // The landing page: the balance, an All button (COM-516), which shows NEW or SALE whenever a
 // section it lists does, then one button per section (COM-506), tagged NEW (COM-517) and SALE.
 // Opening the menu marks nothing seen; only opening a section does.
+static String storePurchaseMessage();  // defined with the section pages below
+
 static void sendStoreLandingPage(uint32_t points) {
     String page = loadPage(CONFIG_STORE_HTML);
     page.replace("%%POINTS%%", String(points));
@@ -7151,8 +7175,10 @@ static void sendStoreLandingPage(uint32_t points) {
             msg += String(vouchers);
             msg += vouchers == 1 ? " Christmas voucher (one free item)" : " Christmas vouchers (one free item each)";
         }
-        msg += ". Use them on any item's row.</div>";
+        msg += ". Use them from a single item's row (not bundles or the Advent calendar; a coupon "
+               "isn't offered on an item that's already on sale).</div>";
     }
+    msg += storePurchaseMessage();  // e.g. a purchase redirected here because its section closed
     page.replace("%%MSG%%", msg);
     sendHtmlPage(page);
 }
@@ -7217,7 +7243,9 @@ static String storeSectionNote(const StoreSection& section) {
     if (section.cat == ITEM_CHRISTMAS && isAdventCalendarOnSale()) {
         adventNote = "The Advent calendar has a door to open every day from Dec 1 to 25 and is on sale "
                      "until Dec 24. It's for this Christmas only.";
-        if (!isChristmasStoreOpen()) note = "More Christmas items arrive on Dec 1.";
+        note = isChristmasStoreOpen()
+                   ? "The other Christmas items are on sale through December 31, and anything you buy is yours to keep all year."
+                   : "More Christmas items arrive on Dec 1.";
     }
     if (!note && !adventNote) return "";
     String html = "<p style='color:#888'>";
@@ -8043,6 +8071,10 @@ static void handleConfigStorePost() {
         cost = flashSalePrice("right_arm_slot", STORE_COST_RIGHT_ARM_SLOT);
         alreadyOwned = configMgr.config().rightArmSlotUnlocked;
     }
+    if (alreadyOwned) {
+        redirectToStoreSection(cat, "err=owned");
+        return;
+    }
     uint32_t baseCost = storeItemCost(cat, idx);
     if (payCoupon) {
         if (configMgr.config().adventCoupons == 0 || cost != baseCost) {
@@ -8056,11 +8088,6 @@ static void handleConfigStorePost() {
             return;
         }
         cost = 0;
-    }
-
-    if (alreadyOwned) {
-        redirectToStoreSection(cat, "err=owned");
-        return;
     }
     if (configMgr.config().points < cost) {
         redirectToStoreSection(cat, "err=funds");
@@ -8889,20 +8916,24 @@ void loop() {
         wasNew = isNew;
     }
 
-    // Advent calendar gift icon (COM-655) — pulses every 500ms while a door can be opened, and
-    // is erased once more the moment none can (or the sleep window hides it).
+    // Advent calendar gift icon (COM-655) — pulses every 500ms while a door is waiting, stays
+    // steady while the calendar is only there to look back at, and is drawn or erased once more
+    // whenever it appears or goes (e.g. the sleep window hiding it).
     {
         static unsigned long lastAdventPulse = 0;
-        static bool wasAdventIconShown = false;
+        static bool wasShown = false, wasWaiting = false;
         bool shown = adventIconShown();
-        if (shown && now - lastAdventPulse >= 500) {
+        bool waiting = shown && adventDoorWaiting();
+        if (waiting && now - lastAdventPulse >= 500) {
             lastAdventPulse = now;
             adventIconLit = !adventIconLit;
-            if (!peekingAsleep) drawAdventIcon();
-        } else if (!shown && wasAdventIconShown && !peekingAsleep) {
             drawAdventIcon();
+        } else if (shown != wasShown || waiting != wasWaiting) {
+            adventIconLit = true;
+            if (!peekingAsleep) drawAdventIcon();
         }
-        wasAdventIconShown = shown;
+        wasShown = shown;
+        wasWaiting = waiting;
     }
 
     // Sale flash — while any flash sale is active, toggle the "SALE!" banner's color every

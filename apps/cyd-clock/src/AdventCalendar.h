@@ -12,7 +12,7 @@
 //   - On sale Nov 20 to Dec 24 (or any time in Christmas Preview), 350 points, one year only:
 //     owned exactly while ConfigManager's adventYear is the current local year.
 //   - Door d opens from Dec d. Missed doors can be caught up any time until Dec 31.
-//   - The same 25 doors every year (ADVENT_DOORS below).
+//   - The same 25 doors every year (DOORS below).
 namespace advent {
 
 static constexpr int DOOR_COUNT     = 25;
@@ -34,7 +34,7 @@ enum class Reward : uint8_t {
     Gift,       // value = gift slot 0..GIFT_COUNT-1 (which byte of adventGifts records it)
     Coupon,     // one 50%-off coupon
     Joke,       // value = index into JOKES
-    Ornament,   // value = ornament 0..ORNAMENT_COUNT-1 (see AdventCalendarUi's drawOrnament())
+    Ornament,   // value = ornament 0..ORNAMENT_COUNT-1 (see drawAdventOrnament() in AdventCalendarUi.h)
     Christmas,  // CHRISTMAS_POINTS plus one Christmas voucher
 };
 
