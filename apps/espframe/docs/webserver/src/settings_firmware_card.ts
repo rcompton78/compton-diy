@@ -100,15 +100,18 @@
           return safeGet(endpoints.update);
         })
         .then(function (data) {
-          var hasUpdate = data && data.value &&
-            (data.current_version
-              ? data.current_version !== data.latest_version
-              : data.state === "UPDATE AVAILABLE");
-          if (hasUpdate) {
-            S.update_available = true;
-            S.latest_version = data.latest_version || data.value;
-            renderUpdateRow();
+          // ESPHome's update entity has no latest_version field: the latest
+          // version is its "value", and its state says whether that's newer.
+          if (data) {
+            applyEntityToState({
+              id: "update/Firmware: Update",
+              value: data.value,
+              state: data.state,
+              current_version: data.current_version,
+              latest_version: data.latest_version
+            });
           }
+          renderUpdateRow();
           if (!S.update_available) {
             statusMsg.textContent = "Up to date";
             statusMsg.style.color = "var(--success)";
