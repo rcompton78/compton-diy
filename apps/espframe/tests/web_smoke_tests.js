@@ -441,6 +441,9 @@ function browserScriptForScenario(scenario) {
         }
         updateEndpointValueFromPost(decoded, body);
       }
+      if (decoded.indexOf("Firmware: Update") !== -1 && window.__smoke.firmwareUpdateFails) {
+        return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) });
+      }
       if (decoded.indexOf("Firmware: Update") !== -1) {
         return Promise.resolve({
           ok: true,
@@ -931,9 +934,18 @@ function smokeAssertionsForScenario(scenario) {
           .find((body) => body.textContent.indexOf("Check for Update") !== -1);
         return card ? card.innerText : "";
       }
+      function installedLabelText() {
+        const label = Array.from(document.querySelectorAll(".fw-body .fw-label"))
+          .find((item) => item.firstChild && item.firstChild.textContent === "Installed");
+        return label ? label.textContent : "";
+      }
       async function requireInstalledVersion(version) {
-        const pattern = new RegExp("Installed\\s*" + version.replace(/\./g, "\\."));
-        await waitFor(() => pattern.test(firmwareCardText()), 2000, "Installed " + version);
+        const expected = "Installed " + version;
+        try {
+          await waitFor(() => installedLabelText() === expected, 2000, expected);
+        } catch (_) {
+          throw new Error("Expected " + JSON.stringify(expected) + ", card shows " + JSON.stringify(installedLabelText()));
+        }
       }
       function firmwareInstallButton() {
         return Array.from(document.querySelectorAll(".fw-updates button"))
@@ -1032,6 +1044,15 @@ function smokeAssertionsForScenario(scenario) {
           domain: "text_sensor", value: "v1.0.1", state: "v1.0.1"
         });
         await requireInstalledVersion("v1.0.1");
+
+        // When the frame doesn't answer the update entity request, the card
+        // must not claim the firmware is up to date.
+        window.__smoke.firmwareUpdateFails = true;
+        clickButton("Check for Update");
+        await waitFor(() => buttonByText("Check for Update") && !buttonByText("Check for Update").disabled, 7000, "failed firmware check");
+        const checkText = firmwareCardText();
+        if (checkText.indexOf("Up to date") !== -1) throw new Error("Failed update check reported Up to date");
+        if (checkText.indexOf("Couldn't check") === -1) throw new Error("Failed update check not reported");
       }
 
       try {

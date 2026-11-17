@@ -3028,15 +3028,18 @@ to {
       }).then(function() {
         return safeGet(endpoints.update);
       }).then(function(data) {
-        if (data) {
-          applyEntityToState({
-            id: "update/Firmware: Update",
-            value: data.value,
-            state: data.state,
-            current_version: data.current_version,
-            latest_version: data.latest_version
-          });
+        if (!data) {
+          statusMsg.textContent = "Couldn't check \u2013 try again";
+          statusMsg.style.color = "var(--danger)";
+          return;
         }
+        applyEntityToState({
+          id: "update/Firmware: Update",
+          value: data.value,
+          state: data.state,
+          current_version: data.current_version,
+          latest_version: data.latest_version
+        });
         renderUpdateRow();
         if (!S.update_available) {
           statusMsg.textContent = "Up to date";

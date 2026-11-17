@@ -100,17 +100,22 @@
           return safeGet(endpoints.update);
         })
         .then(function (data) {
+          // safeGet returns null when the frame didn't answer, so there's no
+          // result to report; don't call that "Up to date".
+          if (!data) {
+            statusMsg.textContent = "Couldn't check \u2013 try again";
+            statusMsg.style.color = "var(--danger)";
+            return;
+          }
           // ESPHome's update entity has no latest_version field: the latest
           // version is its "value", and its state says whether that's newer.
-          if (data) {
-            applyEntityToState({
-              id: "update/Firmware: Update",
-              value: data.value,
-              state: data.state,
-              current_version: data.current_version,
-              latest_version: data.latest_version
-            });
-          }
+          applyEntityToState({
+            id: "update/Firmware: Update",
+            value: data.value,
+            state: data.state,
+            current_version: data.current_version,
+            latest_version: data.latest_version
+          });
           renderUpdateRow();
           if (!S.update_available) {
             statusMsg.textContent = "Up to date";
