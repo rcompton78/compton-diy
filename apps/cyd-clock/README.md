@@ -8,7 +8,7 @@ toys, room themes, plus a few pricey legendary items like a Sorting Hat, Hogwart
 Patch room theme that's only sold in October but stays yours all year once bought). Every December
 the store also opens a Christmas section with a legendary Cozy Fireplace room theme, Reindeer
 Antlers, Candy Cane Glasses, a Reindeer stuffy and a Christmas Bundle of all four; they leave the
-store on January 1, but anything bought stays yours. From November 20 to December 24 that
+store on January 1, but anything bought stays yours. From November 15 to December 24 that
 section also sells a legendary Advent calendar: once bought, a gift icon on the clock opens a
 door a day from December 1 to 25 (points, surprise items, 50%-off coupons, jokes, ornaments for
 the Christmas Night tree, and on Christmas Day 100 points plus a voucher for any free item).

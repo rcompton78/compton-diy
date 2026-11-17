@@ -9,7 +9,7 @@
 // page and touch/loop glue live in main.cpp.
 //
 // Rules (decided on the card):
-//   - On sale Nov 20 to Dec 24 (or any time in Christmas Preview), 350 points, one year only:
+//   - On sale Nov 15 to Dec 24 (or any time in Christmas Preview), 350 points, one year only:
 //     owned exactly while ConfigManager's adventYear is the current local year.
 //   - Door d opens from Dec d. Missed doors can be caught up any time until Dec 31.
 //   - The same 25 doors every year (DOORS, defined in AdventCalendar.cpp).
@@ -21,7 +21,7 @@ static constexpr int ORNAMENT_COUNT = 6;
 static constexpr int JOKE_COUNT     = 3;
 
 // Sale window as MMDD, inclusive at both ends.
-static constexpr int SALE_START_MMDD = 1120;
+static constexpr int SALE_START_MMDD = 1115;
 static constexpr int SALE_END_MMDD   = 1224;
 
 // Points from the Dec 25 door (it also gives a Christmas voucher), and what a gift door gives

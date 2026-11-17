@@ -48,7 +48,7 @@ grep -A3 'CAT_COLORS\[\] = {\|STUFFIES\[\] = {\|BLANKET_COLORS\[\] = {\|ROOM_THE
 
 Plus two special cases not from a catalog array: `right_arm_slot` (the one-time
 right-arm buddy slot unlock), and `advent_calendar` (the Advent calendar, COM-655). The device
-only accepts a sale on the calendar between Nov 20 and Dec 24 (or in Christmas Preview), like
+only accepts a sale on the calendar between Nov 15 and Dec 24 (or in Christmas Preview), like
 the other seasonal items; outside that window it rejects the sale and shows no SALE banner.
 
 Store combos (COM-507) are valid sale targets too: their `combo_*` ids live in `STORE_COMBOS[]`.
