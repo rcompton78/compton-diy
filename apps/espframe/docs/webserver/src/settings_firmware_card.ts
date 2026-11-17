@@ -60,10 +60,9 @@
           })
           .catch(function (err) {
             console.error("POST " + installUrl + " error:", err);
-            // The frame answers before it starts installing, so this is
-            // normally a real failure; if it already reports INSTALLING, let
-            // the update entity's next state decide instead.
-            if (S.update_state !== "INSTALLING") installFailed();
+            // The frame answers before it starts installing (the OTA is
+            // deferred), so a rejected request means it never started.
+            installFailed();
           });
       });
       if (installing) {

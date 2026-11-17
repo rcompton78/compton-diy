@@ -3000,7 +3000,7 @@ to {
           if (!r.ok) throw new Error("install_failed: " + r.status);
         }).catch(function(err) {
           console.error("POST " + installUrl + " error:", err);
-          if (S.update_state !== "INSTALLING") installFailed();
+          installFailed();
         });
       });
       if (installing) {
