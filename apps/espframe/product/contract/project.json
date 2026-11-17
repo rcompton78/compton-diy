@@ -771,6 +771,7 @@
     "backup-import-unsupported-version"
   ],
   "web_live_render_state_keys": [
+    "firmware",
     "screen_rotation",
     "portrait_pairing",
     "developer_features_enabled"
@@ -1067,12 +1068,14 @@
     "backlight_on",
     "brightness",
     "brightness_current",
+    "firmware_install_pending",
     "immich_url",
     "installed_version",
     "latest_version",
     "tz_labels",
     "tz_options",
-    "update_available"
+    "update_available",
+    "update_state"
   ],
   "date_filter_modes": [
     "Fixed Range",

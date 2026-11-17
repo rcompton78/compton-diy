@@ -73,6 +73,10 @@ globals:
     type: bool
     restore_value: true
     initial_value: 'false'
+  # Set while an OTA download runs; the slideshow starts no fetches meanwhile.
+  - id: firmware_update_in_progress
+    type: bool
+    initial_value: 'false'
   # The manifest URL update checks use; empty means checks are off.
   - id: firmware_source_url
     type: std::string
@@ -91,6 +95,56 @@ script:
           if (url.empty() || !is_valid_http_url(url)) url = "${firmware_manifest_url}";
           id(firmware_source_url) = url;
           id(firmware_update).set_source_url(url.empty() ? "${firmware_update_off_url}" : url);
+  # Runs from the OTA's on_begin, before it fetches the MD5 or opens the
+  # firmware download. Each open photo download holds a TLS session and an
+  # image decoder in internal RAM; with them open, the OTA's own TLS session
+  # can fail to allocate (mbedtls -0x7F00). Aborting them frees that memory
+  # without touching the decoded photos in PSRAM, so the screen keeps its
+  # photo. Must not delay: the OTA connects as soon as this returns.
+  - id: firmware_update_pause_slideshow
+    mode: restart
+    then:
+      - lambda: |-
+          ESP_LOGI("firmware", "Pausing slideshow for firmware update (internal heap free %u, largest block %u)",
+                   (unsigned) heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                   (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+          id(firmware_update_in_progress) = true;
+          id(delayed_prefetch_chain).stop();
+          id(deferred_fetch_into_slot).stop();
+          id(deferred_companion_search).stop();
+          id(deferred_slot0_image_update).stop();
+          id(deferred_slot1_image_update).stop();
+          id(deferred_slot2_image_update).stop();
+          id(deferred_portrait_left_update).stop();
+          id(deferred_portrait_right_update).stop();
+          id(deferred_preload_left_update).stop();
+          id(deferred_preload_right_update).stop();
+          id(espframe_core).slideshow().clear_commands();
+          id(immich_img_0).abort_download();
+          id(immich_img_1).abort_download();
+          id(immich_img_2).abort_download();
+          id(immich_portrait_left).abort_download();
+          id(immich_portrait_right).abort_download();
+          id(immich_portrait_preload_left).abort_download();
+          id(immich_portrait_preload_right).abort_download();
+          ESP_LOGI("firmware", "Slideshow paused (internal heap free %u, largest block %u)",
+                   (unsigned) heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                   (unsigned) heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
+  # Runs when the OTA fails (a successful one reboots). The aborted fetches
+  # left slot and portrait state half set, so restart the slideshow the same
+  # way a settings change does.
+  - id: firmware_update_resume_slideshow
+    mode: restart
+    then:
+      - lambda: |-
+          id(firmware_update_in_progress) = false;
+          if (id(firmware_update_reboot_pending)) {
+            id(firmware_update_reboot_pending) = false;
+            global_preferences->sync();
+          }
+          ESP_LOGW("firmware", "Firmware update failed; resuming slideshow");
+      - delay: 1s
+      - script.execute: immich_connection_config_changed
   - id: firmware_update_recover_display
     mode: restart
     then:
@@ -145,7 +199,15 @@ script:
 # OTA and HTTP update source
 # -----------------------------------------------------------------------------
 ota:
+  # Both install paths (the web UI's Install and update.perform below) end in
+  # this platform's flash(), which fires these triggers on the main loop.
   - platform: http_request
+    on_begin:
+      - script.execute: firmware_update_pause_slideshow
+    on_error:
+      - script.execute: firmware_update_resume_slideshow
+    on_abort:
+      - script.execute: firmware_update_resume_slideshow
 
 update:
   - platform: http_request

@@ -1,3 +1,6 @@
+  // Set by the Firmware card; live_helpers.ts calls it on update entity events.
+  var firmwareUpdateStateListener: ((state: string) => void) | null = null;
+
   function makeFirmwareCard() {
     // Firmware
     var fwBody = el("div", "fw-body");
@@ -17,17 +20,64 @@
     updatesSection.appendChild(updateRow);
     fwBody.appendChild(updatesSection);
 
+    function installFailed() {
+      S.firmware_install_pending = false;
+      renderUpdateRow();
+      statusMsg.textContent = "Install failed \u2013 try again";
+      statusMsg.style.color = "var(--danger)";
+    }
+
+    // Key of what the row last drew. Rebuilding replaces (and unfocuses) the
+    // Install button, so skip it when nothing the row shows has changed.
+    var renderedRowKey: string | null = null;
+
     function renderUpdateRow() {
+      // Also covers installs this page didn't start (auto-update, Home
+      // Assistant, or a reload mid-install), so Install can't be sent twice.
+      var installing = !!S.firmware_install_pending || S.update_state === "INSTALLING";
+      var key = [S.update_available ? "1" : "0", S.latest_version || "", installing ? "1" : "0"].join("|");
+      if (key === renderedRowKey) return;
+      renderedRowKey = key;
       updateRow.replaceChildren();
       if (!S.update_available) return;
       var label = textLabel("Stable", S.latest_version);
       var installBtn = button("Install", "btn btn-primary btn-sm", function () {
+        S.firmware_install_pending = true;
+        statusMsg.textContent = "";
+        // Redraws the row with a disabled "Installing…" button. The new
+        // button isn't focused, so isEditingSetting won't block the re-render
+        // when the frame comes back on its new version.
+        renderUpdateRow();
+        // Not post(): its failure banner says a setting failed to save, and
+        // this card reports a failed install itself.
+        var installUrl = endpoints.update + "/install";
+        fetch(installUrl, { method: "POST" })
+          .then(function (r) {
+            if (!r.ok) throw new Error("install_failed: " + r.status);
+          })
+          .catch(function (err) {
+            console.error("POST " + installUrl + " error:", err);
+            installFailed();
+          });
+      });
+      if (installing) {
         installBtn.disabled = true;
         installBtn.textContent = "Installing\u2026";
-        post(endpoints.update + "/install");
-      });
+      }
       updateRow.appendChild(actionRow(label, installBtn));
     }
+
+    // A successful install reboots the frame. A failed one puts the update
+    // entity back to "UPDATE AVAILABLE" (ESPHome may coalesce the brief
+    // "INSTALLING" state away), and nothing else publishes that while an
+    // install is pending.
+    firmwareUpdateStateListener = function (state) {
+      if (S.firmware_install_pending && state === "UPDATE AVAILABLE") {
+        installFailed();
+        return;
+      }
+      renderUpdateRow();
+    };
 
     renderUpdateRow();
 
