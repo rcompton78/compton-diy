@@ -1,0 +1,218 @@
+# Builds a release on every push to main (and on demand): runs the Build checks,
+# compiles the firmware with this repo's own GitHub Pages manifest baked in,
+# builds the 10" stand's print files, attaches both to a GitHub release, then
+# publishes the update manifest and a browser install page to this repo's
+# GitHub Pages. Frames installed from that page check that manifest, so they
+# only ever install this repo's releases.
+#
+# Needs Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
+# Without it the first job stops with a message saying so; nothing is released.
+name: Release
+
+on:
+  push:
+    branches: [main]
+    # Keep in step with scripts/release/check_publish.sh, which lets a run
+    # publish when only these paths changed after its commit.
+    paths-ignore:
+      - "README.md"
+      - "docs/**/*.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read
+      actions: read
+    outputs:
+      version: ${{ steps.info.outputs.version }}
+      pages_url: ${{ steps.info.outputs.pages_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts/release
+      - id: info
+        name: Check the branch, GitHub Pages and the version
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ]; then
+            echo "::error title=Release runs on $DEFAULT_BRANCH only::Run the Release workflow on $DEFAULT_BRANCH. Other branches are checked by the Build workflow."
+            exit 1
+          fi
+          scripts/release/check_publish.sh
+
+          if ! pages="$(gh api "repos/$GITHUB_REPOSITORY/pages" 2>err.txt)"; then
+            if grep -q "HTTP 404" err.txt; then
+              echo "::error title=GitHub Pages is off::Turn on Pages for this repo (Settings -> Pages -> Build and deployment -> Source: GitHub Actions), then re-run this workflow. Releases publish the update manifest and install page there."
+            else
+              echo "::error title=Could not read the Pages settings::$(cat err.txt)"
+            fi
+            exit 1
+          fi
+          if [ "$(jq -r .build_type <<<"$pages")" != "workflow" ]; then
+            echo "::error title=Pages source is not GitHub Actions::Set Settings -> Pages -> Build and deployment -> Source to GitHub Actions, then re-run this workflow."
+            exit 1
+          fi
+          url="$(jq -r '.html_url // empty' <<<"$pages")"
+          url="${url%/}"
+          case "$url" in
+            https://*) ;;
+            *)
+              echo "::error title=Pages isn't served over https::Got '$url'. Browser flashing and the frame's update checks need https: with a custom domain, tick Settings -> Pages -> Enforce HTTPS."
+              exit 1
+              ;;
+          esac
+          echo "pages_url=$url" >> "$GITHUB_OUTPUT"
+
+          # The run's start date, not today's, so a re-run keeps its version.
+          # Forks copy their parent's tags, so a date + run number can already exist.
+          created="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .created_at)"
+          version="$(date -u -d "$created" +%Y.%m.%d)-$GITHUB_RUN_NUMBER"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$version" >/dev/null 2>&1 &&
+             [ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$version" --jq .object.sha)" != "$GITHUB_SHA" ]; then
+            version="$version-${GITHUB_SHA::7}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  checks:
+    needs: preflight
+    uses: ./.github/workflows/build.yml
+    with:
+      checks_only: true
+
+  firmware:
+    needs: [preflight, checks]
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
+      FIRMWARE_MANIFEST_URL: ${{ needs.preflight.outputs.pages_url }}/manifest.json
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: py
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - id: pin
+        name: Install the pinned ESPHome
+        run: |
+          version="$(python3 -c "import json; print(json.load(open('product/contract/project.json'))['esphome_version'])")"
+          pip install "esphome==$version"
+          echo "esphome=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.platformio
+            builds/.esphome/.espressif
+          key: esphome-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}
+      - name: Compile
+        run: scripts/firmware.sh compile
+      - name: Package
+        run: >
+          python3 scripts/release/make_pages.py --version "$RELEASE_VERSION"
+          --release-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$RELEASE_VERSION"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: firmware
+          path: dist/firmware
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pages
+          path: dist/pages
+          include-hidden-files: true
+
+  stand:
+    needs: [preflight, checks]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: py
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: hardware/stand-10/.venv
+          key: stand-venv-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ hashFiles('hardware/stand-10/requirements.txt') }}
+      - name: Build the print files
+        run: |
+          hardware/stand-10/setup.sh
+          cd hardware/stand-10 && .venv/bin/python -m stand10.build
+      - name: Pack
+        env:
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: scripts/release/pack_stand.sh "$VERSION"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: stand
+          path: dist/stand
+
+  release:
+    needs: [preflight, firmware, stand]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts/release
+      - name: Check this is still the newest commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: scripts/release/check_publish.sh
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: assets
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.preflight.outputs.version }}
+        run: |
+          files=(assets/firmware/*.bin assets/stand/*.tar.gz)
+          # A re-run after the release was created (e.g. Pages failed) updates its files.
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$VERSION" --repo "$GITHUB_REPOSITORY" --clobber "${files[@]}"
+          else
+            gh release create "$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+              --title "Espframe $VERSION" --generate-notes "${files[@]}"
+          fi
+
+  pages:
+    needs: [preflight, release]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: scripts/release
+      - name: Check this is still the newest commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: scripts/release/check_publish.sh
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: pages
+          path: pages
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: pages
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

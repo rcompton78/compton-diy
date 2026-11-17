@@ -11,8 +11,6 @@
 # Build and log
 # -----------------------------------------------------------------------------
 substitutions:
-  espframe_component_url: "https://github.com/jtenniswood/espframe"
-  espframe_component_ref: "main"
   log_level: "INFO"
 
 esp32:
@@ -137,17 +135,9 @@ ota:
             id(firmware_update_reboot_pending) = true;
             global_preferences->sync();
 
-# -----------------------------------------------------------------------------
-# External components (espframe: gsl3680, remote_image, espframe)
-# -----------------------------------------------------------------------------
-external_components:
-  - source:
-      type: git
-      url: ${espframe_component_url}
-      ref: ${espframe_component_ref}
-      path: components
-    components: [gsl3680, remote_image, espframe]
-    refresh: 0s
+# External components (gsl3680, remote_image, espframe) come from this repo's components/, added
+# as a local source by each entry point (builds/*.yaml, dev.yaml). No git
+# source: ESPHome would clone it on every build for code that never compiles.
 
 espframe:
   id: espframe_core

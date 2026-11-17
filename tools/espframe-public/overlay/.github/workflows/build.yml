@@ -1,0 +1,84 @@
+# Checks, compiles the 10" firmware and builds the stand's print files on every
+# pull request. release.yml also calls it, so main is checked before each release.
+# GitHub-hosted runners only; nothing here needs a secret.
+name: Build
+
+on:
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      checks_only:
+        description: Run only the checks (release.yml builds the firmware and stand itself)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # Called from release.yml it shares the caller's run, so key on the workflow too.
+  group: build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - name: Checks
+        run: npm run check:ci
+      - name: Timezone table
+        run: |
+          pip install -r scripts/requirements-timezones.txt
+          python3 scripts/check_timezones.py
+
+  firmware:
+    if: ${{ !inputs.checks_only }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: py
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - id: pin
+        name: Install the pinned ESPHome
+        run: |
+          version="$(python3 -c "import json; print(json.load(open('product/contract/project.json'))['esphome_version'])")"
+          pip install "esphome==$version"
+          echo "esphome=$version" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.platformio
+            builds/.esphome/.espressif
+          key: esphome-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}
+      - name: Compile
+        run: scripts/firmware.sh compile
+
+  stand:
+    if: ${{ !inputs.checks_only }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - id: py
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: hardware/stand-10/.venv
+          key: stand-venv-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ hashFiles('hardware/stand-10/requirements.txt') }}
+      - name: Build the print files and run the fit checks
+        run: |
+          hardware/stand-10/setup.sh
+          cd hardware/stand-10 && .venv/bin/python -m stand10.build
