@@ -22,6 +22,9 @@
 
     function installFailed() {
       S.firmware_install_pending = false;
+      // Redraw even if the key didn't change, so Install is never left
+      // showing "Installing…" next to the failure message.
+      renderedRowKey = null;
       renderUpdateRow();
       statusMsg.textContent = "Install failed \u2013 try again";
       statusMsg.style.color = "var(--danger)";
@@ -57,7 +60,10 @@
           })
           .catch(function (err) {
             console.error("POST " + installUrl + " error:", err);
-            installFailed();
+            // The frame answers before it starts installing, so this is
+            // normally a real failure; if it already reports INSTALLING, let
+            // the update entity's next state decide instead.
+            if (S.update_state !== "INSTALLING") installFailed();
           });
       });
       if (installing) {

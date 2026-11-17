@@ -152,8 +152,9 @@
     } else {
       S[spec.key] = v !== undefined && v !== null ? String(v) : (spec.default !== undefined ? spec.default : "");
     }
-    if (spec.key === "firmware" && previousValue !== undefined && previousValue !== S[spec.key]) {
+    if (spec.key === "firmware" && previousValue && S[spec.key] && previousValue !== S[spec.key]) {
       // The frame came back on a new version, so any install has finished.
+      // A first report (from "") is only the page learning the version.
       S.firmware_install_pending = false;
     }
     if (spec.key === "timezone") S[spec.key] = normalizeTimezoneOption(S[spec.key]);

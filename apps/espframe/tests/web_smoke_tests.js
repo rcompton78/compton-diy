@@ -934,7 +934,8 @@ function smokeAssertionsForScenario(scenario) {
           value: "", state: "UNKNOWN", current_version: "", title: ""
         });
         await waitFor(() => {
-          const card = document.querySelector(".fw-body");
+          const updates = document.querySelector(".fw-updates");
+          const card = updates && updates.closest(".fw-body");
           return card && /Installed\\s*v1\\.0\\.1/.test(card.innerText) && card.innerText.indexOf("Installing") === -1;
         }, 2000, "installed version after a successful install");
 
