@@ -1286,7 +1286,7 @@ A one-year legendary store item (350): one door a day from Dec 1 to 25, opened o
   `adventCoupons`, `adventVouchers` and `adventPreviewDay` are all new, default to "never
   bought", and are read with range checks, so old configs and backups load unchanged.
 - **Store**: `advent_calendar`, first row of the Christmas section, which now also opens from
-  Nov 20 to Dec 24 (`isAdventCalendarOnSale()`) with only the calendar until Dec 1. Flash sales
+  Nov 15 to Dec 24 (`isAdventCalendarOnSale()`) with only the calendar until Dec 1. Flash sales
   work inside that window only (`isSeasonalItemIdOffSale()`).
 - **Doors**: a present in the badge column's top row, left of the level medal, whenever the
   calendar can be opened (owned and December, or Preview; `adventIconShown()`, hidden in the

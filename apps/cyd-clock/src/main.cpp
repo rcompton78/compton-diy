@@ -4796,7 +4796,7 @@ static int collectStoreItemIds(const char** ids, int cap) {
 // while still visually announcing itself). Seasonal items only count while they're on sale, since
 // the store doesn't list them otherwise: Haunted Pumpkin Patch in October (COM-503), the
 // Christmas items and Christmas Bundle in December (COM-637), and the Advent calendar from
-// Nov 20 to Dec 24 (COM-655).
+// Nov 15 to Dec 24 (COM-655).
 static bool isSeasonalItemIdOffSale(const char* id);
 static bool isKnownStoreItemId(const char* id) {
     if (isSeasonalItemIdOffSale(id)) return false;
@@ -5181,7 +5181,7 @@ static bool ownsAdventCalendar() {
 }
 
 /**
- * Whether the store sells the Advent calendar right now: Nov 20 to Dec 24 local time, or at any
+ * Whether the store sells the Advent calendar right now: Nov 15 to Dec 24 local time, or at any
  * time in Christmas Preview (once the clock is synced, since a purchase records the year).
  * Ownership isn't part of this: an owner sees the row as Owned, like any other item.
  *
@@ -6366,7 +6366,7 @@ enum ItemCategory : uint8_t {
     // with these.
     ITEM_RIGHT_ARM_SLOT = ITEM_CATEGORY_COUNT,
     ITEM_COMBO,     // STORE_COMBOS[] (COM-507)
-    ITEM_CHRISTMAS  // the Christmas section (COM-637; also from Nov 20 for the Advent calendar, COM-655)
+    ITEM_CHRISTMAS  // the Christmas section (COM-637; also from Nov 15 for the Advent calendar, COM-655)
 };
 
 // One catalog entry's web-facing fields. `webColor` is nullptr for catalogs whose labels are
@@ -6736,7 +6736,7 @@ static bool findComboItem(const StoreCombo& combo, const char* id, ItemCategory&
 
 // Whether `id` names a seasonal item or combo that isn't on sale right now (declared earlier for
 // isKnownStoreItemId()): Haunted Pumpkin Patch outside October, a Christmas item or the
-// Christmas Bundle outside December, or the Advent calendar outside Nov 20 – Dec 24.
+// Christmas Bundle outside December, or the Advent calendar outside Nov 15 – Dec 24.
 static bool isSeasonalItemIdOffSale(const char* id) {
     if (strcmp(id, ROOM_THEMES[ROOM_THEME_IDX_PUMPKIN_PATCH].id) == 0) return !isPumpkinPatchOnSale();
     if (strcmp(id, ADVENT_CALENDAR_ID) == 0) return !isAdventCalendarOnSale();  // COM-655
@@ -6853,7 +6853,7 @@ static void appendStoreItemTags(String& html, uint32_t baseCost, uint32_t cost, 
 // The store's All page (COM-516): every section on one page, at /config/store?s=all. It isn't a
 // STORE_SECTIONS[] entry, so no section may use this key (checked below).
 static constexpr char STORE_ALL_KEY[] = "all";
-// The seasonal Christmas section's key (COM-637, and the Advent calendar's from Nov 20, COM-655). Its items are also sold in their own
+// The seasonal Christmas section's key (COM-637, and the Advent calendar's from Nov 15, COM-655). Its items are also sold in their own
 // sections, so a purchase made from it posts from=christmas to come back here.
 static constexpr char STORE_CHRISTMAS_KEY[] = "christmas";
 
@@ -7050,7 +7050,7 @@ static_assert(STORE_SECTIONS[0].cat == ITEM_CHRISTMAS && storeKeyEquals(STORE_SE
 
 // Whether `section` is offered right now: every section always, except Christmas (COM-637),
 // which is only listed or reachable while isChristmasStoreOpen(), or while the Advent calendar
-// (COM-655) is on sale, which opens it from Nov 20 with the calendar alone.
+// (COM-655) is on sale, which opens it from Nov 15 with the calendar alone.
 static bool isStoreSectionShown(const StoreSection& section) {
     return section.cat != ITEM_CHRISTMAS || isChristmasStoreOpen() || isAdventCalendarOnSale();
 }
@@ -7084,7 +7084,7 @@ static bool storeSectionHasSale(const StoreSection& section) {
 // Whether `section` has an item the user hasn't been shown yet (COM-517): its catalog has grown
 // past its seen*Count (a firmware update appended an item), or the Right Arm Slot was never seen.
 // Combos have no seen tracking, so they're never NEW, and neither is the Christmas section
-// (COM-637): it only appears for the season (December, plus the Advent calendar from Nov 20),
+// (COM-637): it only appears for the season (December, plus the Advent calendar from Nov 15),
 // which is announcement enough (see isStoreCatalogEntry()).
 static bool storeSectionHasNew(const StoreSection& section) {
     if (section.cat == ITEM_RIGHT_ARM_SLOT) return !configMgr.config().seenRightArmSlot;
@@ -7727,7 +7727,7 @@ static String adventStatusText() {
         s += "/25 doors opened";
     } else {
         s += "<strong>not owned this year</strong>";
-        s += isAdventCalendarOnSale() ? " (on sale now)" : " (on sale Nov 20 \xE2\x80\x93 Dec 24)";
+        s += isAdventCalendarOnSale() ? " (on sale now)" : " (on sale Nov 15 \xE2\x80\x93 Dec 24)";
     }
     s += ". Coupons: ";
     s += String(c.adventCoupons);
