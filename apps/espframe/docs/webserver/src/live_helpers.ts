@@ -10,6 +10,14 @@
         S.brightness = Math.round((d.brightness / 255) * 100);
         S.brightness_current = S.brightness;
       }
+    } else if (id === "update/Firmware: Update") {
+      // Repaint on a new state or version, but pass on only a state the
+      // event actually carries ("" otherwise), so a version-only event can't
+      // look like a failed install.
+      if ((d.state != null || d.value != null || d.latest_version != null) &&
+          typeof firmwareUpdateStateListener === "function") {
+        firmwareUpdateStateListener(d.state != null ? String(d.state) : "");
+      }
     } else if (id === "switch/Clock: Show") {
       S.show_clock = d.state === "ON" || d.value === true;
     } else if (id === "text_sensor/Screen: Sunrise") {

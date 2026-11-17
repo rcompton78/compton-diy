@@ -119,23 +119,43 @@
       return;
     }
     if (id === "update/Firmware: Update") {
-      S.installed_version = d.current_version || "";
-      S.latest_version = d.latest_version || "";
-      S.update_available =
-        S.installed_version &&
-        S.latest_version &&
-        S.installed_version !== S.latest_version;
+      // State-only events (SSE updates after the first) omit current_version,
+      // so keep the versions already known rather than clearing them.
+      if (d.current_version != null) S.installed_version = d.current_version;
+      // ESPHome sends the latest version as "value"; tests and older
+      // builds may also send latest_version.
+      var latest = d.latest_version != null ? d.latest_version : d.value;
+      if (latest != null) S.latest_version = String(latest);
+      if (d.state != null) S.update_state = String(d.state);
+      // The entity's state says it directly; fall back to comparing versions
+      // only when the state doesn't (UNKNOWN or missing).
+      if (S.update_state === "UPDATE AVAILABLE" || S.update_state === "INSTALLING") {
+        S.update_available = !!S.latest_version;
+      } else if (S.update_state === "NO UPDATE") {
+        S.update_available = false;
+      } else {
+        S.update_available = !!(
+          S.installed_version &&
+          S.latest_version &&
+          S.installed_version !== S.latest_version);
+      }
       return;
     }
     var spec = ENTITY_STATE_MAP[id];
     if (!spec) return;
     var v = d.value != null ? d.value : d.state;
+    var previousValue = S[spec.key];
     if (spec.boolFromState) {
       S[spec.key] = v === true || v === "ON";
     } else if (spec.number) {
       S[spec.key] = v != null ? Math.round(Number(v)) : (spec.default !== undefined ? spec.default : 0);
     } else {
       S[spec.key] = v !== undefined && v !== null ? String(v) : (spec.default !== undefined ? spec.default : "");
+    }
+    if (spec.key === "firmware" && previousValue && S[spec.key] && previousValue !== S[spec.key]) {
+      // The frame came back on a new version, so any install has finished.
+      // A first report (from "") is only the page learning the version.
+      S.firmware_install_pending = false;
     }
     if (spec.key === "timezone") S[spec.key] = normalizeTimezoneOption(S[spec.key]);
     if (spec.key && spec.key.indexOf("ntp_server_") === 0) S[spec.key] = normalizeNtpServer(S[spec.key]);
@@ -148,6 +168,14 @@
     if (spec.key === "photo_metadata_date_taken_format") {
       S[spec.key] = normalizeDateTakenFormat(S[spec.key]);
     }
+  }
+
+  // ESPHome 2026.x sends "id" as "text_sensor-firmware__version" and the
+  // "domain/Name" form this page keys on as "name_id"; older builds sent the
+  // "domain/Name" form as "id".
+  function normalizeEntityEvent(d) {
+    if (d && typeof d.name_id === "string" && d.name_id) d.id = d.name_id;
+    return d;
   }
 
   function collectState(d) {
@@ -283,7 +311,7 @@
 
       evtSource.addEventListener("state", function (e) {
         try {
-          var d = JSON.parse(e.data);
+          var d = normalizeEntityEvent(JSON.parse(e.data));
           collectState(d);
           if (rendered) handleLiveEvent(d);
         } catch (_) {}

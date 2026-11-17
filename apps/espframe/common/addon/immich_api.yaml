@@ -448,6 +448,15 @@ script:
     then:
       - if:
           condition:
+            lambda: 'return id(firmware_update_in_progress);'
+          then:
+            - logger.log:
+                level: DEBUG
+                tag: immich
+                format: "Fetch paused (firmware update in progress)"
+            - script.stop: immich_fetch_into_slot
+      - if:
+          condition:
             not:
               wifi.connected:
           then:
@@ -652,6 +661,15 @@ script:
   - id: immich_fetch_portrait_companion
     mode: single
     then:
+      - if:
+          condition:
+            lambda: 'return id(firmware_update_in_progress);'
+          then:
+            - logger.log:
+                level: DEBUG
+                tag: immich
+                format: "Companion search paused (firmware update in progress)"
+            - script.stop: immich_fetch_portrait_companion
       - if:
           condition:
             not:

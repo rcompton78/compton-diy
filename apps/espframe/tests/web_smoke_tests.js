@@ -249,6 +249,7 @@ function browserScriptForScenario(scenario) {
       constructor(url) {
         this.url = url;
         this.listeners = {};
+        window.__smoke.eventSource = this;
         setTimeout(() => {
           if (this.onopen) this.onopen({ type: "open" });
           this.dispatch("log", { msg: "Smoke log line", lvl: 3 });
@@ -880,6 +881,84 @@ function smokeAssertionsForScenario(scenario) {
         await waitFor(() => pageText().indexOf("Photo Source") !== -1, 8000, "settings after wizard");
       }
 
+      // A failed OTA puts the update entity back to UPDATE AVAILABLE; the
+      // Firmware card must re-enable Install and say the install failed.
+      function firmwareInstallButton() {
+        return Array.from(document.querySelectorAll(".fw-updates button"))
+          .find((button) => button.textContent.trim().indexOf("Install") === 0);
+      }
+      async function requireFailedInstallRecovers() {
+        // ESPHome 2026.x event shape: "id" is the object id; "name_id" is
+        // the "domain/Name" form the page keys on.
+        const events = window.__smoke.eventSource;
+        const updateEvent = (state) => ({
+          name_id: "update/Firmware: Update", id: "update-firmware__update", domain: "update",
+          value: "v1.0.1", state
+        });
+        events.dispatch("state", Object.assign(updateEvent("UPDATE AVAILABLE"), { current_version: "v1.0.0" }));
+        const installButton = firmwareInstallButton();
+        if (!installButton) throw new Error("Firmware Install button not found");
+        installButton.click();
+        const installingButton = firmwareInstallButton();
+        if (!installingButton || !installingButton.disabled || installingButton.textContent.indexOf("Installing") === -1) {
+          throw new Error("Install button did not show Installing");
+        }
+        if (!window.__smoke.posts.some((url) => url.indexOf("Firmware: Update/install") !== -1)) {
+          throw new Error("Install did not post to the update entity");
+        }
+        // An update event without a state (cached state still UPDATE
+        // AVAILABLE) must not count as a failed install.
+        events.dispatch("state", {
+          name_id: "update/Firmware: Update", id: "update-firmware__update", domain: "update", value: "v1.0.1"
+        });
+        if (pageText().indexOf("Install failed") !== -1) throw new Error("Stateless update event reported as a failure");
+        events.dispatch("state", updateEvent("INSTALLING"));
+        if (pageText().indexOf("Install failed") !== -1) throw new Error("INSTALLING reported as a failure");
+        events.dispatch("state", updateEvent("UPDATE AVAILABLE"));
+        await waitFor(() => pageText().indexOf("Install failed") !== -1, 2000, "install failure message");
+        const retryButton = firmwareInstallButton();
+        if (!retryButton || retryButton.disabled || retryButton.textContent.trim() !== "Install") {
+          throw new Error("Firmware Install button not re-enabled after a failed install");
+        }
+        requireText("v1.0.1");
+
+        // A successful install reboots the frame, which then reports its new
+        // version; the card must show it and drop the pending install.
+        retryButton.click();
+        events.dispatch("state", {
+          name_id: "text_sensor/Firmware: Version", id: "text_sensor-firmware__version",
+          domain: "text_sensor", value: "v1.0.1", state: "v1.0.1"
+        });
+        events.dispatch("state", {
+          name_id: "update/Firmware: Update", id: "update-firmware__update", domain: "update",
+          value: "", state: "UNKNOWN", current_version: "", title: ""
+        });
+        await waitFor(() => {
+          const updates = document.querySelector(".fw-updates");
+          const card = updates && updates.closest(".fw-body");
+          return card && /Installed\\s*v1\\.0\\.1/.test(card.innerText) && card.innerText.indexOf("Installing") === -1;
+        }, 2000, "installed version after a successful install");
+
+        // An install this page didn't start (auto-update, Home Assistant, or a
+        // reload mid-install) must still disable Install.
+        events.dispatch("state", {
+          name_id: "update/Firmware: Update", id: "update-firmware__update", domain: "update",
+          value: "v1.0.2", state: "UPDATE AVAILABLE", current_version: "v1.0.1"
+        });
+        // A newer release while the state stays UPDATE AVAILABLE must update
+        // the "Stable" version shown.
+        events.dispatch("state", Object.assign(updateEvent("UPDATE AVAILABLE"), { value: "v1.0.3" }));
+        await waitFor(() => {
+          const row = document.querySelector(".fw-updates");
+          return row && row.textContent.indexOf("v1.0.3") !== -1;
+        }, 2000, "newer stable version shown while still UPDATE AVAILABLE");
+        events.dispatch("state", Object.assign(updateEvent("INSTALLING"), { value: "v1.0.3" }));
+        await waitFor(() => {
+          const button = firmwareInstallButton();
+          return button && button.disabled && button.textContent.indexOf("Installing") !== -1;
+        }, 2000, "Install disabled during an install started elsewhere");
+      }
+
       try {
         if (${JSON.stringify(scenario.name)} === "wizard") {
           await waitFor(() => pageText().indexOf("connect your photo frame") !== -1, 8000, "wizard");
@@ -911,6 +990,7 @@ function smokeAssertionsForScenario(scenario) {
             await waitFor(() => checkButton.textContent.trim() === "Check for Update", 7000, "firmware check");
             requireText("Stable");
             requireText("v1.0.1");
+            await requireFailedInstallRecovers();
             const logsTab = Array.from(document.querySelectorAll(".sp-tab")).find((tab) => tab.textContent.trim() === "Logs");
             if (!logsTab) throw new Error("Logs tab not found");
             logsTab.click();

@@ -121,7 +121,8 @@ def check_firmware_update_metadata(product: dict, errors: list[str]) -> None:
         'productSettingOptions("update_frequency")',
         "Check for Update",
         "Install",
-        'post(endpoints.update + "/install")',
+        'var installUrl = endpoints.update + "/install";',
+        'fetch(installUrl, { method: "POST" })',
         "Stable Manifest URL",
     ):
         require_contains(web_template, needle, rel(WEB_TEMPLATE), errors)

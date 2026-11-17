@@ -354,7 +354,9 @@ script:
     mode: queued
     then:
       - lambda: |-
-          if (id(photo_source_menu_open)) return;
+          // Commands left queued during a firmware update are cleared when it
+          // fails and the slideshow restarts (firmware_update_resume_slideshow).
+          if (id(photo_source_menu_open) || id(firmware_update_in_progress)) return;
           SlideshowCommand cmd;
           while (id(espframe_core).slideshow().pop_command(cmd)) {
             switch (cmd.kind) {
@@ -765,6 +767,7 @@ script:
     mode: single
     then:
       - lambda: |-
+          if (id(firmware_update_in_progress)) return;
           id(espframe_core).slideshow().advance_forward(
             millis(),
             id(immich_request_state).cooldown_active(millis()),
@@ -935,7 +938,7 @@ script:
     mode: single
     then:
       - lambda: |-
-          if (id(photo_source_menu_open)) return;
+          if (id(photo_source_menu_open) || id(firmware_update_in_progress)) return;
           id(espframe_core).slideshow().request_prefetch(
             id(backlight_paused),
             id(immich_request_state).cooldown_active(millis()),
