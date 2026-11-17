@@ -182,6 +182,13 @@ const scenarios = [
   { name: "wizard-connection-save", configured: false, width: 1280, height: 900 },
   { name: "settings", configured: true, width: 1280, height: 900 },
   { name: "settings-mobile", configured: true, width: 390, height: 900 },
+  {
+    name: "firmware-up-to-date",
+    configured: true,
+    width: 1280,
+    height: 900,
+    firmwareUpdate: { value: "v1.0.0", state: "NO UPDATE", current_version: "v1.0.0" },
+  },
   { name: "photo-source-reorder", configured: true, width: 1280, height: 900 },
   { name: "screen-rotation-portrait", configured: true, width: 1280, height: 900, query: "dev=experimental" },
   { name: "screen-tone-schedule", configured: true, width: 1280, height: 900 },
@@ -205,7 +212,10 @@ function browserScriptForScenario(scenario) {
       exportPayloads: [],
       inputClicks: 0,
       importFixture: ${JSON.stringify(scenario.importFixture || null)},
-      failedPostEndpoint: ${JSON.stringify(scenario.failedPostEndpoint || "")}
+      failedPostEndpoint: ${JSON.stringify(scenario.failedPostEndpoint || "")},
+      // ESPHome 2026.x update entity JSON: the latest version is "value";
+      // there is no latest_version field.
+      firmwareUpdate: ${JSON.stringify(scenario.firmwareUpdate || { value: "v1.0.1", state: "UPDATE AVAILABLE", current_version: "v1.0.0" })}
     };
     window.addEventListener("error", function (event) {
       window.__smoke.errors.push(event.message || "browser error");
@@ -231,7 +241,12 @@ function browserScriptForScenario(scenario) {
       if (this.download) window.__smoke.downloads += 1;
     };
     FileReader.prototype.readAsText = function (file) {
-      this.result = file && file.__smokeContent ? file.__smokeContent : "";
+      // FileReader.prototype.result is a getter with no setter, so a plain
+      // assignment is silently ignored and the app would read null.
+      Object.defineProperty(this, "result", {
+        configurable: true,
+        value: file && file.__smokeContent ? file.__smokeContent : ""
+      });
       if (this.onload) setTimeout(() => this.onload({ target: this }), 0);
     };
     HTMLInputElement.prototype.click = function () {
@@ -253,6 +268,13 @@ function browserScriptForScenario(scenario) {
         setTimeout(() => {
           if (this.onopen) this.onopen({ type: "open" });
           this.dispatch("log", { msg: "Smoke log line", lvl: 3 });
+          // ESPHome 2026.x event shape: "id" is the object id; "name_id" is
+          // the "domain/Name" form the page keys on. The configuration API
+          // snapshot has no version, so this event is where the page gets it.
+          this.dispatch("state", {
+            name_id: "text_sensor/Firmware: Version", id: "text_sensor-firmware__version",
+            domain: "text_sensor", value: "v1.0.0", state: "v1.0.0"
+          });
           this.dispatch("state", { id: "text_sensor/Screen: Sunrise", value: "06:30" });
           this.dispatch("state", { id: "text_sensor/Screen: Sunset", value: "21:45" });
         }, 25);
@@ -419,11 +441,16 @@ function browserScriptForScenario(scenario) {
         }
         updateEndpointValueFromPost(decoded, body);
       }
+      if (decoded.indexOf("Firmware: Update") !== -1 && window.__smoke.firmwareUpdateFails) {
+        return Promise.resolve({ ok: false, status: 500, json: () => Promise.resolve({}) });
+      }
       if (decoded.indexOf("Firmware: Update") !== -1) {
         return Promise.resolve({
           ok: true,
           status: 200,
-          json: () => Promise.resolve({ value: "v1.0.1", state: "UPDATE AVAILABLE", current_version: "v1.0.0", latest_version: "v1.0.1" })
+          json: () => Promise.resolve(Object.assign({
+            name_id: "update/Firmware: Update", id: "update-firmware__update", domain: "update"
+          }, window.__smoke.firmwareUpdate))
         });
       }
       const endpointName = endpointNameForUrl(decoded);
@@ -441,16 +468,20 @@ function browserScriptForScenario(scenario) {
 function smokeAssertionsForScenario(scenario) {
   return `
     (async function () {
+      // Save checks inside waitFor swallow their errors while polling; the
+      // last one is reported if the wait times out.
+      let lastPendingError = null;
       function waitFor(check, timeoutMs, label) {
         const started = Date.now();
         return new Promise((resolve, reject) => {
           function poll() {
+            lastPendingError = null;
             try {
               if (check()) return resolve();
             } catch (error) {
               return reject(error);
             }
-            if (Date.now() - started > timeoutMs) return reject(new Error("Timed out waiting for " + label));
+            if (Date.now() - started > timeoutMs) return reject(new Error("Timed out waiting for " + label + (lastPendingError ? ": " + lastPendingError.message : "")));
             setTimeout(poll, 50);
           }
           poll();
@@ -500,7 +531,11 @@ function smokeAssertionsForScenario(scenario) {
         }).filter(Boolean);
       }
       function latestConfigurationValue(fragment) {
-        const endpoint = Object.keys(configurationKeyByEndpointName).find((name) => name.indexOf(fragment) !== -1);
+        // Prefer an exact name: "Device: Metadata Date" is also a prefix of
+        // "Device: Metadata Date Format" and "Device: Metadata Date Taken Format".
+        const endpointNames = Object.keys(configurationKeyByEndpointName);
+        const endpoint = endpointNames.find((name) => name === fragment) ||
+          endpointNames.find((name) => name.indexOf(fragment) !== -1);
         const key = endpoint && configurationKeyByEndpointName[endpoint];
         if (!key) return { found: false };
         const updates = configurationUpdates();
@@ -674,6 +709,7 @@ function smokeAssertionsForScenario(scenario) {
           }
           setSelect("Source", mode);
         });
+        setSelect("Source", "Album");
         requireText("Add an album");
         setSelect("Source", "Person");
         requireText("Add a person");
@@ -711,7 +747,8 @@ function smokeAssertionsForScenario(scenario) {
             requireLatestPostValue("Album IDs", "Photos: Album IDs", expectedIds);
             requireLatestPostValue("Album labels", "Photos: Album Labels", expectedLabels);
             return window.__smoke.posts.some((url) => url.indexOf("Apply Photo Source") !== -1);
-          } catch (_) {
+          } catch (error) {
+            lastPendingError = error;
             return false;
           }
         }, 8000, "album reorder save");
@@ -719,6 +756,8 @@ function smokeAssertionsForScenario(scenario) {
       async function requireScreenRotationPortraitFlow() {
         clickTab("Device");
         await waitFor(() => pageText().indexOf("Rotation") !== -1, 8000, "device settings");
+        expandCard("Rotation");
+        expandCard("Developer");
         requireText("Screen Brightness");
         requireText("Developer");
         requireText("Enable in-development features");
@@ -731,8 +770,10 @@ function smokeAssertionsForScenario(scenario) {
         await waitFor(() => {
           try {
             requireLatestPostParam("Portrait rotation", "Screen: Rotation", "option", "90");
-            return window.__smoke.posts.some((url) => url.indexOf("Photos: Portrait Pairing") !== -1 && url.indexOf("turn_off") !== -1);
-          } catch (_) {
+            requirePostContains("Portrait pairing off", "Photos: Portrait Pairing", "turn_off");
+            return true;
+          } catch (error) {
+            lastPendingError = error;
             return false;
           }
         }, 8000, "portrait rotation save");
@@ -743,7 +784,8 @@ function smokeAssertionsForScenario(scenario) {
           try {
             requirePostContains("Developer features enable", "Developer: Features", "turn_on");
             return true;
-          } catch (_) {
+          } catch (error) {
+            lastPendingError = error;
             return false;
           }
         }, 8000, "developer features enable");
@@ -754,7 +796,8 @@ function smokeAssertionsForScenario(scenario) {
             requireLatestPostParam("Rotation kept", "Screen: Rotation", "option", "90");
             requireSelectIncludes("Rotation", ["0", "90", "180", "270"]);
             return true;
-          } catch (_) {
+          } catch (error) {
+            lastPendingError = error;
             return false;
           }
         }, 8000, "portrait rotation kept");
@@ -762,6 +805,9 @@ function smokeAssertionsForScenario(scenario) {
       async function requireScreenToneScheduleControls() {
         clickTab("Device");
         await waitFor(() => pageText().indexOf("Night Schedule") !== -1, 8000, "device screen controls");
+        expandCard("Screen Brightness");
+        expandCard("Screen Tone");
+        expandCard("Night Schedule");
         requireText("Screen Brightness");
         requireText("Screen Tone");
         requireText("Night Schedule");
@@ -800,7 +846,8 @@ function smokeAssertionsForScenario(scenario) {
             requireLatestPostValue("Schedule off hour", "Screen: Schedule Off Hour", "21");
             requireLatestPostValue("Schedule wake timeout", "Screen: Schedule Wake Timeout", "120");
             return true;
-          } catch (_) {
+          } catch (error) {
+            lastPendingError = error;
             return false;
           }
         }, 8000, "screen tone and schedule saves");
@@ -859,7 +906,8 @@ function smokeAssertionsForScenario(scenario) {
             requireLatestPostValue("NTP server 2", "Clock: NTP Server 2", "time2.example.com");
             requireLatestPostValue("NTP server 3", "Clock: NTP Server 3", "time3.example.com");
             return true;
-          } catch (_) {
+          } catch (error) {
+            lastPendingError = error;
             return false;
           }
         }, 8000, "daily settings saves");
@@ -881,12 +929,30 @@ function smokeAssertionsForScenario(scenario) {
         await waitFor(() => pageText().indexOf("Photo Source") !== -1, 8000, "settings after wizard");
       }
 
-      // A failed OTA puts the update entity back to UPDATE AVAILABLE; the
-      // Firmware card must re-enable Install and say the install failed.
+      function firmwareCardText() {
+        const card = Array.from(document.querySelectorAll(".fw-body"))
+          .find((body) => body.textContent.indexOf("Check for Update") !== -1);
+        return card ? card.innerText : "";
+      }
+      function installedLabelText() {
+        const label = Array.from(document.querySelectorAll(".fw-body .fw-label"))
+          .find((item) => item.firstChild && item.firstChild.textContent === "Installed");
+        return label ? label.textContent : "";
+      }
+      async function requireInstalledVersion(version) {
+        const expected = "Installed " + version;
+        try {
+          await waitFor(() => installedLabelText() === expected, 2000, expected);
+        } catch (_) {
+          throw new Error("Expected " + JSON.stringify(expected) + ", card shows " + JSON.stringify(installedLabelText()));
+        }
+      }
       function firmwareInstallButton() {
         return Array.from(document.querySelectorAll(".fw-updates button"))
           .find((button) => button.textContent.trim().indexOf("Install") === 0);
       }
+      // A failed OTA puts the update entity back to UPDATE AVAILABLE; the
+      // Firmware card must re-enable Install and say the install failed.
       async function requireFailedInstallRecovers() {
         // ESPHome 2026.x event shape: "id" is the object id; "name_id" is
         // the "domain/Name" form the page keys on.
@@ -959,6 +1025,36 @@ function smokeAssertionsForScenario(scenario) {
         }, 2000, "Install disabled during an install started elsewhere");
       }
 
+      // The installed version matches the latest, so Check for Update must
+      // say so and offer no Install; after an update reboots the frame onto
+      // a new version, the card must show it.
+      async function requireFirmwareUpToDate() {
+        clickTab("Device");
+        expandCard("Firmware");
+        await requireInstalledVersion("v1.0.0");
+        const checkButton = clickButton("Check for Update");
+        await waitFor(() => checkButton.textContent.trim() === "Check for Update", 7000, "firmware check");
+        if (firmwareCardText().indexOf("Up to date") === -1) throw new Error("Firmware card did not say Up to date");
+        if (firmwareInstallButton()) throw new Error("Install offered for the version already installed");
+        if (document.querySelector(".fw-updates").textContent.indexOf("Stable") !== -1) {
+          throw new Error("Stable row shown for the version already installed");
+        }
+        window.__smoke.eventSource.dispatch("state", {
+          name_id: "text_sensor/Firmware: Version", id: "text_sensor-firmware__version",
+          domain: "text_sensor", value: "v1.0.1", state: "v1.0.1"
+        });
+        await requireInstalledVersion("v1.0.1");
+
+        // When the frame doesn't answer the update entity request, the card
+        // must not claim the firmware is up to date.
+        window.__smoke.firmwareUpdateFails = true;
+        clickButton("Check for Update");
+        await waitFor(() => buttonByText("Check for Update") && !buttonByText("Check for Update").disabled, 7000, "failed firmware check");
+        const checkText = firmwareCardText();
+        if (checkText.indexOf("Up to date") !== -1) throw new Error("Failed update check reported Up to date");
+        if (checkText.indexOf("Couldn't check") === -1) throw new Error("Failed update check not reported");
+      }
+
       try {
         if (${JSON.stringify(scenario.name)} === "wizard") {
           await waitFor(() => pageText().indexOf("connect your photo frame") !== -1, 8000, "wizard");
@@ -970,22 +1066,34 @@ function smokeAssertionsForScenario(scenario) {
           await requireWizardConnectionSave();
         } else {
           await waitFor(() => pageText().indexOf("Photo Source") !== -1, 8000, "settings");
-          requireText("Immich Server URL");
-          requireText("Photo Source");
-          requireText("Date Filter");
-          requireText("Fixed Range");
-          requireText("Relative Range");
-          requireText("Firmware");
+          // Settings cards start collapsed, and innerText skips the bodies of
+          // collapsed cards and inactive tabs, so open what each check reads.
+          clickTab("Device");
+          expandCard("Firmware");
           requireText("Installed");
           requireText("Auto updates");
-          requirePhotoSourceModes();
+          clickTab("Immich");
+          expandCard("Connection");
+          requireText("Immich Server URL");
+          expandCard("Advanced Filters");
+          requireText("Filter by Date");
+          const filterModes = Array.from(fieldByLabel("Mode").querySelectorAll("button")).map((item) => item.textContent.trim());
+          if (JSON.stringify(filterModes) !== JSON.stringify(["Fixed", "Relative"])) {
+            throw new Error("Unexpected date filter modes: " + JSON.stringify(filterModes));
+          }
+          expandCard("Photo Source");
+          requireSelectIncludes("Source", ["All Photos", "Favorites", "Album", "Person", "Tag", "Memories"]);
 
           if (${JSON.stringify(scenario.name)} === "settings" || ${JSON.stringify(scenario.name)} === "settings-mobile") {
+            requirePhotoSourceModes();
+            clickTab("Device");
+            expandCard("Firmware");
             clickButton("Export");
             clickButton("Import");
             if (window.__smoke.downloads !== 1) throw new Error("Export did not trigger a download");
             requireExportShape();
             if (window.__smoke.inputClicks !== 1) throw new Error("Import did not open the file picker");
+            await requireInstalledVersion("v1.0.0");
             const checkButton = clickButton("Check for Update");
             await waitFor(() => checkButton.textContent.trim() === "Check for Update", 7000, "firmware check");
             requireText("Stable");
@@ -1001,6 +1109,10 @@ function smokeAssertionsForScenario(scenario) {
                 throw new Error("Mobile viewport has horizontal overflow");
               }
             }
+          }
+
+          if (${JSON.stringify(scenario.name)} === "firmware-up-to-date") {
+            await requireFirmwareUpToDate();
           }
 
           if (${JSON.stringify(scenario.name)} === "photo-source-reorder") {
@@ -1077,7 +1189,6 @@ function smokeAssertionsForScenario(scenario) {
         }
         if (window.__smoke.errors.length) throw new Error(window.__smoke.errors.join("; "));
         document.documentElement.setAttribute("data-smoke-${scenario.name}", "pass");
-        document.body.appendChild(document.createTextNode(" ESPFRAME_BROWSER_SMOKE_${scenario.name.toUpperCase().replace(/-/g, "_")}_PASS "));
       } catch (error) {
         document.documentElement.setAttribute("data-smoke-${scenario.name}", "fail");
         const pre = document.createElement("pre");
@@ -1185,13 +1296,38 @@ async function runScenario(scenario) {
     30000
   );
 
-  const output = `${result.stdout || ""}\n${result.stderr || ""}`;
-  const passToken = `ESPFRAME_BROWSER_SMOKE_${scenario.name.toUpperCase().replace(/-/g, "_")}_PASS`;
-  if (!output.includes(passToken)) {
-    assert.equal(result.timedOut, false, `Chrome timed out for ${scenario.name}:\n${output}`);
-    assert.equal(result.status, 0, `Chrome failed for ${scenario.name}:\n${output}`);
+  const outcome = scenarioOutcome(scenario, result.stdout || "");
+  if (outcome.status === "pass") return;
+  // A failure the scenario recorded explains more than how Chrome exited.
+  if (outcome.status === "fail") {
+    assert.fail(`Browser smoke scenario ${scenario.name} failed: ${outcome.error || "no error captured"}`);
   }
-  assert.ok(output.includes(passToken), `Browser smoke scenario ${scenario.name} failed:\n${output}`);
+  assert.equal(result.timedOut, false, `Chrome timed out for ${scenario.name}:\n${result.stderr || ""}`);
+  assert.equal(result.status, 0, `Chrome failed for ${scenario.name}:\n${result.stderr || ""}`);
+  assert.fail(`Browser smoke scenario ${scenario.name} failed: scenario never finished`);
+}
+
+function decodeHtmlText(text) {
+  return text
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+// Reads the scenario's outcome from Chrome's --dump-dom output. Only the
+// attribute on the serialized <html> start tag counts: the inline scenario
+// scripts are part of the dumped DOM too, so any token that also appears in
+// their source text would match whether or not the scenario passed.
+function scenarioOutcome(scenario, dom) {
+  const htmlTag = /<html\b[^>]*>/i.exec(dom);
+  const attr = htmlTag && new RegExp(`\\sdata-smoke-${scenario.name}="(pass|fail)"`).exec(htmlTag[0]);
+  const errorMatch = new RegExp(`<pre id="smoke-error-${scenario.name}">([\\s\\S]*?)</pre>`).exec(dom);
+  return {
+    status: attr ? attr[1] : "missing",
+    error: errorMatch ? decodeHtmlText(errorMatch[1]) : "",
+  };
 }
 
 function selectedScenariosFromArgs(args) {
@@ -1245,6 +1381,7 @@ if (require.main === module) {
 
 module.exports = {
   main,
+  scenarioOutcome,
   scenarios,
   selectedScenariosFromArgs,
 };
