@@ -55,6 +55,10 @@ EXCLUDE = [
     "builds/freenove-s3.factory.yaml",
     "builds/waveshare-esp32-s3-touch-lcd-7.yaml",
     "builds/waveshare-esp32-s3-touch-lcd-7.factory.yaml",
+    # The v3-chip Guition build isn't wired into the public repo's single-build
+    # release yet (COM-691). components/mipi_dsi still exports: only that build
+    # loads it, and product/source-ownership.json lists it.
+    "builds/guition-esp32-p4-jc8012p4a1-v3.factory.yaml",
     "hardware/stand/",
     "hardware/stand-10/project.json",
     "project.json",
@@ -255,6 +259,11 @@ DROP_SECTIONS: list[tuple[str, str, str]] = [
         "docs/troubleshooting.md",
         "## Wrong Firmware After an Update\n",
         "## WiFi Setup Problems\n",
+    ),
+    (
+        "docs/install.md",
+        "::: warning Two builds for the 10\" Guition\n",
+        "::: info Browser\n",
     ),
 ]
 FIRMWARE_UPDATE_INTRO = """OTA and HTTP updates from GitHub. A frame flashed from a fork's install page checks that fork's own manifest, `https://<owner>.github.io/<repo>/manifest.json`, which the fork's release workflow publishes to GitHub Pages. Releases from anyone else's fork, including the one you forked from, never reach it. A local build has no manifest URL, so it never checks for updates unless you set one (the README's `FIRMWARE_MANIFEST_URL`, or **Stable Manifest URL** below). Controls: device web UI at `http://<device-ip>/` under **Firmware** (and in Home Assistant).

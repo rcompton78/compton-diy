@@ -63,6 +63,15 @@
       "local_changes": "ESPHome API compatibility, boot timing, watchdog feeding, touch-count clamping, and device firmware table."
     },
     {
+      "path": "components/mipi_dsi",
+      "name": "ESPHome mipi_dsi display component (Guition P4 v3-chip build only)",
+      "upstream": "https://github.com/esphome/esphome",
+      "revision": "2026.6.4 (models/guition.py JC8012P4A1-V2 from dev e952b8c0)",
+      "license": "GPL-3.0-or-later for C/C++ and MIT for Python",
+      "license_file": "components/mipi_dsi/LICENSE.md",
+      "local_changes": "phy_clk_src left at 0 so ESP-IDF picks the DSI PLL reference per ESP32-P4 revision; models trimmed to JC8012P4A1-V2. Delete once the ESPHome pin ships both (see its README.md)."
+    },
+    {
       "path": "components/libjpeg-turbo-esp32",
       "name": "libjpeg-turbo ESP32 decode subset",
       "upstream": "https://github.com/libjpeg-turbo/libjpeg-turbo",

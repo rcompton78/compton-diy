@@ -33,6 +33,15 @@ Connect the display via USB-C, then click the install button below. Check the mo
 
 <EspInstallButton />
 
+::: warning Two builds for the 10" Guition
+The installer at `https://rcompton78.github.io/compton-diy/espframe/` has two 10" buttons, because the board ships with two revisions of its ESP32-P4 chip and one firmware can't run on both:
+
+- **Guition ESP32-P4 JC8012P4A1 v3 chip (10 inch):** boards bought from late 2026 onwards, which have a v3.x chip. Pick this one if you're not sure and your board is new.
+- **Guition ESP32-P4 JC8012P4A1 (10 inch):** earlier boards.
+
+If the screen stays black or the board keeps rebooting after installing one, install the other. Nothing is lost by trying the wrong one first. To check beforehand: `esptool` prints `ESP32-P4 (revision v3.x)` when it connects, and a serial monitor at 115200 baud shows `boot: chip revision: v3.x` when the board resets. v3.x takes the v3 build; anything lower takes the other one. The v3 build also drives the newer LCD panel those boards ship with, and its frame shows up on the network as `immich-frame-10inch-v3`.
+:::
+
 ::: info Browser
 Requires **Chrome** or **Edge** on a desktop computer with [Web Serial](https://developer.mozilla.org/en-US/docs/Web/API/Web_Serial_API). Safari and Firefox not supported.
 :::

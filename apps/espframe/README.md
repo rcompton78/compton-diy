@@ -53,6 +53,8 @@ Currently documented hardware:
 
 The same board is also sold as the **"10.1-inch ESP32P4 development board supports Xiaozhi ESP32 C6 capacitive touch screen"** ([AliExpress](https://www.aliexpress.com/item/1005009147577522.html)), panel `JC8012P4A1C_I_W_Y`. It has the same JD9365 MIPI-DSI panel, GSL3680 touch, ESP32-C6 WiFi co-processor and pinout, so use the `JC8012P4A1` firmware. Its ESP32-C6 WiFi module has no built-in antenna, so make sure the included external antenna is clipped onto the C6 module's U.FL connector — without it, WiFi signal is too weak to connect.
 
+Boards from late 2026 onwards have a v3.x ESP32-P4 chip and a newer LCD panel, and need the separate **JC8012P4A1 v3 chip** build (`builds/guition-esp32-p4-jc8012p4a1-v3.factory.yaml`). The original build leaves those boards black and rebooting; see [Install](docs/install.md#web-installer).
+
 ## Getting Started
 
 The easiest way to install Espframe is with the web installer. You do not need to install developer tools or build firmware yourself.

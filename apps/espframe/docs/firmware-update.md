@@ -10,14 +10,15 @@ OTA and HTTP updates from GitHub. Each device checks its own stable firmware man
 | Device | Default manifest URL |
 |--------|----------------------|
 | Guition ESP32-P4 10" | `https://rcompton78.github.io/compton-diy/espframe/manifest-guition-esp32-p4-jc8012p4a1.json` |
+| Guition ESP32-P4 10" (v3 chip) | `https://rcompton78.github.io/compton-diy/espframe/manifest-guition-esp32-p4-jc8012p4a1-v3.json` |
 | Waveshare ESP32-S3-Touch-LCD-7 7" | `https://rcompton78.github.io/compton-diy/espframe/manifest-waveshare-esp32-s3-touch-lcd-7.json` |
 | Freenove ESP32-S3 CYD | `https://rcompton78.github.io/compton-diy/espframe/manifest-freenove-s3.json` |
 
-Each of these lists a single build. ESPHome installs the first build in a manifest whose chip family matches the device, and the Waveshare 7" and the Freenove board are both ESP32-S3, so a manifest listing both would install whichever came first on either board.
+Each of these lists a single build. ESPHome installs the first build in a manifest whose chip family matches the device, and the Waveshare 7" and the Freenove board are both ESP32-S3, so a manifest listing both would install whichever came first on either board. The two 10" builds are both ESP32-P4 for the same reason: one is for pre-v3 chips and one for v3.x chips, and neither boots on the other's chip.
 
 ### The old shared manifest
 
-Devices used to share `https://rcompton78.github.io/compton-diy/espframe/manifest.json`, and a saved manifest URL survives reflashing. That URL now lists only the ESP32-P4 build, so an ESP32-S3 device still pointed at it finds no compatible build and stops updating rather than installing another board's firmware. Firmware from this release onward moves a device off the shared URL onto its own manifest at boot.
+Devices used to share `https://rcompton78.github.io/compton-diy/espframe/manifest.json`, and a saved manifest URL survives reflashing. That URL now lists only the pre-v3 ESP32-P4 build, so an ESP32-S3 device still pointed at it finds no compatible build and stops updating rather than installing another board's firmware. Firmware from this release onward moves a device off the shared URL onto its own manifest at boot.
 
 A device still on older firmware has to get the new firmware once some other way:
 
