@@ -126,10 +126,13 @@ substitutions() {
     SUBS=(-s firmware_version "${RELEASE_VERSION:-dev}")
     if [ -n "$url" ] && [ -n "${CHIP_SEL:-}" ]; then
         if [ "$CHIP_SEL" = v3 ]; then own="$V3_MANIFEST" other="$PRE_V3_MANIFEST"; else own="$PRE_V3_MANIFEST" other="$V3_MANIFEST"; fi
-        url="${url%/}"
-        case "$url" in
+        # Compare without a trailing slash, but bake in a custom URL as given.
+        case "${url%/}" in
             */"$other") die "FIRMWARE_MANIFEST_URL names the other chip build's manifest ($other), whose image can't boot a $CHIP_SEL chip; for --chip $CHIP_SEL use .../$own" ;;
-            */"$own") [ -n "$sibling" ] || sibling="${url%/*}/$other" ;;
+            */"$own")
+                url="${url%/}"
+                [ -n "$sibling" ] || sibling="${url%/*}/$other"
+                ;;
         esac
     fi
     if [ -n "$url" ]; then
