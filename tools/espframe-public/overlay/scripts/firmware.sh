@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # Build, flash and monitor the 10" frame firmware with the pinned ESPHome.
 #
-#   scripts/firmware.sh install                 install the pinned ESPHome into .venv
-#   scripts/firmware.sh compile                 build the firmware
-#   scripts/firmware.sh flash [--device PORT]   build and flash over USB (or an IP, for OTA)
-#   scripts/firmware.sh logs  [--device PORT]   show the frame's logs (USB port or IP)
-#   scripts/firmware.sh esphome <args...>       run the pinned ESPHome with any other arguments
+#   scripts/firmware.sh install                         install the pinned ESPHome into .venv
+#   scripts/firmware.sh compile [--chip C]              build the firmware
+#   scripts/firmware.sh flash [--chip C] [--device P]   build and flash over USB (or an IP, for OTA)
+#   scripts/firmware.sh logs  [--chip C] [--device P]   show the frame's logs (USB port or IP)
+#   scripts/firmware.sh esphome <args...>               run the pinned ESPHome with any other arguments
+#
+# --chip picks the build for the board's ESP32-P4 revision: pre-v3 (the
+# default, boards from before late 2026) or v3 (a v3.1 or later chip). Neither
+# image boots on the other chip; see the README.
 #
 # The ESPHome version is pinned in product/contract/project.json (esphome_version);
 # `install` (and any other command, on first use) puts exactly that version in this
@@ -20,11 +24,15 @@
 #   RELEASE_VERSION        version baked into the firmware (default "dev"). A
 #                          "dev" build finds updates but never auto-installs
 #                          them; press Install on the frame's web page.
+#   SIBLING_FIRMWARE_MANIFEST_URL
+#                          the other chip build's manifest. A frame whose saved
+#                          manifest URL names it is moved onto its own at boot.
+#                          CI sets it; leave it unset locally.
+#   CHIP                   default --chip (pre-v3 or v3).
 #   DEVICE                 default --device for flash/logs.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-CONFIG="$ROOT/builds/guition-esp32-p4-jc8012p4a1.factory.yaml"
 VENV="$ROOT/.venv"
 CONTRACT="$ROOT/product/contract/project.json"
 
@@ -44,8 +52,8 @@ if [ -f "$ROOT/.env" ]; then
         # Only the documented settings: anything else could overwrite this
         # script's own variables (VENV is rm -rf'd on a reinstall).
         case "$key" in
-            FIRMWARE_MANIFEST_URL | RELEASE_VERSION | DEVICE) export "$key=$value" ;;
-            *) die ".env: unsupported setting '$key' (only FIRMWARE_MANIFEST_URL, RELEASE_VERSION, DEVICE)" ;;
+            FIRMWARE_MANIFEST_URL | SIBLING_FIRMWARE_MANIFEST_URL | RELEASE_VERSION | CHIP | DEVICE) export "$key=$value" ;;
+            *) die ".env: unsupported setting '$key' (only FIRMWARE_MANIFEST_URL, SIBLING_FIRMWARE_MANIFEST_URL, RELEASE_VERSION, CHIP, DEVICE)" ;;
         esac
     done < "$ROOT/.env"
 fi
@@ -104,18 +112,33 @@ substitutions() {
     if [ -n "${FIRMWARE_MANIFEST_URL:-}" ]; then
         SUBS+=(-s firmware_manifest_url "$FIRMWARE_MANIFEST_URL")
     fi
+    if [ -n "${SIBLING_FIRMWARE_MANIFEST_URL:-}" ]; then
+        SUBS+=(-s sibling_firmware_manifest_url "$SIBLING_FIRMWARE_MANIFEST_URL")
+    fi
 }
 
-device_args() {
+# Sets CONFIG from --chip (or CHIP) and DEV_ARGS from --device (or DEVICE).
+# allow_device=0 refuses --device (compile).
+parse_args() {
+    local allow_device="$1"; shift
+    local chip="${CHIP:-pre-v3}" dev="${DEVICE:-}"
     DEV_ARGS=()
-    local dev="${DEVICE:-}"
     while [ $# -gt 0 ]; do
         case "$1" in
-            --device) dev="${2:?--device needs a serial port or IP}"; shift 2 ;;
-            --device=*) dev="${1#--device=}"; shift ;;
+            --chip) chip="${2:?--chip needs pre-v3 or v3}"; shift 2 ;;
+            --chip=*) chip="${1#--chip=}"; shift ;;
+            --device | --device=*)
+                [ "$allow_device" = 1 ] || die "$cmd takes no --device"
+                if [ "$1" = --device ]; then dev="${2:?--device needs a serial port or IP}"; shift 2; else dev="${1#--device=}"; shift; fi
+                ;;
             *) die "unknown option: $1" ;;
         esac
     done
+    case "$chip" in
+        pre-v3) CONFIG="$ROOT/builds/guition-esp32-p4-jc8012p4a1.factory.yaml" ;;
+        v3) CONFIG="$ROOT/builds/guition-esp32-p4-jc8012p4a1-v3.factory.yaml" ;;
+        *) die "unknown chip '$chip' (pre-v3 or v3)" ;;
+    esac
     if [ -n "$dev" ]; then DEV_ARGS=(--device "$dev"); fi
 }
 
@@ -127,16 +150,15 @@ case "$cmd" in
         echo "ESPHome $(installed_version "$bin") ready at $bin"
         ;;
     compile)
-        [ $# -eq 0 ] || die "compile takes no options"
-        bin="$(esphome_bin)" || exit 1; substitutions
+        parse_args 0 "$@"; bin="$(esphome_bin)" || exit 1; substitutions
         exec "$bin" "${SUBS[@]}" compile "$CONFIG"
         ;;
     flash)
-        device_args "$@"; bin="$(esphome_bin)" || exit 1; substitutions
+        parse_args 1 "$@"; bin="$(esphome_bin)" || exit 1; substitutions
         exec "$bin" "${SUBS[@]}" run --no-logs "$CONFIG" ${DEV_ARGS[@]+"${DEV_ARGS[@]}"}
         ;;
     logs)
-        device_args "$@"; bin="$(esphome_bin)" || exit 1; substitutions
+        parse_args 1 "$@"; bin="$(esphome_bin)" || exit 1; substitutions
         exec "$bin" "${SUBS[@]}" logs "$CONFIG" ${DEV_ARGS[@]+"${DEV_ARGS[@]}"}
         ;;
     esphome)
@@ -144,7 +166,7 @@ case "$cmd" in
         exec "$bin" "${SUBS[@]}" "$@"
         ;;
     *)
-        sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//' >&2
+        sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//' >&2
         exit 2
         ;;
 esac

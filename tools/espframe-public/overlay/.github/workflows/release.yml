@@ -1,9 +1,10 @@
 # Builds a release on every push to main (and on demand): runs the Build checks,
-# compiles the firmware with this repo's own GitHub Pages manifest baked in,
-# builds the 10" stand's print files, attaches both to a GitHub release, then
-# publishes the update manifest and a browser install page to this repo's
-# GitHub Pages. Frames installed from that page check that manifest, so they
-# only ever install this repo's releases.
+# compiles both 10" firmware builds (pre-v3 and v3 ESP32-P4 chips) with this
+# repo's own GitHub Pages manifests baked in,
+# builds the 10" stand's print files, attaches them to a GitHub release, then
+# publishes the update manifests (one per build) and a browser install page to
+# this repo's GitHub Pages. Frames installed from that page check their build's
+# manifest, so they only ever install this repo's releases.
 #
 # Needs Settings -> Pages -> Build and deployment -> Source: "GitHub Actions".
 # Without it the first job stops with a message saying so; nothing is released.
@@ -96,7 +97,11 @@ jobs:
     runs-on: ubuntu-latest
     env:
       RELEASE_VERSION: ${{ needs.preflight.outputs.version }}
-      FIRMWARE_MANIFEST_URL: ${{ needs.preflight.outputs.pages_url }}/manifest.json
+      # One manifest per build (both are ESP32-P4, and OTA takes the first
+      # chipFamily match). Keep in step with BUILDS in scripts/release/make_pages.py.
+      # The pre-v3 build keeps manifest.json, which older frames already poll.
+      PRE_V3_MANIFEST: ${{ needs.preflight.outputs.pages_url }}/manifest.json
+      V3_MANIFEST: ${{ needs.preflight.outputs.pages_url }}/manifest-guition-esp32-p4-jc8012p4a1-v3.json
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: py
@@ -115,8 +120,16 @@ jobs:
             ~/.platformio
             builds/.esphome/.espressif
           key: esphome-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}
-      - name: Compile
-        run: scripts/firmware.sh compile
+      # Each build's sibling is the other's manifest: a frame whose saved URL
+      # names it (e.g. from a backup of the other board) is moved onto its own.
+      - name: Compile (pre-v3 chip)
+        run: >
+          FIRMWARE_MANIFEST_URL="$PRE_V3_MANIFEST" SIBLING_FIRMWARE_MANIFEST_URL="$V3_MANIFEST"
+          scripts/firmware.sh compile --chip pre-v3
+      - name: Compile (v3 chip)
+        run: >
+          FIRMWARE_MANIFEST_URL="$V3_MANIFEST" SIBLING_FIRMWARE_MANIFEST_URL="$PRE_V3_MANIFEST"
+          scripts/firmware.sh compile --chip v3
       - name: Package
         run: >
           python3 scripts/release/make_pages.py --version "$RELEASE_VERSION"

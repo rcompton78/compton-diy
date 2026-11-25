@@ -1,5 +1,6 @@
-# Checks, compiles the 10" firmware and builds the stand's print files on every
-# pull request. release.yml also calls it, so main is checked before each release.
+# Checks, compiles both 10" firmware builds (pre-v3 and v3 chips) and builds
+# the stand's print files on every pull request. release.yml also calls it, so
+# main is checked before each release.
 # GitHub-hosted runners only; nothing here needs a secret.
 name: Build
 
@@ -44,6 +45,11 @@ jobs:
   firmware:
     if: ${{ !inputs.checks_only }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        chip: [pre-v3, v3]
+    name: firmware (${{ matrix.chip }} chip)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - id: py
@@ -63,7 +69,7 @@ jobs:
             builds/.esphome/.espressif
           key: esphome-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}
       - name: Compile
-        run: scripts/firmware.sh compile
+        run: scripts/firmware.sh compile --chip ${{ matrix.chip }}
 
   stand:
     if: ${{ !inputs.checks_only }}
