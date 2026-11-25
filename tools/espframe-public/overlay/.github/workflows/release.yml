@@ -120,6 +120,8 @@ jobs:
             ~/.platformio
             builds/.esphome/.espressif
           key: esphome-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}
+          # build.yml saves per chip (-pre-v3, -v3); either warms this one.
+          restore-keys: esphome-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}-
       # Each build's sibling is the other's manifest: a frame whose saved URL
       # names it (e.g. from a backup of the other board) is moved onto its own.
       - name: Compile (pre-v3 chip)

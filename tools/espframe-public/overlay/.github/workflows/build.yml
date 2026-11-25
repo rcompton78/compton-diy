@@ -67,8 +67,10 @@ jobs:
           path: |
             ~/.platformio
             builds/.esphome/.espressif
-          # Per chip, so the two matrix legs don't race to save one key.
+          # Per chip, so the two matrix legs don't race to save one key. The
+          # prefix also restores release.yml's cache (same toolchain).
           key: esphome-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}-${{ matrix.chip }}
+          restore-keys: esphome-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}
       - name: Compile
         run: scripts/firmware.sh compile --chip ${{ matrix.chip }}
 

@@ -33,7 +33,8 @@
 #                          manifest URL names it is moved onto its own at boot.
 #                          Unset, it's derived from FIRMWARE_MANIFEST_URL when
 #                          that names this chip's manifest (the other chip's
-#                          manifest in the same folder).
+#                          manifest in the same folder). Set without
+#                          FIRMWARE_MANIFEST_URL, it's refused.
 #   CHIP                   default --chip (pre-v3 or v3).
 #   DEVICE                 default --device for flash/logs.
 set -euo pipefail
@@ -122,16 +123,19 @@ V3_MANIFEST=manifest-guition-esp32-p4-jc8012p4a1-v3.json
 # names the other chip's manifest is refused, and one naming this chip's
 # manifest gives the sibling URL when that isn't set.
 substitutions() {
-    local url="${FIRMWARE_MANIFEST_URL:-}" sibling="${SIBLING_FIRMWARE_MANIFEST_URL:-}" own other
+    local url="${FIRMWARE_MANIFEST_URL:-}" sibling="${SIBLING_FIRMWARE_MANIFEST_URL:-}" own other path
     SUBS=(-s firmware_version "${RELEASE_VERSION:-dev}")
     if [ -n "$url" ] && [ -n "${CHIP_SEL:-}" ]; then
         if [ "$CHIP_SEL" = v3 ]; then own="$V3_MANIFEST" other="$PRE_V3_MANIFEST"; else own="$PRE_V3_MANIFEST" other="$V3_MANIFEST"; fi
-        # Compare without a trailing slash, but bake in a custom URL as given.
-        case "${url%/}" in
+        # Compare the path (no query, fragment or trailing slash), but bake in
+        # a custom URL as given.
+        path="${url%%[?#]*}"
+        path="${path%/}"
+        case "$path" in
             */"$other") die "FIRMWARE_MANIFEST_URL names the other chip build's manifest ($other), whose image can't boot a $CHIP_SEL chip; for --chip $CHIP_SEL use .../$own" ;;
             */"$own")
-                url="${url%/}"
-                [ -n "$sibling" ] || sibling="${url%/*}/$other"
+                [ "$url" != "$path/" ] || url="$path"
+                [ -n "$sibling" ] || sibling="${path%/*}/$other"
                 ;;
         esac
     fi
@@ -139,6 +143,9 @@ substitutions() {
         SUBS+=(-s firmware_manifest_url "$url")
     fi
     if [ -n "$sibling" ]; then
+        # The frame would move a saved sibling URL onto its own, an empty one here,
+        # which turns update checks off.
+        [ -n "$url" ] || die "SIBLING_FIRMWARE_MANIFEST_URL needs FIRMWARE_MANIFEST_URL: without it, a frame with the sibling saved would be moved onto no manifest (update checks off)"
         SUBS+=(-s sibling_firmware_manifest_url "$sibling")
     fi
 }
