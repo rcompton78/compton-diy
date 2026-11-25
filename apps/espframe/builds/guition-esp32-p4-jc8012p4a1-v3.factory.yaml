@@ -1,0 +1,64 @@
+# =============================================================================
+# FACTORY FIRMWARE - Guition ESP32-P4 JC8012P4A1, ESP32-P4 v3.1+ chip
+# =============================================================================
+# Secrets-free config for the ESPHome web installer. Boots into AP mode
+# for WiFi setup via captive portal.
+#
+# The same frame as guition-esp32-p4-jc8012p4a1.factory.yaml, built for boards
+# with a v3.1 or later ESP32-P4 (late-2026 boards onwards; the boot log says
+# "chip revision: v3.2", for example). IDF's default minimum here is v3.1, so a
+# v3.0 chip boots neither build. ESP-IDF can't build one image for both revisions:
+# the pre-v3 build boot-loops on a v3 chip, and this one won't boot on pre-v3.
+# It also drives the newer "V2" LCD panel those boards ship with (COM-690).
+#
+# Compiled by CI (see .github/workflows/release.yml).
+# =============================================================================
+
+substitutions:
+  name: "immich-frame-10inch-v3"
+  friendly_name: "Immich Frame 10inch"
+  firmware_version: "dev"
+  # Its own manifest: the pre-v3 build shares the ESP32-P4 chip family, and
+  # OTA takes the first chipFamily match (COM-427).
+  firmware_manifest_url: "https://rcompton78.github.io/compton-diy/espframe/manifest-guition-esp32-p4-jc8012p4a1-v3.json"
+  # A pre-v3 frame's backup restored onto this board carries the pre-v3
+  # manifest, whose image can't boot a v3 chip; on_boot moves it onto ours.
+  sibling_firmware_manifest_url: "https://rcompton78.github.io/compton-diy/espframe/manifest-guition-esp32-p4-jc8012p4a1.json"
+
+packages:
+  espframe: !include ../devices/guition-esp32-p4-jc8012p4a1/packages.yaml
+
+external_components:
+  - source:
+      type: local
+      path: ../components
+    # mipi_dsi overrides ESPHome's own copy for this build only: it fixes the
+    # DSI PLL-reference abort on v3 silicon and adds the V2 panel's init table
+    # (see components/mipi_dsi/README.md).
+    components: [gsl3680, remote_image, espframe, mipi_dsi]
+
+# Target v3.1+ silicon (the device config sets true, for pre-v3 chips).
+esp32:
+  engineering_sample: false
+
+display:
+  - id: !extend tft_display
+    model: JC8012P4A1-V2
+    # Guition's timings for this panel on a v3 chip (P4V3X demo, jd9365_lcd.cpp).
+    # The upstream model's 1500Mbps and vsync front porch 20 leave faint bands
+    # across every row of bright text; front porch 30 at 1000Mbps is clean.
+    pclk_frequency: 70MHz
+    lane_bit_rate: 1000Mbps
+    hsync_pulse_width: 20
+    hsync_back_porch: 20
+    hsync_front_porch: 40
+    vsync_pulse_width: 4
+    vsync_back_porch: 10
+    vsync_front_porch: 30
+
+web_server:
+  port: 80
+  version: 3
+  js_url: ""
+  css_include: "../docs/public/webserver/style.css"
+  js_include: "../docs/public/webserver/app.js"

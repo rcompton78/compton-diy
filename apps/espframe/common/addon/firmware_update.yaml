@@ -11,7 +11,8 @@
 # firmware_version: default for local builds; overridden by main config
 # (e.g. factory.yaml) or by -s firmware_version when building releases.
 #
-# firmware_manifest_url: each device's packages.yaml sets its own. The URL
+# firmware_manifest_url: each device's packages.yaml sets its own, unless a
+# build entry point overrides it (the Guition v3 build does). The URL
 # actually polled (firmware_source_url, set by firmware_refresh_source) is the
 # saved Manifest URL setting if it's a valid URL, else this build default. An
 # empty result (a build with no default and nothing saved, e.g. a fork's local
@@ -30,6 +31,12 @@ substitutions:
   # defaults to its own manifest-<device>.json instead. A saved URL survives
   # reflashes, so on_boot below moves a device off this one.
   legacy_firmware_manifest_url: "https://rcompton78.github.io/compton-diy/espframe/manifest.json"
+  # Another build's manifest for the same chip family that a saved URL could
+  # still name, e.g. from a backup of a pre-v3 10" frame restored onto a v3
+  # board (COM-690). Its image can't boot this chip, so every update would fail;
+  # set_action saves firmware_manifest_url in its place, and on_boot moves an
+  # already-saved one. Empty: never.
+  sibling_firmware_manifest_url: ""
 
 esphome:
   project:
@@ -55,6 +62,13 @@ esphome:
               id(firmware_manifest_url_text).make_call().set_value(default_url).perform();
               global_preferences->sync();
               ESP_LOGI("firmware", "Migrated firmware manifest URL from the shared manifest to %s", default_url.c_str());
+            }
+            const std::string sibling_url = "${sibling_firmware_manifest_url}";
+            if (!sibling_url.empty() && default_url != sibling_url &&
+                strip_trailing_slashes(id(firmware_manifest_url_text).state) == sibling_url) {
+              id(firmware_manifest_url_text).make_call().set_value(default_url).perform();
+              global_preferences->sync();
+              ESP_LOGI("firmware", "Migrated firmware manifest URL from another chip revision's manifest to %s", default_url.c_str());
             }
             id(firmware_refresh_source).execute();
         - component.update: firmware_version_sensor
@@ -257,6 +271,10 @@ text:
       - lambda: |-
           std::string url = strip_trailing_slashes(x);
           if (url.empty()) url = "${firmware_manifest_url}";
+          // Another chip revision's manifest (e.g. from a restored backup) can
+          // never install here; keep this build's own instead.
+          const std::string sibling_url = "${sibling_firmware_manifest_url}";
+          if (!sibling_url.empty() && url == sibling_url) url = "${firmware_manifest_url}";
           if (!url.empty() && !is_valid_http_url(url)) {
             ESP_LOGW("firmware", "Firmware manifest URL must be a valid http(s)://host[:port]/path URL");
             return;
