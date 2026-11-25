@@ -266,6 +266,15 @@ DROP_SECTIONS: list[tuple[str, str, str]] = [
         "::: info Browser\n",
     ),
 ]
+# Text to remove wherever it appears, with how many times it must occur in each
+# file (a doc can repeat it, which PATCHES' exactly-once rule can't express).
+V3_HOTSPOT_NOTE = " (**immich-frame-10inch-v3** on the v3 chip build)"
+STRIP_ALL: list[tuple[str, str, int]] = [
+    # The v3-chip Guition build isn't exported yet (COM-691).
+    ("docs/install.md", V3_HOTSPOT_NOTE, 1),
+    ("docs/usb-flashing.md", V3_HOTSPOT_NOTE, 1),
+    ("docs/troubleshooting.md", V3_HOTSPOT_NOTE, 2),
+]
 FIRMWARE_UPDATE_INTRO = """OTA and HTTP updates from GitHub. A frame flashed from a fork's install page checks that fork's own manifest, `https://<owner>.github.io/<repo>/manifest.json`, which the fork's release workflow publishes to GitHub Pages. Releases from anyone else's fork, including the one you forked from, never reach it. A local build has no manifest URL, so it never checks for updates unless you set one (the README's `FIRMWARE_MANIFEST_URL`, or **Stable Manifest URL** below). Controls: device web UI at `http://<device-ip>/` under **Firmware** (and in Home Assistant).
 
 """
@@ -429,6 +438,13 @@ def apply_patches(dest: Path) -> None:
         if count != 1:
             die(f"patch for {rel} matched {count} times (expected 1): {old[:80]!r}")
         path.write_text(text.replace(old, new), encoding="utf-8")
+    for rel, old, count in STRIP_ALL:
+        path = dest / rel
+        text = path.read_text(encoding="utf-8")
+        found = text.count(old)
+        if found != count:
+            die(f"strip for {rel} matched {found} times (expected {count}): {old[:80]!r}")
+        path.write_text(text.replace(old, ""), encoding="utf-8")
     for rel, start, end in DROP_SECTIONS:
         path = dest / rel
         text = path.read_text(encoding="utf-8")
