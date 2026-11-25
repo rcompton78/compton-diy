@@ -244,6 +244,16 @@ PATCHES: list[tuple[str, str, str]] = [
     ),
     (
         "docs/install.md",
+        "Connect the display via USB-C, then click the install button below.",
+        "Connect the display via USB-C.",
+    ),
+    (
+        "docs/install.md",
+        "Click **Install Espframe for Immich**, choose",
+        "Click the **Install** button for your board's chip, choose",
+    ),
+    (
+        "docs/install.md",
         "The button above installs only the original build. The installer at `https://rcompton78.github.io/compton-diy/espframe/` has two 10\" buttons, because",
         "The install page has two buttons, because",
     ),
@@ -286,7 +296,7 @@ DROP_SECTIONS: list[tuple[str, str, str]] = [
     ),
 
 ]
-FIRMWARE_UPDATE_INTRO = """OTA and HTTP updates from GitHub. A frame flashed from a fork's install page checks that fork's own manifest, which the fork's release workflow publishes to GitHub Pages: `https://<owner>.github.io/<repo>/manifest.json` for the original 10" build, and `https://<owner>.github.io/<repo>/manifest-guition-esp32-p4-jc8012p4a1-v3.json` for the v3 chip build. Each lists a single build: both are ESP32-P4, ESPHome installs the first build whose chip family matches, and neither build boots on the other's chip. A frame whose saved manifest URL names the other build's manifest (from a restored backup, say) is moved back onto its own at boot. Releases from anyone else's fork, including the one you forked from, never reach it. A local build has no manifest URL, so it never checks for updates unless you set one (the README's `FIRMWARE_MANIFEST_URL`, or **Stable Manifest URL** below). Controls: device web UI at `http://<device-ip>/` under **Firmware** (and in Home Assistant).
+FIRMWARE_UPDATE_INTRO = """OTA and HTTP updates from GitHub. A frame flashed from a fork's install page checks that fork's own manifest, which the fork's release workflow publishes to GitHub Pages: `https://<owner>.github.io/<repo>/manifest.json` for the original 10" build, and `https://<owner>.github.io/<repo>/manifest-guition-esp32-p4-jc8012p4a1-v3.json` for the v3 chip build. Each lists a single build: both are ESP32-P4, ESPHome installs the first build whose chip family matches, and neither build boots on the other's chip. A frame from the install page whose saved manifest URL names the other build's manifest (from a restored backup, say) is moved back onto its own at boot, as is a local build given one of the fork's manifest URLs. Releases from anyone else's fork, including the one you forked from, never reach it. A local build has no manifest URL, so it never checks for updates unless you set one (the README's `FIRMWARE_MANIFEST_URL`, or **Stable Manifest URL** below). Controls: device web UI at `http://<device-ip>/` under **Firmware** (and in Home Assistant).
 
 """
 

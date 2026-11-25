@@ -20,14 +20,20 @@
 #   FIRMWARE_MANIFEST_URL  manifest the build checks for updates. Unset, it has
 #                          none (a manifest URL the frame already saved, under
 #                          Firmware -> Advanced, still applies). CI sets it to
-#                          the fork's Pages URL.
+#                          the fork's Pages URL. Each chip build has its own
+#                          manifest (manifest.json for pre-v3,
+#                          manifest-guition-esp32-p4-jc8012p4a1-v3.json for v3),
+#                          and a URL naming the other chip's is refused: that
+#                          image can't boot this chip, so every update would fail.
 #   RELEASE_VERSION        version baked into the firmware (default "dev"). A
 #                          "dev" build finds updates but never auto-installs
 #                          them; press Install on the frame's web page.
 #   SIBLING_FIRMWARE_MANIFEST_URL
 #                          the other chip build's manifest. A frame whose saved
 #                          manifest URL names it is moved onto its own at boot.
-#                          CI sets it; leave it unset locally.
+#                          Unset, it's derived from FIRMWARE_MANIFEST_URL when
+#                          that names this chip's manifest (the other chip's
+#                          manifest in the same folder).
 #   CHIP                   default --chip (pre-v3 or v3).
 #   DEVICE                 default --device for flash/logs.
 set -euo pipefail
@@ -106,18 +112,36 @@ esphome_bin() {
     echo "$VENV/bin/esphome"
 }
 
-# -s flags must come before the ESPHome subcommand.
+# Each chip build's manifest file name. Keep in step with BUILDS in
+# scripts/release/make_pages.py and the manifest URLs in .github/workflows/release.yml.
+PRE_V3_MANIFEST=manifest.json
+V3_MANIFEST=manifest-guition-esp32-p4-jc8012p4a1-v3.json
+
+# -s flags must come before the ESPHome subcommand. With a chosen chip (CHIP_SEL,
+# set by parse_args; the esphome passthrough has none), a manifest URL that
+# names the other chip's manifest is refused, and one naming this chip's
+# manifest gives the sibling URL when that isn't set.
 substitutions() {
+    local url="${FIRMWARE_MANIFEST_URL:-}" sibling="${SIBLING_FIRMWARE_MANIFEST_URL:-}" own other
     SUBS=(-s firmware_version "${RELEASE_VERSION:-dev}")
-    if [ -n "${FIRMWARE_MANIFEST_URL:-}" ]; then
-        SUBS+=(-s firmware_manifest_url "$FIRMWARE_MANIFEST_URL")
+    if [ -n "$url" ] && [ -n "${CHIP_SEL:-}" ]; then
+        if [ "$CHIP_SEL" = v3 ]; then own="$V3_MANIFEST" other="$PRE_V3_MANIFEST"; else own="$PRE_V3_MANIFEST" other="$V3_MANIFEST"; fi
+        url="${url%/}"
+        case "$url" in
+            */"$other") die "FIRMWARE_MANIFEST_URL names the other chip build's manifest ($other), whose image can't boot a $CHIP_SEL chip; for --chip $CHIP_SEL use .../$own" ;;
+            */"$own") [ -n "$sibling" ] || sibling="${url%/*}/$other" ;;
+        esac
     fi
-    if [ -n "${SIBLING_FIRMWARE_MANIFEST_URL:-}" ]; then
-        SUBS+=(-s sibling_firmware_manifest_url "$SIBLING_FIRMWARE_MANIFEST_URL")
+    if [ -n "$url" ]; then
+        SUBS+=(-s firmware_manifest_url "$url")
+    fi
+    if [ -n "$sibling" ]; then
+        SUBS+=(-s sibling_firmware_manifest_url "$sibling")
     fi
 }
 
-# Sets CONFIG from --chip (or CHIP) and DEV_ARGS from --device (or DEVICE).
+# Sets CHIP_SEL and CONFIG from --chip (or CHIP), and DEV_ARGS from --device
+# (or DEVICE).
 # allow_device=0 refuses --device (compile).
 parse_args() {
     local allow_device="$1"; shift
@@ -134,6 +158,7 @@ parse_args() {
             *) die "unknown option: $1" ;;
         esac
     done
+    CHIP_SEL="$chip"
     case "$chip" in
         pre-v3) CONFIG="$ROOT/builds/guition-esp32-p4-jc8012p4a1.factory.yaml" ;;
         v3) CONFIG="$ROOT/builds/guition-esp32-p4-jc8012p4a1-v3.factory.yaml" ;;

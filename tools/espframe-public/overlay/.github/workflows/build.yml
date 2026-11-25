@@ -67,7 +67,8 @@ jobs:
           path: |
             ~/.platformio
             builds/.esphome/.espressif
-          key: esphome-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}
+          # Per chip, so the two matrix legs don't race to save one key.
+          key: esphome-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}-${{ matrix.chip }}
       - name: Compile
         run: scripts/firmware.sh compile --chip ${{ matrix.chip }}
 

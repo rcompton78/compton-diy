@@ -67,9 +67,16 @@ A local build reports version `dev` and has **no update manifest**, so it doesn'
 FIRMWARE_MANIFEST_URL=https://<your-user>.github.io/<repo>/manifest.json
 ```
 
-For the v3 chip build, use `https://<your-user>.github.io/<repo>/manifest-guition-esp32-p4-jc8012p4a1-v3.json` instead: each manifest lists one build, and the other build's image can't boot your board.
+That's the original build's manifest. For a v3 chip board use the v3 build's instead, with `CHIP=v3` so every command builds it:
 
-`.env` is gitignored and read as plain `NAME=value` lines. It takes only `FIRMWARE_MANIFEST_URL`, `RELEASE_VERSION`, `CHIP` (the default `--chip`, `pre-v3` or `v3`), `DEVICE` (the default `--device` for `flash` and `logs`) and `SIBLING_FIRMWARE_MANIFEST_URL` (the other build's manifest, which the release workflow sets so a frame that has it saved moves onto its own; leave it out locally); any other name stops the script with an error, so a misspelt setting can't be silently ignored. A `dev` build finds updates but never installs one on its own: press **Install** on the frame's web page, or also set `RELEASE_VERSION=` to a version of your own in `.env` so auto-update works. You can also set or change the URL later on the frame's web page, under **Firmware** → **Advanced**.
+```bash
+CHIP=v3
+FIRMWARE_MANIFEST_URL=https://<your-user>.github.io/<repo>/manifest-guition-esp32-p4-jc8012p4a1-v3.json
+```
+
+Each manifest lists one build, and the other build's image can't boot your board, so `firmware.sh` refuses a URL that names the other chip's manifest.
+
+`.env` is gitignored and read as plain `NAME=value` lines. It takes only `FIRMWARE_MANIFEST_URL`, `RELEASE_VERSION`, `CHIP` (the default `--chip`, `pre-v3` or `v3`), `DEVICE` (the default `--device` for `flash` and `logs`) and `SIBLING_FIRMWARE_MANIFEST_URL` (the other build's manifest: a frame that has it saved, say from a backup of the other board, moves onto its own at boot. You rarely need it: when `FIRMWARE_MANIFEST_URL` names one of your fork's manifests, the script fills in the other); any other name stops the script with an error, so a misspelt setting can't be silently ignored. A `dev` build finds updates but never installs one on its own: press **Install** on the frame's web page, or also set `RELEASE_VERSION=` to a version of your own in `.env` so auto-update works. You can also set or change the URL later on the frame's web page, under **Firmware** → **Advanced**.
 
 ## Set up the frame
 
