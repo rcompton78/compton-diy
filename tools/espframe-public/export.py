@@ -55,10 +55,6 @@ EXCLUDE = [
     "builds/freenove-s3.factory.yaml",
     "builds/waveshare-esp32-s3-touch-lcd-7.yaml",
     "builds/waveshare-esp32-s3-touch-lcd-7.factory.yaml",
-    # The v3-chip Guition build isn't wired into the public repo's single-build
-    # release yet (COM-691). components/mipi_dsi still exports: only that build
-    # loads it, and product/source-ownership.json lists it.
-    "builds/guition-esp32-p4-jc8012p4a1-v3.factory.yaml",
     "hardware/stand/",
     "hardware/stand-10/project.json",
     "project.json",
@@ -244,7 +240,45 @@ PATCHES: list[tuple[str, str, str]] = [
     (
         "docs/install.md",
         "<EspInstallButton />",
-        "Open your fork's install page, `https://<owner>.github.io/<repo>/` (see the README), and click **Install** there.",
+        "Open your fork's install page, `https://<owner>.github.io/<repo>/` (see the README), and click the **Install** button for your board there.",
+    ),
+    (
+        "docs/install.md",
+        "Connect the display via USB-C, then click the install button below.",
+        "Connect the display via USB-C.",
+    ),
+    (
+        "docs/install.md",
+        "Click **Install Espframe for Immich**, choose",
+        "Click the **Install** button for your board's chip, choose",
+    ),
+    (
+        "docs/install.md",
+        "The button above installs only the original build. The installer at `https://rcompton78.github.io/compton-diy/espframe/` has two 10\" buttons, because",
+        "The install page has two buttons, because",
+    ),
+    # The v3-chip build (COM-690, exported since COM-691). Its compton-diy
+    # manifest URLs go; scripts/firmware.sh sets the fork's own with -s.
+    (
+        "builds/guition-esp32-p4-jc8012p4a1-v3.factory.yaml",
+        "# Compiled by CI (see .github/workflows/release.yml).\n",
+        "# Built by scripts/firmware.sh --chip v3, locally and in .github/workflows/*.yml.\n",
+    ),
+    (
+        "builds/guition-esp32-p4-jc8012p4a1-v3.factory.yaml",
+        '  # Its own manifest: the pre-v3 build shares the ESP32-P4 chip family, and\n'
+        '  # OTA takes the first chipFamily match (COM-427).\n'
+        '  firmware_manifest_url: "https://rcompton78.github.io/compton-diy/espframe/manifest-guition-esp32-p4-jc8012p4a1-v3.json"\n'
+        '  # A pre-v3 frame\'s backup restored onto this board carries the pre-v3\n'
+        '  # manifest, whose image can\'t boot a v3 chip; on_boot moves it onto ours.\n'
+        '  sibling_firmware_manifest_url: "https://rcompton78.github.io/compton-diy/espframe/manifest-guition-esp32-p4-jc8012p4a1.json"\n',
+        '  # Both empty here, like every local build. The release workflow sets this\n'
+        '  # build\'s own manifest (the pre-v3 build shares the ESP32-P4 chip family,\n'
+        '  # and OTA takes the first chipFamily match) and, as the sibling, the pre-v3\n'
+        '  # manifest, which a pre-v3 frame\'s backup restored onto this board carries\n'
+        '  # and whose image can\'t boot a v3 chip; on_boot moves it onto ours.\n'
+        '  firmware_manifest_url: ""\n'
+        '  sibling_firmware_manifest_url: ""\n',
     ),
 ]
 
@@ -258,24 +292,11 @@ DROP_SECTIONS: list[tuple[str, str, str]] = [
     (
         "docs/troubleshooting.md",
         "## Wrong Firmware After an Update\n",
-        "## WiFi Setup Problems\n",
+        "## 10\" Screen Stays Black or Keeps Rebooting\n",
     ),
-    (
-        "docs/install.md",
-        "::: warning Two builds for the 10\" Guition\n",
-        "::: info Browser\n",
-    ),
+
 ]
-# Text to remove wherever it appears, with how many times it must occur in each
-# file (a doc can repeat it, which PATCHES' exactly-once rule can't express).
-V3_HOTSPOT_NOTE = " (**immich-frame-10inch-v3** on the v3 chip build)"
-STRIP_ALL: list[tuple[str, str, int]] = [
-    # The v3-chip Guition build isn't exported yet (COM-691).
-    ("docs/install.md", V3_HOTSPOT_NOTE, 1),
-    ("docs/usb-flashing.md", V3_HOTSPOT_NOTE, 1),
-    ("docs/troubleshooting.md", V3_HOTSPOT_NOTE, 2),
-]
-FIRMWARE_UPDATE_INTRO = """OTA and HTTP updates from GitHub. A frame flashed from a fork's install page checks that fork's own manifest, `https://<owner>.github.io/<repo>/manifest.json`, which the fork's release workflow publishes to GitHub Pages. Releases from anyone else's fork, including the one you forked from, never reach it. A local build has no manifest URL, so it never checks for updates unless you set one (the README's `FIRMWARE_MANIFEST_URL`, or **Stable Manifest URL** below). Controls: device web UI at `http://<device-ip>/` under **Firmware** (and in Home Assistant).
+FIRMWARE_UPDATE_INTRO = """OTA and HTTP updates from GitHub. A frame flashed from a fork's install page checks that fork's own manifest, which the fork's release workflow publishes to GitHub Pages: `https://<owner>.github.io/<repo>/manifest.json` for the original 10" build, and `https://<owner>.github.io/<repo>/manifest-guition-esp32-p4-jc8012p4a1-v3.json` for the v3 chip build. Each lists a single build: both are ESP32-P4, ESPHome installs the first build whose chip family matches, and neither build boots on the other's chip. A frame from the install page whose saved manifest URL names the other build's manifest (from a restored backup, say) is moved back onto its own at boot, as is a local build given one of the fork's manifest URLs. Releases from anyone else's fork, including the one you forked from, never reach it. A local build has no manifest URL, so it never checks for updates unless you set one (the README's `FIRMWARE_MANIFEST_URL`, or **Stable Manifest URL** below). Controls: device web UI at `http://<device-ip>/` under **Firmware** (and in Home Assistant).
 
 """
 
@@ -438,13 +459,6 @@ def apply_patches(dest: Path) -> None:
         if count != 1:
             die(f"patch for {rel} matched {count} times (expected 1): {old[:80]!r}")
         path.write_text(text.replace(old, new), encoding="utf-8")
-    for rel, old, count in STRIP_ALL:
-        path = dest / rel
-        text = path.read_text(encoding="utf-8")
-        found = text.count(old)
-        if found != count:
-            die(f"strip for {rel} matched {found} times (expected {count}): {old[:80]!r}")
-        path.write_text(text.replace(old, ""), encoding="utf-8")
     for rel, start, end in DROP_SECTIONS:
         path = dest / rel
         text = path.read_text(encoding="utf-8")

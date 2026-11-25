@@ -16,12 +16,13 @@
     main { max-width: 640px; margin: 0 auto; padding: 40px 16px 64px; }
     .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; }
     h1 { font-size: 1.5rem; margin: 0 0 4px; }
+    h2 { font-size: 1.1rem; margin: 24px 0 4px; }
     .version { color: var(--muted); margin: 0 0 20px; }
     ol { padding-left: 1.2rem; }
     li { margin-bottom: 8px; }
     a { color: var(--accent); }
     .note { color: var(--muted); font-size: 0.9rem; margin-top: 20px; }
-    esp-web-install-button { display: block; margin: 20px 0; }
+    esp-web-install-button { display: block; margin: 16px 0; }
   </style>
 </head>
 <body>
@@ -32,16 +33,15 @@
     <ol>
       <li>Use Chrome or Edge on a desktop computer.</li>
       <li>Plug a USB-C <strong>data</strong> cable into the frame's bottom USB-C port (labelled USB).</li>
-      <li>Click <strong>Install</strong>, pick the frame's serial port and confirm. It takes a few minutes.</li>
-      <li>When it's done, the frame starts a Wi-Fi hotspot called <strong>immich-frame-10inch</strong>. Join it from a phone and pick your Wi-Fi network.</li>
+      <li>Click the <strong>Install</strong> button for your board (see below), pick the frame's serial port and confirm. It takes a few minutes.</li>
+      <li>When it's done, the frame starts a Wi-Fi hotspot called <strong>immich-frame-10inch</strong> (<strong>immich-frame-10inch-v3</strong> with the v3 chip build). Join it from a phone and pick your Wi-Fi network.</li>
       <li>Open the IP address shown on the frame in a browser and enter your Immich server URL and API key.</li>
     </ol>
-    <esp-web-install-button manifest="manifest.json">
-      <button slot="activate">Install</button>
-      <span slot="unsupported">Your browser can't flash over USB. Use Chrome or Edge on a desktop computer.</span>
-      <span slot="not-allowed">Flashing needs a secure (https) page.</span>
-    </esp-web-install-button>
-    <p class="note">A frame installed from this page (with its settings erased when asked) checks this site's manifest.json for updates, so it only installs releases from this repository.</p>
+    <h2>Which button?</h2>
+    <p>The board ships with two revisions of its ESP32-P4 chip, and one firmware can't run on both. Boards bought from late 2026 onwards have a v3.1 or later chip: pick the <strong>v3 chip</strong> button if you're not sure and your board is new. Earlier boards take the other one.</p>
+    <p>If the screen stays black or the board keeps rebooting after installing one, install the other. Nothing is lost by trying the wrong one first. A v3.0 chip isn't supported by either build.</p>
+{{INSTALL_BUTTONS}}
+    <p class="note">A frame installed from this page (with its settings erased when asked) checks this site's manifest for its build for updates, so it only installs releases from this repository, and only the build for its chip.</p>
     <p class="note">Espframe is by <a href="https://github.com/jtenniswood/espframe">jtenniswood</a> and contributors, licensed under the <a href="https://polyformproject.org/licenses/noncommercial/1.0.0/">PolyForm Noncommercial License 1.0.0</a>. Required Notice: Copyright 2025-2026 Espframe contributors.</p>
   </div>
 </main>
