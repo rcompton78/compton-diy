@@ -1,12 +1,13 @@
 # =============================================================================
-# FACTORY FIRMWARE - Guition ESP32-P4 JC8012P4A1, ESP32-P4 v3.x chip
+# FACTORY FIRMWARE - Guition ESP32-P4 JC8012P4A1, ESP32-P4 v3.1+ chip
 # =============================================================================
 # Secrets-free config for the ESPHome web installer. Boots into AP mode
 # for WiFi setup via captive portal.
 #
 # The same frame as guition-esp32-p4-jc8012p4a1.factory.yaml, built for boards
-# with a v3.x ESP32-P4 (late-2026 boards onwards; the boot log says
-# "chip revision: v3.x"). ESP-IDF can't build one image for both revisions:
+# with a v3.1 or later ESP32-P4 (late-2026 boards onwards; the boot log says
+# "chip revision: v3.2", for example). IDF's default minimum here is v3.1, so a
+# v3.0 chip boots neither build. ESP-IDF can't build one image for both revisions:
 # the pre-v3 build boot-loops on a v3 chip, and this one won't boot on pre-v3.
 # It also drives the newer "V2" LCD panel those boards ship with (COM-690).
 #
@@ -20,6 +21,9 @@ substitutions:
   # Its own manifest: the pre-v3 build shares the ESP32-P4 chip family, and
   # OTA takes the first chipFamily match (COM-427).
   firmware_manifest_url: "https://rcompton78.github.io/compton-diy/espframe/manifest-guition-esp32-p4-jc8012p4a1-v3.json"
+  # A pre-v3 frame's backup restored onto this board carries the pre-v3
+  # manifest, whose image can't boot a v3 chip; on_boot moves it onto ours.
+  sibling_firmware_manifest_url: "https://rcompton78.github.io/compton-diy/espframe/manifest-guition-esp32-p4-jc8012p4a1.json"
 
 packages:
   espframe: !include ../devices/guition-esp32-p4-jc8012p4a1/packages.yaml
@@ -33,7 +37,7 @@ external_components:
     # (see components/mipi_dsi/README.md).
     components: [gsl3680, remote_image, espframe, mipi_dsi]
 
-# Target v3.x silicon (the device config sets true, for pre-v3 chips).
+# Target v3.1+ silicon (the device config sets true, for pre-v3 chips).
 esp32:
   engineering_sample: false
 

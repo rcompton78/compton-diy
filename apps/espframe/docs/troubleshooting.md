@@ -40,17 +40,17 @@ After recovering, the frame checks its own manifest. If it was flashed with firm
 
 ## 10" Screen Stays Black or Keeps Rebooting
 
-Guition 10" boards from late 2026 onwards have a v3.x ESP32-P4 chip and a newer LCD panel. The original 10" firmware can't start on that chip: the screen stays black and the board resets over and over. Install the **JC8012P4A1 v3 chip (10 inch)** firmware instead (see [Install](/install#web-installer)). It works the other way round too: the v3 build won't boot an older board.
+Guition 10" boards from late 2026 onwards have a v3.1 or later ESP32-P4 chip and a newer LCD panel. The original 10" firmware can't start on that chip: the screen stays black and the board resets over and over. Install the **JC8012P4A1 v3 chip (10 inch)** firmware instead (see [Install](/install#web-installer)). It works the other way round too: the v3 build won't boot an older board.
 
 ## WiFi Setup Problems
 
-After flashing, Espframe should either ask for WiFi details or create a setup hotspot named **immich-frame-10inch**.
+After flashing, Espframe should either ask for WiFi details or create a setup hotspot named **immich-frame-10inch** (**immich-frame-10inch-v3** on the v3 chip build).
 
 If you do not see the frame on your network:
 
 - Check that the WiFi name and password were entered correctly.
 - Make sure the frame is close enough to the access point.
-- Look again for the **immich-frame-10inch** hotspot from a phone or laptop.
+- Look again for the **immich-frame-10inch** hotspot (**immich-frame-10inch-v3** on the v3 chip build) from a phone or laptop.
 - Reboot the frame and wait for the setup screen to appear.
 
 ## Immich Connection Problems

@@ -34,12 +34,12 @@ Connect the display via USB-C, then click the install button below. Check the mo
 <EspInstallButton />
 
 ::: warning Two builds for the 10" Guition
-The installer at `https://rcompton78.github.io/compton-diy/espframe/` has two 10" buttons, because the board ships with two revisions of its ESP32-P4 chip and one firmware can't run on both:
+The button above installs only the original build. The installer at `https://rcompton78.github.io/compton-diy/espframe/` has two 10" buttons, because the board ships with two revisions of its ESP32-P4 chip and one firmware can't run on both:
 
-- **Guition ESP32-P4 JC8012P4A1 v3 chip (10 inch):** boards bought from late 2026 onwards, which have a v3.x chip. Pick this one if you're not sure and your board is new.
+- **Guition ESP32-P4 JC8012P4A1 v3 chip (10 inch):** boards bought from late 2026 onwards, which have a v3.1 or later chip. Pick this one if you're not sure and your board is new.
 - **Guition ESP32-P4 JC8012P4A1 (10 inch):** earlier boards.
 
-If the screen stays black or the board keeps rebooting after installing one, install the other. Nothing is lost by trying the wrong one first. To check beforehand: `esptool` prints `ESP32-P4 (revision v3.x)` when it connects, and a serial monitor at 115200 baud shows `boot: chip revision: v3.x` when the board resets. v3.x takes the v3 build; anything lower takes the other one. The v3 build also drives the newer LCD panel those boards ship with, and its frame shows up on the network as `immich-frame-10inch-v3`.
+If the screen stays black or the board keeps rebooting after installing one, install the other. Nothing is lost by trying the wrong one first. To check beforehand: `esptool` prints `ESP32-P4 (revision v3.2)` (for example) when it connects, and a serial monitor at 115200 baud shows `boot: chip revision: v3.2` when the board resets. v3.1 or later takes the v3 build, and v1.x takes the other one. A v3.0 chip isn't supported by either build. The v3 build also drives the newer LCD panel those boards ship with, and its frame shows up on the network as `immich-frame-10inch-v3`.
 :::
 
 ::: info Browser
@@ -50,7 +50,7 @@ Requires **Chrome** or **Edge** on a desktop computer with [Web Serial](https://
 
 1. **Connect** — Plug in with USB-C; allow drivers if prompted.
 2. **Flash** — Click **Install Espframe for Immich**, choose the device’s serial port, confirm. Takes a few minutes.
-3. **WiFi** — Enter network name and password when prompted. If no prompt appears, the device creates a hotspot named **immich-frame-10inch**; connect from phone/laptop for captive portal setup.
+3. **WiFi** — Enter network name and password when prompted. If no prompt appears, the device creates a hotspot named **immich-frame-10inch** (**immich-frame-10inch-v3** on the v3 chip build); connect from phone/laptop for captive portal setup.
 4. **Immich** — Open the device IP in a browser (shown on screen), enter **Immich Server URL** and **API Key**. The URL can be an IP address such as `http://192.168.1.30:2283` or a domain such as `https://photos.example.com`. See [API Key](/api-key) for permissions. Photos start loading. Next: [Photo Sources](/photo-sources) to choose what to display.
 
 The setup wizard defaults to **24 Hour** clock format, **Europe/London (GMT+0)** timezone, shows the clock by default, and uses **0.pool.ntp.org**, **1.pool.ntp.org**, and **2.pool.ntp.org** for time sync. Pick your timezone during setup so the clock and sunrise/sunset based brightness and night tone are calculated for your location. The on-screen clock refreshes every **60 seconds**.
