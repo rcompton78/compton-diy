@@ -4,7 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{{APP_NAME}} Flasher</title>
-  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+  <!-- Pinned (COM-698): a floating @10 changed the flasher under us. Its chunks load
+       relative to this exact version. Bump the version and hash together, here and in
+       tools/espframe-public/overlay/scripts/release/install-page.html. -->
+  <script type="module" src="https://unpkg.com/esp-web-tools@10.5.2/dist/web/install-button.js"
+          integrity="sha384-dJtpioB8K6UOxkehuzawNzjwLqw86zfDAmOtfyjUBzX2XqmuAL6lzGb3m/gxPB1u" crossorigin="anonymous"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body {

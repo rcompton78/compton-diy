@@ -65,7 +65,7 @@ onMounted(async () => {
   await loadManifestVersion()
   if (!supported.value) return
   try {
-    await import('https://unpkg.com/esp-web-tools@10.2.1/dist/web/install-button.js')
+    await import('https://unpkg.com/esp-web-tools@10.5.2/dist/web/install-button.js')
   } catch (err) {
     loadError.value = err?.message || 'Network or script load error.'
   }
