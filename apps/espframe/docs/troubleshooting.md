@@ -18,6 +18,8 @@ If the browser installer cannot find the display, first check the basics:
 
 See [USB Flashing Help for Guition ESP32-P4](/usb-flashing) for more detail.
 
+If the installer stops with **Failed to initialize** or `Failed to open serial port`, see [If the Installer Says "Failed to Initialize"](/usb-flashing#if-the-installer-says-failed-to-initialize), which also covers flashing with esptool instead.
+
 ## Wrong Firmware After an Update
 
 Before per-device update manifests, a Waveshare ESP32-S3-Touch-LCD-7 could auto-update to the Freenove ESP32-S3 firmware, because both boards are ESP32-S3 and shared one manifest. The 7" then shows a black screen (the backlight stays off) and appears on the network as **Immich Frame Freenove S3** / `immich-frame-freenove-s3`.
