@@ -56,9 +56,17 @@ function loadBackupImportValidation() {
   const staticEntities = generatedJsonVar("STATIC_ENTITIES");
   const backupSchema = generatedJsonVar("BACKUP_SCHEMA");
   const helperNames = ["productSettingOptions", "staticEntityOptions"];
+  const esbuild = require("esbuild");
   const helpers = helperNames.map((name) => {
+    // Cut from "function name(" to the first closing brace at the template's two-space
+    // function indent, then check the cut is a whole function, so a reformat fails here
+    // with a clear message rather than as a SyntaxError further down.
     const match = template.match(new RegExp(`\\n  function ${name}\\([\\s\\S]*?\\n  }\\n`));
     assert.ok(match, `app.template.ts should define ${name}`);
+    assert.doesNotThrow(
+      () => esbuild.transformSync(match[0], { loader: "ts" }),
+      `app.template.ts's ${name} couldn't be extracted as a whole function (indentation changed?)`,
+    );
     return match[0];
   });
   const endpoints = {};
@@ -71,10 +79,14 @@ function loadBackupImportValidation() {
     endpoints,
   };
   const backupImportSource = fs.readFileSync(path.join(root, "docs/webserver/src/backup_import.ts"), "utf8");
-  // The template helpers carry TypeScript annotations; strip them the same way the web build does.
-  const helperSource = require("esbuild").transformSync(helpers.join("\n"), { loader: "ts", target: "es2018" }).code;
+  // The template helpers and backup_import.ts are both TypeScript sources; transpile them
+  // together, the way the web build does, so TS-only syntax in either is handled.
+  const scriptSource = esbuild.transformSync(`${helpers.join("\n")}\n${backupImportSource}`, {
+    loader: "ts",
+    target: "es2018",
+  }).code;
   vm.runInNewContext(
-    `${helperSource}\n${backupImportSource}\nthis.validate = validateProductSettingBackupImport;\nthis.staticEntityOptions = staticEntityOptions;`,
+    `${scriptSource}\nthis.validate = validateProductSettingBackupImport;\nthis.staticEntityOptions = staticEntityOptions;`,
     context,
   );
   const entryFor = (group, field) => {
