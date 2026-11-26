@@ -78,10 +78,10 @@ fi
 # same folder whatever directory it runs from.
 case "${PLATFORMIO_CORE_DIR:-}" in
     '') PLATFORMIO_CORE_DIR="$ROOT/.platformio-core" ;;
+    *'$'*) die "PLATFORMIO_CORE_DIR (from .env or the environment): .env values aren't expanded; use a full path or ~/ instead of $PLATFORMIO_CORE_DIR" ;;
     '~') PLATFORMIO_CORE_DIR="$HOME" ;;
     '~/'*) PLATFORMIO_CORE_DIR="$HOME/${PLATFORMIO_CORE_DIR#'~/'}" ;;
     '~'*) die "PLATFORMIO_CORE_DIR (from .env or the environment): only a leading ~/ is expanded; use a full path instead of $PLATFORMIO_CORE_DIR" ;;
-    *'$'*) die "PLATFORMIO_CORE_DIR (from .env): .env values aren't expanded; use a full path or ~/ instead of $PLATFORMIO_CORE_DIR" ;;
     /*) ;;
     *) PLATFORMIO_CORE_DIR="$ROOT/$PLATFORMIO_CORE_DIR" ;;
 esac
