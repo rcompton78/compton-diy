@@ -43,7 +43,7 @@ Safari and Firefox do not support the required browser flashing flow.
 Install pages built before this fix loaded an older flasher (ESP Web Tools 10.4.0) that gave up when the display sent a little serial noise while it was being identified: it stopped with **Failed to initialize**, and every later try failed with `Failed to open serial port` or "The port is already open" until the tab was closed. The current install page retries past that noise. If you see this error:
 
 - Close the install tab (that frees the port), open the install page again and reload it, then retry.
-- Press **F12** and open **Console**: the first line names the ESP Web Tools version. Anything older than 10.5.2 is a stale page.
+- Press **F12**, open **Console** and click the install button: a line reading `ESP Web Tools <version>` names the flasher. Anything older than 10.5.2 is a stale page.
 
 If it still fails, Windows itself may be refusing the port. To check whether Windows can open the port at all, outside the browser, run this in PowerShell (use the COM number Device Manager shows under **Ports**):
 
@@ -54,7 +54,7 @@ $p.Open(); $p.IsOpen; $p.Close()
 
 If it prints `True`, Windows can use the port: close every Chrome window and try the installer again. If it fails with "Access to the path 'COM6' is denied", no browser installer will get through on that PC. We've seen this on one PC even straight after a reboot, on a fresh driver install and on a different USB port, with no program holding the port, while the same display flashed fine from another PC and from WSL2.
 
-Otherwise, flash with [esptool](https://docs.espressif.com/projects/esptool/en/latest/) from a terminal instead. Download the firmware image for your board from the latest GitHub release or from the install page's folder (the same file the installer uses):
+Otherwise, flash with [esptool](https://docs.espressif.com/projects/esptool/en/latest/) from a terminal instead. Download the full firmware image for your board (the same file the installer uses, not the `-ota.bin` update image) from the install page's folder or the latest GitHub release:
 
 - `espframe-guition-esp32-p4-jc8012p4a1-v3.bin` for a board with a v3 chip (late 2026 onwards; see [Troubleshooting](/troubleshooting)).
 - `espframe-guition-esp32-p4-jc8012p4a1.bin` for an older board.
