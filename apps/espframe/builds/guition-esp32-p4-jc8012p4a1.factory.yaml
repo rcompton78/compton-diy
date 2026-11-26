@@ -4,8 +4,9 @@
 # Secrets-free config for the ESPHome web installer. Boots into AP mode
 # for WiFi setup via captive portal.
 #
-# Compiled by CI (see .github/workflows/release.yml) — not used locally.
-# For local development, see devices/guition-esp32-p4-jc8012p4a1/esphome.yaml.
+# Compiled by CI (see .github/workflows/release.yml).
+# devices/guition-esp32-p4-jc8012p4a1/dev.yaml is a local alternative that
+# takes Wi-Fi from secrets.yaml.
 # =============================================================================
 
 substitutions:

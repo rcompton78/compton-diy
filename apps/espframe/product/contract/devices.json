@@ -219,7 +219,7 @@
     "stand_url": "https://makerworld.com/en/models/2490049-guition-p4-10inch-screen-stand#profileId-2736046",
     "build_yaml": "builds/guition-esp32-p4-jc8012p4a1.factory.yaml",
     "package_yaml": "devices/guition-esp32-p4-jc8012p4a1/packages.yaml",
-    "local_yaml": "devices/guition-esp32-p4-jc8012p4a1/esphome.yaml",
+    "local_yaml": "devices/guition-esp32-p4-jc8012p4a1/dev.yaml",
     "device_yaml": "devices/guition-esp32-p4-jc8012p4a1/device/device.yaml",
     "public_manifest": "firmware/manifest.json",
     "public_beta_manifest": "firmware/beta/manifest.json"

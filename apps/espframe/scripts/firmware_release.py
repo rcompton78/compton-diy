@@ -32,7 +32,7 @@ PLACEHOLDER_STRINGS = {
     for value in PROJECT.get("firmware_placeholder_versions", ["dev", "0.0.0", "main"])
 }
 RELEASE_URL_BASE = project_value("release_url_base", "https://github.com/jtenniswood/espframe/releases/tag/")
-PROJECT_NAME = project_value("package_name", "jtenniswood.immich-frame")
+PROJECT_NAME = project_value("package_name", "rcompton78.espframe")
 RELEASE_VERSION_RE = re.compile(str(PROJECT.get("release_version_pattern", r"^v\d+\.\d+\.\d+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$")))
 
 

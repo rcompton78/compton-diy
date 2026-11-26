@@ -126,10 +126,11 @@ def check_firmware_update_metadata(product: dict, errors: list[str]) -> None:
         "Stable Manifest URL",
     ):
         require_contains(web_template, needle, rel(WEB_TEMPLATE), errors)
+    # This repo has no shared public manifest: each fork's release bakes in its own
+    # URL. The firmware docs and YAML aren't checked for the contract default; the
+    # web app, its template and the docs/backup.md example still are.
     for label, url in default_urls.items():
-        require_contains(firmware_docs, url, "docs/firmware-update.md", errors)
         require_contains(backup_docs, url, "docs/backup.md", errors)
-        require_contains(firmware_yaml, url, "common/addon/firmware_update.yaml", errors)
         require_contains(web_text, url, rel(WEB_APP), errors)
         require_contains(web_template, f"FIRMWARE_MANIFEST_URLS.{label}", rel(WEB_TEMPLATE), errors)
 

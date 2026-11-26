@@ -78,6 +78,9 @@ GITIGNORE_EXTRA = """
 # Public repo (tools/espframe-public in the source repo)
 .env
 dist/
+
+# wf plugin local config (secrets)
+.claude/workflow.local.md
 """
 
 # (file, old, new): old must occur exactly once in the copied file.
@@ -207,11 +210,13 @@ PATCHES: list[tuple[str, str, str]] = [
     ),
     (
         "builds/guition-esp32-p4-jc8012p4a1.factory.yaml",
-        "# Compiled by CI (see .github/workflows/release.yml) — not used locally.\n"
-        "# For local development, see devices/guition-esp32-p4-jc8012p4a1/esphome.yaml.",
-        "# Built by scripts/firmware.sh, locally and in .github/workflows/*.yml.\n"
-        "# devices/guition-esp32-p4-jc8012p4a1/dev.yaml is a local alternative that\n"
-        "# takes Wi-Fi from secrets.yaml.",
+        "# Compiled by CI (see .github/workflows/release.yml).\n",
+        "# Built by scripts/firmware.sh, locally and in .github/workflows/*.yml.\n",
+    ),
+    (
+        "devices/guition-esp32-p4-jc8012p4a1/dev.yaml",
+        "#   scripts/espframe-esphome.sh run apps/espframe/devices/guition-esp32-p4-jc8012p4a1/dev.yaml\n",
+        "#   scripts/firmware.sh esphome run devices/guition-esp32-p4-jc8012p4a1/dev.yaml\n",
     ),
     (
         "common/addon/firmware_update.yaml",
@@ -334,6 +339,8 @@ ALLOW = {
 CREDENTIAL_OK = re.compile(
     r"api_key|read|write|true|false|True|False|null|none|None|\$\{.*|!secret.*|!lambda.*|<.*"
     r"|fixture-read-only-api-key|imported-api-key"
+    # The README's and Build workflow's dummy secrets.yaml for dev.yaml.
+    r"|your-network|your-password|ci-password"
     # Code, not values: a TS type or a property/expression (`apiKey: string;`).
     r"|\w+[;,]|string|number|boolean|(?:self|this|state|props|os|process|id|args|config|S)\.\w+.*|\w+\(.*"
 )
@@ -347,6 +354,15 @@ URL_HOSTS_OK = re.compile(
     r"|localhost(?::\d+)?|127\.0\.0\.1(?::\S*)?|<[^>]+>(?::\d+)?|\$\{[^}]+\}|\{[^}]+\}"
     r"|192\.168\.(?:4\.1|1\.30|0\.1)(?::\d+)?|\.\.\.|\*",
     re.I,
+)
+# Text the scan ignores outright. The firmware's ESPHome project name
+# (project.package_name, COM-663) is the public repo's own owner and name.
+ALLOW_LITERALS = ("rcompton78.espframe",)
+# Each allowed only as a whole token, so a longer name built on it
+# (rcompton78.espframe.lan, rcompton78.espframe@...) is still scanned.
+ALLOW_LITERAL_RES = tuple(
+    re.compile(r"(?<![\w.@/-])" + re.escape(literal) + r"(?!\.?[\w@-])")
+    for literal in ALLOW_LITERALS
 )
 # Vendored third-party source credits its authors by email.
 ALLOW_PATHS = {"personal email": ("components/libwebp-esp32/",)}
@@ -555,6 +571,8 @@ def scan(dest: Path) -> None:
     hits = []
 
     def check_text(rel: str, where: str, text: str) -> None:
+        for literal_re in ALLOW_LITERAL_RES:
+            text = literal_re.sub("", text)
         for pattern, what in SCAN:
             for m in pattern.finditer(text):
                 if m.group(0) in ALLOW.get(what, ()):
@@ -563,7 +581,7 @@ def scan(dest: Path) -> None:
                     continue
                 if what == "URL host" and URL_HOSTS_OK.fullmatch(m.group("host")):
                     continue
-                if what == "private hostname" and re.fullmatch(r"immich|homeassistant|espframe|immich-frame[\w-]*", m.group(0).lower().removesuffix(".local")):
+                if what == "private hostname" and re.fullmatch(r"immich|homeassistant|espframe|immich-frame[\w-]*|workflow", m.group(0).lower().removesuffix(".local")):
                     continue
                 if rel.startswith(ALLOW_PATHS.get(what, ())):
                     continue

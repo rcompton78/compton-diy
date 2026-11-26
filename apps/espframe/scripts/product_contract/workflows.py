@@ -1,4 +1,9 @@
-"""Validate GitHub workflow and release contract metadata."""
+"""Check GitHub workflow contract metadata and the tool versions CI installs.
+
+check_esphome_version and check_node_version run as part of check:product. The
+remaining workflow helpers parse workflow YAML and are covered by
+tests/workflow_contract_tests.py.
+"""
 
 from __future__ import annotations
 
@@ -6,9 +11,7 @@ from collections.abc import Callable
 import re
 from pathlib import Path
 
-from product_contract.common import ROOT, check_relative_path, read, rel, require_contains
-from product_config import public_base_url, release_matrix_devices
-from product_contract.workflow_pr_template import check_pull_request_template_contract
+from product_contract.common import ROOT, require_contains
 
 
 WORKFLOW_ACTION_TARGETS = {
@@ -1409,1071 +1412,100 @@ def check_workflow_job_condition_usage(
             errors.append(f"{label} job {job_id} must not define an if condition")
 
 
-def check_device_workflow_contract(product: dict, errors: list[str]) -> None:
-    release_workflow = read(ROOT / ".github" / "workflows" / "release.yml", errors)
-    docs_workflow = read(ROOT / ".github" / "workflows" / "docs.yml", errors)
-    compile_workflow = read(ROOT / ".github" / "workflows" / "compile.yml", errors)
-    project = product["project"]
-    release_actions = project.get("release_workflow_actions", {})
-    artifact_prefix = str(project.get("release_artifact_prefix", "")).strip()
-    release_build_output_dir = str(project.get("release_build_output_dir", "")).strip()
-    release_publish_dir = str(project.get("release_publish_dir", "")).strip()
-    release_uploaded_verify_dir = str(project.get("release_uploaded_verify_dir", "")).strip()
-    release_source_factory_binary = str(project.get("release_source_factory_binary", "")).strip()
-    release_source_ota_binary = str(project.get("release_source_ota_binary", "")).strip()
-    release_esphome_cache_dir = str(project.get("release_esphome_cache_dir", "")).strip()
-    release_esphome_cache_key_prefix = str(project.get("release_esphome_cache_key_prefix", "")).strip()
-    release_esphome_cache_hash_files = [
-        str(path).strip() for path in project.get("release_esphome_cache_hash_files", []) if str(path).strip()
-    ]
-    asset_suffixes = [str(value).strip() for value in project.get("release_asset_suffixes", []) if str(value).strip()]
-    binary_download_patterns = [
-        str(value).strip() for value in project.get("release_binary_download_patterns", []) if str(value).strip()
-    ]
-    manifest_download_patterns = [
-        str(value).strip() for value in project.get("release_manifest_download_patterns", []) if str(value).strip()
-    ]
-    uploaded_verify_patterns = [
-        str(value).strip() for value in project.get("release_uploaded_verify_patterns", []) if str(value).strip()
-    ]
-    release_download_clobber = project.get("github_release_download_clobber")
-    release_upload_clobber = project.get("github_release_upload_clobber")
-    release_version_pattern = str(project.get("release_version_pattern", "")).strip()
-    stable_release_version_pattern = str(project.get("stable_release_version_pattern", "")).strip()
-    firmware_version_placeholder = str(project.get("firmware_version_placeholder_line", "")).rstrip("\n")
-    local_build_version = str(project.get("firmware_local_build_version", "")).strip()
-    placeholder_versions = [str(value).strip() for value in project.get("firmware_placeholder_versions", []) if str(value).strip()]
-    changelog_categories = project.get("release_changelog_categories", [])
-    changelog_fallback = str(project.get("release_changelog_fallback_category", "")).strip()
-    docs_dist_artifact_name = str(project.get("docs_dist_artifact_name", "")).strip()
-    docs_firmware_artifact_name = str(project.get("docs_firmware_artifact_name", "")).strip()
-    compile_firmware_artifact_prefix = str(project.get("compile_firmware_artifact_prefix", "")).strip()
-    compile_firmware_output_dir = str(project.get("compile_firmware_output_dir", "")).strip()
-    compile_firmware_version_prefix = str(project.get("compile_firmware_version_prefix", "")).strip()
-    checkout_action = (
-        str(release_actions.get("checkout", "")).strip() if isinstance(release_actions, dict) else ""
-    )
-    cache_action = (
-        str(release_actions.get("cache", "")).strip() if isinstance(release_actions, dict) else ""
-    )
-    upload_artifact_action = (
-        str(release_actions.get("upload_artifact", "")).strip() if isinstance(release_actions, dict) else ""
-    )
-    download_artifact_action = (
-        str(release_actions.get("download_artifact", "")).strip() if isinstance(release_actions, dict) else ""
-    )
-    upload_pages_artifact_action = (
-        str(release_actions.get("upload_pages_artifact", "")).strip() if isinstance(release_actions, dict) else ""
-    )
-    deploy_pages_action = (
-        str(release_actions.get("deploy_pages", "")).strip() if isinstance(release_actions, dict) else ""
-    )
-    docs_dist_output_path = str(project.get("docs_dist_output_path", "")).strip()
-    docs_deploy_path = str(project.get("docs_deploy_path", "")).strip()
-    pages_environment = str(project.get("github_pages_environment", "")).strip()
-    pages_concurrency_group = str(project.get("github_pages_concurrency_group", "")).strip()
-    pages_cancel_in_progress = project.get("github_pages_cancel_in_progress")
-    docs_workflow_success_conclusion = str(project.get("github_docs_workflow_run_success_conclusion", "")).strip()
-    release_notes_fetch_depth = project.get("github_release_notes_fetch_depth")
-    release_notes_fetch_tags = project.get("github_release_notes_fetch_tags")
-    release_notes_version_ref = str(project.get("github_release_notes_version_ref", "")).strip()
-    release_build_version_ref = str(project.get("github_release_build_version_ref", "")).strip()
-    release_build_ref = str(project.get("github_release_build_ref", "")).strip()
-    release_build_fail_fast = project.get("github_release_build_fail_fast")
-    release_notes_output = str(project.get("github_release_notes_output", "")).strip()
-    sparse_checkout_files = [
-        str(path).strip() for path in project.get("github_sparse_checkout_files", []) if str(path).strip()
-    ]
-    metadata_sparse_checkout_files = [
-        str(path).strip() for path in project.get("github_metadata_sparse_checkout_files", []) if str(path).strip()
-    ]
-    sparse_checkout_cone_mode = project.get("github_sparse_checkout_cone_mode")
-    docs_verify_retries = project.get("docs_firmware_verify_retries")
-    docs_verify_delay = project.get("docs_firmware_verify_delay_seconds")
-    docs_release_meta_step_id = str(project.get("github_docs_release_meta_step_id", "")).strip()
-    docs_release_tag_env = str(project.get("github_docs_release_tag_env", "")).strip()
-    docs_release_tag_output = str(project.get("github_docs_release_tag_output", "")).strip()
-    docs_prerelease_tag_env = str(project.get("github_docs_prerelease_tag_env", "")).strip()
-    pages_deployment_step_id = str(project.get("github_pages_deployment_step_id", "")).strip()
-    pages_url_output = str(project.get("github_pages_url_output", "")).strip()
-    prerelease_lookup_limit = project.get("github_prerelease_lookup_limit")
-    github_cli_env = project.get("github_cli_env", {})
-    firmware_compile_timeout = project.get("firmware_compile_timeout_minutes")
-    esphome_config_mount = str(project.get("esphome_config_mount", "")).strip()
-    slugs = [str(device.get("slug", "")).strip() for device in product["devices"]]
-    expected_slugs = " ".join(slugs)
-    workflow_texts = {
-        "compile": (".github/workflows/compile.yml", compile_workflow),
-        "docs": (".github/workflows/docs.yml", docs_workflow),
-        "release": (".github/workflows/release.yml", release_workflow),
-    }
-    product_output_names = [
-        "release_matrix",
-        "esphome_docker_image",
-        "esphome_version",
-        "esphome_config_mount",
-        "esphome_docker_remove_flag",
-        "release_esphome_cache_dir",
-        "release_esphome_cache_key_prefix",
-    ]
-    product_metadata_outputs = {
-        name: f"${{{{ steps.product.outputs.{name} }}}}"
-        for name in product_output_names
-    }
-    check_workflow_job_outputs(
-        "compile.firmware-metadata",
-        product_metadata_outputs,
-        workflow_texts,
-        errors,
-    )
-    release_metadata_outputs = {
-        **product_metadata_outputs,
-        "device_slugs": "${{ steps.product.outputs.device_slugs }}",
-    }
-    check_workflow_job_outputs(
-        "release.release-metadata",
-        release_metadata_outputs,
-        workflow_texts,
-        errors,
-    )
-    firmware_env_names = {
-        "ESPHOME_DOCKER_IMAGE": "esphome_docker_image",
-        "ESPHOME_VERSION": "esphome_version",
-        "ESPHOME_CONFIG_MOUNT": "esphome_config_mount",
-        "ESPHOME_DOCKER_REMOVE_FLAG": "esphome_docker_remove_flag",
-        "RELEASE_ESPHOME_CACHE_DIR": "release_esphome_cache_dir",
-        "RELEASE_ESPHOME_CACHE_KEY_PREFIX": "release_esphome_cache_key_prefix",
-    }
-    for target, metadata_job in (
-        ("compile.compile", "firmware-metadata"),
-        ("release.build-firmware", "release-metadata"),
-    ):
-        check_workflow_job_env(
-            target,
-            {
-                env_name: f"${{{{ needs.{metadata_job}.outputs.{output_name} }}}}"
-                for env_name, output_name in firmware_env_names.items()
-            },
-            workflow_texts,
-            errors,
-        )
-    release_notes_checkout_inputs: dict[str, str] = {}
-    if isinstance(release_notes_fetch_depth, int) and not isinstance(release_notes_fetch_depth, bool):
-        release_notes_checkout_inputs["fetch-depth"] = str(release_notes_fetch_depth)
-    if isinstance(release_notes_fetch_tags, bool):
-        release_notes_checkout_inputs["fetch-tags"] = str(release_notes_fetch_tags).lower()
-    if release_notes_checkout_inputs:
-        match_input, match_value = next(iter(release_notes_checkout_inputs.items()))
-        check_workflow_action_step_inputs(
-            "release.release-notes",
-            checkout_action,
-            match_input,
-            match_value,
-            release_notes_checkout_inputs,
-            workflow_texts,
-            errors,
-        )
-    if release_build_ref:
-        for target in ("release.release-metadata", "release.build-firmware"):
-            check_workflow_action_step_inputs(
-                target,
-                checkout_action,
-                "ref",
-                release_build_ref,
-                {"ref": release_build_ref},
-                workflow_texts,
-                errors,
-            )
-    if release_notes_version_ref:
-        for step_name in ("Build detailed changelog", "Update GitHub release notes"):
-            check_workflow_named_step_env(
-                "release.release-notes",
-                step_name,
-                {"VERSION": release_notes_version_ref},
-                workflow_texts,
-                errors,
-            )
-    if release_build_version_ref:
-        for step_name in ("Compile firmware", "Collect firmware files and generate manifest"):
-            check_workflow_named_step_env(
-                "release.build-firmware",
-                step_name,
-                {"VERSION": release_build_version_ref},
-                workflow_texts,
-                errors,
-            )
-    if release_notes_output:
-        check_workflow_named_step_run_contains(
-            "release.release-notes",
-            "Build detailed changelog",
-            [f'--output "{release_notes_output}"'],
-            workflow_texts,
-            errors,
-        )
-        check_workflow_named_step_run_contains(
-            "release.release-notes",
-            "Update GitHub release notes",
-            [f'--notes-file "{release_notes_output}"'],
-            workflow_texts,
-            errors,
-        )
-    for label, text in (
-        (".github/workflows/release.yml", release_workflow),
-        (".github/workflows/docs.yml", docs_workflow),
-    ):
-        if label == ".github/workflows/release.yml":
-            require_contains(text, "DEVICE_SLUGS: ${{ needs.release-metadata.outputs.device_slugs }}", label, errors)
-        else:
-            require_contains(text, "python3 scripts/product_config.py github-env >> \"$GITHUB_ENV\"", label, errors)
-            require_contains(text, "$DEVICE_SLUGS", label, errors)
-        if f"DEVICE_SLUGS: {expected_slugs}" in text:
-            errors.append(f"{label} must read DEVICE_SLUGS from product metadata, not a literal device list")
-    check_workflow_gh_cli_env(
-        github_cli_env,
-        {
-            "docs": (".github/workflows/docs.yml", docs_workflow),
-            "release": (".github/workflows/release.yml", release_workflow),
-        },
-        errors,
-    )
-    check_workflow_sparse_checkout_usage(
-        sparse_checkout_files,
-        metadata_sparse_checkout_files,
-        sparse_checkout_cone_mode,
-        {
-            "compile": (".github/workflows/compile.yml", compile_workflow),
-            "docs": (".github/workflows/docs.yml", docs_workflow),
-            "release": (".github/workflows/release.yml", release_workflow),
-        },
-        errors,
-    )
-    check_workflow_action_usage(
-        release_actions,
-        {
-            ".github/workflows/release.yml": release_workflow,
-            ".github/workflows/docs.yml": docs_workflow,
-            ".github/workflows/compile.yml": compile_workflow,
-        },
-        errors,
-    )
-    if artifact_prefix:
-        release_artifact_name = f"{artifact_prefix}${{{{ matrix.slug }}}}"
-        release_artifact_upload_inputs = {"name": release_artifact_name}
-        if release_build_output_dir:
-            release_artifact_upload_inputs["path"] = f"{release_build_output_dir}/"
-        check_workflow_action_step_inputs(
-            "release.build-firmware",
-            upload_artifact_action,
-            "name",
-            release_artifact_name,
-            release_artifact_upload_inputs,
-            {"release": (".github/workflows/release.yml", release_workflow)},
-            errors,
-        )
+# This repo has two workflows: build.yml (pull requests, manual runs, and called
+# from release.yml) and release.yml (pushes to main). The contract only pins the
+# tool versions they install; the workflow layout itself is not mirrored in
+# product metadata.
+FIRMWARE_WORKFLOWS = (".github/workflows/build.yml", ".github/workflows/release.yml")
+ESPHOME_PIN_READ = "['esphome_version']"
+# The pin as the workflows install it; extra pip flags around it are fine.
+ESPHOME_PINNED_INSTALL = "esphome==$version"
 
-        release_artifact_download_inputs = {
-            "pattern": f"{artifact_prefix}*",
-            "merge-multiple": "true",
-        }
-        if release_publish_dir:
-            release_artifact_download_inputs["path"] = release_publish_dir
-        check_workflow_action_step_inputs(
-            "release.publish",
-            download_artifact_action,
-            "pattern",
-            f"{artifact_prefix}*",
-            release_artifact_download_inputs,
-            {"release": (".github/workflows/release.yml", release_workflow)},
-            errors,
-        )
-    if release_build_output_dir:
-        check_workflow_named_step_run_contains(
-            "release.build-firmware",
-            "Compile firmware",
-            [
-                f"mkdir -p {release_build_output_dir}",
-                f'"{release_build_output_dir}/${{{{ matrix.slug }}}}.factory.bin"',
-            ],
-            workflow_texts,
-            errors,
-        )
-        check_workflow_named_step_run_contains(
-            "release.build-firmware",
-            "Collect firmware files and generate manifest",
-            [
-                f"mkdir -p {release_build_output_dir}",
-                f'"{release_build_output_dir}/${{{{ matrix.slug }}}}.ota.bin"',
-                f'"{release_build_output_dir}/${{{{ matrix.slug }}}}.manifest.json"',
-            ],
-            workflow_texts,
-            errors,
-        )
-    if release_source_factory_binary:
-        check_workflow_named_step_run_contains(
-            "release.build-firmware",
-            "Compile firmware",
-            [
-                f'"${{BUILD_DIR}}/{release_source_factory_binary}"',
-                "factory binary not found",
-            ],
-            workflow_texts,
-            errors,
-        )
-    if release_source_ota_binary:
-        check_workflow_named_step_run_contains(
-            "release.build-firmware",
-            "Compile firmware",
-            [
-                '-s firmware_version "${VERSION}"',
-                'compile "${ESPHOME_CONFIG_MOUNT}/builds/${{ matrix.yaml }}.yaml"',
-            ],
-            workflow_texts,
-            errors,
-        )
-        check_workflow_named_step_run_contains(
-            "release.build-firmware",
-            "Collect firmware files and generate manifest",
-            [
-                f'"${{BUILD_DIR}}/{release_source_ota_binary}"',
-                "OTA binary not found",
-            ],
-            workflow_texts,
-            errors,
-        )
-    if release_publish_dir:
-        check_workflow_named_step_run_contains(
-            "release.publish",
-            "Verify assembled release assets",
-            [f"--dir {release_publish_dir}"],
-            workflow_texts,
-            errors,
-        )
-        check_workflow_named_step_run_contains(
-            "release.publish",
-            "Upload firmware to release",
-            [f"{release_publish_dir}/*"],
-            workflow_texts,
-            errors,
-        )
-    if release_uploaded_verify_dir:
-        check_workflow_named_step_run_contains(
-            "release.publish",
-            "Verify uploaded release assets",
-            [
-                f"mkdir -p {release_uploaded_verify_dir}",
-                f"--dir {release_uploaded_verify_dir}",
-            ],
-            workflow_texts,
-            errors,
-        )
-    if release_esphome_cache_dir:
-        build_dir_fragment = (
-            'BUILD_DIR="${RELEASE_ESPHOME_CACHE_DIR}/build/${{ matrix.build_name }}/.pioenvs/'
-            '${{ matrix.build_name }}"'
-        )
-        for target, step_names in (
-            ("compile.compile", ("Compile test firmware artifacts",)),
-            ("release.build-firmware", ("Compile firmware", "Collect firmware files and generate manifest")),
-        ):
-            for step_name in step_names:
-                check_workflow_named_step_run_contains(
-                    target,
-                    step_name,
-                    [build_dir_fragment],
-                    workflow_texts,
-                    errors,
-                )
-        for target in ("compile.compile", "release.build-firmware"):
-            check_workflow_named_step_run_contains(
-                target,
-                "Fix ESPHome cache permissions",
-                [
-                    'if [ -d "${RELEASE_ESPHOME_CACHE_DIR}" ]; then',
-                    'sudo chown -R "$USER:$USER" "${RELEASE_ESPHOME_CACHE_DIR}"',
-                    'chmod -R u+rwX "${RELEASE_ESPHOME_CACHE_DIR}"',
-                ],
-                workflow_texts,
-                errors,
-            )
-    if release_esphome_cache_key_prefix:
-        for target, metadata_job in (
-            ("compile.compile", "firmware-metadata"),
-            ("release.build-firmware", "release-metadata"),
-        ):
-            cache_step_fragments = [
-                (
-                    "restore-keys: |\n"
-                    f"            ${{{{ needs.{metadata_job}.outputs.release_esphome_cache_key_prefix }}}}-"
-                    f"${{{{ matrix.slug }}}}-"
-                ),
-            ]
-            check_workflow_named_step_contains(
-                target,
-                "Cache ESPHome build",
-                cache_step_fragments,
-                workflow_texts,
-                errors,
-            )
-    if release_esphome_cache_hash_files:
-        hash_files = "', '".join(release_esphome_cache_hash_files)
-        for target, metadata_job in (
-            ("compile.compile", "firmware-metadata"),
-            ("release.build-firmware", "release-metadata"),
-        ):
-            check_workflow_named_step_uses(
-                target,
-                "Cache ESPHome build",
-                cache_action,
-                workflow_texts,
-                errors,
-            )
-            cache_inputs = {
-                "path": f"${{{{ needs.{metadata_job}.outputs.release_esphome_cache_dir }}}}",
-                "key": (
-                    f"${{{{ needs.{metadata_job}.outputs.release_esphome_cache_key_prefix }}}}-"
-                    f"${{{{ matrix.slug }}}}-${{{{ hashFiles('{hash_files}') }}}}"
-                ),
-            }
-            check_workflow_named_step_with(
-                target,
-                "Cache ESPHome build",
-                cache_inputs,
-                workflow_texts,
-                errors,
-            )
-    if compile_firmware_artifact_prefix:
-        compile_artifact_name = f"{compile_firmware_artifact_prefix}${{{{ matrix.slug }}}}"
-        compile_artifact_upload_inputs = {"name": compile_artifact_name}
-        if compile_firmware_output_dir:
-            compile_artifact_upload_inputs["path"] = f"{compile_firmware_output_dir}/"
-        check_workflow_action_step_inputs(
-            "compile.compile",
-            upload_artifact_action,
-            "name",
-            compile_artifact_name,
-            compile_artifact_upload_inputs,
-            {"compile": (".github/workflows/compile.yml", compile_workflow)},
-            errors,
-        )
-    if compile_firmware_output_dir:
-        check_workflow_named_step_run_contains(
-            "compile.compile",
-            "Compile test firmware artifacts",
-            [
-                f"mkdir -p {compile_firmware_output_dir}",
-                f'"{compile_firmware_output_dir}/${{{{ matrix.slug }}}}.factory.bin"',
-                f'"{compile_firmware_output_dir}/${{{{ matrix.slug }}}}.ota.bin"',
-                f'"{compile_firmware_output_dir}/${{{{ matrix.slug }}}}.version.txt"',
-                'echo "source_ref=${GITHUB_REF_NAME}"',
-                'echo "source_sha=${GITHUB_SHA}"',
-            ],
-            workflow_texts,
-            errors,
-        )
-    if compile_firmware_version_prefix:
-        check_workflow_named_step_run_contains(
-            "compile.compile",
-            "Compile test firmware artifacts",
-            [
-                f'TEST_VERSION="{compile_firmware_version_prefix}-${{GITHUB_RUN_ID}}-${{GITHUB_RUN_ATTEMPT}}"',
-                '-s firmware_version "${TEST_VERSION}"',
-            ],
-            workflow_texts,
-            errors,
-        )
-    for step_name in ("Download firmware from latest release", "Download firmware from latest pre-release"):
-        for pattern in binary_download_patterns:
-            check_workflow_named_step_run_contains(
-                "docs.download-firmware",
-                step_name,
-                [f'--pattern "{pattern}"'],
-                workflow_texts,
-                errors,
-            )
-        for pattern in manifest_download_patterns:
-            if pattern == "manifest.json":
-                manifest_env = (
-                    "DEFAULT_PUBLIC_BETA_MANIFEST"
-                    if step_name == "Download firmware from latest pre-release"
-                    else "DEFAULT_PUBLIC_MANIFEST"
-                )
-                check_workflow_named_step_run_contains(
-                    "docs.download-firmware",
-                    step_name,
-                    [f'basename "${manifest_env}"'],
-                    workflow_texts,
-                    errors,
-                )
-            else:
-                check_workflow_named_step_run_contains(
-                    "docs.download-firmware",
-                    step_name,
-                    [f'--pattern "{pattern}"'],
-                    workflow_texts,
-                    errors,
-                )
-    for pattern in uploaded_verify_patterns:
-        check_workflow_named_step_run_contains(
-            "release.publish",
-            "Verify uploaded release assets",
-            [f'--pattern "{pattern}"'],
-            workflow_texts,
-            errors,
-        )
-    if release_download_clobber is True:
-        for step_name in ("Download firmware from latest release", "Download firmware from latest pre-release"):
-            check_workflow_named_step_run_contains(
-                "docs.download-firmware",
-                step_name,
-                ["--clobber"],
-                workflow_texts,
-                errors,
-            )
-    if release_upload_clobber is True:
-        check_workflow_named_step_run_contains(
-            "release.publish",
-            "Upload firmware to release",
-            [f"{release_publish_dir}/* --clobber"],
-            workflow_texts,
-            errors,
-        )
-    firmware_release_script = read(ROOT / "scripts" / "firmware_release.py", errors)
-    for suffix in asset_suffixes:
-        check_workflow_named_step_run_contains(
-            "release.publish",
-            "Verify uploaded release assets",
-            [f'--pattern "*{suffix}"'],
-            workflow_texts,
-            errors,
-        )
-        if suffix == ".manifest.json":
-            for step_name in ("Download firmware from latest release", "Download firmware from latest pre-release"):
-                check_workflow_named_step_run_contains(
-                    "docs.download-firmware",
-                    step_name,
-                    [f'--pattern "${{SLUG}}{suffix}"'],
-                    workflow_texts,
-                    errors,
-                )
-        require_contains(firmware_release_script, suffix, "scripts/firmware_release.py", errors)
-    release_changelog_script = read(ROOT / "scripts" / "release_changelog.py", errors)
-    if release_version_pattern:
-        require_contains(firmware_release_script, "release_version_pattern", "scripts/firmware_release.py", errors)
-    if stable_release_version_pattern:
-        require_contains(release_changelog_script, "stable_release_version_pattern", "scripts/release_changelog.py", errors)
-    if isinstance(changelog_categories, list) and changelog_categories:
-        require_contains(release_changelog_script, "release_changelog_categories", "scripts/release_changelog.py", errors)
-    if changelog_fallback:
-        require_contains(release_changelog_script, "release_changelog_fallback_category", "scripts/release_changelog.py", errors)
-    if firmware_version_placeholder:
-        require_contains(firmware_release_script, "firmware_version_placeholder_line", "scripts/firmware_release.py", errors)
-        for device in product["devices"]:
-            build_yaml = check_relative_path(device.get("build_yaml"), f"Device {device.get('slug', '<missing>')} build_yaml", errors)
-            if build_yaml:
-                require_contains(read(ROOT / build_yaml, errors), firmware_version_placeholder, build_yaml, errors)
-    if placeholder_versions:
-        require_contains(firmware_release_script, "firmware_placeholder_versions", "scripts/firmware_release.py", errors)
-    if local_build_version:
-        require_contains(
-            read(ROOT / "common" / "addon" / "firmware_update.yaml", errors),
-            f'firmware_version: "{local_build_version}"',
-            "common/addon/firmware_update.yaml",
-            errors,
-        )
-    docs_workflow_texts = {"docs": (".github/workflows/docs.yml", docs_workflow)}
-    if docs_dist_artifact_name:
-        docs_dist_upload_inputs = {"name": docs_dist_artifact_name}
-        if docs_dist_output_path:
-            docs_dist_upload_inputs["path"] = docs_dist_output_path
-        check_workflow_action_step_inputs(
-            "docs.build-docs",
-            upload_artifact_action,
-            "name",
-            docs_dist_artifact_name,
-            docs_dist_upload_inputs,
-            docs_workflow_texts,
-            errors,
-        )
-    if docs_firmware_artifact_name:
-        manifest_dir_checks: list[tuple[str, str]] = []
-        for device in product["devices"]:
-            if str(device.get("public_manifest", "")).strip():
-                manifest_dir_checks.append(("Download firmware from latest release", "STABLE_MANIFEST_DIR"))
-            if str(device.get("public_beta_manifest", "")).strip():
-                manifest_dir_checks.append(("Download firmware from latest pre-release", "BETA_MANIFEST_DIR"))
-        for step_name, dir_name in dict.fromkeys(manifest_dir_checks):
-            check_workflow_named_step_run_contains(
-                "docs.download-firmware",
-                step_name,
-                [f'mkdir -p "${dir_name}"'],
-                docs_workflow_texts,
-                errors,
-            )
-        check_workflow_action_step_inputs(
-            "docs.download-firmware",
-            upload_artifact_action,
-            "name",
-            docs_firmware_artifact_name,
-            {
-                "name": docs_firmware_artifact_name,
-                "path": f"{docs_firmware_artifact_name}/",
-            },
-            docs_workflow_texts,
-            errors,
-        )
-        if docs_deploy_path:
-            check_workflow_action_step_inputs(
-                "docs.deploy-docs",
-                download_artifact_action,
-                "name",
-                docs_firmware_artifact_name,
-                {
-                    "name": docs_firmware_artifact_name,
-                    "path": f"{docs_deploy_path}/{docs_firmware_artifact_name}",
-                },
-                docs_workflow_texts,
-                errors,
-            )
-            require_contains(
-                docs_workflow,
-                f"rm -rf {docs_deploy_path}/{docs_firmware_artifact_name}",
-                ".github/workflows/docs.yml",
-                errors,
-            )
-    if docs_deploy_path:
-        if docs_dist_artifact_name:
-            check_workflow_action_step_inputs(
-                "docs.deploy-docs",
-                download_artifact_action,
-                "name",
-                docs_dist_artifact_name,
-                {
-                    "name": docs_dist_artifact_name,
-                    "path": docs_deploy_path,
-                },
-                docs_workflow_texts,
-                errors,
-            )
-        check_workflow_action_step_inputs(
-            "docs.deploy-docs",
-            upload_pages_artifact_action,
-            "path",
-            docs_deploy_path,
-            {"path": docs_deploy_path},
-            docs_workflow_texts,
-            errors,
-        )
-    pages_environment_values: dict[str, str] = {}
-    if pages_environment:
-        pages_environment_values["name"] = pages_environment
-    if pages_deployment_step_id and pages_url_output:
-        pages_environment_values["url"] = f"${{{{ steps.{pages_deployment_step_id}.outputs.{pages_url_output} }}}}"
-    if pages_environment_values:
-        check_workflow_job_environment(
-            "docs.deploy-docs",
-            pages_environment_values,
-            workflow_texts,
-            errors,
-        )
-    if pages_deployment_step_id:
-        check_workflow_named_step_id(
-            "docs.deploy-docs",
-            "Deploy to GitHub Pages",
-            pages_deployment_step_id,
-            workflow_texts,
-            errors,
-        )
-    if deploy_pages_action:
-        check_workflow_named_step_uses(
-            "docs.deploy-docs",
-            "Deploy to GitHub Pages",
-            deploy_pages_action,
-            workflow_texts,
-            errors,
-        )
-    check_workflow_concurrency(
-        pages_concurrency_group,
-        pages_cancel_in_progress,
-        ".github/workflows/docs.yml",
-        docs_workflow,
-        errors,
-    )
-    if docs_workflow_success_conclusion:
-        require_contains(
-            docs_workflow,
-            "github.event_name != 'workflow_run' ||",
-            ".github/workflows/docs.yml",
-            errors,
-        )
-        require_contains(
-            docs_workflow,
-            f"github.event.workflow_run.conclusion == '{docs_workflow_success_conclusion}'",
-            ".github/workflows/docs.yml",
-            errors,
-        )
-    if isinstance(docs_verify_retries, int) and not isinstance(docs_verify_retries, bool):
-        check_workflow_named_step_run_contains(
-            "docs.deploy-docs",
-            "Verify public firmware",
-            [f"--retries {docs_verify_retries}"],
-            workflow_texts,
-            errors,
-        )
-    if isinstance(docs_verify_delay, int) and not isinstance(docs_verify_delay, bool):
-        check_workflow_named_step_run_contains(
-            "docs.deploy-docs",
-            "Verify public firmware",
-            [f"--delay {docs_verify_delay}"],
-            workflow_texts,
-            errors,
-        )
-    if docs_release_tag_env:
-        release_tag_ref = f"${docs_release_tag_env}"
-        check_workflow_named_step_run_contains(
-            "docs.download-firmware",
-            "Set release metadata",
-            [
-                f"{docs_release_tag_env}=$(gh release view --json tagName -q .tagName)",
-                f'echo "{docs_release_tag_env}=${{{docs_release_tag_env}}}" >> "$GITHUB_ENV"',
-            ],
-            workflow_texts,
-            errors,
-        )
-        for step_name in ("Download firmware from latest release", "Verify firmware assets"):
-            check_workflow_named_step_run_contains(
-                "docs.download-firmware",
-                step_name,
-                [release_tag_ref],
-                workflow_texts,
-                errors,
-            )
-    if docs_release_tag_env and docs_release_tag_output:
-        if docs_release_meta_step_id:
-            check_workflow_named_step_contains(
-                "docs.download-firmware",
-                "Set release metadata",
-                [f"id: {docs_release_meta_step_id}"],
-                workflow_texts,
-                errors,
-            )
-            check_workflow_job_outputs(
-                "docs.download-firmware",
-                {
-                    docs_release_tag_output: (
-                        f"${{{{ steps.{docs_release_meta_step_id}.outputs.{docs_release_tag_output} }}}}"
-                    ),
-                },
-                workflow_texts,
-                errors,
-            )
-        check_workflow_named_step_run_contains(
-            "docs.download-firmware",
-            "Set release metadata",
-            [f'echo "{docs_release_tag_output}=${{{docs_release_tag_env}}}" >> "$GITHUB_OUTPUT"'],
-            workflow_texts,
-            errors,
-        )
-        check_workflow_named_step_run_contains(
-            "docs.deploy-docs",
-            "Verify public firmware",
-            [f"${{{{ needs.download-firmware.outputs.{docs_release_tag_output} }}}}"],
-            workflow_texts,
-            errors,
-        )
-    if docs_prerelease_tag_env:
-        prerelease_tag_ref = f"${docs_prerelease_tag_env}"
-        check_workflow_named_step_run_contains(
-            "docs.download-firmware",
-            "Download firmware from latest pre-release",
-            [
-                f"{docs_prerelease_tag_env}=$(gh release list",
-                f'if [ -n "{prerelease_tag_ref}" ]; then',
-                f'gh release download "{prerelease_tag_ref}"',
-            ],
-            workflow_texts,
-            errors,
-        )
-    check_workflow_job_timeout_usage(
-        firmware_compile_timeout,
-        {
-            "compile": (".github/workflows/compile.yml", compile_workflow),
-            "release": (".github/workflows/release.yml", release_workflow),
-        },
-        errors,
-    )
-    check_workflow_release_build_fail_fast(
-        release_build_fail_fast,
-        {"release": (".github/workflows/release.yml", release_workflow)},
-        errors,
-    )
-    check_workflow_job_strategy_matrix(
-        "compile.compile",
-        "${{ fromJson(needs.firmware-metadata.outputs.release_matrix) }}",
-        workflow_texts,
-        errors,
-    )
-    check_workflow_job_strategy_matrix(
-        "release.build-firmware",
-        "${{ fromJson(needs.release-metadata.outputs.release_matrix) }}",
-        workflow_texts,
-        errors,
-    )
-    check_workflow_named_step_run_contains(
-        "docs.download-firmware",
-        "Set release metadata",
-        ["gh release view --json tagName"],
-        workflow_texts,
-        errors,
-    )
-    check_workflow_named_step_run_contains(
-        "docs.download-firmware",
-        "Verify firmware assets",
-        ["python3 scripts/firmware_release.py verify-directory"],
-        workflow_texts,
-        errors,
-    )
-    check_workflow_named_step_run_contains(
-        "docs.deploy-docs",
-        "Verify public firmware",
-        [
-            "python3 scripts/firmware_release.py verify-pages",
-            '--base-url "$PUBLIC_BASE_URL"',
-        ],
-        workflow_texts,
-        errors,
-    )
-    if isinstance(prerelease_lookup_limit, int) and not isinstance(prerelease_lookup_limit, bool):
-        check_workflow_named_step_run_contains(
-            "docs.download-firmware",
-            "Download firmware from latest pre-release",
-            [f"gh release list --limit {prerelease_lookup_limit} --json tagName,isPrerelease"],
-            workflow_texts,
-            errors,
-        )
-    if esphome_config_mount:
-        check_workflow_named_step_run_contains(
-            "release.build-firmware",
-            "Compile firmware",
-            ['compile "${ESPHOME_CONFIG_MOUNT}/builds/${{ matrix.yaml }}.factory.yaml"'],
-            workflow_texts,
-            errors,
-        )
-        check_workflow_named_step_run_contains(
-            "compile.compile",
-            "Compile test firmware artifacts",
-            [
-                'compile "${ESPHOME_CONFIG_MOUNT}/builds/${{ matrix.yaml }}.factory.yaml"',
-                'compile "${ESPHOME_CONFIG_MOUNT}/builds/${{ matrix.yaml }}.yaml"',
-            ],
-            workflow_texts,
-            errors,
-        )
 
+def _read_rel(root: Path, rel_path: str, errors: list[str]) -> str:
+    path = root / rel_path
     try:
-        release_devices = release_matrix_devices(product)
-    except RuntimeError as exc:
-        errors.append(str(exc))
-        return
-
-    devices_by_slug = {str(device.get("slug", "")).strip(): device for device in product["devices"]}
-    for release_device in release_devices:
-        slug = release_device["slug"]
-        public_manifest_dirs = []
-        for field in ("public_manifest", "public_beta_manifest"):
-            public_manifest = str(devices_by_slug.get(slug, {}).get(field, "")).strip()
-            if public_manifest:
-                public_manifest_dirs.append(Path(public_manifest).parent.as_posix())
-        for prefix in dict.fromkeys(public_manifest_dirs):
-            env_name = "DEFAULT_PUBLIC_BETA_MANIFEST" if prefix.endswith("/beta") else "DEFAULT_PUBLIC_MANIFEST"
-            dir_name = "BETA_MANIFEST_DIR" if prefix.endswith("/beta") else "STABLE_MANIFEST_DIR"
-            require_contains(
-                docs_workflow,
-                f'{dir_name}=$(dirname "${env_name}")',
-                ".github/workflows/docs.yml",
-                errors,
-            )
-            require_contains(
-                docs_workflow,
-                f'if [ -f "${{{dir_name}}}/${{DEFAULT_DEVICE_SLUG}}.manifest.json" ]; then',
-                ".github/workflows/docs.yml",
-                errors,
-            )
-            require_contains(
-                docs_workflow,
-                f'cp "${{{dir_name}}}/${{DEFAULT_DEVICE_SLUG}}.manifest.json" "${env_name}"',
-                ".github/workflows/docs.yml",
-                errors,
-            )
+        return path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        errors.append(f"Missing file: {rel_path}")
+        return ""
 
 
-def check_esphome_version(product: dict, errors: list[str]) -> None:
-    project = product["project"]
-    version = str(project.get("esphome_version", "")).strip()
-    docker_image = str(project.get("esphome_docker_image", "")).strip().rstrip(":")
-    config_mount = str(project.get("esphome_config_mount", "")).strip()
-    remove_container = project.get("esphome_docker_remove_container")
+def workflow_files(root: Path) -> list[Path]:
+    """Return every GitHub workflow file (.yml and .yaml), sorted by name."""
+    workflow_dir = root / ".github" / "workflows"
+    return sorted([*workflow_dir.glob("*.yml"), *workflow_dir.glob("*.yaml")])
+
+
+def check_esphome_version(product: dict, errors: list[str], root: Path = ROOT) -> None:
+    """Check that local builds and CI install the contract's ESPHome pin and the docs state it.
+
+    Each firmware workflow must read the pin from the contract and install exactly
+    that version; any other ``esphome`` install in a workflow is reported.
+    """
+    version = str(product["project"].get("esphome_version", "")).strip()
     if not version:
         errors.append("project.esphome_version is required")
         return
+    if not re.match(r"^\d+\.\d+\.\d+$", version):
+        errors.append("project.esphome_version must be an exact X.Y.Z version")
 
-    required_refs = [
-        ROOT / "README.md",
-        ROOT / "docs" / "install.md",
-        ROOT / "docs" / "manual-setup.md",
-    ]
-    for path in required_refs:
-        text = read(path, errors)
-        require_contains(text, version, rel(path), errors)
+    require_contains(_read_rel(root, "scripts/firmware.sh", errors), '["esphome_version"]', "scripts/firmware.sh", errors)
+    for rel_path in FIRMWARE_WORKFLOWS:
+        text = _read_rel(root, rel_path, errors)
+        require_contains(text, ESPHOME_PIN_READ, rel_path, errors)
+        require_contains(text, ESPHOME_PINNED_INSTALL, rel_path, errors)
+    for path in workflow_files(root):
+        rel_path = path.relative_to(root).as_posix()
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if re.search(r"\bpip3? install\b.*\besphome\b", line) and ESPHOME_PINNED_INSTALL not in line:
+                errors.append(f"{rel_path} installs ESPHome without the contract pin: {line.strip()}")
 
-    readme = read(ROOT / "README.md", errors)
-    if docker_image:
-        require_contains(readme, f"{docker_image}:{version}", "README.md", errors)
-
-    compile_workflow = read(ROOT / ".github" / "workflows" / "compile.yml", errors)
-    release_workflow = read(ROOT / ".github" / "workflows" / "release.yml", errors)
-    workflow_texts = {
-        "compile": (".github/workflows/compile.yml", compile_workflow),
-        "release": (".github/workflows/release.yml", release_workflow),
-    }
-    for target in ("compile.firmware-metadata", "release.release-metadata"):
-        check_workflow_named_step_run_contains(
-            target,
-            "Read product metadata",
-            ['python3 scripts/product_config.py github-output >> "$GITHUB_OUTPUT"'],
-            workflow_texts,
-            errors,
-        )
-
-    docker_run_fragments = ['"${ESPHOME_DOCKER_IMAGE}:${ESPHOME_VERSION}"']
-    if config_mount:
-        docker_run_fragments.append('-v "${PWD}:${ESPHOME_CONFIG_MOUNT}"')
-        require_contains(readme, f'-v "${{PWD}}:{config_mount}"', "README.md", errors)
-    if remove_container is True:
-        docker_run_fragments.append("docker run ${ESPHOME_DOCKER_REMOVE_FLAG}")
-        require_contains(readme, "docker run --rm", "README.md", errors)
-
-    for target, step_name in (
-        ("compile.compile", "Compile test firmware artifacts"),
-        ("release.build-firmware", "Compile firmware"),
-    ):
-        check_workflow_named_step_run_contains(
-            target,
-            step_name,
-            docker_run_fragments,
-            workflow_texts,
-            errors,
-        )
+    install_docs = _read_rel(root, "docs/install.md", errors)
+    require_contains(install_docs, f"`{version}`", "docs/install.md", errors)
+    require_contains(_read_rel(root, "docs/manual-setup.md", errors), f"`{version}`", "docs/manual-setup.md", errors)
+    # The install notes head the bullet with the X.Y series, e.g. "**ESPHome 2026.6:**".
+    series = version.rsplit(".", 1)[0]
+    for found in re.findall(r"\*\*ESPHome (\d+\.\d+):\*\*", install_docs):
+        if found != series:
+            errors.append(f"docs/install.md heading says ESPHome {found}, expected {series}")
 
 
-def check_workflows(product: dict, errors: list[str]) -> None:
-    project = product["project"]
-    compile_workflow = read(ROOT / ".github" / "workflows" / "compile.yml", errors)
+def check_node_version(product: dict, errors: list[str], root: Path = ROOT) -> None:
+    """Check that workflow Node versions and the README match project.node_version.
 
-    docs_workflow = read(ROOT / ".github" / "workflows" / "docs.yml", errors)
-    release_workflow = read(ROOT / ".github" / "workflows" / "release.yml", errors)
-    default_branch = str(project.get("github_default_branch", "")).strip()
-    check_workflow_default_branch(default_branch, ".github/workflows/docs.yml", docs_workflow, errors)
-    workflow_path_filters = project.get("github_workflow_path_filters", {})
-    check_workflow_path_filters(
-        workflow_path_filters,
-        {
-            ".github/workflows/compile.yml": compile_workflow,
-            ".github/workflows/docs.yml": docs_workflow,
-        },
-        errors,
-    )
-    workflow_texts = {
-        "compile": (".github/workflows/compile.yml", compile_workflow),
-        "docs": (".github/workflows/docs.yml", docs_workflow),
-        "release": (".github/workflows/release.yml", release_workflow),
-    }
-    workflow_events = project.get("github_workflow_events", {})
-    check_workflow_events(workflow_events, workflow_texts, errors)
-    node24_env = str(project.get("github_actions_node24_env", "")).strip()
-    if str(project.get("node_version", "")).strip() == "24":
-        check_workflow_top_level_env(node24_env, "true", workflow_texts, errors)
-    workflow_event_types = project.get("github_workflow_event_types", {})
-    check_workflow_event_type_usage(workflow_event_types, workflow_texts, errors)
-    workflow_jobs = project.get("github_workflow_jobs", {})
-    check_workflow_jobs(workflow_jobs, workflow_texts, errors)
-    actions_runner = str(project.get("github_actions_runner", "")).strip()
-    check_workflow_job_runner_usage(actions_runner, workflow_texts, errors)
-    workflow_job_dependencies = project.get("github_workflow_job_dependencies", {})
-    check_workflow_job_dependency_usage(workflow_job_dependencies, workflow_texts, errors)
-    workflow_job_conditions = project.get("github_workflow_job_conditions", {})
-    check_workflow_job_condition_usage(workflow_job_conditions, workflow_texts, errors)
-    workflow_permissions = project.get("github_workflow_permissions", {})
-    workflow_names = project.get("github_workflow_names", {})
-    if isinstance(workflow_names, dict):
-        check_workflow_names(workflow_names, workflow_texts, errors)
-        release_workflow_name = str(workflow_names.get("release", "")).strip()
-        if release_workflow_name:
-            check_workflow_run_targets(
-                [release_workflow_name],
-                ".github/workflows/docs.yml",
-                docs_workflow,
-                errors,
-            )
-    check_workflow_permissions(workflow_permissions, workflow_texts, errors)
-    for label, text in (
-        (".github/workflows/docs.yml", docs_workflow),
-        (".github/workflows/release.yml", release_workflow),
-    ):
-        require_contains(text, "scripts/product_config.py", label, errors)
-        for contract_path in (
-            "product/contract/devices.json",
-            "product/contract/manifest.json",
-            "product/contract/project.json",
-            "product/contract/settings.json",
-        ):
-            require_contains(text, contract_path, label, errors)
-
-    check_pull_request_template_contract(project, workflow_names, errors)
-
-
-def check_node_version(product: dict, errors: list[str]) -> None:
-    project = product["project"]
-    version = str(project.get("node_version", "")).strip()
-    package_cache = str(project.get("node_package_cache", "")).strip()
-    install_command = str(project.get("node_install_command", "")).strip()
-    local_check_command = str(project.get("local_check_command", "")).strip()
-    docs_build_command = str(project.get("docs_build_command", "")).strip()
-    node24_env = str(project.get("github_actions_node24_env", "")).strip()
-    release_actions = project.get("release_workflow_actions", {})
-    setup_node_action = (
-        str(release_actions.get("setup_node", "")).strip() if isinstance(release_actions, dict) else ""
-    )
+    At least one workflow must set ``node-version``. Only the leading major
+    version is compared, so ``22``, ``22.x`` and ``'22.12.0'`` all match 22.
+    Expressions such as ``${{ matrix.node }}`` and ``node-version-file`` can't be
+    checked statically and are reported so the check never silently passes.
+    """
+    version = str(product["project"].get("node_version", "")).strip()
     if not version:
         errors.append("project.node_version is required")
         return
     if not re.match(r"^\d+$", version):
         errors.append("project.node_version must be a major version number")
-    if version == "24" and not node24_env:
-        errors.append("project.github_actions_node24_env is required when project.node_version is 24")
 
-    compile_workflow = read(ROOT / ".github" / "workflows" / "compile.yml", errors)
-    docs_workflow = read(ROOT / ".github" / "workflows" / "docs.yml", errors)
-    workflow_texts = {
-        "compile": (".github/workflows/compile.yml", compile_workflow),
-        "docs": (".github/workflows/docs.yml", docs_workflow),
-    }
-    setup_node_inputs = {"node-version": version}
-    if package_cache:
-        setup_node_inputs["cache"] = package_cache
-    for target in ("compile.validate", "docs.build-docs"):
-        check_workflow_action_step_inputs(
-            target,
-            setup_node_action,
-            "node-version",
-            version,
-            setup_node_inputs,
-            workflow_texts,
-            errors,
-        )
-    if install_command:
-        for target in ("compile.validate", "docs.build-docs"):
-            check_workflow_job_run_command(target, install_command, workflow_texts, errors)
-    if local_check_command:
-        check_workflow_job_run_command("compile.validate", local_check_command, workflow_texts, errors)
-    if docs_build_command:
-        check_workflow_job_run_command("docs.build-docs", docs_build_command, workflow_texts, errors)
+    found_any = False
+    for path in workflow_files(root):
+        rel_path = path.relative_to(root).as_posix()
+        text = path.read_text(encoding="utf-8")
+        if re.search(r"^[ \t]*node-version-file:", text, re.MULTILINE):
+            errors.append(f"{rel_path} uses node-version-file; set node-version: {version} instead")
+        for raw in re.findall(r"^[ \t]*node-version:[ \t]*(.*?)[ \t]*(?:#.*)?$", text, re.MULTILINE):
+            found_any = True
+            value = raw.strip().strip("'\"")
+            major = re.match(r"(\d+)(?:\.|$)", value)
+            if not major:
+                errors.append(f"{rel_path} node-version {raw.strip() or '(empty)'} can't be checked; use {version}")
+            elif major.group(1) != version:
+                errors.append(f"{rel_path} uses node-version {value}, expected project.node_version {version}")
+    if not found_any:
+        errors.append(f"No workflow sets node-version; expected {version}")
+
+    readme = _read_rel(root, "README.md", errors)
+    mentioned = re.findall(r"Node\.js (\d+)\b", readme)
+    if version not in mentioned:
+        errors.append(f"README.md is missing 'Node.js {version}'")
+    for other in sorted(set(mentioned) - {version}):
+        errors.append(f"README.md mentions Node.js {other}, expected {version}")

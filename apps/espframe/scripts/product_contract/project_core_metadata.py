@@ -151,5 +151,7 @@ def check_project_package_firmware_metadata(product: dict, errors: list[str]) ->
     project = product["project"]
     package_name = str(project.get("package_name", "")).strip()
     firmware_update = read(ROOT / "common" / "addon" / "firmware_update.yaml", errors)
+    # The name itself reaches the firmware through each device's generated
+    # packages.yaml (project_name substitution); check:generated covers that.
     if package_name:
-        require_contains(firmware_update, f"name: {package_name}", "common/addon/firmware_update.yaml", errors)
+        require_contains(firmware_update, 'name: "${project_name}"', "common/addon/firmware_update.yaml", errors)

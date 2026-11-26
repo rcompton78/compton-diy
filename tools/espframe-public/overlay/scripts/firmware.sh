@@ -37,6 +37,12 @@
 #                          FIRMWARE_MANIFEST_URL, it's refused.
 #   CHIP                   default --chip (pre-v3 or v3).
 #   DEVICE                 default --device for flash/logs.
+#   PLATFORMIO_CORE_DIR    where PlatformIO keeps its toolchains and Python env
+#                          (several GB). Default: .platformio-core/ in this repo,
+#                          so the build never changes the ~/.platformio other
+#                          projects share. Point worktrees or clones at one
+#                          folder to share a copy. A relative path is relative
+#                          to the repo root; a leading ~/ is $HOME.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -59,11 +65,27 @@ if [ -f "$ROOT/.env" ]; then
         # Only the documented settings: anything else could overwrite this
         # script's own variables (VENV is rm -rf'd on a reinstall).
         case "$key" in
-            FIRMWARE_MANIFEST_URL | SIBLING_FIRMWARE_MANIFEST_URL | RELEASE_VERSION | CHIP | DEVICE) export "$key=$value" ;;
-            *) die ".env: unsupported setting '$key' (only FIRMWARE_MANIFEST_URL, SIBLING_FIRMWARE_MANIFEST_URL, RELEASE_VERSION, CHIP, DEVICE)" ;;
+            FIRMWARE_MANIFEST_URL | SIBLING_FIRMWARE_MANIFEST_URL | RELEASE_VERSION | CHIP | DEVICE | PLATFORMIO_CORE_DIR) export "$key=$value" ;;
+            *) die ".env: unsupported setting '$key' (only FIRMWARE_MANIFEST_URL, SIBLING_FIRMWARE_MANIFEST_URL, RELEASE_VERSION, CHIP, DEVICE, PLATFORMIO_CORE_DIR)" ;;
         esac
     done < "$ROOT/.env"
 fi
+
+# Keep PlatformIO's toolchains and Python env in this repo unless told otherwise:
+# its default, ~/.platformio, is shared by every PlatformIO and ESPHome project
+# on the machine, and a build here can recreate its Python env. A value from
+# .env or the environment is anchored the same way, so the script finds the
+# same folder whatever directory it runs from.
+case "${PLATFORMIO_CORE_DIR:-}" in
+    '') PLATFORMIO_CORE_DIR="$ROOT/.platformio-core" ;;
+    *'$'*) die "PLATFORMIO_CORE_DIR (from .env or the environment): .env values aren't expanded; use a full path or ~/ instead of $PLATFORMIO_CORE_DIR" ;;
+    '~') PLATFORMIO_CORE_DIR="$HOME" ;;
+    '~/'*) PLATFORMIO_CORE_DIR="$HOME/${PLATFORMIO_CORE_DIR#'~/'}" ;;
+    '~'*) die "PLATFORMIO_CORE_DIR (from .env or the environment): only a leading ~/ is expanded; use a full path instead of $PLATFORMIO_CORE_DIR" ;;
+    /*) ;;
+    *) PLATFORMIO_CORE_DIR="$ROOT/$PLATFORMIO_CORE_DIR" ;;
+esac
+export PLATFORMIO_CORE_DIR
 
 python_bin() {
     local candidate

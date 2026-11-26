@@ -1,7 +1,11 @@
 # =============================================================================
 # DEV CONFIG - Local development entry point (Guition ESP32-P4 JC8012P4A1)
 # =============================================================================
-# Flash with: esphome run dev.yaml
+# Joins your Wi-Fi straight away (no hotspot setup). Put a secrets.yaml with
+# wifi_ssid and wifi_password next to this file (it's gitignored), then from
+# the repo root:
+#
+#   scripts/espframe-esphome.sh run apps/espframe/devices/guition-esp32-p4-jc8012p4a1/dev.yaml
 # =============================================================================
 
 substitutions:
@@ -20,3 +24,8 @@ external_components:
       type: local
       path: ../../components
     components: [gsl3680, remote_image, espframe]
+
+# ESPHome resolves these paths from this file's folder, not from device.yaml's.
+web_server:
+  css_include: "../../docs/public/webserver/style.css"
+  js_include: "../../docs/public/webserver/app.js"

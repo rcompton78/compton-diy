@@ -12,6 +12,7 @@ from product_contract.common import (
     WEB_TEMPLATE,
     check_web_entity_default_type,
     extract_js_json_var,
+    firmware_entity_block,
     read,
     rel,
     require_contains,
@@ -51,6 +52,59 @@ def require_web_card_renderer(web_text: str, function_name: str, errors: list[st
     if re.search(renderer_pattern, web_text):
         return
     errors.append(f"Missing generated web card renderer {function_name}")
+
+
+def firmware_select_options(block: str) -> list[str] | None:
+    """Return the quoted option list from a firmware select entity block, or None if it has none."""
+    lines = block.splitlines()
+    start = next((index for index, line in enumerate(lines) if line.strip() == "options:"), None)
+    if start is None:
+        return None
+    indent = len(lines[start]) - len(lines[start].lstrip(" "))
+    options: list[str] = []
+    for line in lines[start + 1:]:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if len(line) - len(line.lstrip(" ")) <= indent or not stripped.startswith("- "):
+            break
+        options.append(stripped[2:].strip().strip('"'))
+    return options
+
+
+def check_static_entity_options(
+    key: str,
+    metadata: dict,
+    domain: str,
+    name: str,
+    firmware_text: str,
+    firmware_file: str,
+    errors: list[str],
+) -> None:
+    options = metadata.get("options")
+    label = f"Static web entity {key}"
+    if domain != "select":
+        errors.append(f"{label} options are only valid for select entities")
+        return
+    if not isinstance(options, list) or not options:
+        errors.append(f"{label} options must be a non-empty list")
+        return
+    if any(not isinstance(option, str) or not option for option in options):
+        errors.append(f"{label} options must be non-empty strings")
+        return
+    if len(options) != len(set(options)):
+        errors.append(f"{label} options must not contain duplicates")
+    default = metadata.get("default")
+    if default is not None and default not in options:
+        errors.append(f"{label} default is not in options")
+    block = firmware_entity_block(firmware_text, name, firmware_file, errors)
+    if not block:
+        return
+    firmware_options = firmware_select_options(block)
+    if firmware_options is None:
+        errors.append(f"{firmware_file} select {name} is missing an options list")
+    elif firmware_options != options:
+        errors.append(f"{label} options must match {firmware_file} select {name} options {firmware_options}")
 
 
 def check_web_entity_metadata(product: dict, errors: list[str]) -> None:
@@ -153,6 +207,12 @@ def check_web_entity_metadata(product: dict, errors: list[str]) -> None:
             text = read(ROOT / firmware_file, errors)
             require_contains(text, f"{domain}:", firmware_file, errors)
             require_contains(text, f"name: \"{name}\"", firmware_file, errors)
+            if "options" in metadata:
+                check_static_entity_options(key, metadata, domain, name, text, firmware_file, errors)
+            elif domain == "select" and "optionsKey" not in metadata:
+                errors.append(
+                    f"Static web entity {key} select entity must set options or optionsKey so backup import can validate it"
+                )
 
     alias_entities_seen: set[str] = set()
     entity_aliases = web_entity_aliases(product)

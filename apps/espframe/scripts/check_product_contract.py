@@ -2,8 +2,9 @@
 """Validate the shared product metadata against the checked-in project.
 
 This is the first release gate for the reset architecture. It catches drift
-between product metadata, firmware YAML, the custom web UI, docs, and CI before
-we start generating larger parts of the project from the product schema.
+between product metadata, firmware YAML, the custom web UI, docs, and the
+tool versions CI installs. README prose and the original project's docs site,
+public URLs and workflow layout are deliberately not checked here.
 """
 
 from __future__ import annotations
@@ -37,11 +38,6 @@ from product_contract.photo_features import (
 )
 from product_contract.privacy import check_privacy_metadata
 from product_contract.project_metadata import check_project_metadata
-from product_contract.public_site import (
-    check_docs_site_config,
-    check_public_manifest_urls,
-    check_public_site_references,
-)
 from product_contract.screen_features import (
     check_clock_time_metadata,
     check_developer_features_metadata,
@@ -51,12 +47,7 @@ from product_contract.screen_features import (
     check_touch_controls_metadata,
 )
 from product_contract.settings import check_settings
-from product_contract.workflows import (
-    check_device_workflow_contract,
-    check_esphome_version,
-    check_node_version,
-    check_workflows,
-)
+from product_contract.workflows import check_esphome_version, check_node_version
 from product_config import load_product
 
 
@@ -85,17 +76,12 @@ def main() -> int:
     check_setup_flow_metadata(product, errors)
     check_photo_display_metadata(product, errors)
     check_devices(product, errors)
-    check_public_manifest_urls(product, errors)
-    check_public_site_references(product, errors)
-    check_docs_site_config(product, errors)
-    check_device_workflow_contract(product, errors)
     check_generated_asset_metadata(product, errors)
     check_factory_firmware_metadata(product, errors)
     check_web_server_metadata(product, errors)
     check_external_components_metadata(product, errors)
     check_esphome_version(product, errors)
     check_node_version(product, errors)
-    check_workflows(product, errors)
     check_settings(product, errors)
 
     if errors:

@@ -152,13 +152,6 @@ def check_project_release_metadata(product: dict, errors: list[str]) -> None:
     for field in ("compile_firmware_artifact_prefix", "compile_firmware_output_dir", "compile_firmware_version_prefix"):
         if not str(project.get(field, "")).strip():
             errors.append(f"project.{field} is required")
-    pull_request_template = check_relative_path(
-        project.get("github_pull_request_template_path"),
-        "project.github_pull_request_template_path",
-        errors,
-    )
-    if pull_request_template:
-        read(ROOT / pull_request_template, errors)
     device_testing_options = project.get("github_pull_request_device_testing_options", [])
     if not isinstance(device_testing_options, list) or not device_testing_options:
         errors.append("project.github_pull_request_device_testing_options must be a non-empty list")

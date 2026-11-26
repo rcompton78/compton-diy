@@ -30,7 +30,6 @@ def check_photo_source_metadata(product: dict, errors: list[str]) -> None:
         if photo_source_setting.get("default") != "All Photos":
             errors.append("photo_source default must be All Photos")
 
-    readme = read(ROOT / "README.md", errors)
     index_docs = read(ROOT / "docs" / "index.md", errors)
     photo_docs = read(ROOT / "docs" / "photo-sources.md", errors)
     api_key_docs = read(ROOT / "docs" / "api-key.md", errors)
@@ -66,16 +65,6 @@ def check_photo_source_metadata(product: dict, errors: list[str]) -> None:
             ("common/addon/immich_filter.yaml", filter_yaml),
         ):
             require_contains(text, mode, label, errors)
-    for needle in (
-        "whole library",
-        "favorites",
-        "specific albums",
-        "specific people",
-        "specific tags",
-        '"on this day" memories',
-        "chosen date range",
-    ):
-        require_contains(readme, needle, "README.md", errors)
     for needle in (
         "Photo Sources",
         "favorites only",
@@ -377,14 +366,13 @@ def check_setup_flow_metadata(product: dict, errors: list[str]) -> None:
         require_contains(manual_setup_docs, secret, "docs/manual-setup.md", errors)
         for label, local_yaml in local_yamls:
             require_contains(local_yaml, f"!secret {secret}", label or "device local ESPHome YAML", errors)
+    # package_ref/package_refresh describe the original project's remote-package
+    # install, which only docs/manual-setup.md documents. This repo's local
+    # YAML includes the package from disk, so it isn't checked for them.
     if package_ref:
         require_contains(manual_setup_docs, f"ref: {package_ref}", "docs/manual-setup.md", errors)
-        for label, local_yaml in local_yamls:
-            require_contains(local_yaml, f"ref: {package_ref}", label or "device local ESPHome YAML", errors)
     if package_refresh:
         require_contains(manual_setup_docs, f"refresh: {package_refresh}", "docs/manual-setup.md", errors)
-        for label, local_yaml in local_yamls:
-            require_contains(local_yaml, f"refresh: {package_refresh}", label or "device local ESPHome YAML", errors)
     for needle in ("WiFi", "Immich server URL", "Immich API key"):
         require_contains(immich_frame_docs, needle, "docs/immich-photo-frame.md", errors)
 
@@ -453,7 +441,6 @@ def check_photo_display_metadata(product: dict, errors: list[str]) -> None:
     date_filter_modes = [str(value).strip() for value in project.get("date_filter_modes", []) if str(value).strip()]
     date_filter_relative_anchor = str(project.get("date_filter_relative_anchor", "")).strip()
     date_filter_time_source = str(project.get("date_filter_time_source", "")).strip()
-    portrait_pairing_behavior = str(project.get("portrait_pairing_behavior", "")).strip()
     portrait_pairing_rotation_behavior = str(project.get("portrait_pairing_rotation_behavior", "")).strip()
     metadata_overlay_fields = [
         str(value).strip() for value in project.get("metadata_overlay_fields", []) if str(value).strip()
@@ -473,7 +460,6 @@ def check_photo_display_metadata(product: dict, errors: list[str]) -> None:
         elif setting.get("default") is not True:
             errors.append(f"{key} default must be true")
 
-    readme = read(ROOT / "README.md", errors)
     index_docs = read(ROOT / "docs" / "index.md", errors)
     photo_docs = read(ROOT / "docs" / "photo-sources.md", errors)
     web_template = read_web_source(errors)
@@ -536,8 +522,6 @@ def check_photo_display_metadata(product: dict, errors: list[str]) -> None:
         if filter_yaml.count(f"max_length: {date_length}") < 2:
             errors.append("common/addon/immich_filter.yaml must use date setting format length for date_from and date_to")
 
-    if portrait_pairing_behavior:
-        require_contains(readme, portrait_pairing_behavior, "README.md", errors)
     for needle in ("Portrait Pairing", "portrait photos taken on the same day", "side-by-side"):
         require_contains(index_docs, needle, "docs/index.md", errors)
     for needle in ("Portrait Pairing", "side-by-side", "landscape screens"):

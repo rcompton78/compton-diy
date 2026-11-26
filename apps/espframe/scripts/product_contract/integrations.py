@@ -85,7 +85,6 @@ def check_home_assistant_metadata(product: dict, errors: list[str]) -> None:
     wifi_strength_source = str(project.get("network_wifi_strength_source", "")).strip()
     wifi_strength_update_interval = str(project.get("network_wifi_strength_update_interval", "")).strip()
 
-    readme = read(ROOT / "README.md", errors)
     index_docs = read(ROOT / "docs" / "index.md", errors)
     immich_photo_frame_docs = read(ROOT / "docs" / "immich-photo-frame.md", errors)
     home_assistant_docs = read(ROOT / "docs" / "home-assistant.md", errors)
@@ -94,7 +93,6 @@ def check_home_assistant_metadata(product: dict, errors: list[str]) -> None:
     device_yaml = read(ROOT / device_yaml_path, errors)
 
     docs_to_check = (
-        ("README.md", readme),
         ("docs/index.md", index_docs),
         ("docs/immich-photo-frame.md", immich_photo_frame_docs),
         ("docs/home-assistant.md", home_assistant_docs),
@@ -103,13 +101,11 @@ def check_home_assistant_metadata(product: dict, errors: list[str]) -> None:
         for label, text in docs_to_check:
             require_contains(text, name, label, errors)
     if requirement:
-        require_contains(readme, requirement, "README.md", errors)
         require_contains(home_assistant_docs, requirement, "docs/home-assistant.md", errors)
     if url:
         require_contains(home_assistant_docs, url, "docs/home-assistant.md", errors)
     if platform:
         for label, text in (
-            ("README.md", readme),
             ("docs/immich-photo-frame.md", immich_photo_frame_docs),
             ("docs/home-assistant.md", home_assistant_docs),
         ):

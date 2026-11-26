@@ -147,6 +147,11 @@ const rejectedBackupFixture = {
   },
 };
 
+const invalidClockOptionsBackupFixture = JSON.parse(
+  fs.readFileSync(path.join(root, "tests/fixtures/compat/espframe-config-v1-invalid-clock-options.json"), "utf8"),
+);
+invalidClockOptionsBackupFixture.clock.format = "12 Hour";
+
 const partialBackupFixture = {
   version: 1,
   connection: {
@@ -197,6 +202,7 @@ const scenarios = [
   { name: "backup-import-save-failure", configured: true, width: 1280, height: 900, importFixture: validBackupFixture, failedPostEndpoint: "Screen: Daytime Brightness" },
   { name: "backup-import-partial", configured: true, width: 1280, height: 900, importFixture: partialBackupFixture },
   { name: "backup-import-rejected", configured: true, width: 1280, height: 900, importFixture: rejectedBackupFixture },
+  { name: "backup-import-invalid-clock-options", configured: true, width: 1280, height: 900, importFixture: invalidClockOptionsBackupFixture },
   { name: "backup-import-missing-version", configured: true, width: 1280, height: 900, importFixture: missingVersionBackupFixture },
   { name: "backup-import-future-version", configured: true, width: 1280, height: 900, importFixture: futureVersionBackupFixture },
   { name: "backup-import-unsupported-version", configured: true, width: 1280, height: 900, importFixture: unsupportedVersionBackupFixture },
@@ -1166,6 +1172,18 @@ function smokeAssertionsForScenario(scenario) {
             await waitFor(() => pageText().indexOf("Import skipped 1 setting") !== -1, 8000, "rejected import");
             if (hasConfigurationPost("Photos: Album IDs")) {
               throw new Error("Rejected album IDs were posted to the device");
+            }
+          }
+
+          if (${JSON.stringify(scenario.name)} === "backup-import-invalid-clock-options") {
+            clickButton("Import");
+            await waitFor(() => pageText().indexOf("Imported with 2 skipped settings") !== -1, 8000, "invalid clock options import");
+            requirePostContains("Valid clock format still imported", "Clock: Format", "option=12 Hour");
+            if (hasConfigurationPost("Clock: Size")) {
+              throw new Error("Unsupported clock size was posted to the device");
+            }
+            if (hasConfigurationPost("Clock: Position")) {
+              throw new Error("Unsupported clock position was posted to the device");
             }
           }
 

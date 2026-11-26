@@ -18,6 +18,8 @@ on:
     paths-ignore:
       - "README.md"
       - "docs/**/*.md"
+      - ".gitignore"
+      - ".claude/**"
   workflow_dispatch:
 
 permissions:
@@ -117,11 +119,12 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            ~/.platformio
+            .platformio-core
             builds/.esphome/.espressif
-          key: esphome-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}
-          # build.yml saves per chip (-pre-v3, -v3); either warms this one.
-          restore-keys: esphome-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}-
+          key: esphome-v2-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}
+          # A manual Build run on main saves per chip (-pre-v3, -v3), and either
+          # warms this one; PR runs can't, since their caches are scoped to the PR.
+          restore-keys: esphome-v2-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}-
       # Each build's sibling is the other's manifest: a frame whose saved URL
       # names it (e.g. from a backup of the other board) is moved onto its own.
       - name: Compile (pre-v3 chip)

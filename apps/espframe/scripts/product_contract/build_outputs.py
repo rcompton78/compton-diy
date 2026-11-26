@@ -142,16 +142,22 @@ def check_factory_firmware_metadata(product: dict, errors: list[str]) -> None:
     secret_policy = str(project.get("factory_firmware_secret_policy", "")).strip()
     network_mode = str(project.get("factory_firmware_network_mode", "")).strip()
     setup_method = str(project.get("factory_firmware_setup_method", "")).strip()
-    local_use = str(project.get("factory_firmware_local_use", "")).strip()
-    esphome_config_mount = str(project.get("esphome_config_mount", "")).strip()
     firmware_version_placeholder = str(project.get("firmware_version_placeholder_line", "")).strip()
     factory_css_include = str(project.get("web_server_factory_css_include", "")).strip()
     factory_js_include = str(project.get("web_server_factory_js_include", "")).strip()
 
     install_docs = read(ROOT / "docs" / "install.md", errors)
     connectivity_yaml = read(ROOT / "common" / "addon" / "connectivity.yaml", errors)
-    compile_workflow = read(ROOT / ".github" / "workflows" / "compile.yml", errors)
+    firmware_script = read(ROOT / "scripts" / "firmware.sh", errors)
+    build_workflow = read(ROOT / ".github" / "workflows" / "build.yml", errors)
     release_workflow = read(ROOT / ".github" / "workflows" / "release.yml", errors)
+    # Every firmware build, local or in CI, goes through scripts/firmware.sh.
+    for label, text in (
+        (".github/workflows/build.yml", build_workflow),
+        (".github/workflows/release.yml", release_workflow),
+    ):
+        # "compile --chip <chip>" since the v3-chip build (COM-691).
+        require_contains(text, "scripts/firmware.sh compile", label, errors)
 
     for device in product["devices"]:
         slug = str(device.get("slug", "")).strip()
@@ -159,7 +165,7 @@ def check_factory_firmware_metadata(product: dict, errors: list[str]) -> None:
         if not build_yaml:
             continue
         build_text = read(ROOT / build_yaml, errors)
-        for value in (purpose, secret_policy, network_mode, setup_method, local_use):
+        for value in (purpose, secret_policy, network_mode, setup_method):
             if value:
                 require_contains(build_text, value, build_yaml, errors)
         if firmware_version_placeholder:
@@ -168,31 +174,7 @@ def check_factory_firmware_metadata(product: dict, errors: list[str]) -> None:
             require_contains(build_text, f'css_include: "{factory_css_include}"', build_yaml, errors)
         if factory_js_include:
             require_contains(build_text, f'js_include: "{factory_js_include}"', build_yaml, errors)
-        if esphome_config_mount:
-            require_contains(
-                compile_workflow,
-                'compile "${ESPHOME_CONFIG_MOUNT}/builds/${{ matrix.yaml }}.factory.yaml"',
-                ".github/workflows/compile.yml",
-                errors,
-            )
-            require_contains(
-                compile_workflow,
-                'compile "${ESPHOME_CONFIG_MOUNT}/builds/${{ matrix.yaml }}.yaml"',
-                ".github/workflows/compile.yml",
-                errors,
-            )
-            require_contains(
-                release_workflow,
-                'compile "${ESPHOME_CONFIG_MOUNT}/builds/${{ matrix.yaml }}.factory.yaml"',
-                ".github/workflows/release.yml",
-                errors,
-            )
-            require_contains(
-                release_workflow,
-                'compile "${ESPHOME_CONFIG_MOUNT}/builds/${{ matrix.yaml }}.yaml"',
-                ".github/workflows/release.yml",
-                errors,
-            )
+        require_contains(firmware_script, f'CONFIG="$ROOT/{build_yaml}"', "scripts/firmware.sh", errors)
 
     if network_mode:
         require_contains(install_docs, "hotspot", "docs/install.md", errors)
@@ -290,13 +272,10 @@ def check_external_components_metadata(product: dict, errors: list[str]) -> None
     component_names = [
         str(value).strip() for value in project.get("external_component_names", []) if str(value).strip()
     ]
-    git_source_type = str(project.get("external_component_git_source_type", "")).strip()
     local_source_type = str(project.get("external_component_local_source_type", "")).strip()
     git_path = str(project.get("external_component_git_path", "")).strip()
     local_path = str(project.get("external_component_local_path", "")).strip()
-    component_ref = str(project.get("external_component_ref", "")).strip()
     components_inline = f"components: [{', '.join(component_names)}]" if component_names else ""
-    repository_url = str(project.get("repository_url", "")).strip()
 
     for component in component_names:
         component_dir = ROOT / "components" / component
@@ -311,27 +290,13 @@ def check_external_components_metadata(product: dict, errors: list[str]) -> None
         device_yaml = check_relative_path(device.get("device_yaml"), f"Device {slug} device_yaml", errors)
         build_yaml = check_relative_path(device.get("build_yaml"), f"Device {slug} build_yaml", errors)
         if device_yaml:
+            # Components come from this repo (a local source in each build YAML),
+            # not from a git source in the device package.
             device_text = read(ROOT / device_yaml, errors)
-            require_contains(device_text, "external_components:", device_yaml, errors)
-            if git_source_type:
-                require_contains(device_text, f"      type: {git_source_type}", device_yaml, errors)
-            if repository_url:
-                require_contains(device_text, f'espframe_component_url: "{repository_url}"', device_yaml, errors)
-                require_contains(device_text, "      url: ${espframe_component_url}", device_yaml, errors)
-            if component_ref:
-                require_contains(device_text, f'espframe_component_ref: "{component_ref}"', device_yaml, errors)
-                require_contains(device_text, "      ref: ${espframe_component_ref}", device_yaml, errors)
-            if git_path:
-                require_contains(device_text, f"      path: {git_path}", device_yaml, errors)
-            if components_inline:
-                require_contains(device_text, f"    {components_inline}", device_yaml, errors)
-            require_contains(device_text, "    refresh: 0s", device_yaml, errors)
             require_contains(device_text, "espframe:", device_yaml, errors)
             require_contains(device_text, "  id: espframe_core", device_yaml, errors)
         if build_yaml:
             build_paths = [build_yaml]
-            if build_yaml.endswith(".factory.yaml"):
-                build_paths.append(build_yaml.replace(".factory.yaml", ".yaml"))
             for build_path in build_paths:
                 checked_build_path = check_relative_path(
                     build_path,

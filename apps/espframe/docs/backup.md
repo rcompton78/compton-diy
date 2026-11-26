@@ -21,7 +21,7 @@ The export captures all user-facing settings from the current session:
 | **Photos** | Source, album IDs, album labels, person IDs, person labels, tag IDs, tag labels, date filter settings, orientation, portrait pairing, display mode |
 | **Frequency** | Slideshow interval, connection timeout |
 | **Firmware Updates** | Auto update, update frequency, custom manifest URL |
-| **Clock** | Show clock, format, timezone |
+| **Clock** | Show clock, format, timezone, size, position, NTP servers |
 | **Screen Brightness** | Daytime brightness, nighttime brightness |
 | **Night Schedule** | Enable, on time, off time, wake timeout |
 | **Rotation** | Rotation |
@@ -39,6 +39,8 @@ Firmware version, update status, sunrise/sunset, and current brightness are **no
 Partial config files work — only settings present in the file are applied; everything else stays unchanged.
 
 Album IDs, Album Labels, Person IDs, Person Labels, Tag IDs, and Tag Labels each must be 255 characters or fewer after trimming, which matches the device storage limit. If an import file exceeds that for any of those fields, the web UI reports the skipped setting and keeps importing other valid fields.
+
+Settings chosen from a fixed list, such as photo source, clock format, clock size, or clock position, must match one of the options the frame offers. If an import file has an unsupported value, such as a clock size of `Huge`, the web UI skips that setting and keeps importing the others.
 
 ## File Format
 
@@ -74,7 +76,14 @@ The export is a standard JSON file with a `version` field and grouped settings:
     "update_frequency": "Daily",
     "manifest_url": "https://jtenniswood.github.io/espframe/firmware/manifest.json"
   },
-  "clock": { "show": true, "format": "24 Hour", "timezone": "..." },
+  "clock": {
+    "show": true,
+    "format": "24 Hour",
+    "timezone": "...",
+    "size": "Medium",
+    "position": "Bottom Left",
+    "ntp_servers": ["0.pool.ntp.org", "1.pool.ntp.org", "2.pool.ntp.org"]
+  },
   "screen": {
     "brightness_day": 100,
     "brightness_night": 75,

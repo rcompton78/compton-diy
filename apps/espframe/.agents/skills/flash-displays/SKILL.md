@@ -24,7 +24,7 @@ Use `dev.yaml` by default. If the user names another YAML file, use that file in
 
 - If the user explicitly says `dev`, `dev file`, or `dev.yaml`, use `dev.yaml`.
 - If the user gives a bare filename such as `esphome.yaml`, resolve it inside the selected display's config directory.
-- If the user gives a repo-relative path such as `devices/guition-esp32-p4-jc8012p4a1/esphome.yaml`, resolve it from the repository root.
+- If the user gives a repo-relative path such as `devices/guition-esp32-p4-jc8012p4a1/dev.yaml`, resolve it from the repository root.
 - Only use YAML files inside this repository. If the selected file does not exist, ask for the correct file instead of guessing.
 - Do not commit, print, or stage `secrets.yaml`. YAML files may reference `!secret wifi_ssid` and `!secret wifi_password`, but the secrets file itself must stay local and uncommitted. If this computer already has local secrets elsewhere, an ignored symlink may be used for local flashing.
 

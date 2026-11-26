@@ -30,6 +30,10 @@
       "purpose": "Download photo thumbnails for display"
     },
     {
+      "name": "asset.statistics",
+      "purpose": "Count matching photos when using Album, Person, or Tag sources"
+    },
+    {
       "name": "person.read",
       "purpose": "Show people's names on the photo overlay"
     },
@@ -295,6 +299,13 @@
         "messages": [
           "Stable firmware URL was invalid - not imported"
         ]
+      },
+      {
+        "path": "tests/fixtures/compat/espframe-config-v1-invalid-clock-options.json",
+        "messages": [
+          "clock.size had an unsupported option - not imported",
+          "clock.position had an unsupported option - not imported"
+        ]
       }
     ],
     "rejected_versions": [
@@ -328,8 +339,16 @@
       "gesture": "Press and hold for 3 seconds, then release"
     },
     {
+      "action": "Show IP address",
+      "gesture": "Tap the photo once"
+    },
+    {
       "action": "Next photo",
-      "gesture": "Double-tap on the photo"
+      "gesture": "Double-tap the right half of the screen"
+    },
+    {
+      "action": "Previous photo",
+      "gesture": "Double-tap the left half of the screen"
     }
   ],
   "screen_brightness_day_night_source": "sunrise/sunset",
@@ -871,12 +890,25 @@
       "entity": "select/Clock: Size",
       "firmware_file": "common/addon/time.yaml",
       "default": "Medium",
+      "options": [
+        "Small",
+        "Medium",
+        "Large"
+      ],
       "fetch": true
     },
     "clock_position": {
       "entity": "select/Clock: Position",
       "firmware_file": "common/addon/time.yaml",
       "default": "Bottom Left",
+      "options": [
+        "Bottom Left",
+        "Bottom Center",
+        "Bottom Right",
+        "Top Left",
+        "Top Center",
+        "Top Right"
+      ],
       "fetch": true
     },
     "c6_current_firmware": {
@@ -1096,7 +1128,7 @@
   "license_name": "PolyForm Noncommercial License 1.0.0",
   "owner_name": "jtenniswood",
   "owner_url": "https://github.com/jtenniswood",
-  "package_name": "jtenniswood.immich-frame",
+  "package_name": "rcompton78.espframe",
   "repository_url": "https://github.com/jtenniswood/espframe",
   "github_default_branch": "main",
   "github_pull_request_template_path": ".github/pull_request_template.md",
@@ -1427,7 +1459,7 @@
   "generated_firmware_deferred_setting_fields": [],
   "support_url": "https://www.buymeacoffee.com/jtenniswood",
   "support_button_image_url": "https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png",
-  "node_version": "24",
+  "node_version": "22",
   "node_package_cache": "npm",
   "node_install_command": "npm ci",
   "local_check_command": "npm run check:pr",
