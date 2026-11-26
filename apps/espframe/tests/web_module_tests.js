@@ -42,4 +42,82 @@ assert.ok(publicApp.includes('"album_order"'), "public app should include album 
 assert.ok(publicApp.includes("Move album up"), "public app should include album reorder controls");
 assert.ok(publicApp.includes("movePhotoIdRow"), "public app should keep photo ID and label rows reorderable");
 
+// Backup import validation runs against the generated product metadata, so select options
+// from both product settings and static entities (e.g. clock size/position) are covered.
+function generatedJsonVar(name) {
+  const match = publicApp.match(new RegExp(`\\bvar ${name} = (.*);\\s*$`, "m"));
+  assert.ok(match, `public app should define ${name}`);
+  return JSON.parse(match[1]);
+}
+
+function loadBackupImportValidation() {
+  const vm = require("vm");
+  const productSettings = generatedJsonVar("PRODUCT_SETTINGS");
+  const staticEntities = generatedJsonVar("STATIC_ENTITIES");
+  const backupSchema = generatedJsonVar("BACKUP_SCHEMA");
+  const helperNames = ["productSettingOptions", "staticEntityOptions"];
+  const helpers = helperNames.map((name) => {
+    const match = template.match(new RegExp(`\\n  function ${name}\\([\\s\\S]*?\\n  }\\n`));
+    assert.ok(match, `app.template.ts should define ${name}`);
+    return match[0];
+  });
+  const endpoints = {};
+  for (const entry of backupSchema) {
+    for (const key of entry.state_keys) endpoints[key] = true; // stub: validation only checks presence
+  }
+  const context = {
+    PRODUCT_SETTINGS: productSettings,
+    STATIC_ENTITIES: staticEntities,
+    endpoints,
+  };
+  const backupImportSource = fs.readFileSync(path.join(root, "docs/webserver/src/backup_import.ts"), "utf8");
+  // The template helpers carry TypeScript annotations; strip them the same way the web build does.
+  const helperSource = require("esbuild").transformSync(helpers.join("\n"), { loader: "ts", target: "es2018" }).code;
+  vm.runInNewContext(
+    `${helperSource}\n${backupImportSource}\nthis.validate = validateProductSettingBackupImport;\nthis.staticEntityOptions = staticEntityOptions;`,
+    context,
+  );
+  const entryFor = (group, field) => {
+    const entry = backupSchema.find((item) => item.group === group && item.field === field);
+    assert.ok(entry, `backup schema should include ${group}.${field}`);
+    return entry;
+  };
+  const validate = (entry, value) => ({ ...context.validate(entry, value) });
+  const staticEntityOptions = (key) => Array.from(context.staticEntityOptions(key));
+  return { validate, entryFor, staticEntityOptions };
+}
+
+{
+  const { validate, entryFor, staticEntityOptions } = loadBackupImportValidation();
+
+  assert.deepEqual(staticEntityOptions("clock_size"), ["Small", "Medium", "Large"]);
+  assert.deepEqual(staticEntityOptions("not_a_static_entity"), []);
+  const clockSize = entryFor("clock", "size");
+  const clockPosition = entryFor("clock", "position");
+  const clockFormat = entryFor("clock", "format");
+
+  for (const option of ["Small", "Medium", "Large"]) {
+    assert.deepEqual(validate(clockSize, option), { ok: true, value: option, message: "" });
+  }
+  assert.equal(validate(clockPosition, "Top Right").ok, true);
+  assert.deepEqual(validate(clockSize, "Huge"), {
+    ok: false,
+    value: "Huge",
+    message: "clock.size had an unsupported option - not imported",
+  });
+  assert.deepEqual(validate(clockPosition, "Middle"), {
+    ok: false,
+    value: "Middle",
+    message: "clock.position had an unsupported option - not imported",
+  });
+  assert.equal(validate(clockFormat, "12 Hour").ok, true);
+  assert.equal(validate(clockFormat, "13 Hour").ok, false);
+
+  const invalidClockFixture = JSON.parse(
+    fs.readFileSync(path.join(root, "tests/fixtures/compat/espframe-config-v1-invalid-clock-options.json"), "utf8"),
+  );
+  assert.equal(validate(clockSize, invalidClockFixture.clock.size).ok, false);
+  assert.equal(validate(clockPosition, invalidClockFixture.clock.position).ok, false);
+}
+
 console.log("web module tests passed");

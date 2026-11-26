@@ -8,6 +8,10 @@
 # button triggers an immediate check. Version is exposed as a text sensor for
 # diagnostics.
 #
+# project_name: esphome.project.name, set by each device's generated
+# packages.yaml from project.package_name in product/contract/project.json.
+# The update check compares only the manifest version, not this name.
+#
 # firmware_version: default for local builds; overridden by main config
 # (e.g. factory.yaml) or by -s firmware_version when building releases.
 #
@@ -40,7 +44,7 @@ substitutions:
 
 esphome:
   project:
-    name: jtenniswood.immich-frame
+    name: "${project_name}"
     version: "${firmware_version}"
   on_boot:
     - priority: -50

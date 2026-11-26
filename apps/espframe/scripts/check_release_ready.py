@@ -109,14 +109,7 @@ def compile_firmware() -> bool:
             )
         )
 
-        ota_command = esphome_compile_command(
-            image,
-            version,
-            mount,
-            remove_flag,
-            f"{mount}/builds/{device['yaml']}.yaml",
-        )
-        checks.append(run(ota_command, f"ESPHome OTA compile ({device['slug']})"))
+        # The factory compile also produces the OTA image (firmware.bin).
         checks.append(
             run(
                 [
@@ -138,7 +131,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--compile",
         action="store_true",
-        help="Also compile factory and OTA firmware with ESPHome Docker before passing release readiness.",
+        help="Also compile the firmware with ESPHome Docker and check the factory and OTA image budgets before passing release readiness.",
     )
     return parser
 
@@ -147,7 +140,7 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(sys.argv[1:] if argv is None else argv)
     print("Espframe release-readiness check")
     if args.compile:
-        print("This runs the normal local gate plus ESPHome factory and OTA firmware compile.")
+        print("This runs the normal local gate plus an ESPHome firmware compile and factory/OTA budget checks.")
     else:
         print("This runs the normal local gate. Use --compile before firmware releases.")
     passed = run(["npm", "run", "check:all"], "Local validation gate")

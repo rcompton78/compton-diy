@@ -111,7 +111,18 @@
 
   function backupImportSettingSpec(entry) {
     var stateKey = backupImportStateKey(entry);
-    return stateKey && PRODUCT_SETTINGS ? PRODUCT_SETTINGS[stateKey] : null;
+    if (!stateKey) return null;
+    if (PRODUCT_SETTINGS && PRODUCT_SETTINGS[stateKey]) return PRODUCT_SETTINGS[stateKey];
+    var staticSpec = STATIC_ENTITIES && STATIC_ENTITIES[stateKey];
+    if (staticSpec && Array.isArray(staticSpec.options)) {
+      return { domain: "select", options: staticEntityOptions(stateKey) };
+    }
+    return null;
+  }
+
+  function backupImportSelectOptions(stateKey, spec) {
+    if (PRODUCT_SETTINGS && PRODUCT_SETTINGS[stateKey]) return productSettingOptions(stateKey, true);
+    return Array.isArray(spec.options) ? spec.options : [];
   }
 
   function backupImportFieldLabel(entry) {
@@ -172,7 +183,7 @@
 
     if (spec.domain === "select") {
       var optionValue = String(value);
-      if (productSettingOptions(stateKey, true).indexOf(optionValue) === -1) {
+      if (backupImportSelectOptions(stateKey, spec).indexOf(optionValue) === -1) {
         return backupImportValidation(false, value, backupImportFieldLabel(entry) + " had an unsupported option - not imported");
       }
       return backupImportValidation(true, optionValue);

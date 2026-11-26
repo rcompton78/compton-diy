@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from product_config import backup_schema, load_product
+from product_config import backup_schema, backup_select_field_options, load_product
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -53,13 +53,6 @@ def web_source_text() -> str:
     return "\n".join(path.read_text() for path in files)
 
 
-def setting_options(product: dict[str, Any]) -> dict[str, set[str]]:
-    return {
-        str(setting["key"]): {str(option) for option in setting.get("options", [])}
-        for setting in product["settings"]
-    }
-
-
 def backup_schema_groups(schema: list[dict[str, Any]]) -> list[str]:
     groups: list[str] = []
     for entry in schema:
@@ -101,7 +94,7 @@ def validate_fixture(
     if "full" in path.stem and groups != schema_groups:
         errors.append(f"{label} full fixture groups must match backup schema groups")
 
-    options = setting_options(product)
+    select_options = backup_select_field_options(product)
     photo_id_limit = int(project.get("backup_import_photo_id_limit", 255))
 
     for group in groups:
@@ -115,20 +108,13 @@ def validate_fixture(
             errors.append(f"{label} {group} contains unknown keys: {', '.join(unknown_keys)}")
         if "full" in path.stem and allowed and set(value) != allowed:
             errors.append(f"{label} {group} must contain every version-1 key")
+        for field, field_value in value.items():
+            options = select_options.get(f"{group}.{field}")
+            if options is not None and str(field_value) not in options:
+                errors.append(f"{label} {group}.{field} has unsupported option {field_value!r}")
 
     photos = data.get("photos", {})
     if isinstance(photos, dict):
-        for key, setting_key in (
-            ("source", "photo_source"),
-            ("album_order", "album_order"),
-            ("date_filter_mode", "date_filter_mode"),
-            ("relative_unit", "relative_unit"),
-            ("orientation", "photo_orientation"),
-            ("display_mode", "display_mode"),
-        ):
-            value = photos.get(key)
-            if value is not None and str(value) not in options.get(setting_key, set()):
-                errors.append(f"{label} photos.{key} has unsupported option {value!r}")
         for key in ("album_ids", "album_labels", "person_ids", "person_labels", "tag_ids", "tag_labels"):
             value = str(photos.get(key, ""))
             if len(value) > photo_id_limit:

@@ -185,7 +185,7 @@
 
     var f8 = field("Size");
     f8.appendChild(
-      selectFromOptions(["Small", "Medium", "Large"], S.clock_size, function (v) {
+      selectFromOptions(staticEntityOptions("clock_size"), S.clock_size, function (v) {
         saveSetting("clock_size", v);
       })
     );
@@ -194,7 +194,7 @@
     var f9 = field("Position");
     f9.appendChild(
       selectFromOptions(
-        ["Bottom Left", "Bottom Center", "Bottom Right", "Top Left", "Top Center", "Top Right"],
+        staticEntityOptions("clock_position"),
         S.clock_position,
         function (v) {
           saveSetting("clock_position", v);

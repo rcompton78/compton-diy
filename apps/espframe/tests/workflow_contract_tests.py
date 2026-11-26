@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -11,6 +12,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from product_contract.workflows import (  # noqa: E402
+    check_esphome_version,
+    check_node_version,
     append_list_drift_errors,
     append_mapping_value_errors,
     append_scalar_value_error,
@@ -2647,6 +2650,133 @@ def test_discovered_test_functions_discovers_named_callables() -> None:
     for _, test_func in discovered:
         test_func()
     assert calls == ["selected", "also_selected"]
+
+
+PINNED_INSTALL_STEP = """\
+      - id: pin
+        run: |
+          version="$(python3 -c "import json; print(json.load(open('product/contract/project.json'))['esphome_version'])")"
+          pip install "esphome==$version"
+"""
+
+
+def write_version_tree(root: Path, build_yml: str, extra: dict[str, str] | None = None) -> None:
+    files = {
+        ".github/workflows/build.yml": build_yml,
+        ".github/workflows/release.yml": "jobs:\n  firmware:\n    steps:\n" + PINNED_INSTALL_STEP,
+        "scripts/firmware.sh": 'pin="$(python -c \'print(json.load(f)["esphome_version"])\')"\n',
+        "docs/install.md": "- **ESPHome 2026.6:** Current local builds use ESPHome `2026.6.4`.\n",
+        "docs/manual-setup.md": "This repository's own builds use ESPHome `2026.6.4`.\n",
+        "README.md": "Node.js 22 is needed only to change the web UI.\n",
+    }
+    files.update(extra or {})
+    for rel_path, text in files.items():
+        path = root / rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+
+def run_version_checks(build_yml: str, extra: dict[str, str] | None = None) -> list[str]:
+    product = {"project": {"esphome_version": "2026.6.4", "node_version": "22"}}
+    errors: list[str] = []
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        write_version_tree(root, build_yml, extra)
+        check_esphome_version(product, errors, root)
+        check_node_version(product, errors, root)
+    return errors
+
+
+def build_with_node(node_line: str) -> str:
+    return "jobs:\n  checks:\n    steps:\n      - uses: actions/setup-node@v4\n        with:\n" + node_line + PINNED_INSTALL_STEP
+
+
+def test_version_checks_accept_matching_pins() -> None:
+    assert run_version_checks(build_with_node("          node-version: 22\n")) == []
+
+
+def test_node_version_compares_only_the_major() -> None:
+    for line in ("          node-version: 22.x\n", "          node-version: '22.12.0'\n", '          node-version: "22" # LTS\n'):
+        assert run_version_checks(build_with_node(line)) == [], line
+
+
+def test_node_version_rejects_other_major() -> None:
+    assert run_version_checks(build_with_node("          node-version: 20\n")) == [
+        ".github/workflows/build.yml uses node-version 20, expected project.node_version 22"
+    ]
+
+
+def test_node_version_reports_unverifiable_values() -> None:
+    errors = run_version_checks(build_with_node("          node-version: ${{ matrix.node }}\n"))
+    assert errors == [".github/workflows/build.yml node-version ${{ matrix.node }} can't be checked; use 22"]
+    errors = run_version_checks(build_with_node("          node-version:\n"))
+    assert errors == [".github/workflows/build.yml node-version (empty) can't be checked; use 22"]
+
+
+def test_node_version_requires_a_workflow_to_set_it() -> None:
+    assert run_version_checks(build_with_node("")) == ["No workflow sets node-version; expected 22"]
+    errors = run_version_checks(build_with_node("          node-version-file: .nvmrc\n"))
+    assert errors == [
+        ".github/workflows/build.yml uses node-version-file; set node-version: 22 instead",
+        "No workflow sets node-version; expected 22",
+    ]
+
+
+def test_node_version_reads_yaml_extension_workflows() -> None:
+    errors = run_version_checks(
+        build_with_node("          node-version: 22\n"),
+        {".github/workflows/docs.yaml": "jobs:\n  docs:\n    steps:\n      - with:\n          node-version: 20\n"},
+    )
+    assert errors == [".github/workflows/docs.yaml uses node-version 20, expected project.node_version 22"]
+
+
+def test_node_version_checks_readme_mentions() -> None:
+    build = build_with_node("          node-version: 22\n")
+    assert run_version_checks(build, {"README.md": "Node.js 220 or later.\n"}) == [
+        "README.md is missing 'Node.js 22'",
+        "README.md mentions Node.js 220, expected 22",
+    ]
+    assert run_version_checks(build, {"README.md": "Node.js 22 here, Node.js 20 there.\n"}) == [
+        "README.md mentions Node.js 20, expected 22"
+    ]
+
+
+def test_esphome_version_rejects_unpinned_installs() -> None:
+    build = build_with_node("          node-version: 22\n") + "      - run: pip install esphome==2026.5.0\n"
+    assert run_version_checks(build) == [
+        ".github/workflows/build.yml installs ESPHome without the contract pin: - run: pip install esphome==2026.5.0"
+    ]
+
+
+def test_esphome_version_requires_pinned_install_in_each_firmware_workflow() -> None:
+    build = "jobs:\n  checks:\n    steps:\n      - with:\n          node-version: 22\n"
+    assert run_version_checks(build) == [
+        ".github/workflows/build.yml is missing \"['esphome_version']\"",
+        ".github/workflows/build.yml is missing 'esphome==$version'",
+    ]
+    assert run_version_checks(
+        build_with_node("          node-version: 22\n"),
+        {".github/workflows/release.yml": "jobs:\n  firmware:\n    steps:\n      - run: echo hi\n"},
+    ) == [
+        ".github/workflows/release.yml is missing \"['esphome_version']\"",
+        ".github/workflows/release.yml is missing 'esphome==$version'",
+    ]
+
+
+def test_esphome_version_allows_extra_pip_flags_on_the_pinned_install() -> None:
+    build = build_with_node("          node-version: 22\n").replace(
+        'pip install "esphome==$version"', 'pip install --no-cache-dir "esphome==$version"'
+    )
+    assert 'pip install --no-cache-dir "esphome==$version"' in build
+    assert run_version_checks(build) == []
+
+
+def test_esphome_version_checks_docs_version_and_series() -> None:
+    build = build_with_node("          node-version: 22\n")
+    errors = run_version_checks(build, {"docs/install.md": "- **ESPHome 2026.5:** Current local builds use ESPHome `2026.6.4`.\n"})
+    assert errors == ["docs/install.md heading says ESPHome 2026.5, expected 2026.6"]
+    errors = run_version_checks(build, {"docs/manual-setup.md": "Builds use ESPHome `2026.6.5`.\n"})
+    assert errors == ["docs/manual-setup.md is missing '`2026.6.4`'"]
 
 
 def main() -> int:

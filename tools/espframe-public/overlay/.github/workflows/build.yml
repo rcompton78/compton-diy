@@ -65,12 +65,20 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
-            ~/.platformio
+            .platformio-core
             builds/.esphome/.espressif
           # Per chip, so the two matrix legs don't race to save one key. The
           # prefix also restores release.yml's cache (same toolchain).
-          key: esphome-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}-${{ matrix.chip }}
-          restore-keys: esphome-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}
+          key: esphome-v2-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}-${{ matrix.chip }}
+          restore-keys: esphome-v2-${{ runner.os }}-py${{ steps.py.outputs.python-version }}-${{ steps.pin.outputs.esphome }}
+      # dev.yaml isn't compiled here, so validate it to catch config that only
+      # breaks the local Wi-Fi build (such as include paths). It's the pre-v3
+      # board's, so once is enough.
+      - name: Validate the local Wi-Fi config
+        if: ${{ matrix.chip == 'pre-v3' }}
+        run: |
+          printf 'wifi_ssid: "ci"\nwifi_password: "ci-password"\n' > devices/guition-esp32-p4-jc8012p4a1/secrets.yaml
+          scripts/firmware.sh esphome -q config devices/guition-esp32-p4-jc8012p4a1/dev.yaml
       - name: Compile
         run: scripts/firmware.sh compile --chip ${{ matrix.chip }}
 

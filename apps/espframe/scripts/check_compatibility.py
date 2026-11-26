@@ -11,6 +11,7 @@ from typing import Any
 
 from product_config import (
     backup_schema,
+    backup_select_field_options,
     default_public_manifest_urls,
     load_product,
     public_base_url,
@@ -108,23 +109,14 @@ def fixture_validation_errors(data: dict[str, Any], product: dict[str, Any]) -> 
     if data.get("version") != project.get("backup_config_version"):
         errors.append("missing or unsupported version")
 
-    options = {
-        str(setting["key"]): {str(option) for option in setting.get("options", [])}
-        for setting in product["settings"]
-    }
+    for field_key, options in backup_select_field_options(product).items():
+        group, field = field_key.split(".", 1)
+        group_data = data.get(group, {})
+        value = group_data.get(field) if isinstance(group_data, dict) else None
+        if value is not None and str(value) not in options:
+            errors.append(f"{field_key} has unsupported option")
     photos = data.get("photos", {})
     if isinstance(photos, dict):
-        for backup_key, setting_key in (
-            ("source", "photo_source"),
-            ("album_order", "album_order"),
-            ("date_filter_mode", "date_filter_mode"),
-            ("relative_unit", "relative_unit"),
-            ("orientation", "photo_orientation"),
-            ("display_mode", "display_mode"),
-        ):
-            value = photos.get(backup_key)
-            if value is not None and str(value) not in options.get(setting_key, set()):
-                errors.append(f"photos.{backup_key} has unsupported option")
         limit = int(project.get("backup_import_photo_id_limit", 255))
         for key in ("album_ids", "album_labels", "person_ids", "person_labels", "tag_ids", "tag_labels"):
             if len(str(photos.get(key, ""))) > limit:
@@ -222,20 +214,30 @@ def check_compatibility_fixtures(product: dict[str, Any], errors: list[str]) -> 
         errors.append("project.compatibility_fixture_files.rejected_fields must be a non-empty list")
     else:
         web_text = WEB_APP.read_text()
+        backup_keys = {f'{entry["group"]}.{entry["field"]}' for entry in backup_schema(product)}
         for item in rejected_fields:
             if not isinstance(item, dict):
                 errors.append("project.compatibility_fixture_files.rejected_fields entries must be objects")
                 continue
             path = ROOT / str(item.get("path", ""))
             data = load_json(path, errors)
-            if data and not fixture_validation_errors(data, product):
+            fixture_errors = fixture_validation_errors(data, product) if data else []
+            if data and not fixture_errors:
                 errors.append(f"{rel(path)} must contain at least one rejected import field")
             messages = item.get("messages", [])
             if not isinstance(messages, list) or not messages:
                 errors.append(f"{rel(path)} rejected fixture must list expected web UI messages")
                 continue
             for message in [str(value) for value in messages]:
-                require_contains(web_text, message, rel(WEB_APP), errors)
+                # Generic import messages are built as "<group>.<field> <reason>", so only the
+                # reason is literal in the web app. The named field must also fail validation.
+                field_key, _, reason = message.partition(" ")
+                if field_key in backup_keys and reason:
+                    require_contains(web_text, " " + reason, rel(WEB_APP), errors)
+                    if data and not any(error.startswith(f"{field_key} ") for error in fixture_errors):
+                        errors.append(f"{rel(path)} expects {field_key} to be rejected, but it passes validation")
+                else:
+                    require_contains(web_text, message, rel(WEB_APP), errors)
 
     rejected_versions = fixtures.get("rejected_versions", [])
     if not isinstance(rejected_versions, list) or not rejected_versions:

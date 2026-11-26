@@ -330,6 +330,42 @@ def backup_schema(product: dict[str, Any] | None = None) -> list[dict[str, Any]]
     return schema
 
 
+# Select-backed backup fields whose web import has its own validation path, so a fixed option
+# list doesn't describe what import accepts. screen.rotation's options depend on the hardware.
+BACKUP_SELECT_FIELDS_WITH_OWN_IMPORT = frozenset({"screen.rotation"})
+
+
+def backup_select_field_options(product: dict[str, Any] | None = None) -> dict[str, set[str]]:
+    """Map each single-key backup field ("group.field") backed by a select to the options import accepts.
+
+    Options come from the product setting (including developer options, which the web import also
+    accepts) or, for settings that are not product settings, from the static web entity's options.
+    Fields in BACKUP_SELECT_FIELDS_WITH_OWN_IMPORT are left out.
+    """
+    data = product if product is not None else load_product()
+    setting_options: dict[str, set[str]] = {}
+    for setting in data["settings"]:
+        if setting.get("entity", {}).get("domain") != "select":
+            continue
+        options = [*setting.get("options", []), *setting.get("developer_options", [])]
+        if options:
+            setting_options[str(setting["key"])] = {str(option) for option in options}
+    for key, metadata in web_static_entities(data).items():
+        options = metadata.get("options")
+        if isinstance(options, list) and options and key not in setting_options:
+            setting_options[key] = {str(option) for option in options}
+
+    result: dict[str, set[str]] = {}
+    for entry in backup_schema(data):
+        state_keys = entry["state_keys"]
+        field_key = f'{entry["group"]}.{entry["field"]}'
+        if field_key in BACKUP_SELECT_FIELDS_WITH_OWN_IMPORT:
+            continue
+        if len(state_keys) == 1 and state_keys[0] in setting_options:
+            result[field_key] = setting_options[state_keys[0]]
+    return result
+
+
 def web_settings_metadata(product_settings: list[dict[str, Any]] | None = None) -> dict[str, dict[str, Any]]:
     data = load_product()
     source_settings = product_settings if product_settings is not None else data["settings"]

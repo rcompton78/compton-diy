@@ -78,12 +78,12 @@ def test_check_package_script_steps_rejects_missing_release_and_pr_steps() -> No
     errors: list[str] = []
     scripts = expected_composite_scripts()
     scripts["check:release"] = "npm run check:pr && npm run check:firmware-release"
-    scripts["check:pr"] = str(scripts["check:pr"]).replace(" && npm run docs:build", "")
+    scripts["check:pr"] = str(scripts["check:pr"]).replace(" && npm run test:firmware-logic", "")
 
     check_package_script_steps(scripts, errors)
 
     assert errors == [
-        "package.json check:pr must include docs:build",
+        "package.json check:pr must include test:firmware-logic",
         "package.json check:release must include check:release-changelog",
     ]
 

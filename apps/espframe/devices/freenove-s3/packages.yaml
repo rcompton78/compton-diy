@@ -1,6 +1,7 @@
 # ESPFRAME: generated from product/contract; run `npm run generate` to update.
 
 substitutions:
+  project_name: "rcompton78.espframe"
   display_width: "240"
   display_height: "320"
   portrait_metadata_width: "220"

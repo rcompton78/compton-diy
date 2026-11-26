@@ -38,7 +38,7 @@ GitHub turns Actions off in new forks and never turns on Pages by itself, so do 
 2. **Settings** → **Pages** → **Build and deployment** → **Source**: choose **GitHub Actions**.
 3. **Actions** tab → **Release** → **Run workflow** (on `main`).
 
-The first run takes 30 minutes or more (later ones reuse a cache). It runs the checks, builds both firmware builds and the stand's print files, attaches them to a new GitHub release, and publishes an install page at `https://<your-user>.github.io/<repo>/`. After that, every push to `main` makes a new release, except pushes that only change `README.md` or Markdown pages under `docs/`. (If Pages is off, the Release run stops at its first step and says how to turn it on.) Only the newest commit on `main` is released: to retry a failed release, run the workflow again rather than re-running an old run.
+The first run takes 30 minutes or more (later ones reuse a cache). It runs the checks, builds both firmware builds and the stand's print files, attaches them to a new GitHub release, and publishes an install page at `https://<your-user>.github.io/<repo>/`. After that, every push to `main` makes a new release, except pushes that only change `README.md`, Markdown pages under `docs/`, `.gitignore` or files under `.claude/`. (If Pages is off, the Release run stops at its first step and says how to turn it on.) Only the newest commit on `main` is released: to retry a failed release, run the workflow again rather than re-running an old run.
 
 To flash, open your install page in **Chrome or Edge** on a desktop computer, plug in the frame, click the **Install** button for your board's chip and pick its serial port. Frames installed from your page check your page's manifest for their build for updates (`manifest.json` for the original build, `manifest-guition-esp32-p4-jc8012p4a1-v3.json` for the v3 chip build), so they get your releases and nobody else's, and only the build for their chip.
 
@@ -76,7 +76,31 @@ FIRMWARE_MANIFEST_URL=https://<your-user>.github.io/<repo>/manifest-guition-esp3
 
 Each manifest lists one build, and the other build's image can't boot your board, so `firmware.sh` refuses a URL that names the other chip's manifest.
 
-`.env` is gitignored and read as plain `NAME=value` lines. It takes only `FIRMWARE_MANIFEST_URL`, `RELEASE_VERSION`, `CHIP` (the default `--chip`, `pre-v3` or `v3`), `DEVICE` (the default `--device` for `flash` and `logs`) and `SIBLING_FIRMWARE_MANIFEST_URL` (the other build's manifest: a frame that has it saved, say from a backup of the other board, moves onto its own at boot. You rarely need it: when `FIRMWARE_MANIFEST_URL` names one of your fork's manifests, the script fills in the other, and it's refused without `FIRMWARE_MANIFEST_URL`); any other name stops the script with an error, so a misspelt setting can't be silently ignored. A `dev` build finds updates but never installs one on its own: press **Install** on the frame's web page, or also set `RELEASE_VERSION=` to a version of your own in `.env` so auto-update works. You can also set or change the URL later on the frame's web page, under **Firmware** → **Advanced**.
+`.env` is gitignored and read as plain `NAME=value` lines. It takes only `FIRMWARE_MANIFEST_URL`, `RELEASE_VERSION`, `CHIP` (the default `--chip`, `pre-v3` or `v3`), `DEVICE` (the default `--device` for `flash` and `logs`), `PLATFORMIO_CORE_DIR` (see [Developer notes](#developer-notes)) and `SIBLING_FIRMWARE_MANIFEST_URL` (the other build's manifest: a frame that has it saved, say from a backup of the other board, moves onto its own at boot. You rarely need it: when `FIRMWARE_MANIFEST_URL` names one of your fork's manifests, the script fills in the other, and it's refused without `FIRMWARE_MANIFEST_URL`); any other name stops the script with an error, so a misspelt setting can't be silently ignored. A `dev` build finds updates but never installs one on its own: press **Install** on the frame's web page, or also set `RELEASE_VERSION=` to a version of your own in `.env` so auto-update works. You can also set or change the URL later on the frame's web page, under **Firmware** → **Advanced**.
+
+#### Local Wi-Fi build
+
+`scripts/firmware.sh compile` builds the same firmware as a release: it starts a hotspot until you pick a network. For development, `devices/guition-esp32-p4-jc8012p4a1/dev.yaml` builds a frame called `immich-frame-10inch-dev` that joins your Wi-Fi straight away. It's the original (pre-v3 chip) build; there's no Wi-Fi entry point for the v3 build. Create `devices/guition-esp32-p4-jc8012p4a1/secrets.yaml` (gitignored) next to it:
+
+```yaml
+wifi_ssid: "your-network"
+wifi_password: "your-password"
+```
+
+Then build and flash it with the pinned ESPHome (always go through `scripts/firmware.sh`, not a plain `esphome`, so you get the right version):
+
+```bash
+scripts/firmware.sh esphome run devices/guition-esp32-p4-jc8012p4a1/dev.yaml --device /dev/ttyUSB0
+```
+
+#### Developer notes
+
+- **Firmware files.** `scripts/firmware.sh compile` writes `firmware.factory.bin` (full flash, for a new or erased frame) and `firmware.ota.bin` (update) to `builds/.esphome/build/immich-frame-10inch/.pioenvs/immich-frame-10inch/` (`immich-frame-10inch-v3` for `--chip v3`). A `dev.yaml` build lands under `devices/guition-esp32-p4-jc8012p4a1/.esphome/build/immich-frame-10inch-dev/` instead.
+- **First compile.** It downloads several GB of ESP-IDF toolchain, so allow time and disk space. Later builds reuse it. `scripts/firmware.sh` keeps PlatformIO's toolchains and Python environment in `.platformio-core/` in the repo (gitignored), not the `~/.platformio` other PlatformIO and ESPHome projects share, so building here never changes them. Each clone or worktree downloads its own copy; to share one, set `PLATFORMIO_CORE_DIR` to a common folder in your environment or in `.env` (e.g. `PLATFORMIO_CORE_DIR=~/.cache/espframe-platformio`). Setting it to `~/.platformio` goes back to the shared folder, which a build here may change (it can recreate PlatformIO's Python environment).
+- **No OTA password or API key.** OTA and the Home Assistant API are open to anyone on your network. Add `password:` under `ota:` and `encryption: key:` under `api:` in your own config if that matters to you.
+- **Node.js.** Use Node.js 22, the version CI uses (`.nvmrc` pins it for `nvm use`).
+- **Web smoke test.** `npm run test:web-smoke` drives a headless Chrome or Chromium; if it isn't in a standard place, set `CHROME_BIN` to its path.
+- **Timezone check.** `npm run test:timezones` needs the pinned IANA data: `pip install -r scripts/requirements-timezones.txt` (into `.venv` or your own Python).
 
 ## Set up the frame
 
@@ -89,8 +113,9 @@ Each manifest lists one build, and the other build's image can't boot your board
 ## Changing the code
 
 - Device config: `devices/guition-esp32-p4-jc8012p4a1/` and the shared `common/addon/*.yaml`; the build entry points are `builds/guition-esp32-p4-jc8012p4a1.factory.yaml` and, for v3 chips, `builds/guition-esp32-p4-jc8012p4a1-v3.factory.yaml`, which adds the newer panel and a patched copy of ESPHome's `mipi_dsi` display component (`components/mipi_dsi/`, see its README). Custom C++ components are in `components/`.
-- Several files are generated from `product/contract/*.json` and the web UI sources in `docs/webserver/src/` (the frame's settings page). After changing those, run `npm ci` once, then `npm run generate`, and commit the results; the Build workflow fails if they're stale. `npm run check:ci` runs the same checks as the Build workflow. (The other `check:*` scripts come from the original project and don't all pass here.)
-- Builds compile the custom components straight from this repo's `components/`, so nothing is downloaded from any other espframe repo. (`devices/guition-esp32-p4-jc8012p4a1/dev.yaml` is a local entry point with your own `secrets.yaml` for Wi-Fi; [Manual Setup](docs/manual-setup.md) covers the original project's ESPHome-dashboard install, not this repo.)
+- Several files are generated from `product/contract/*.json` and the web UI sources in `docs/webserver/src/` (the frame's settings page). After changing those, run `npm ci` once, then `npm run generate`, and commit the results; the Build workflow fails if they're stale. `npm run check:ci` runs the same checks as the Build workflow. `npm run check:fast` is a quicker static set that adds the product-contract, backup and compatibility checks but skips the typecheck and web tests. `npm run check:pr` is the full pre-PR set (both of those plus the browser smoke tests); the smoke tests need Chrome or Chromium, so set `CHROME_BIN` to its path if it isn't installed in a standard location.
+- The firmware's ESPHome project name (shown in the boot log, the ESPHome dashboard and Home Assistant) is `project.package_name` in `product/contract/project.json`, in `author.project` form. In your own fork, set it to your name and run `npm run generate`. Update checks compare only the version, so renaming doesn't stop frames getting updates.
+- Builds compile the custom components straight from this repo's `components/`, so nothing is downloaded from any other espframe repo. (`devices/guition-esp32-p4-jc8012p4a1/dev.yaml` is a local entry point with your own `secrets.yaml` for Wi-Fi; see [Local Wi-Fi build](#local-wi-fi-build). [Manual Setup](docs/manual-setup.md) covers the original project's ESPHome-dashboard install, not this repo.)
 - The stand is a parametric [build123d](https://github.com/gumyr/build123d) model; see [its README](hardware/stand-10/README.md) to rebuild the print files locally.
 
 ## Licence and credit
