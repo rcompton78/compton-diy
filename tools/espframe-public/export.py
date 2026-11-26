@@ -358,6 +358,12 @@ URL_HOSTS_OK = re.compile(
 # Text the scan ignores outright. The firmware's ESPHome project name
 # (project.package_name, COM-663) is the public repo's own owner and name.
 ALLOW_LITERALS = ("rcompton78.espframe",)
+# Each allowed only as a whole token, so a longer name built on it
+# (rcompton78.espframe.lan, rcompton78.espframe@...) is still scanned.
+ALLOW_LITERAL_RES = tuple(
+    re.compile(r"(?<![\w.@/-])" + re.escape(literal) + r"(?!\.?[\w@-])")
+    for literal in ALLOW_LITERALS
+)
 # Vendored third-party source credits its authors by email.
 ALLOW_PATHS = {"personal email": ("components/libwebp-esp32/",)}
 
@@ -565,8 +571,8 @@ def scan(dest: Path) -> None:
     hits = []
 
     def check_text(rel: str, where: str, text: str) -> None:
-        for literal in ALLOW_LITERALS:
-            text = text.replace(literal, "")
+        for literal_re in ALLOW_LITERAL_RES:
+            text = literal_re.sub("", text)
         for pattern, what in SCAN:
             for m in pattern.finditer(text):
                 if m.group(0) in ALLOW.get(what, ()):

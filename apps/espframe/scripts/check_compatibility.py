@@ -229,10 +229,18 @@ def check_compatibility_fixtures(product: dict[str, Any], errors: list[str]) -> 
                 errors.append(f"{rel(path)} rejected fixture must list expected web UI messages")
                 continue
             for message in [str(value) for value in messages]:
-                # Generic import messages are built as "<group>.<field> <reason>", so only the
+                # Generic import messages are built as "<group>.<field> <reason>", with the
+                # field's underscores shown as spaces (backupImportFieldLabel), so only the
                 # reason is literal in the web app. The named field must also fail validation.
-                field_key, _, reason = message.partition(" ")
-                if field_key in backup_keys and reason:
+                field_key, reason = next(
+                    (
+                        (key, message[len(key) + 1 :])
+                        for key in sorted(backup_keys, key=len, reverse=True)
+                        if message.startswith(key.replace("_", " ") + " ")
+                    ),
+                    ("", ""),
+                )
+                if field_key and reason:
                     require_contains(web_text, " " + reason, rel(WEB_APP), errors)
                     if data and not any(error.startswith(f"{field_key} ") for error in fixture_errors):
                         errors.append(f"{rel(path)} expects {field_key} to be rejected, but it passes validation")
