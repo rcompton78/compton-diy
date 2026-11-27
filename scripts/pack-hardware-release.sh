@@ -4,13 +4,15 @@
 #   scripts/pack-hardware-release.sh <project-dir> <name> [version]
 #
 # Expects the project's CAD build to have already run (the `release` target
-# dependsOn `cad`), leaving out/*.{3mf,stl,step} and out/checks.txt. Writes
-# dist/<name>/<name>-<version>.tar.gz with one top-level <name>-<version>/ dir
-# holding the print files, checks.txt, README.md, docs/*.png and a VERSION file.
+# dependsOn `cad`), leaving out/*.{3mf,stl,step} and out/checks.txt (plus any
+# out/checks-<variant>.txt, e.g. the 10" stand's landscape model, COM-684).
+# Writes dist/<name>/<name>-<version>.tar.gz with one top-level
+# <name>-<version>/ dir holding the print files, every checks*.txt, README.md,
+# docs/*.png and a VERSION file.
 # release.yml attaches dist/<project>/*.tar.gz to the GitHub release.
 #
-# Refuses to pack if checks.txt is missing or reports any FAIL, so a model that
-# fails its fit / tip-over checks can never be published (the CAD build already
+# Refuses to pack if checks.txt is missing or any checks*.txt reports a FAIL,
+# so a model that fails its fit / tip-over checks can never be published (the CAD build already
 # exits non-zero on a failed check; this is the second guard).
 set -euo pipefail
 
@@ -27,13 +29,14 @@ if [ ! -f "$CHECKS" ]; then
   echo "ERROR: $CHECKS not found; run the project's cad target first." >&2
   exit 1
 fi
-if grep -q '^FAIL' "$CHECKS"; then
+shopt -s nullglob
+all_checks=("$OUT"/checks*.txt)
+if grep -q '^FAIL' "${all_checks[@]}"; then
   echo "ERROR: model checks failed, refusing to pack:" >&2
-  grep '^FAIL' "$CHECKS" >&2
+  grep -H '^FAIL' "${all_checks[@]}" >&2
   exit 1
 fi
 
-shopt -s nullglob
 prints=("$OUT"/*.3mf "$OUT"/*.stl "$OUT"/*.step)
 renders=("$SRC"/docs/*.png)
 if [ ${#prints[@]} -eq 0 ]; then
@@ -47,7 +50,7 @@ trap 'rm -rf "$STAGE"' EXIT
 PKG="$STAGE/$NAME-$VERSION"
 mkdir -p "$PKG/docs" "$DEST"
 
-cp "${prints[@]}" "$CHECKS" "$PKG/"
+cp "${prints[@]}" "${all_checks[@]}" "$PKG/"
 if [ ! -f "$SRC/README.md" ]; then
   echo "ERROR: $SRC/README.md not found; hardware releases must ship a README." >&2
   exit 1

@@ -142,7 +142,7 @@ PATCHES: list[tuple[str, str, str]] = [
     (
         "hardware/stand-10/README.md",
         "```bash\npnpm nx run espframe-stand-10:cad\n```",
-        "```bash\nhardware/stand-10/setup.sh\ncd hardware/stand-10 && .venv/bin/python -m stand10.build\n```",
+        "```bash\nhardware/stand-10/setup.sh\ncd hardware/stand-10 && .venv/bin/python -m stand10.build && .venv/bin/python -m stand10l.build\n```",
     ),
     (
         "hardware/stand-10/README.md",
@@ -151,7 +151,7 @@ PATCHES: list[tuple[str, str, str]] = [
     ),
     (
         "hardware/stand-10/README.md",
-        "`pnpm nx run espframe-stand-10:release` runs `cad` and packs the tarball into `dist/espframe-stand-10/` (`scripts/pack-hardware-release.sh`, which refuses to pack on any `FAIL`). On merge to `master`, `.github/workflows/release.yml` runs it on the self-hosted runner, with the venv cached outside the checkout.",
+        "`pnpm nx run espframe-stand-10:release` runs `cad` and packs the tarball into `dist/espframe-stand-10/` (`scripts/pack-hardware-release.sh`, which refuses to pack on a `FAIL` in any `checks*.txt`). On merge to `master`, `.github/workflows/release.yml` runs it on the self-hosted runner, with the venv cached outside the checkout.",
         "`scripts/release/pack_stand.sh` packs the tarball into `dist/` and refuses to pack on any `FAIL`; `.github/workflows/release.yml` runs both on every release.",
     ),
     (
