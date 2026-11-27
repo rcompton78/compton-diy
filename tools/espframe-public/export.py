@@ -162,7 +162,7 @@ PATCHES: list[tuple[str, str, str]] = [
     (
         "hardware/stand-10/.gitignore",
         "rebuild with `pnpm nx run espframe-stand-10:cad`.",
-        "rebuild with `.venv/bin/python -m stand10.build`.",
+        "rebuild with `.venv/bin/python -m stand10.build && .venv/bin/python -m stand10l.build`.",
     ),
     (
         "hardware/stand-10/requirements.txt",

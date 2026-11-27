@@ -56,7 +56,7 @@ PORT_MOUTH_X = BOX_X[0]                           # 54
 PORT_Y = SHELL_H - P.PORT_X                       # 58.7 up from the shell bottom
 # PORT_DEPTH (11.8) is the portrait's.
 
-# --- Cable path behind the board: plug -> R bend rearwards -> plate notch -> R bend down -> deck slot ---------------
+# --- Cable path behind the board: plug -> R bend rearwards -> plate notch -> R bend down -> lid notch -> tray -------
 PLUG_END_X = PORT_MOUTH_X - PLUG_OUT              # 26.5: the plug's cable end
 CABLE_X = PLUG_END_X - BEND_R                     # 8.5: the cable's line after the first bend
 CABLE_DEPTH = PORT_DEPTH + 2 * BEND_R             # 47.8: its depth behind the glass after the second bend
@@ -77,7 +77,10 @@ JACK_Z = FLOOR + 1.0 + JACK_FLANGE_H / 2
 PLATE_Y0 = 2.5                                    # DESIGN: lower than portrait (no shelf under it); lowest corner ~2 mm
                                                   #   off the desk
 VENT_XS = tuple(SHELL_W / 2 + (i - 2) * 25.0 for i in range(5))   # DESIGN: five slots, centred, clear of the risers
-VENT_ROWS_Y = (24.0, 31.0, 129.0, 136.0)          # DESIGN: two rows below the rear box, two above it (heat rises out)
+VENT_ROWS_Y = (30.5, 36.0, 129.0, 136.0)          # DESIGN: two rows low (air in) and two above the rear box (heat rises
+                                                  #   out); the low rows stay above the foot's deck, which would seal
+                                                  #   them, and the air behind a slot runs down the 15° lean
+MIN_VENT_CLEAR = 5.0                              # DESIGN: check limit, free air behind every vent slot before the foot
 
 # Dovetail: right of the rear box (x ≥ 197, box ≤ 192) and left of the bottom-right riser (x ≤ 222.3); the box spans
 # the middle, so the spine can't sit centred below it.

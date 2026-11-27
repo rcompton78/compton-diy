@@ -1,6 +1,6 @@
 # Espframe for Immich: 10" frame
 
-Turn a Guition ESP32-P4 10" touchscreen (`JC8012P4A1`) into a private digital photo frame for your [Immich](https://immich.app/) photo library, with a 3D-printable desk stand.
+Turn a Guition ESP32-P4 10" touchscreen (`JC8012P4A1`) into a private digital photo frame for your [Immich](https://immich.app/) photo library, with 3D-printable portrait and landscape desk stands.
 
 <p align="center">
   <img src="docs/public/espframe.png" alt="Espframe showing Immich photos on a Guition ESP32-P4 touchscreen" width="700" />
@@ -15,7 +15,7 @@ The frame shows your Immich library (or chosen albums, people, tags, memories or
 - A **Guition ESP32-P4 10" `JC8012P4A1`** display. The "10.1-inch ESP32P4 … ESP32 C6" board (`JC8012P4A1C_I_W_Y`) is the same hardware; clip its external antenna onto the C6 module.
 - A **USB-C data cable** (not charge-only), plugged into the board's **bottom** USB-C port, labelled USB.
 - An **Immich server** on your network and an [Immich API key](docs/api-key.md).
-- Optional: a 3D printer for the [desk stand](hardware/stand-10/README.md).
+- Optional: a 3D printer for a [desk stand](hardware/stand-10/README.md), portrait or landscape.
 
 ## Which build: original or v3 chip
 
@@ -38,11 +38,11 @@ GitHub turns Actions off in new forks and never turns on Pages by itself, so do 
 2. **Settings** → **Pages** → **Build and deployment** → **Source**: choose **GitHub Actions**.
 3. **Actions** tab → **Release** → **Run workflow** (on `main`).
 
-The first run takes 30 minutes or more (later ones reuse a cache). It runs the checks, builds both firmware builds and the stand's print files, attaches them to a new GitHub release, and publishes an install page at `https://<your-user>.github.io/<repo>/`. After that, every push to `main` makes a new release, except pushes that only change `README.md`, Markdown pages under `docs/`, `.gitignore` or files under `.claude/`. (If Pages is off, the Release run stops at its first step and says how to turn it on.) Only the newest commit on `main` is released: to retry a failed release, run the workflow again rather than re-running an old run.
+The first run takes 30 minutes or more (later ones reuse a cache). It runs the checks, builds both firmware builds and the stands' print files, attaches them to a new GitHub release, and publishes an install page at `https://<your-user>.github.io/<repo>/`. After that, every push to `main` makes a new release, except pushes that only change `README.md`, Markdown pages under `docs/`, `.gitignore` or files under `.claude/`. (If Pages is off, the Release run stops at its first step and says how to turn it on.) Only the newest commit on `main` is released: to retry a failed release, run the workflow again rather than re-running an old run.
 
 To flash, open your install page in **Chrome or Edge** on a desktop computer, plug in the frame, click the **Install** button for your board's chip and pick its serial port. Frames installed from your page check your page's manifest for their build for updates (`manifest.json` for the original build, `manifest-guition-esp32-p4-jc8012p4a1-v3.json` for the v3 chip build), so they get your releases and nobody else's, and only the build for their chip.
 
-Pull requests run the **Build** workflow instead: the checks, a compile of each firmware build and the stand build, with no release. You can also run it by hand on any branch from the Actions tab.
+Pull requests run the **Build** workflow instead: the checks, a compile of each firmware build and the stand builds, with no release. You can also run it by hand on any branch from the Actions tab.
 
 ### B. Build and flash on your own computer
 
@@ -106,7 +106,7 @@ scripts/firmware.sh esphome run devices/guition-esp32-p4-jc8012p4a1/dev.yaml --d
 
 1. **Wi-Fi.** After flashing, the frame starts a Wi-Fi hotspot called **immich-frame-10inch** (**immich-frame-10inch-v3** with the v3 chip build). Join it from a phone and pick your network.
 2. **Immich.** The frame shows its IP address. Open `http://<frame-ip>/` in a browser and enter your **Immich server URL** (e.g. `http://192.168.1.30:2283` or `https://photos.example.com`) and an **API key** ([permissions](docs/api-key.md)). Photos start loading.
-3. **Choose photos and tune the screen** on the same web page: [Photo Sources](docs/photo-sources.md), [Screen Settings](docs/screen-settings.md), [Touch Controls](docs/touch-controls.md). For the stand's portrait mount, pick the portrait rotation that shows pictures upright.
+3. **Choose photos and tune the screen** on the same web page: [Photo Sources](docs/photo-sources.md), [Screen Settings](docs/screen-settings.md), [Touch Controls](docs/touch-controls.md). On the portrait stand, pick the portrait rotation (90 or 270) that shows pictures upright; on the landscape stand, the landscape one (0 or 180).
 
 [Home Assistant](docs/home-assistant.md), [backups](docs/backup.md) and [firmware updates](docs/firmware-update.md) each have their own page.
 
@@ -116,7 +116,7 @@ scripts/firmware.sh esphome run devices/guition-esp32-p4-jc8012p4a1/dev.yaml --d
 - Several files are generated from `product/contract/*.json` and the web UI sources in `docs/webserver/src/` (the frame's settings page). After changing those, run `npm ci` once, then `npm run generate`, and commit the results; the Build workflow fails if they're stale. `npm run check:ci` runs the same checks as the Build workflow. `npm run check:fast` is a quicker static set that adds the product-contract, backup and compatibility checks but skips the typecheck and web tests. `npm run check:pr` is the full pre-PR set (both of those plus the browser smoke tests); the smoke tests need Chrome or Chromium, so set `CHROME_BIN` to its path if it isn't installed in a standard location.
 - The firmware's ESPHome project name (shown in the boot log, the ESPHome dashboard and Home Assistant) is `project.package_name` in `product/contract/project.json`, in `author.project` form. In your own fork, set it to your name and run `npm run generate`. Update checks compare only the version, so renaming doesn't stop frames getting updates.
 - Builds compile the custom components straight from this repo's `components/`, so nothing is downloaded from any other espframe repo. (`devices/guition-esp32-p4-jc8012p4a1/dev.yaml` is a local entry point with your own `secrets.yaml` for Wi-Fi; see [Local Wi-Fi build](#local-wi-fi-build). [Manual Setup](docs/manual-setup.md) covers the original project's ESPHome-dashboard install, not this repo.)
-- The stand is a parametric [build123d](https://github.com/gumyr/build123d) model; see [its README](hardware/stand-10/README.md) to rebuild the print files locally.
+- The stands are a parametric [build123d](https://github.com/gumyr/build123d) model; see [their README](hardware/stand-10/README.md) to rebuild the print files locally.
 
 ## Licence and credit
 

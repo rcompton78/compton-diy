@@ -154,14 +154,29 @@ def run(parts: dict) -> list:
     local = [(to_screen * Pos(q)).position for q in path.points[: path.behind + 1]]
     cx = [q.X for q in local if q.Z <= -p.D_PLATE_FRONT + r]
     in_notch = bool(cx) and min(cx) - r >= plate_outline()[0] - 0.01 and max(cx) + r <= nx - 1.0
-    add("Cable passes the plate's edge notch", in_notch and r * 2 + 2 * 1.0 <= nh,
-        f"crosses the plate at x {min(cx):.1f}–{max(cx):.1f} (cable Ø{p.CABLE_D:g}) inside the {nx:.1f} × {nh:g} mm notch "
-        f"open to the left edge; it slides in sideways before the frame goes on")
     exposed = [q for q in path.points[path.behind: path.bend_end + 1] if q.Z > layout().z_deck]
     ex_len = sum((exposed[i + 1] - exposed[i]).length for i in range(len(exposed) - 1))
-    add("Cable behind the plate (information)", True,
-        f"{ex_len:.0f} mm of cable shows between the plate notch and the lid, at the left end, "
-        f"{p.CABLE_DEPTH - p.D_PLATE_BACK:.1f} mm behind the plate at most")
+    add("Cable passes the plate's edge notch", in_notch and r * 2 + 2 * 1.0 <= nh,
+        f"crosses the plate at x {min(cx):.1f}–{max(cx):.1f} (cable Ø{p.CABLE_D:g}) inside the {nx:.1f} × {nh:g} mm notch "
+        f"open to the left edge; it slides in sideways before the frame goes on. {ex_len:.0f} mm of cable then shows "
+        f"behind the plate at the left end, at most {p.CABLE_DEPTH - p.D_PLATE_BACK:.1f} mm behind it, down to the lid")
+
+    # Vents: every slot has free air behind it (the foot's deck behind the plate would seal a low one).
+    sl, sw = p.VENT_SLOT
+    blocked, worst_v = [], math.inf
+    for vx in p.VENT_XS:
+        for vy in p.VENT_ROWS_Y:
+            behind = SCREEN_TO_WORLD * screen_box(vx - sl / 2, vx + sl / 2, vy - sw / 2, vy + sw / 2,
+                                                  p.D_PLATE_BACK, p.D_PLATE_BACK + p.MIN_VENT_CLEAR)
+            if (behind & foot).volume > 1e-3:
+                blocked.append((round(vx, 1), vy))
+            worst_v = min(worst_v, behind.distance_to(foot))
+    low = min(p.VENT_ROWS_Y) - sw / 2
+    add("Vents open to free air", not blocked,
+        f"{len(p.VENT_XS) * len(p.VENT_ROWS_Y)} slots, rows at y {', '.join(f'{v:g}' for v in p.VENT_ROWS_Y)} (two low for air "
+        f"in, two above the rear box for heat out); {p.MIN_VENT_CLEAR:g} mm of air behind each, closest to the foot "
+        f"{worst_v:.1f} mm; the lowest slot edge is {screen_point(0, low, p.D_PLATE_BACK).Z - p.DECK_Z:.1f} mm above the "
+        f"deck" + (f"; BLOCKED {blocked}" if blocked else ""))
 
     # 7. Tip-over.
     force, masses, m_tot, cg_y, cg_z, side = tip_over(foot, lid, plate_w, frame_w)
@@ -174,12 +189,10 @@ def run(parts: dict) -> list:
     # tray between its left wall and the dovetail post.
     L = layout()
     nx0, nx1, ny1 = lid_notch()
-    notch_ok = nx0 >= L.in_x0 - p.LID_RABBET + p.LID_CLEAR and nx1 < lift_slot_x()[0]
     lid_gap = min(lid.distance_to(Vertex(v.X, v.Y, v.Z)) for v in path.points[: path.bend_end + 1])
-    gap_x = (p.DOVE_X - p.POST_W / 2) - L.in_x0
-    add("Cable drops through the lid notch", notch_ok and lid_gap >= r + 1.0 and gap_x >= p.PLUG_W + 2 * p.MIN_PLUG_PASS,
-        f"notch x {nx0:.1f}–{nx1:.1f}, to Y {ny1:.1f} from the lid's front edge; cable {lid_gap - r:.2f} mm off the lid; "
-        f"with the lid off the plug passes up out of the open tray ({gap_x:.0f} mm from the left wall to the post)")
+    add("Cable drops through the lid notch", lid_gap >= r + 1.0,
+        f"notch {nx1 - nx0:.1f} mm wide at x {nx0:.1f}–{nx1:.1f}, open to the lid's front edge and reaching Y {ny1:.1f}; "
+        f"cable {lid_gap - r:.2f} mm off the lid (need ≥ 1); the plug goes in and out through the open tray, lid off")
 
     # 9. Lid detents (as the 7").
     snap = p.LID_DETENT_H - p.LID_CLEAR

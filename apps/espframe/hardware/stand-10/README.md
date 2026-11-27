@@ -159,7 +159,7 @@ It's a separate package, `stand10l`, beside the portrait's `stand10`. It takes e
 
 ### How it differs from the portrait stand
 
-- **Pose.** The board is turned 90° clockwise from the portrait pose, seen from the front: the USB-C end of the rear box on the left, the LCD-FPC end on the right, and the C6 antenna window in the **top-right** corner, away from the desk and the foot. The nylon M2.5 goes in the top-right hole, in the window, as in portrait; every other screw and insert stays at least 15 mm away (23 mm, checked).
+- **Pose.** The board is turned 90° clockwise from the portrait pose, seen from the front: the USB-C end of the rear box on the left, the LCD-FPC end on the right, and the C6 antenna window in the **top-right** corner, away from the desk and the foot. The nylon M2.5 goes in the top-right hole, the one inside the antenna window's footprint (top-left in portrait); every other screw and insert stays at least 15 mm away (23 mm, checked).
 - **Frame.** 248.2 × 169.0 mm printed face-down, within the P1S's 256 bed by 7.8 mm. Faces 15.1 mm at the sides and 13.6 at the top; the bottom runs down to the desk, an 18.5 mm border. The M3 bosses are in the side walls at 30 and 105 mm up, so the right-hand upper one stays clear of the antenna window and the left-hand ones clear of the cable notch.
 - **Cable: backwards through the plate.** The straight plug now points sideways, left out of the box's end face. Dropping it straight to the bottom edge, as in portrait, would bend it into the bottom-left riser, so instead:
   1. one R18 bend turns it rearwards, 8.5 mm in from the shell's left edge;
@@ -169,9 +169,9 @@ It's a separate package, `stand10l`, beside the portrait's `stand10`. It takes e
 
   About 37 mm of cable shows behind the plate at the left end, between the notch and the lid. The path is 267 mm of the 300 mm cable.
 - **No shelf.** The foot sits wholly behind the plate: the cable comes down behind it, not under the glass, so there's no shelf, deck slot or tunnel. The plate comes down to 2.1 mm off the desk.
-- **Dovetail.** The rear box spans the middle of the plate, so the spine can't sit centred below it as it would on a wider plate: it's right of the box (x 197–221, the box ends at 192), under the antenna corner, with the portrait's groove, rail, engagement (32.8 mm) and optional foot lock.
+- **Dovetail.** The rear box spans the middle of the plate, so the spine can't sit centred below it as it would on a wider plate: it's right of the box (x 197–221, the box ends at 192), under the antenna corner, with the portrait's groove, rail and optional foot lock (engagement 32.8 mm here, 30.8 in portrait).
 - **Foot.** As wide as the frame and on its centre line, 108 mm deep (132 from the glass's bottom-front edge to the rear wall). The coil and the jack set the depth; stability alone would allow much less.
-- **Vents.** Two rows of five slots above the rear box (heat rises out of them) and two below it, along the long edge.
+- **Vents.** Four rows of five slots along the long edge: two rows above the rear box, where heat rises out, and two low rows for air in. The low rows sit above the foot's deck, which would otherwise seal them (checked: every slot has 5 mm of free air behind it).
 - **Rotation.** In the espframe settings, pick the landscape rotation, `0` or `180`, that shows the picture upright with the USB-C end on the left. Which of the two it is still has to be confirmed on the board (see Open items).
 
 ### Checks
@@ -181,8 +181,9 @@ It's a separate package, `stand10l`, beside the portrait's `stand10`. It takes e
 | Check | Result |
 |---|---|
 | Cable passes the plate's edge notch | crosses the plate at x 8.5–9.7, inside the 13 × 8 mm notch |
-| Cable drops through the lid notch | notch x 4.8–12.2 from the lid's front edge, cable 1.5 mm off the lid; with the lid off the plug passes up out of the open tray |
-| Cable behind the plate | 37 mm shows, at the left end, at most 19.4 mm behind the plate |
+| Cable drops through the lid notch | a 7.4 mm wide notch (x 4.8–12.2) open to the lid's front edge and reaching 58.6 mm back; the cable stays 1.5 mm off the lid |
+| Cable passes the plate's edge notch | 37 mm of cable then shows behind the plate at the left end, at most 19.4 mm behind it |
+| Vents open to free air | 20 slots, each with 5 mm of air behind it; the lowest slot edge is 2.7 mm above the foot's deck |
 | Plate clears the foot | foot face 0.2 mm behind the plate, only the rail in its groove |
 | Tip-over push at the screen centre | **9.55 N** (need ≥ 4.5), 870 g total; sideways tip at 61° |
 | Every part fits the P1S bed | frame 248.2 × 169.0 × 33.6, plate 243.6 × 156.6, foot 248.2 × 108.2, lid 244.9 × 85.3 |
@@ -201,21 +202,22 @@ The portrait stand's coupons cover the landscape stand too. Settings as the port
 
 ### Bill of materials
 
-As the portrait stand's, except the desk felt: 1 mm adhesive felt, ≈ 248 × 5 mm under the frame face's bottom plus two ≈ 2 × 34 mm strips under the side walls. The nylon M2.5 goes in the **top-right** hole seen from the front (the window corner).
+As the portrait stand's, except the desk felt: 1 mm adhesive felt, ≈ 248 × 5 mm under the frame face's bottom plus two ≈ 2 × 34 mm strips under the side walls. The nylon M2.5 goes in the **top-right** hole seen from the front (the window corner). No rubber feet here either: the foot's sloped face sits 0.2 mm behind the leaning plate, so lifting the foot by more than about 0.75 mm would push that face into the plate.
 
 ### Assembly
 
-As the portrait stand's, with these differences:
+As the portrait stand's, with these differences. The portrait steps' mentions of the spine "at the USB-C end" and of the shelf slot don't apply: here the spine is at the right-hand end seen from the front, and there's no shelf.
 
-1. **Jack and cable.** Lid off, fit the jack in the rear wall near the left end. Lay one loose coil in the tray, right of the jack, and bring the plug end up out of the open tray at the front-left.
+1. **Jack and cable.** Lid off, fit the jack in the rear wall near the left end. Lay one loose coil in the tray, in front of the jack and running right from it, and bring the plug end up out of the open tray at the front-left.
 2. **Plate.** Screw the plate to the board as in portrait (the nylon screw in the top-right hole seen from the front). Plug the straight plug into USB_UART: it points left. Bend the lead rearwards and slide it into the notch in the plate's left edge, before the frame goes on.
 3. **Frame.** Fix the frame with four M3 × 8 + washers as in portrait; its left wall closes the notch.
-4. **Mount.** Lower the plate's groove onto the foot's rail. Let the lead drop into the tray's front-left corner, and fit the lid with its notch over the lead, front edge first, then press the rear edge down until it clicks.
+4. **Mount.** Lower the plate's groove onto the foot's rail. Let the lead drop into the tray's front-left corner. Optionally fit the foot-lock M3 × 12 now, from inside the tray through the access bore, as in portrait. Then fit the lid with its notch over the lead, front edge first, then press the rear edge down until it clicks.
 5. **Rotation.** In the espframe settings, pick `0` or `180`, whichever shows the picture upright.
 
 ### Open items
 
 - **Rotation:** confirm whether `0` or `180` is upright with the USB-C end on the left, and put it in this README.
+- **Modelled coil overlaps itself:** the coil's closing arc crosses back over the floor bend while that bend is still about 2 mm off the tray floor, 3.0 mm apart centre to centre on a Ø4.5 cable. No check measures it yet. The printed parts don't depend on it (the tray is open and a real loose cable just stacks), but the render and the 267 mm path length show a coil that can't exist exactly as drawn. Fix: add a cable self-clearance check (for both stands) and either raise `COIL_Y` by about the coil radius, which deepens the foot about 18 mm, or start the coil's rise earlier.
 - **Cable behind the plate:** about 37 mm of cable shows at the left end. A printed hood over it is possible if it bothers you.
-- **Plug and cable:** the portrait's open item applies: the plug's length and the cable's diameter and bend radius are listing values. Here the R18 bends are behind the plate and in the tray, so a stiffer cable shows up as the lead pushing the lid, not as a forced bend at the port.
+- **Plug and cable:** the portrait's open item applies: the plug's length and the cable's diameter and bend radius are listing values. Here the first R18 bend is in the gap between the board and the plate, and the other two are behind the plate and in the tray, so a stiffer cable shows up as the lead pushing the lid, not as a forced bend at the port.
 - **Antenna:** the window is in the top-right corner here. Check Wi-Fi with the frame on; the antenna's size is still estimated.

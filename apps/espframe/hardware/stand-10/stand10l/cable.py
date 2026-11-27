@@ -19,9 +19,9 @@ class CablePath:
     points: list            # world Vectors, ~1 mm apart
     length: float           # mm, plug exit to jack body
     min_radius: float       # tightest bend along the path, mm
-    bend_end: int           # index of the last point of the deck bend (everything before is plug-side)
+    bend_end: int           # index of the last point of the floor bend (everything before it is plug-side)
     behind: int             # index of the first point behind the plate (after the notch)
-    drop: float             # straight drop below the plug before the bend (spare room), mm
+    drop: float             # straight drop behind the plate before the floor bend (spare room), mm
     loop_start: int         # index of the first loop point
     loop_end: int
 
