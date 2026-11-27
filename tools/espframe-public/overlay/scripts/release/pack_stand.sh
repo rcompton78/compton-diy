@@ -24,7 +24,11 @@ SRC="$ROOT/hardware/stand-10"
 OUT="$SRC/out"
 CHECKS="$OUT/checks.txt"
 
-[ -f "$CHECKS" ] || { echo "ERROR: $CHECKS not found; build the stand first." >&2; exit 1; }
+# Both stands' check reports must exist: a landscape build that stopped before its checks
+# would otherwise leave a release with a partial set of print files.
+for f in "$CHECKS" "$OUT/checks-landscape.txt"; do
+  [ -f "$f" ] || { echo "ERROR: $f not found; build both stands first." >&2; exit 1; }
+done
 shopt -s nullglob
 all_checks=("$OUT"/checks*.txt)
 if grep -q '^FAIL' "${all_checks[@]}"; then

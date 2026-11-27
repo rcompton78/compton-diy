@@ -127,7 +127,8 @@ def lid_notch():
     from .cable import build_path
     L = layout()
     r, c = p.CABLE_D / 2, p.LID_NOTCH_CLEAR
-    pts = [v for v in build_path().points[: build_path().bend_end + 1]
+    path = build_path()
+    pts = [v for v in path.points[: path.bend_end + 1]
            if L.z_cavity_top - r <= v.Z <= L.z_deck + r]
     return (min(v.X for v in pts) - r - c, max(v.X for v in pts) + r + c, max(v.Y for v in pts) + r + c)
 

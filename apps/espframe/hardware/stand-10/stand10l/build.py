@@ -12,7 +12,6 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from build123d import Pos
 
 from stand10.build import BOX, CABLE, FELT, FOOT, GLASS, METAL, PETG, PICTURE, WOOD, export
 from stand10.coupons import riser_coupon

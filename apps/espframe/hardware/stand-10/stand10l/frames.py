@@ -15,12 +15,6 @@ def screen_point(x: float, y: float, depth: float) -> Vector:
     return (SCREEN_TO_WORLD * Pos(x, y, -depth)).position
 
 
-def plane_y(depth: float, z: float) -> float:
-    """World Y where the screen-frame plane at `depth` behind the glass front crosses height z."""
-    a, b = screen_point(0, 0, depth), screen_point(0, 10, depth)
-    return a.Y + (z - a.Z) / (b.Z - a.Z) * (b.Y - a.Y)
-
-
 def box(x0, x1, y0, y1, z0, z1):
     """Axis-aligned box from min/max coordinates."""
     return Pos(x0, y0, z0) * Box(x1 - x0, y1 - y0, z1 - z0, align=(Align.MIN, Align.MIN, Align.MIN))
