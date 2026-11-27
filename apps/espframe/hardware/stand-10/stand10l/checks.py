@@ -156,8 +156,9 @@ def run(parts: dict) -> list:
     in_notch = bool(cx) and min(cx) - r >= plate_outline()[0] - 0.01 and max(cx) + r <= nx - 1.0
     exposed = [q for q in path.points[path.behind: path.bend_end + 1] if q.Z > layout().z_deck]
     ex_len = sum((exposed[i + 1] - exposed[i]).length for i in range(len(exposed) - 1))
+    cx_desc = f"crosses the plate at x {min(cx):.1f}–{max(cx):.1f}" if cx else "NEVER crosses the plate"
     add("Cable passes the plate's edge notch", in_notch and r * 2 + 2 * 1.0 <= nh,
-        f"crosses the plate at x {min(cx):.1f}–{max(cx):.1f} (cable Ø{p.CABLE_D:g}) inside the {nx:.1f} × {nh:g} mm notch "
+        f"{cx_desc} (cable Ø{p.CABLE_D:g}) inside the {nx:.1f} × {nh:g} mm notch "
         f"open to the left edge; it slides in sideways before the frame goes on. {ex_len:.0f} mm of cable then shows "
         f"behind the plate at the left end, at most {p.CABLE_DEPTH - p.D_PLATE_BACK:.1f} mm behind it, down to the lid")
 

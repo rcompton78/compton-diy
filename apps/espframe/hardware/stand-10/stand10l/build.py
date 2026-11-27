@@ -38,6 +38,10 @@ def main(argv=None) -> int:
     out, docs = Path(args.out).resolve(), Path(args.docs).resolve()
     out.mkdir(parents=True, exist_ok=True)
     docs.mkdir(parents=True, exist_ok=True)
+    # Clear this build's previous outputs first, so a run that stops partway can't leave an old checks report (which
+    # the pack scripts trust) next to new or missing print files.
+    for old in [out / "checks-landscape.txt", *out.glob(f"{PREFIX}-*")]:
+        old.unlink()
 
     print("building landscape parts…", flush=True)
     plate, foot, lid, frame = build_plate(), build_foot(), build_lid(), build_frame()

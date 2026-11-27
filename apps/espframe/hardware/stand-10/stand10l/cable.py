@@ -54,7 +54,10 @@ def build_path() -> CablePath:
     head += [(x, p.PORT_Y - R + R * math.sin(a), d0 + R + R * math.cos(a))
              for a in (math.radians(90 - 90 * i / 30) for i in range(1, 31))]
     head_w = [screen_point(*q) for q in head]
-    behind = next(i for i, q in enumerate(head) if q[2] > p.D_PLATE_BACK)
+    behind = next((i for i, q in enumerate(head) if q[2] > p.D_PLATE_BACK), None)
+    if behind is None:
+        raise ValueError(f"cable never reaches behind the plate (back {p.D_PLATE_BACK:.1f} mm, "
+                         f"deepest {max(q[2] for q in head):.1f} mm)")
     e0 = screen_point(x, p.CABLE_DROP_Y, p.CABLE_DEPTH)
     z_floor = p.FLOOR + r
     # Straight drop down the screen (-S, -C) so the R bend ends with the cable on the tray floor.
