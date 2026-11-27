@@ -98,4 +98,4 @@ jobs:
       - name: Build the print files and run the fit checks
         run: |
           hardware/stand-10/setup.sh
-          cd hardware/stand-10 && .venv/bin/python -m stand10.build
+          cd hardware/stand-10 && .venv/bin/python -m stand10.build && .venv/bin/python -m stand10l.build

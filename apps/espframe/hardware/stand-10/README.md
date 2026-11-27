@@ -1,4 +1,6 @@
-# Espframe 10" portrait desk stand
+# Espframe 10" desk stands: portrait and landscape
+
+There are two stands here, from one model: the portrait stand described first, and a **landscape stand** (COM-684) built from the same board measurements and fits, described in [Landscape stand](#landscape-stand-com-684) below.
 
 A 3D-printable portrait desk stand for the 10" espframe (Guition ESP32-P4 JC8012P4A1, 800 × 1280, about 550 g), with a wood-look picture frame round the screen. It follows the 7" stand in [`../stand`](../stand/README.md) (COM-363 and its follow-ups) and reuses its measured fits, cable and jack. It's a parametric Python model built with [build123d](https://github.com/gumyr/build123d): one command rebuilds every print file, the preview images and a set of fit and stability checks (COM-396). Background notes and sources are in [docs/background.md](docs/background.md).
 
@@ -40,7 +42,7 @@ Still estimated: the plug and cable (the 7"'s listing values: 27.5 mm out of the
 
 ## Download the print files
 
-Every merge to `master` that changes the stand attaches `espframe-stand-10-<version>.tar.gz` to that build's [GitHub release](https://github.com/rcompton78/compton-diy/releases). It holds the 3MF/STL/STEP files for every part, `checks.txt`, this README and the renders. CI only publishes it when every check passes.
+Every merge to `master` that changes the stand attaches `espframe-stand-10-<version>.tar.gz` to that build's [GitHub release](https://github.com/rcompton78/compton-diy/releases). It holds the 3MF/STL/STEP files for every part of both stands (the landscape ones are `espframe-10in-landscape-stand-*`), `checks.txt` and `checks-landscape.txt`, this README and the renders. CI only publishes it when every check passes.
 
 ## Building
 
@@ -48,12 +50,12 @@ Every merge to `master` that changes the stand attaches `espframe-stand-10-<vers
 pnpm nx run espframe-stand-10:cad
 ```
 
-This creates (or refreshes) a local Python venv (`setup.sh`, Python 3.10–3.13, pinned `requirements.txt`) and runs `python -m stand10.build`, which:
+This creates (or refreshes) a local Python venv (`setup.sh`, Python 3.10–3.13, pinned `requirements.txt`) and runs `python -m stand10.build` and then `python -m stand10l.build` (the landscape stand, which writes `checks-landscape.txt` and `docs/landscape-*.png`). The portrait build:
 - builds every part and writes `out/espframe-10in-stand-<part>.{stl,3mf,step}` (`out/` is gitignored);
 - runs the checks below, writes `out/checks.txt`, and exits non-zero if any fails;
 - renders the preview PNGs into `docs/`.
 
-`pnpm nx run espframe-stand-10:release` runs `cad` and packs the tarball into `dist/espframe-stand-10/` (`scripts/pack-hardware-release.sh`, which refuses to pack on any `FAIL`). On merge to `master`, `.github/workflows/release.yml` runs it on the self-hosted runner, with the venv cached outside the checkout.
+`pnpm nx run espframe-stand-10:release` runs `cad` and packs the tarball into `dist/espframe-stand-10/` (`scripts/pack-hardware-release.sh`, which refuses to pack on a `FAIL` in any `checks*.txt`). On merge to `master`, `.github/workflows/release.yml` runs it on the self-hosted runner, with the venv cached outside the checkout.
 
 Every dimension is a named constant in [`stand10/params.py`](stand10/params.py), tagged `MEASURED`, `SOURCED`, `DESIGN` or `EST`.
 
@@ -142,3 +144,79 @@ The first printed plate, screws tight, left 2.5 mm between the frame face's rear
 - **Antenna window size:** estimated 18 × 25 mm round its measured centre.
 - **Weights:** weigh the printed parts and update `PRINT_FILL` / `FRAME_FILL`; tip-over has 0.49 N to spare.
 - **Frame look:** print it and check the border on the real panel; tune `REVEAL` if a black line shows.
+
+## Landscape stand (COM-684)
+
+| | |
+|---|---|
+| ![Front](docs/landscape-assembly-front.png) | ![Front three-quarter](docs/landscape-assembly-front-34.png) |
+| ![Side](docs/landscape-side.png) | ![Rear three-quarter](docs/landscape-assembly-rear.png) |
+| ![Rear, plate sheet hidden](docs/landscape-assembly-rear-open.png) | ![Cable at the left end](docs/landscape-cable.png) |
+
+Overall 248 W × 139 D × 164 H mm. The same board, lean (15°), wood-look frame, back-plate, dovetail and Poyiccot cable and jack as the portrait stand, turned a quarter turn: pushing it back at the screen centre takes 9.55 N to tip it (target 4.5).
+
+It's a separate package, `stand10l`, beside the portrait's `stand10`. It takes every measured value and fit from `stand10/params.py` and only sets the board's landscape pose and its own design choices in [`stand10l/params.py`](stand10l/params.py), so the portrait files are unchanged by it. The coupons (hole template, riser, plugs, receptacle, dovetail) are the portrait stand's: same board, same fits.
+
+### How it differs from the portrait stand
+
+- **Pose.** The board is turned 90° clockwise from the portrait pose, seen from the front: the USB-C end of the rear box on the left, the LCD-FPC end on the right, and the C6 antenna window in the **top-right** corner, away from the desk and the foot. The nylon M2.5 goes in the top-right hole, the one inside the antenna window's footprint (top-left in portrait); every other screw and insert stays at least 15 mm away (23 mm, checked).
+- **Frame.** 248.2 × 169.0 mm printed face-down, within the P1S's 256 bed by 7.8 mm. Faces 15.1 mm at the sides and 13.6 at the top; the bottom runs down to the desk, an 18.5 mm border. The M3 bosses are in the side walls at 30 and 105 mm up, so the right-hand upper one stays clear of the antenna window and the left-hand ones clear of the cable notch.
+- **Cable: backwards through the plate.** The straight plug now points sideways, left out of the box's end face. Dropping it straight to the bottom edge, as in portrait, would bend it into the bottom-left riser, so instead:
+  1. one R18 bend turns it rearwards, 8.5 mm in from the shell's left edge;
+  2. it passes the plate in a 13 × 8 mm notch **open to the plate's left edge**, so it slides in sideways before the frame goes on (a closed hole would mean threading the jack end through it);
+  3. a second R18 bend turns it down, 19 mm behind the plate, and it drops through a notch in the tray lid's front-left corner;
+  4. an R18 bend onto the tray floor, one loose coil (shorter than portrait's, 48 mm long) and on to the jack in the rear wall, near the left end.
+
+  About 37 mm of cable shows behind the plate at the left end, between the notch and the lid. The path is 267 mm of the 300 mm cable.
+- **No shelf.** The foot sits wholly behind the plate: the cable comes down behind it, not under the glass, so there's no shelf, deck slot or tunnel. The plate comes down to 2.1 mm off the desk.
+- **Dovetail.** The rear box spans the middle of the plate, so the spine can't sit centred below it as it would on a wider plate: it's right of the box (x 197–221, the box ends at 192), under the antenna corner, with the portrait's groove, rail and optional foot lock (engagement 32.8 mm here, 30.8 in portrait).
+- **Foot.** As wide as the frame and on its centre line, 108 mm deep (132 from the glass's bottom-front edge to the rear wall). The coil and the jack set the depth; stability alone would allow much less.
+- **Vents.** Three rows of five slots along the long edge: two rows above the rear box, where heat rises out, and one low row for air in. The low row sits between the foot's deck, which would seal it, and the rear box's bottom edge, which would leave it opening only onto the 2 mm gap behind the box; there's room for one row there (checked: every slot has 5 mm of free air behind it).
+- **Rotation.** In the espframe settings, pick the landscape rotation, `0` or `180`, that shows the picture upright with the USB-C end on the left. Which of the two it is still has to be confirmed on the board (see Open items).
+
+### Checks
+
+`out/checks-landscape.txt` runs the portrait stand's checks adapted to the landscape layout (riser seat, screw engagement, plug heads, antenna keep-out, dovetail, cable bends, clearance and length, tip-over, lid detents, jack, frame reveal and centring, frame on the desk, bed fit), plus:
+
+| Check | Result |
+|---|---|
+| Cable passes the plate's edge notch | crosses the plate at x 8.5–9.7, inside the 13 × 8 mm notch; 37 mm of cable then shows behind the plate at the left end, at most 19.4 mm behind it |
+| Cable drops through the lid notch | a 7.5 mm wide notch (x 4.8–12.2) open to the lid's front edge and reaching 58.6 mm back; the cable stays 1.5 mm off the lid |
+| Vents open to free air | 15 slots, each with 5 mm of air behind it; none over the rear box; the lowest slot edge is 3.6 mm above the foot's deck |
+| Plate clears the foot | foot face 0.2 mm behind the plate, only the rail in its groove |
+| Tip-over push at the screen centre | **9.55 N** (need ≥ 4.5), 870 g total; sideways tip at 61° |
+| Every part fits the P1S bed | frame 248.2 × 169.0 × 33.6, plate 243.6 × 156.6, foot 248.2 × 108.2, lid 244.9 × 85.3 |
+
+### Parts to print
+
+The portrait stand's coupons cover the landscape stand too. Settings as the portrait's parts.
+
+| File | Orientation | Settings |
+|---|---|---|
+| `espframe-10in-landscape-stand-plate` | As exported: back face on the bed, risers and spine up | 4 walls, 40% infill, 0.2 mm layers |
+| `espframe-10in-landscape-stand-foot` | As exported: upright on its base | 4 walls, 25% infill, no supports |
+| `espframe-10in-landscape-stand-lid` | Flat | 3 walls |
+| `espframe-10in-landscape-stand-frame` | As exported: face down, walls and bosses up | Wood-look PLA, 3 walls, 20% infill |
+| `plugs` (portrait) | As the portrait's | Six crush-rib hole plugs, the same |
+
+### Bill of materials
+
+As the portrait stand's, except the desk felt: 1 mm adhesive felt, ≈ 248 × 5 mm under the frame face's bottom plus two ≈ 2 × 34 mm strips under the side walls. The nylon M2.5 goes in the **top-right** hole seen from the front (the window corner). No rubber feet here either: the foot's sloped face sits 0.2 mm behind the leaning plate, so lifting the foot by more than about 0.75 mm would push that face into the plate.
+
+### Assembly
+
+As the portrait stand's, with these differences. The portrait steps' mentions of the spine "at the USB-C end" and of the shelf slot don't apply: here the spine is at the right-hand end seen from the front, and there's no shelf.
+
+1. **Jack and cable.** Lid off, fit the jack in the rear wall near the left end. Lay one loose coil in the tray, in front of the jack and running right from it, and bring the plug end up out of the open tray at the front-left.
+2. **Plate.** Screw the plate to the board as in portrait (the nylon screw in the top-right hole seen from the front). Plug the straight plug into USB_UART: it points left. Bend the lead rearwards and slide it into the notch in the plate's left edge, before the frame goes on.
+3. **Frame.** Fix the frame with four M3 × 8 + washers as in portrait; its left wall closes the notch.
+4. **Mount.** Lower the plate's groove onto the foot's rail. Let the lead drop into the tray's front-left corner. Optionally fit the foot-lock M3 × 12 now, from inside the tray through the access bore, as in portrait. Then fit the lid with its notch over the lead, front edge first, then press the rear edge down until it clicks.
+5. **Rotation.** In the espframe settings, pick `0` or `180`, whichever shows the picture upright.
+
+### Open items
+
+- **Rotation:** confirm whether `0` or `180` is upright with the USB-C end on the left, and put it in this README.
+- **Modelled coil overlaps itself:** the coil's closing arc crosses back over the floor bend while that bend is still about 2 mm off the tray floor, 3.0 mm apart centre to centre on a Ø4.5 cable. No check measures it yet. The printed parts don't depend on it (the tray is open and a real loose cable just stacks), but the render and the 267 mm path length show a coil that can't exist exactly as drawn. Fix: add a cable self-clearance check (for both stands) and either raise `COIL_Y` by about the coil radius, which deepens the foot about 18 mm, or start the coil's rise earlier.
+- **Cable behind the plate:** about 37 mm of cable shows at the left end. A printed hood over it is possible if it bothers you.
+- **Plug and cable:** the portrait's open item applies: the plug's length and the cable's diameter and bend radius are listing values. Here the first R18 bend is in the gap between the board and the plate, and the other two are behind the plate and in the tray, so a stiffer cable shows up as the lead pushing the lid, not as a forced bend at the port.
+- **Antenna:** the window is in the top-right corner here. Check Wi-Fi with the frame on; the antenna's size is still estimated.

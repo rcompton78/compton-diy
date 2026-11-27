@@ -165,7 +165,7 @@ jobs:
       - name: Build the print files
         run: |
           hardware/stand-10/setup.sh
-          cd hardware/stand-10 && .venv/bin/python -m stand10.build
+          cd hardware/stand-10 && .venv/bin/python -m stand10.build && .venv/bin/python -m stand10l.build
       - name: Pack
         env:
           VERSION: ${{ needs.preflight.outputs.version }}

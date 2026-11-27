@@ -4,12 +4,13 @@
 #   scripts/release/pack_stand.sh [version]
 #
 # Run the CAD build first (hardware/stand-10/setup.sh, then
-# `.venv/bin/python -m stand10.build` in hardware/stand-10), which leaves
-# out/*.{3mf,stl,step} and out/checks.txt. Writes
-# dist/stand/espframe-stand-10-<version>.tar.gz holding the print files,
-# checks.txt, the stand README, its renders, LICENSE, NOTICE and a VERSION file.
+# `.venv/bin/python -m stand10.build` and `-m stand10l.build` in
+# hardware/stand-10), which leave out/*.{3mf,stl,step}, out/checks.txt and
+# out/checks-landscape.txt. Writes
+# dist/stand/espframe-stand-10-<version>.tar.gz holding the print files of
+# both stands, every checks*.txt, the stand README, its renders, LICENSE, NOTICE and a VERSION file.
 #
-# Refuses to pack if checks.txt is missing or reports any FAIL, so a model that
+# Refuses to pack if checks.txt is missing or any checks*.txt reports a FAIL, so a model that
 # fails its fit or tip-over checks is never published.
 set -euo pipefail
 
@@ -23,14 +24,19 @@ SRC="$ROOT/hardware/stand-10"
 OUT="$SRC/out"
 CHECKS="$OUT/checks.txt"
 
-[ -f "$CHECKS" ] || { echo "ERROR: $CHECKS not found; build the stand first." >&2; exit 1; }
-if grep -q '^FAIL' "$CHECKS"; then
+# Both stands' check reports must exist: a landscape build that stopped before its checks
+# would otherwise leave a release with a partial set of print files.
+for f in "$CHECKS" "$OUT/checks-landscape.txt"; do
+  [ -f "$f" ] || { echo "ERROR: $f not found; build both stands first." >&2; exit 1; }
+done
+shopt -s nullglob
+all_checks=("$OUT"/checks*.txt)
+if grep -q '^FAIL' "${all_checks[@]}"; then
   echo "ERROR: stand checks failed, refusing to pack:" >&2
-  grep '^FAIL' "$CHECKS" >&2
+  grep -H '^FAIL' "${all_checks[@]}" >&2
   exit 1
 fi
 
-shopt -s nullglob
 prints=("$OUT"/*.3mf "$OUT"/*.stl "$OUT"/*.step)
 renders=("$SRC"/docs/*.png)
 [ ${#prints[@]} -gt 0 ] || { echo "ERROR: no 3MF/STL/STEP files in $OUT." >&2; exit 1; }
@@ -44,7 +50,7 @@ mkdir -p "$PKG/docs" "$DEST"
 for f in "$SRC/README.md" "$ROOT/LICENSE" "$ROOT/NOTICE"; do
   [ -f "$f" ] || { echo "ERROR: $f not found; the release must ship it." >&2; exit 1; }
 done
-cp "${prints[@]}" "$CHECKS" "$SRC/README.md" "$ROOT/LICENSE" "$ROOT/NOTICE" "$PKG/"
+cp "${prints[@]}" "${all_checks[@]}" "$SRC/README.md" "$ROOT/LICENSE" "$ROOT/NOTICE" "$PKG/"
 if [ ${#renders[@]} -gt 0 ]; then cp "${renders[@]}" "$PKG/docs/"; fi
 {
   echo "$NAME $VERSION"

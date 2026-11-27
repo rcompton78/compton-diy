@@ -17,11 +17,12 @@
       "cache": true,
       "inputs": [
         "{projectRoot}/stand10/**/*.py",
+        "{projectRoot}/stand10l/**/*.py",
         "{projectRoot}/requirements.txt"
       ],
       "outputs": ["{projectRoot}/out", "{projectRoot}/docs"],
       "options": {
-        "command": ".venv/bin/python -m stand10.build",
+        "command": ".venv/bin/python -m stand10.build && .venv/bin/python -m stand10l.build",
         "cwd": "apps/espframe/hardware/stand-10"
       }
     },
@@ -31,6 +32,7 @@
       "cache": true,
       "inputs": [
         "{projectRoot}/stand10/**/*.py",
+        "{projectRoot}/stand10l/**/*.py",
         "{projectRoot}/requirements.txt",
         "{projectRoot}/README.md",
         "{projectRoot}/docs/*.png",

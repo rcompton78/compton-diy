@@ -1,6 +1,6 @@
 # espframe public repo export
 
-[rcompton78/espframe](https://github.com/rcompton78/espframe) is a public, 10"-only copy of `apps/espframe` (Guition ESP32-P4 JC8012P4A1 plus the 10" stand) for friends to fork, build, flash and update themselves (COM-628). compton-diy stays the only place espframe code is written; changes flow one way, from here to there.
+[rcompton78/espframe](https://github.com/rcompton78/espframe) is a public, 10"-only copy of `apps/espframe` (Guition ESP32-P4 JC8012P4A1 plus the 10" portrait and landscape stands) for friends to fork, build, flash and update themselves (COM-628). compton-diy stays the only place espframe code is written; changes flow one way, from here to there.
 
 ## Publishing
 
