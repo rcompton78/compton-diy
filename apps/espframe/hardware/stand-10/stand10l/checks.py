@@ -171,10 +171,13 @@ def run(parts: dict) -> list:
             if (behind & foot).volume > 1e-3:
                 blocked.append((round(vx, 1), vy))
             worst_v = min(worst_v, behind.distance_to(foot))
+            # In front of the plate, a slot over the rear box opens only onto the 2 mm gap behind it.
+            if vx + sl / 2 > p.BOX_X[0] and vx - sl / 2 < p.BOX_X[1] and vy + sw / 2 > p.BOX_Y[0] and vy - sw / 2 < p.BOX_Y[1]:
+                blocked.append((round(vx, 1), vy, "over the rear box"))
     low = min(p.VENT_ROWS_Y) - sw / 2
     add("Vents open to free air", not blocked,
-        f"{len(p.VENT_XS) * len(p.VENT_ROWS_Y)} slots, rows at y {', '.join(f'{v:g}' for v in p.VENT_ROWS_Y)} (two low for air "
-        f"in, two above the rear box for heat out); {p.MIN_VENT_CLEAR:g} mm of air behind each, closest to the foot "
+        f"{len(p.VENT_XS) * len(p.VENT_ROWS_Y)} slots, none over the rear box, rows at y {', '.join(f'{v:g}' for v in p.VENT_ROWS_Y)} (the lowest for air in, "
+        f"two above the rear box for heat out); {p.MIN_VENT_CLEAR:g} mm of air behind each, closest to the foot "
         f"{worst_v:.1f} mm; the lowest slot edge is {screen_point(0, low, p.D_PLATE_BACK).Z - p.DECK_Z:.1f} mm above the "
         f"deck" + (f"; BLOCKED {blocked}" if blocked else ""))
 

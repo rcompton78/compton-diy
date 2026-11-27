@@ -77,9 +77,11 @@ JACK_Z = FLOOR + 1.0 + JACK_FLANGE_H / 2
 PLATE_Y0 = 2.5                                    # DESIGN: lower than portrait (no shelf under it); lowest corner ~2 mm
                                                   #   off the desk
 VENT_XS = tuple(SHELL_W / 2 + (i - 2) * 25.0 for i in range(5))   # DESIGN: five slots, centred, clear of the risers
-VENT_ROWS_Y = (30.5, 36.0, 129.0, 136.0)          # DESIGN: two rows low (air in) and two above the rear box (heat rises
-                                                  #   out); the low rows stay above the foot's deck, which would seal
-                                                  #   them, and the air behind a slot runs down the 15° lean
+VENT_ROWS_Y = (31.5, 129.0, 136.0)                # DESIGN: one low row (air in) and two above the rear box (heat rises
+                                                  #   out). The low row has to stay above the foot's deck, which would
+                                                  #   seal it (the air behind a slot runs down the 15° lean), and below
+                                                  #   the rear box's bottom edge (y 34.35), where it would only open
+                                                  #   onto the 2 mm gap behind the box: room for one row only
 MIN_VENT_CLEAR = 5.0                              # DESIGN: check limit, free air behind every vent slot before the foot
 
 # Dovetail: right of the rear box (x ≥ 197, box ≤ 192) and left of the bottom-right riser (x ≤ 222.3); the box spans

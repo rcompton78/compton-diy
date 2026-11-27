@@ -171,7 +171,7 @@ It's a separate package, `stand10l`, beside the portrait's `stand10`. It takes e
 - **No shelf.** The foot sits wholly behind the plate: the cable comes down behind it, not under the glass, so there's no shelf, deck slot or tunnel. The plate comes down to 2.1 mm off the desk.
 - **Dovetail.** The rear box spans the middle of the plate, so the spine can't sit centred below it as it would on a wider plate: it's right of the box (x 197–221, the box ends at 192), under the antenna corner, with the portrait's groove, rail and optional foot lock (engagement 32.8 mm here, 30.8 in portrait).
 - **Foot.** As wide as the frame and on its centre line, 108 mm deep (132 from the glass's bottom-front edge to the rear wall). The coil and the jack set the depth; stability alone would allow much less.
-- **Vents.** Four rows of five slots along the long edge: two rows above the rear box, where heat rises out, and two low rows for air in. The low rows sit above the foot's deck, which would otherwise seal them (checked: every slot has 5 mm of free air behind it).
+- **Vents.** Three rows of five slots along the long edge: two rows above the rear box, where heat rises out, and one low row for air in. The low row sits between the foot's deck, which would seal it, and the rear box's bottom edge, which would leave it opening only onto the 2 mm gap behind the box; there's room for one row there (checked: every slot has 5 mm of free air behind it).
 - **Rotation.** In the espframe settings, pick the landscape rotation, `0` or `180`, that shows the picture upright with the USB-C end on the left. Which of the two it is still has to be confirmed on the board (see Open items).
 
 ### Checks
@@ -180,10 +180,9 @@ It's a separate package, `stand10l`, beside the portrait's `stand10`. It takes e
 
 | Check | Result |
 |---|---|
-| Cable passes the plate's edge notch | crosses the plate at x 8.5–9.7, inside the 13 × 8 mm notch |
-| Cable drops through the lid notch | a 7.4 mm wide notch (x 4.8–12.2) open to the lid's front edge and reaching 58.6 mm back; the cable stays 1.5 mm off the lid |
-| Cable passes the plate's edge notch | 37 mm of cable then shows behind the plate at the left end, at most 19.4 mm behind it |
-| Vents open to free air | 20 slots, each with 5 mm of air behind it; the lowest slot edge is 2.7 mm above the foot's deck |
+| Cable passes the plate's edge notch | crosses the plate at x 8.5–9.7, inside the 13 × 8 mm notch; 37 mm of cable then shows behind the plate at the left end, at most 19.4 mm behind it |
+| Cable drops through the lid notch | a 7.5 mm wide notch (x 4.8–12.2) open to the lid's front edge and reaching 58.6 mm back; the cable stays 1.5 mm off the lid |
+| Vents open to free air | 15 slots, each with 5 mm of air behind it; none over the rear box; the lowest slot edge is 3.6 mm above the foot's deck |
 | Plate clears the foot | foot face 0.2 mm behind the plate, only the rail in its groove |
 | Tip-over push at the screen centre | **9.55 N** (need ≥ 4.5), 870 g total; sideways tip at 61° |
 | Every part fits the P1S bed | frame 248.2 × 169.0 × 33.6, plate 243.6 × 156.6, foot 248.2 × 108.2, lid 244.9 × 85.3 |
